@@ -747,9 +747,14 @@ label_style = st.radio("Label Style", ["Text", "Glyph"], index=1, horizontal=Tru
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    df = df[df["Computed Absolute Degree"] if "Computed Absolute Degree" in df.columns else pd.Series([None]*len(df)).notna()].copy()
-    df["abs_deg"] = df["Computed Absolute Degree"] if "Computed Absolute Degree" in df.columns else pd.Series([None]*len(df)).astype(float)
-
+    
+if "Computed Absolute Degree" in df.columns:
+    df = df[df["Computed Absolute Degree"].notna()]
+    else:
+    st.error("❌ The CSV is missing the 'Computed Absolute Degree' column.")
+    st.stop()
+.notna()].copy()
+    
     asc_row = df[df["Object"].str.lower().str.contains("asc")]
 
     true_node_row = df[df["Object"].str.lower().str.contains("true node|north node")]
