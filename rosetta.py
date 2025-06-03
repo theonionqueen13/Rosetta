@@ -1,3 +1,10 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import networkx as nx
+from itertools import combinations
+
 # Glyph constants for glyph mode
 
 GLYPHS = {
@@ -294,12 +301,6 @@ def render_chart(
     return fig, visible_objects
 
 
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-import networkx as nx
-from itertools import combinations
 
 ASPECTS = {
     "Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
@@ -747,14 +748,9 @@ label_style = st.radio("Label Style", ["Text", "Glyph"], index=1, horizontal=Tru
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    
-if "Computed Absolute Degree" in df.columns:
-    df = df[df["Computed Absolute Degree"].notna()]
-    else:
-    st.error("❌ The CSV is missing the 'Computed Absolute Degree' column.")
-    st.stop()
-.notna()].copy()
-    
+    df = df[df["Computed Absolute Degree"].notna()].copy()
+    df["abs_deg"] = df["Computed Absolute Degree"].astype(float)
+
     asc_row = df[df["Object"].str.lower().str.contains("asc")]
 
     true_node_row = df[df["Object"].str.lower().str.contains("true node|north node")]
