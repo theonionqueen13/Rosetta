@@ -1,0 +1,5 @@
+[server]
+headless = true
+
+[general]
+mainModule = "rosetta_cleaned_final.py"
