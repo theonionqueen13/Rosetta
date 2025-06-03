@@ -477,6 +477,25 @@ def generate_combo_groups(filaments):
     return fig
 
 
+def format_planet_profile(row):
+    name = row["Object"]
+    meaning = OBJECT_MEANINGS.get(name, "")
+    dignity = row.get("Dignity", "None")
+    retro = row.get("Retrograde", "")
+    sabian = row.get("Sabian Symbol", "")
+    fixed_star = row.get("Fixed Star Conjunction", "")
+    oob = row.get("OOB Status", "")
+    sign = row.get("Sign", "")
+    lon = row.get("Longitude", "")
+    ruled_by_sign = row.get("Ruled by (sign)", "")
+    ruled_by_house = row.get("Ruled by (house)", "")
+    rules_sign = row.get("Rules sign", "")
+    rules_house = row.get("Rules house", "")
+    speed = row.get("Speed", "")
+    lat = row.get("Latitude", "")
+    dec = row.get("Declination", "")
+
+
 OBJECT_MEANINGS = {
     "Sun": "Your core identity, purpose, and life force.",
     "Moon": "Your emotions, inner world, and instinctive needs.",
@@ -486,6 +505,159 @@ OBJECT_MEANINGS = {
     "Jupiter": "Your growth path, optimism, and what expands you.",
     "Saturn": "Your responsibilities, discipline, and long-term lessons.",
     # Add more as needed
+}
+
+
+def format_planet_profile(row):
+    name = row["Object"]
+    meaning = OBJECT_MEANINGS.get(name, "")
+    dignity = row.get("Dignity", "None")
+    retro = row.get("Retrograde", "")
+    sabian = row.get("Sabian Symbol", "")
+    fixed_star = row.get("Fixed Star Conjunction", "")
+    oob = row.get("OOB Status", "")
+    sign = row.get("Sign", "")
+    lon = row.get("Longitude", "")
+    ruled_by_sign = row.get("Ruled by (sign)", "")
+    ruled_by_house = row.get("Ruled by (house)", "")
+    rules_sign = row.get("Rules sign", "")
+    rules_house = row.get("Rules house", "")
+    speed = row.get("Speed", "")
+    lat = row.get("Latitude", "")
+    dec = row.get("Declination", "")
+
+    header = f"### {GLYPHS.get(name, '')} {name}"
+    if str(dignity).lower() not in ["none", "nan"]:
+        header += f" ({dignity})"
+    if str(retro).strip().lower() == "rx":
+        header += " Retrograde"
+
+    profile = f"{header}\n*{meaning}*\n"
+    if sabian:
+        profile += f"“{sabian}”\n"
+    profile += f"{sign} {lon}"
+    if str(retro).strip().lower() == "rx":
+        profile += " Rx"
+    profile += "\n"
+    if str(oob).strip():
+        profile += f"Out Of Bounds: {oob}\n"
+    if str(fixed_star).strip():
+        profile += f"Conjunct Fixed Star: {fixed_star}\n"
+    profile += f"Ruled by (sign): {ruled_by_sign}\n"
+    profile += f"Ruled by (house): {ruled_by_house}\n"
+    profile += f"Rules sign: {rules_sign}\n"
+    profile += f"Rules house: {rules_house}\n"
+    profile += f"Speed: {speed}\nLatitude: {lat}\nDeclination: {dec}\n"
+    return profile.strip()
+
+
+OBJECT_MEANINGS = {
+    "AC": "The mask you wear and how others first see you.",
+    "Desc": "What you seek in relationships and partners.",
+    "True Node": "Your soul\u2019s growth direction in this life.",
+    "Mean Node": "A smoothed version of your soul growth path.",
+    "Sun": "Your core identity, purpose, and life force.",
+    "Mercury": "Your mind, communication style, and how you think.",
+    "Venus": "How you love, attract, and experience beauty.",
+    "Mars": "How you act, assert yourself, and pursue desires.",
+    "Jupiter": "Your growth path, optimism, and what expands you.",
+    "Saturn": "Your responsibilities, discipline, and long-term lessons.",
+    "Uranus": "Your uniqueness, rebellion, and breakthroughs.",
+    "Neptune": "Your dreams, illusions, and spiritual longing.",
+    "Pluto": "Your power, transformations, and shadow work.",
+    "Eris": "Victimhood to advocacy for the underdog, through learning and speaking truth.",
+    "Ceres": "The nurturing instinct and cycles of giving and receiving.",
+    "Pallas": "Pattern recognition, creative intelligence, and tactics.",
+    "Juno": "What you need in committed partnerships.",
+    "Vesta": "Sacred focus, devotion, and spiritual flame.",
+    "Lilith": "Your raw feminine power, rebellion, and untamed self.",
+    "P.Fort.": "Where you find natural ease and success.",
+    "Vertex": "A fated meeting point \u2014 unexpected turning points.",
+    "10H Cusp": "Start of the 10th house \u2014 your career, reputation, and public life.",
+    "11H Cusp": "Start of the 11th house \u2014 your community, friendships, and future dreams.",
+    "12H Cusp": "Start of the 12th house \u2014 your inner world, solitude, and spiritual release.",
+    "1H Cusp": "Start of the 1st house \u2014 your identity and how you present yourself.",
+    "2H Cusp": "Start of the 2nd house \u2014 your values, resources, and self-worth.",
+    "3H Cusp": "Start of the 3rd house \u2014 your thinking, communication, and siblings.",
+    "4H Cusp": "Start of the 4th house \u2014 your roots, home, and emotional foundation.",
+    "5H Cusp": "Start of the 5th house \u2014 your creativity, play, and romance.",
+    "6H Cusp": "Start of the 6th house \u2014 your health, habits, and service.",
+    "7H Cusp": "Start of the 7th house \u2014 your close relationships and partnerships.",
+    "8H Cusp": "Start of the 8th house \u2014 your intimacy, shared resources, and transformation.",
+    "9H Cusp": "Start of the 9th house \u2014 your beliefs, higher learning, and long journeys.",
+    "Aletheia": "Reveals hidden truths and uncovers what has been denied.",
+    "Angel": "Symbolizes divine protection and higher guidance.",
+    "Anteros": "Represents mutual love, returned affection, and karmic romance.",
+    "Apollo": "Brings light, healing, clarity, and artistic purpose.",
+    "Arachne": "Creative brilliance and the struggle with pride or authority.",
+    "Ariadne": "Your intuitive guide \u2014 the thread through life\u2019s labyrinth.",
+    "Asclepius": "Healing wisdom, especially through nontraditional medicine.",
+    "Bacchus": "Joyful abandon, artistic flow, and ecstatic states.",
+    "Chiron": "The deep wound you heal in others by healing yourself.",
+    "Coppernicus": "Revolutionary vision and paradigm-breaking insight.",
+    "Dionysus": "Ecstatic transformation, divine madness, and emotional release.",
+    "Echo": "Unmet longing, repetition, and the search for your own voice.",
+    "Eros": "Your passionate, magnetic drive and creative spark.",
+    "Eurydike": "The longing for love lost or the cost of devotion.",
+    "Euterpe": "Muse of music \u2014 inspires joy through melody and rhythm.",
+    "Fama": "Your reputation, what spreads about you \u2014 truth or not.",
+    "Freia": "Feminine sovereignty, fertility, and sacred love.",
+    "Harmonia": "Seeks balance, beauty, and inner alignment.",
+    "Haumea": "Feminine creation force, fertility, and regeneration.",
+    "Hekate": "Witchcraft, crossroads, and magical decision points.",
+    "Hephaistos": "Inventive crafting, working with hands, and forged power.",
+    "Hygiea": "Clean energy, wellness, and detoxification.",
+    "Hypnos": "Symbol of deep rest, dreamwork, and trance states.",
+    "IC": "Your roots, inner foundation, and home life.",
+    "Icarus": "Risk-taking, impulsiveness, and soaring too close to danger.",
+    "Iris": "Messenger of spirit and emotional rainbow bridge.",
+    "Isis": "Sacred feminine protector, memory, and soul devotion.",
+    "Ixion": "Moral boundary testing and repeated karmic mistakes.",
+    "Justitia": "Divine justice, fairness, and balance of power.",
+    "Kaali": "Life force power, prana, and energetic surges.",
+    "Kafka": "The absurd, surreal, or inescapable mental loops.",
+    "Karma": "Echoes of past choices and recurring soul patterns.",
+    "Kassandra": "Unheeded intuition \u2014 the gift and curse of foresight.",
+    "Koussevitzky": "Musical stewardship, mastery, and mentorship.",
+    "Lachesis": "Life span, fate threads, and divine measurement.",
+    "Lilith (i)": "Inner rage or shame from rejected feminine instinct.",
+    "Lucifer": "Brilliance, ambition, and misunderstood lightbearer.",
+    "MC": "Your public role, career, and ambitions.",
+    "Magdalena": "Divine feminine grief and holy remembrance.",
+    "Makemake": "Sacred wildness and ecological harmony.",
+    "Medusa": "Female rage, protection through fear, and injustice.",
+    "Minerva": "Wisdom, strategy, and sharp mental insight.",
+    "Mnemosyne": "Ancestral memory, soul records, and recall.",
+    "Moon": "Your emotions, inner world, and instinctive needs.",
+    "Morpheus": "Fantasy, altered perception, and dreamscapes.",
+    "Nemesis": "Shadow rivalries and internal saboteurs.",
+    "Nessus": "Toxic cycles, abuse patterns, and karmic entanglements.",
+    "Niobe": "Parental grief, pride, and sorrow from loss.",
+    "Odysseus": "Long journeys, cunning survival, and spiritual testing.",
+    "Orcus": "Oaths, soul contracts, and consequences of betrayal.",
+    "Orpheus": "The music of grief \u2014 longing for what's lost.",
+    "Osiris": "Death, rebirth, and divine masculine memory.",
+    "Pamela": "Gentle care, emotional availability, and home-heartedness.",
+    "Panacea": "Your personal remedy and healing philosophy.",
+    "Polyhymnia": "Sacred devotion through silence, voice, or ritual.",
+    "Pomona": "Harvest, abundance, and enjoyment of simple pleasures.",
+    "Priapus (i)": "Your magnetic, seductive pull \u2014 sometimes unconscious.",
+    "Psyche": "Your soul\u2019s longing for love and deep understanding.",
+    "Quaoar": "Ritual, dance, and creation of sacred order.",
+    "Sedna": "Spiritual betrayal and the long arc of soul recovery.",
+    "Singer": "Your vocal frequency and soul sound signature.",
+    "Sirene": "Lure of beauty and danger \u2014 call of the unconscious.",
+    "Siva": "Transcendence through sacred destruction.",
+    "Sphinx": "Your personal riddle and what the soul must solve.",
+    "Terpsichore": "Joy through movement, dance, and physical expression.",
+    "Tezcatlipoca": "Shadow trials, ego collapse, and cosmic reflection.",
+    "Thalia": "Joy, laughter, and healing through light-heartedness.",
+    "Typhon": "Chaotic force within \u2014 monster energy rising.",
+    "Ulysses": "Strategic mind and mythic endurance.",
+    "Varuna": "Cosmic law, spiritual magnitude, and ethical vision.",
+    "Veritas": "Your inner compass of truth and integrity.",
+    "West": "Symbolic point of endings and what you leave behind.",
+    "Zephyr": "New beginnings, grace, and the breath of change.",
 }
 
 
@@ -513,73 +685,56 @@ def format_planet_profile(row):
         "Vertex": "\ud83d\udf0a",
         "True Node": "\u260a",
     }
-
-    def safe(val):
-        return str(val).strip() if val is not None else ""
-
-    name = safe(row.get("Object", ""))
+    name = row["Object"]
     meaning = OBJECT_MEANINGS.get(name, "")
-    dignity = safe(row.get("Dignity", ""))
-    retro = safe(row.get("Retrograde", ""))
-    station = safe(row.get("Station", ""))
-    sabian = safe(row.get("Sabian Symbol", ""))
-    fixed_star = safe(row.get("Fixed Star Conjunction", ""))
-    oob = safe(row.get("OOB Status", ""))
-    sign = safe(row.get("Sign", ""))
-    lon = safe(row.get("Longitude", ""))
-    ruled_by_sign = safe(row.get("Ruled by (sign)", ""))
-    ruled_by_house = safe(row.get("Ruled by (house)", ""))
-    rules_sign = safe(row.get("Rules sign", ""))
-    rules_house = safe(row.get("Rules house", ""))
-    speed = safe(row.get("Speed", ""))
-    lat = safe(row.get("Latitude", ""))
-    dec = safe(row.get("Declination", ""))
+    dignity = row.get("Dignity", "")
+    retro = row.get("Retrograde", "")
+    sabian = row.get("Sabian Symbol", "")
+    fixed_star = row.get("Fixed Star Conjunction", "")
+    oob = row.get("OOB Status", "")
+    sign = row.get("Sign", "")
+    lon = row.get("Longitude", "")
+    ruled_by_sign = row.get("Ruled by (sign)", "")
+    ruled_by_house = row.get("Ruled by (house)", "")
+    rules_sign = row.get("Rules sign", "")
+    rules_house = row.get("Rules house", "")
+    speed = row.get("Speed", "")
+    lat = row.get("Latitude", "")
+    dec = row.get("Declination", "")
 
-    # === Header Construction ===
-    glyph = glyphs.get(name, "")
-    header = f"{glyph} {name}"
-    if retro == "Rx":
+    header = f"### {glyphs.get(name, '')} {name}"
+    if str(dignity).strip().lower() not in ["none", "nan"]:
+        header += f" ({dignity})"
+    if str(retro).strip().lower() == "rx":
         header += " Retrograde"
-    if dignity and dignity.lower() != "none":
-        header += f" (In {dignity})"
 
-    lines = [f"### {header}"]
-
-    # === Sabian Symbol ===
-    if sabian and sabian.lower() not in ["none", "nan", ""]:
-        lines.append(f"“{sabian}”")
-
-    # === Add Meaning ===
+    lines = [header]
     if meaning:
-        lines.append(f"{meaning}")
-
-    # === Main Info Line ===
+        lines.append(f"**{meaning}**")
+    if sabian and str(sabian).strip().lower() not in ["none", "nan"]:
+        lines.append(f"“{sabian}”")
     if sign and lon:
-        pos_line = f"{sign} {lon}"
-        if retro == "Rx":
-            pos_line += " Rx"
-        lines.append(pos_line)
-
-    # === Additional Data ===
-    if oob.lower().startswith("oob"):
-        lines.append(f"Out Of Bounds {oob[3:].strip()}")
-    if station.lower().startswith("station"):
-        lines.append(station)
-    if fixed_star.lower() not in ["none", "nan", ""]:
+        position_line = f"{sign} {lon}"
+        if str(retro).strip().lower() == "rx":
+            position_line += " Rx"
+        lines.append(position_line)
+    if str(oob).strip().lower() not in ["no", "none", "nan"]:
+        lines.append(f"Out Of Bounds: {oob}")
+    if str(fixed_star).strip().lower() not in ["none", "nan"]:
         lines.append(f"Conjunct Fixed Star: {fixed_star}")
-    if ruled_by_sign.lower() not in ["none", "nan", ""]:
+    if str(ruled_by_sign).strip().lower() not in ["none", "nan"]:
         lines.append(f"Ruled by (sign): {ruled_by_sign}")
-    if ruled_by_house.lower() not in ["none", "nan", ""]:
+    if str(ruled_by_house).strip().lower() not in ["none", "nan"]:
         lines.append(f"Ruled by (house): {ruled_by_house}")
-    if rules_sign.lower() not in ["none", "nan", ""]:
+    if str(rules_sign).strip().lower() not in ["none", "nan"]:
         lines.append(f"Rules sign: {rules_sign}")
-    if rules_house.lower() not in ["none", "nan", ""]:
+    if str(rules_house).strip().lower() not in ["none", "nan"]:
         lines.append(f"Rules house: {rules_house}")
-    if speed.lower() not in ["none", "nan", ""]:
+    if str(speed).strip().lower() not in ["none", "nan"]:
         lines.append(f"Speed: {speed}")
-    if lat.lower() not in ["none", "nan", ""]:
+    if str(lat).strip().lower() not in ["none", "nan"]:
         lines.append(f"Latitude: {lat}")
-    if dec.lower() not in ["none", "nan", ""]:
+    if str(dec).strip().lower() not in ["none", "nan"]:
         lines.append(f"Declination: {dec}")
 
     return "\n\n".join(lines).strip()
@@ -593,14 +748,6 @@ label_style = st.radio("Label Style", ["Text", "Glyph"], index=1, horizontal=Tru
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
-    # Validate and extract Computed Absolute Degree
-    if "Computed Absolute Degree" in df.columns:
-        df = df[df["Computed Absolute Degree"].notna()].copy()
-        df["abs_deg"] = df["Computed Absolute Degree"]
-    else:
-        st.error("❌ The CSV is missing the 'Computed Absolute Degree' column.")
-        st.stop()
     df = df[df["Computed Absolute Degree"].notna()].copy()
     df["abs_deg"] = df["Computed Absolute Degree"].astype(float)
 
@@ -653,23 +800,6 @@ if uploaded_file:
         dark_mode,
     )
     st.pyplot(fig, use_container_width=False)
-
-    st.sidebar.subheader("🪐 Planet Profiles in View")
-    for obj in sorted(visible_objects):
-        matched_rows = df[df["Object"] == obj]
-        st.sidebar.write(f"🔍 Processing {obj}")
-        if not matched_rows.empty:
-            try:
-                row = matched_rows.iloc[0].to_dict()
-                profile = format_planet_profile(row)
-                safe_profile = profile.encode("utf-16", "surrogatepass").decode(
-                    "utf-16"
-                )
-                st.sidebar.markdown(safe_profile)
-                st.sidebar.markdown("---")
-            except Exception as e:
-                st.sidebar.error(f"❌ Error processing {obj}: {e}")
-
     st.success(
         "Chart with full pattern fusion + singleton filament combo toggles rendered."
     )
