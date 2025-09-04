@@ -59,73 +59,91 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
         ax.text(r, 1.3, label,
                 ha="center", va="center", fontsize=9,
                 color="white" if dark_mode else "black")
-        
-# --- put near the bottom of rosetta/drawing.py (anywhere above the shape drawing is fine) ---
-
-# Major aspects used for detection/drawing
-MAJOR_ASPECTS = ("Conjunction", "Sextile", "Square", "Trine", "Opposition")
-
-def classify_major_aspect_pair(pos, p1, p2):
-    """Return the major aspect name for (p1,p2) using the same logic as draw_aspect_lines, or None."""
-    d1, d2 = pos.get(p1), pos.get(p2)
-    if d1 is None or d2 is None:
-        return None
-    angle = abs(d1 - d2) % 360
-    if angle > 180:
-        angle = 360 - angle
-    for asp in MAJOR_ASPECTS:
-        data = ASPECTS[asp]
-        if abs(angle - data["angle"]) <= data["orb"]:
-            return asp
-    return None
 
 # -------------------------------
-# Aspect lines
+# Aspect lines (master truth)
 # -------------------------------
 
-def enumerate_major_edges(pos, members):
+def draw_aspect_lines(
+    ax,
+    pos,
+    patterns,
+    active_patterns,
+    asc_deg,
+    group_colors,
+    return_edges=False,
+    edges=None,
+):
     """
-    Enumerate the exact major-aspect edges that the parent pattern would draw for these members.
-    Returns: [((p1, p2), aspect_name), ...] with p1,p2 as concrete planet names.
-    """
-    nodes = [m for m in members if m in pos]
-    edges = []
-    for i in range(len(nodes)):
-        for j in range(i+1, len(nodes)):
-            a, b = nodes[i], nodes[j]
-            asp = classify_major_aspect_pair(pos, a, b)
-            if asp:
-                edges.append(((a, b), asp))
-    return edges
+    Master source of major aspects.
 
-def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg, group_colors):
-    """Draw major aspect lines between planets in active patterns."""
+    - If edges is None: compute edges for the active patterns here (single source of truth).
+    - If edges is provided: DO NOT recompute; only draw edges that lie fully within
+      the same active parent pattern. (Keeps all consumers consistent.)
+    - If ax is None: skip drawing; just compute/return edges.
+
+    Returns:
+        edges (only if return_edges=True): [((p1, p2), aspect_name), ...]
+    """
     single_pattern_mode = len(active_patterns) == 1
 
-    for idx, pattern in enumerate(patterns):
-        if idx not in active_patterns:
-            continue
-        planets = list(pattern)
-        for i in range(len(planets)):
-            for j in range(i+1, len(planets)):
-                p1, p2 = planets[i], planets[j]
-                d1, d2 = pos.get(p1), pos.get(p2)
-                if d1 is None or d2 is None:
-                    continue
-                angle = abs(d1 - d2) % 360
-                if angle > 180:
-                    angle = 360 - angle
-                for aspect, data in ASPECTS.items():
-                    if aspect not in ["Conjunction","Sextile","Square","Trine","Opposition"]:
+    # --- compute once (only when edges=None) ---
+    if edges is None:
+        edges = []
+        for idx, pattern in enumerate(patterns):
+            if idx not in active_patterns:
+                continue
+            planets = list(pattern)
+            for i in range(len(planets)):
+                for j in range(i + 1, len(planets)):
+                    p1, p2 = planets[i], planets[j]
+                    d1, d2 = pos.get(p1), pos.get(p2)
+                    if d1 is None or d2 is None:
                         continue
-                    if abs(angle - data["angle"]) <= data["orb"]:
-                        r1 = deg_to_rad(d1, asc_deg)
-                        r2 = deg_to_rad(d2, asc_deg)
-                        color = data["color"] if single_pattern_mode else group_colors[idx % len(group_colors)]
-                        ax.plot([r1, r2], [1, 1],
-                                linestyle=data["style"], color=color, linewidth=2)
-                        break
 
+                    angle = abs(d1 - d2) % 360
+                    if angle > 180:
+                        angle = 360 - angle
+
+                    # majors only
+                    for aspect in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
+                        data = ASPECTS[aspect]
+                        if abs(angle - data["angle"]) <= data["orb"]:
+                            edges.append(((p1, p2), aspect))
+                            break  # first major match wins
+
+    # --- draw from provided edges (or freshly computed ones), no recompute ---
+    if ax is not None:
+        # map planet -> active parent index
+        parent_of = {}
+        for idx, pattern in enumerate(patterns):
+            if idx in active_patterns:
+                for p in pattern:
+                    parent_of[p] = idx
+
+        for ((p1, p2), aspect) in edges:
+            i1 = parent_of.get(p1)
+            i2 = parent_of.get(p2)
+            # draw only if both endpoints live in the same active parent
+            if i1 is None or i2 is None or i1 != i2:
+                continue
+
+            d1, d2 = pos.get(p1), pos.get(p2)
+            if d1 is None or d2 is None:
+                continue
+
+            r1 = deg_to_rad(d1, asc_deg)
+            r2 = deg_to_rad(d2, asc_deg)
+            data = ASPECTS[aspect]
+            color = data["color"] if single_pattern_mode else group_colors[i1 % len(group_colors)]
+            ax.plot([r1, r2], [1, 1], linestyle=data["style"], color=color, linewidth=2)
+
+    if return_edges:
+        return edges
+
+# -------------------------------
+# Filaments (minors)
+# -------------------------------
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
     """Draw minor aspect (filament) connections"""
@@ -177,6 +195,7 @@ def draw_shape_edges(ax, pos, edges, asc_deg,
             color = base_color
 
         ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=2)
+
 
 def draw_minor_edges(ax, pos, edges, asc_deg):
     """
