@@ -127,40 +127,33 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start=0, G=None, wi
     """
     Detect shapes for the given members of a parent pattern.
 
-    - Strict mode: only use edges already present in G for this pattern.
+    - Strict mode: only use edges from the parent graph G.
     - Approx mode: allow "almost" edges if within 4.5° orb.
     """
-    if not members or G is None:
+    if not members:
         return [], sid_start
 
-    # 1) Cluster conjunctions into representative nodes
+    # 1. Cluster conjunctions into reps
     rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(members))
     R = list(rep_pos.keys())
 
-    # 2) Build lookup of parent edges limited to these members (single source of truth)
+    # 2. Build lookup table from the parent graph G
     edge_lookup = {}
-    for u, v, data in G.edges(data=True):
-        if u in members and v in members:
-            a, b = rep_anchor[u], rep_anchor[v]
-            edge_lookup[frozenset([a, b])] = data.get("aspect")
+    for a, b in combinations(R, 2):
+        planets_a, planets_b = rep_map[a], rep_map[b]
+        for pa in planets_a:
+            for pb in planets_b:
+                if G.has_edge(pa, pb):  # <-- authoritative: parent edges only
+                    asp = G.edges[pa, pb]["aspect"]
+                    edge_lookup[frozenset([a, b])] = asp
 
     shapes, seen, sid = [], set(), sid_start
 
     def has_edge(a, b, aspect):
-        """Return True if parent says this rep edge has `aspect`; 'approx' if widen-orb qualifies."""
+        """Check if rep a–b has this aspect in parent G (or orb fallback)."""
         key = frozenset([a, b])
         if key in edge_lookup and edge_lookup[key] == aspect:
             return True
-        if widen_orb:
-            # Only in approx mode: allow near-miss
-            d1, d2 = rep_pos[a], rep_pos[b]
-            angle = abs(d1 - d2) % 360
-            if angle > 180:
-                angle = 360 - angle
-            target = ASPECTS[aspect]["angle"]
-            if abs(angle - target) <= 4.5:
-                return "approx"
-        return False
 
     def add_once(sh_type, node_list, candidate_edges, suppresses=None):
         nonlocal sid
@@ -183,7 +176,7 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start=0, G=None, wi
                 node_list, specs, rep_map, rep_anchor, suppresses
             )
         return True
-    
+
     # -----------------------
     # SHAPE DETECTION LOGIC
     # -----------------------
@@ -471,6 +464,88 @@ def apply_suppression(shapes):
                         print(f"SUPPRESS: shape{s_small['id']} ({s_small['type']}, parent {s_small['parent']}) "
                               f"BY shape{s_big['id']} ({s_big['type']}).")
                         suppressed.add(j)
+
+
+# -------------------------------
+# Public API
+# -------------------------------
+def detect_shapes(pos, patterns, G):
+    shapes = []
+    sid = 0
+    for parent_idx, mems in enumerate(patterns):
+        shapes_here, sid = _detect_shapes_for_members(pos, mems, parent_idx, sid, G)
+        shapes.extend(shapes_here)
+
+    strict_nodes = set()
+    for s in shapes:
+        strict_nodes.update(s["members"])
+
+    for parent_idx, mems in enumerate(patterns):
+        leftovers = [m for m in mems if m not in strict_nodes]
+        if leftovers:
+            approx_shapes, sid = _detect_shapes_for_members(
+                pos, leftovers, parent_idx, sid, G, widen_orb=True
+            )
+            for s in approx_shapes:
+                s["approx"] = True
+            shapes.extend(approx_shapes)
+
+    print("SHAPES BEFORE SUPPRESSION:")
+    for s in shapes:
+        print(f" - shape{s['id']}: {s['type']} | parent={s['parent']} | members={s['members']}")
+
+    suppressed = set()
+
+    def _same_members(small, target_fset):
+        return frozenset(small["members"]) == target_fset
+
+    for i, s_big in enumerate(shapes):
+        sup = s_big.get("suppresses")
+        if not sup:
+            continue
+        sup_sets = sup.get("suppress", {})
+        _ = sup.get("keep", {})
+        for s_type, targets in sup_sets.items():
+            for target in targets:
+                for j, s_small in enumerate(shapes):
+                    if j in suppressed:
+                        continue
+                    if s_small["type"] != s_type:
+                        continue
+                    if s_small["parent"] != s_big["parent"]:
+                        continue
+                    if not _same_members(s_small, target):
+                        continue
+                    protected = False
+                    for keeper in shapes:
+                        kdata = keeper.get("suppresses", {})
+                        kkeep = kdata.get("keep", {})
+                        if keeper["parent"] != s_small["parent"]:
+                            continue
+                        if (s_small["type"] in kkeep and
+                            frozenset(s_small["members"]) in kkeep[s_small["type"]]):
+                            protected = True
+                            print(
+                                f"KEEP (override): shape{s_small['id']} ({s_small['type']}, parent {s_small['parent']}) "
+                                f"protected by shape{keeper['id']} ({keeper['type']})."
+                            )
+                            break
+                    if protected:
+                        continue
+                    print(
+                        f"SUPPRESS: shape{s_small['id']} ({s_small['type']}, parent {s_small['parent']}) "
+                        f"BY shape{s_big['id']} ({s_big['type']})."
+                    )
+                    suppressed.add(j)
+
+    shapes_after = [s for i, s in enumerate(shapes) if i not in suppressed]
+
+    print("SHAPES AFTER SUPPRESSION:")
+    for s in shapes_after:
+        print(f" - shape{s['id']}: {s['type']} | parent={s['parent']} | members={s['members']}")
+
+    return shapes_after
+
 
 def internal_minor_edges_for_pattern(pos, members):
     minors = []
