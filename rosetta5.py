@@ -92,9 +92,10 @@ def get_shapes(pos, patterns, major_edges_all):
 
 # Distinct palette for sub-shapes
 SUBSHAPE_COLORS = [
-    "#FF7F50", "#FFD700", "#90EE90", "#20B2AA",
-    "#FF69B4", "#8B4513", "#B8860B", "#708090",
-    "#FF8C00", "#DA70D6", "#CD5C5C", "#00CED1",
+    "#FF5214", "#FFA600", "#FBFF00", "#87DB00",
+    "#00B828", "#049167", "#006EFF", "#1100FF",
+    "#6320FF", "#9E0099", "#FF00EA", "#720022",
+    "#4B2C06", "#534546", "#C4A5A5", "#5F7066",
 ]
 
 # --- FORMATTER ---
