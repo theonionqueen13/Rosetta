@@ -184,30 +184,39 @@ def render_chart_with_shapes(
     # sub-shapes
     for s in active_shapes:
         visible_objects.update(s["members"])
-    if len(active_shapes) > 1:
-        color_map = {s["id"]: SUBSHAPE_COLORS[i % len(SUBSHAPE_COLORS)]
-                     for i, s in enumerate(active_shapes)}
-        for s in active_shapes:
-            draw_shape_edges(ax, pos, s["edges"], asc_deg,
-                             use_aspect_colors=False,
-                             override_color=color_map[s["id"]])
-    elif len(active_shapes) == 1:
-        s = active_shapes[0]
-        draw_shape_edges(ax, pos, s["edges"], asc_deg,
-                         use_aspect_colors=False,
-                         override_color=SUBSHAPE_COLORS[0])
+    # persistent color map for ALL shapes, keyed by id
+    if "shape_color_map" not in st.session_state:
+        st.session_state.shape_color_map = {}
+
+    for s in shapes:
+        if s["id"] not in st.session_state.shape_color_map:
+            # assign color based on shape id (stable)
+            color = SUBSHAPE_COLORS[s["id"] % len(SUBSHAPE_COLORS)]
+            st.session_state.shape_color_map[s["id"]] = color
+
+    # now render active shapes
+    for s in active_shapes:
+        draw_shape_edges(
+            ax, pos, s["edges"], asc_deg,
+            use_aspect_colors=False,
+            override_color=st.session_state.shape_color_map[s["id"]]
+        )
 
     # singletons
     visible_objects.update(active_singletons)
 
     # connectors
     for (p1, p2, asp_name, pat1, pat2) in filaments:
+        # check if each endpoint is active in ANY visible category
         in_parent1 = any((idx in active_parents) and (p1 in patterns[idx]) for idx in active_parents)
         in_parent2 = any((idx in active_parents) and (p2 in patterns[idx]) for idx in active_parents)
+
         in_shape1 = any(p1 in s["members"] for s in active_shapes)
         in_shape2 = any(p2 in s["members"] for s in active_shapes)
+
         in_singleton1 = p1 in active_singletons
         in_singleton2 = p2 in active_singletons
+
         if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
             from rosetta.helpers import deg_to_rad
             r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
@@ -273,28 +282,44 @@ if uploaded_file:
 
                 with st.expander(label, expanded=False):
                     parent_shapes = [s for s in shapes if s["parent"] == i]
-                    shape_entries = []
+
                     if parent_shapes:
                         st.markdown("**Sub-shapes detected:**")
 
+                        # --- Split into normal vs remainder ---
+                        remainder_shapes = [s for s in parent_shapes if s.get("remainder")]
+                        normal_shapes   = [s for s in parent_shapes if not s.get("remainder")]
+
+                        shape_entries = []
+
+                        # sort "normal" shapes nicely first
                         def default_sort_key(s):
                             return -len(s["members"]), s["type"]
 
-                        if any(s["type"] == "Envelope" for s in parent_shapes):
+                        if any(s["type"] == "Envelope" for s in normal_shapes):
                             order = ["Envelope", "Mystic Rectangle", "Sextile Wedge", "Grand Trine"]
-                            envelope_cluster = [s for s in parent_shapes if s["type"] in order]
-                            rest = [s for s in parent_shapes if s["type"] not in order]
+                            envelope_cluster = [s for s in normal_shapes if s["type"] in order]
+                            rest = [s for s in normal_shapes if s["type"] not in order]
                             envelope_cluster.sort(key=lambda s: order.index(s["type"]))
                             rest.sort(key=default_sort_key)
-                            parent_shapes = envelope_cluster + rest
+                            normal_shapes = envelope_cluster + rest
                         else:
-                            parent_shapes.sort(key=default_sort_key)
+                            normal_shapes.sort(key=default_sort_key)
 
-                        for s in parent_shapes:
+                        # render normal + approx shapes first
+                        for s in normal_shapes:
                             shape_name = f"({s['type']})" if s.get("approx") else s["type"]
                             label_text = f"{shape_name} ({', '.join(s['members'])})"
                             on = st.checkbox(label_text, value=False, key=f"shape_{i}_{s['id']}")
                             shape_entries.append({"id": s["id"], "on": on})
+
+                        # render remainder groups last, with square brackets
+                        if remainder_shapes:
+                            for s in remainder_shapes:
+                                label_text = f"[{', '.join(s['members'])}]"
+                                on = st.checkbox(label_text, value=False, key=f"shape_{i}_{s['id']}")
+                                shape_entries.append({"id": s["id"], "on": on})
+
                     else:
                         st.markdown("_(no sub-shapes found)_")
 

@@ -115,20 +115,66 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     sid = sid_start
 
     def has_edge(a, b, aspect):
-        """True iff the representative edge exists with the exact aspect in the filtered master list."""
-        return aspect in edge_lookup.get(frozenset((a, b)), [])
+        """True iff edge exists in master list, or (if widen_orb) it's close enough to qualify as approx."""
+        key = frozenset((a, b))
+        if aspect in edge_lookup.get(key, []):
+            return True
 
-    def add_once(sh_type, node_list, candidate_edges, suppresses=None):
+        if widen_orb:
+            # Expanded orb check for approximate edges
+            d1, d2 = pos.get(a), pos.get(b)
+            if d1 is None or d2 is None:
+                return False
+            angle = abs(d1 - d2) % 360
+            if angle > 180:
+                angle = 360 - angle
+            data = ASPECTS[aspect]
+            widened_orb = data["orb"] * 1.5  # expand by 50%, adjust as you like
+            if abs(angle - data["angle"]) <= widened_orb:
+                return True
+        return False
+
+    def has_edge_loose(a, b, aspect, bonus=1.0):
+        """
+        When widen_orb=True, allow 'near misses' by checking angles directly
+        using representative positions and a wider orb. Returns True if the
+        pair is within (orb + bonus). This does NOT touch major_edges_all.
+        """
+        if not widen_orb:
+            return False
+        if aspect not in ("Opposition", "Trine", "Sextile", "Square", "Conjunction"):
+            return False
+
+        # Use representative (cluster) degrees, not raw planet degrees
+        da = rep_pos.get(a)
+        db = rep_pos.get(b)
+        if da is None or db is None:
+            return False
+
+        angle = abs((da - db) % 360)
+        if angle > 180:
+            angle = 360 - angle
+
+        target = ASPECTS[aspect]["angle"]
+        base_orb = ASPECTS[aspect]["orb"]
+        return abs(angle - target) <= (base_orb + bonus)
+
+    def add_once(sh_type, node_list, candidate_edges, suppresses=None, approx_bonus=2.0):
         nonlocal sid
         key = (sh_type, tuple(sorted(node_list)))
         if key in seen:
             return False
 
-        # Only include edges that actually exist in edge_lookup
         specs = []
         for (x, y), asp in candidate_edges:
+            # Strict edge present in filtered master list?
             if has_edge(x, y, asp):
                 specs.append(((x, y), asp))
+            # Otherwise, if we're in widen_orb mode, allow an approximate edge
+            elif has_edge_loose(x, y, asp, bonus=approx_bonus):
+                specs.append(((x, y), asp + "_approx"))
+                # DEBUG: show invented approx edges
+                # print(f"   [approx] {x}-{y} {asp} (bonus={approx_bonus})")
 
         if not specs:
             return False
@@ -243,19 +289,24 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
             if (has_edge(a, b, "Trine") and has_edge(b, c, "Trine") and has_edge(a, c, "Trine")):
                 for t in (a, b, c):
                     if has_edge(apex, t, "Opposition"):
+                        # a,b,c are the grand-trine nodes, t is the one opposed by apex
                         rest = [x for x in (a, b, c) if x != t]
+
+                        suppress_wedges = {
+                            frozenset([apex, t, rest[0]]),  # wedge using apex–t opposition + trines/sextiles
+                            frozenset([apex, t, rest[1]]),
+                        }
+
+                        suppress_sextile_wedge = {
+                            frozenset([apex, rest[0], rest[1]])  # apex sextiles to both, those two are trine
+                        }
+
                         suppresses = {
-                            "Wedge": {
-                                frozenset([a, b, apex]),
-                                frozenset([b, c, apex]),
-                                frozenset([a, c, apex]),
-                            },
-                            "Sextile Wedge": {
-                                frozenset([apex, rest[0], a]),
-                                frozenset([apex, rest[1], b]),
-                            },
+                            "Wedge": suppress_wedges,
+                            "Sextile Wedge": suppress_sextile_wedge,
                             "Grand Trine": {frozenset([a, b, c])},
                         }
+
                         candidate_edges = [
                             ((a, b), "Trine"), ((b, c), "Trine"), ((a, c), "Trine"),
                             ((apex, t), "Opposition"),
@@ -315,15 +366,78 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
 def detect_shapes(pos, patterns, major_edges_all):
     shapes = []
     sid = 0
+    used_members = set()
+    used_edges = set()  # track edges already consumed by strict/approx shapes
 
+    # strict pass
     for parent_idx, mems in enumerate(patterns):
         s_here, sid = _detect_shapes_for_members(
             pos, mems, parent_idx, sid, major_edges_all, widen_orb=False
         )
         shapes.extend(s_here)
+        for sh in s_here:
+            used_members.update(sh["members"])
+            for (u, v), asp in sh["edges"]:
+                used_edges.add((tuple(sorted((u, v))), asp))
 
-    # 🚨 Apply suppression filtering here
+    # approx pass
+    for parent_idx, mems in enumerate(patterns):
+        leftovers = set(mems) - used_members
+        if not leftovers:
+            continue
+        s_here_approx, sid = _detect_shapes_for_members(
+            pos, leftovers, parent_idx, sid, major_edges_all, widen_orb=True
+        )
+        for sh in s_here_approx:
+            sh["approx"] = True
+            used_members.update(sh["members"])
+            for (u, v), asp in sh["edges"]:
+                used_edges.add((tuple(sorted((u, v))), asp))
+        shapes.extend(s_here_approx)
+
+    # remainder pass (grouped by connectivity)
+    for parent_idx, mems in enumerate(patterns):
+        members_set = set(mems)
+
+        # collect unused edges
+        remainders = []
+        for (u, v), asp in major_edges_all:
+            edge_key = (tuple(sorted((u, v))), asp)
+            if (
+                edge_key not in used_edges
+                and u in members_set
+                and v in members_set
+            ):
+                remainders.append(((u, v), asp))
+
+        if remainders:
+            # build adjacency graph
+            import networkx as nx
+            G = nx.Graph()
+            for (u, v), asp in remainders:
+                G.add_edge(u, v, aspect=asp)
+
+            for comp in nx.connected_components(G):
+                comp_edges = []
+                for u, v in G.subgraph(comp).edges():
+                    asp = G[u][v]["aspect"]
+                    comp_edges.append(((u, v), asp))
+
+                shapes.append({
+                    "id": sid,
+                    "type": "Remainder",
+                    "parent": parent_idx,
+                    "members": list(comp),
+                    "edges": comp_edges,
+                    "remainder": True,
+                })
+                sid += 1
+
+    # suppression at the very end
     shapes = apply_suppression(shapes)
+
+    # sort: strict+approx first, then remainder groups last
+    shapes.sort(key=lambda s: (s.get("remainder", False), s["id"]))
     return shapes
 
 # -------------------------------
