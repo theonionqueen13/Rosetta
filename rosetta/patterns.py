@@ -1,30 +1,22 @@
-# rosetta/patterns.py
+
 import networkx as nx
 from itertools import combinations, permutations
 from rosetta.lookup import ASPECTS
-from rosetta.drawing import enumerate_major_edges
-
-# -------------------------------
-# Aspect graph (patterns as connected components)
-# -------------------------------
+from rosetta.drawing import classify_major_aspect_pair, enumerate_major_edges
+ 
+ # -------------------------------
+ # Aspect graph (patterns as connected components)
+ # -------------------------------
 def build_aspect_graph(pos, return_graph=False):
-    MAJORS = ("Conjunction", "Sextile", "Square", "Trine", "Opposition")
     G = nx.Graph()
     for p1, p2 in combinations(pos.keys(), 2):
-        d1, d2 = pos[p1], pos[p2]
-        angle = abs(d1 - d2) % 360
-        if angle > 180:
-            angle = 360 - angle
-        for asp in MAJORS:
-            data = ASPECTS[asp]
-            if abs(angle - data["angle"]) <= data["orb"]:
-                G.add_edge(p1, p2, aspect=asp)
-                break
+        asp = classify_major_aspect_pair(pos, p1, p2)
+        if asp:
+            G.add_edge(p1, p2, aspect=asp)
     comps = list(nx.connected_components(G))
     if return_graph:
         return comps, G
     return comps
-
 
 def detect_minor_links_with_singletons(pos, patterns):
     minor_aspects = ["Quincunx", "Sesquisquare"]
@@ -54,7 +46,6 @@ def detect_minor_links_with_singletons(pos, patterns):
                     connections.append((p1, p2, asp, pat1, pat2))
                 break
     return connections, singleton_map
-
 
 def generate_combo_groups(filaments):
     G = nx.Graph()
@@ -91,7 +82,6 @@ def _add_shape(
 
 def _has_aspect(G, a, b, kind):
     return G.has_edge(a, b) and G[a][b]["aspect"] == kind
-
 
 # -------------------------------
 # Main detection (pattern matching on graph)
