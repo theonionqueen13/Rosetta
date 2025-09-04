@@ -75,46 +75,37 @@ def draw_aspect_lines(
     edges=None,
 ):
     """
-    Master source of major aspects.
+    Single source of truth for major aspect edges.
 
-    - If edges is None: compute edges for the active patterns here (single source of truth).
-    - If edges is provided: DO NOT recompute; only draw edges that lie fully within
-      the same active parent pattern. (Keeps all consumers consistent.)
-    - If ax is None: skip drawing; just compute/return edges.
-
-    Returns:
-        edges (only if return_edges=True): [((p1, p2), aspect_name), ...]
+    - If edges is None: compute them fresh from pos for the active patterns.
+    - If edges is provided: just use that (no recalculation).
+    - If ax is not None: draw them.
+    - If return_edges: return the edge list.
     """
     single_pattern_mode = len(active_patterns) == 1
 
-    # --- compute once (only when edges=None) ---
     if edges is None:
         edges = []
         for idx, pattern in enumerate(patterns):
             if idx not in active_patterns:
                 continue
-            planets = list(pattern)
-            for i in range(len(planets)):
-                for j in range(i + 1, len(planets)):
-                    p1, p2 = planets[i], planets[j]
+            keys = list(pattern)
+            for i1 in range(len(keys)):
+                for i2 in range(i1 + 1, len(keys)):
+                    p1, p2 = keys[i1], keys[i2]
                     d1, d2 = pos.get(p1), pos.get(p2)
                     if d1 is None or d2 is None:
                         continue
-
-                    angle = abs(d1 - d2) % 360
+                    angle = abs(d1 - d2)
                     if angle > 180:
                         angle = 360 - angle
+                    for asp, asp_data in ASPECTS.items():
+                        if asp not in ["Quincunx", "Sesquisquare"]:  # majors only
+                            if abs(asp_data["angle"] - angle) <= asp_data["orb"]:
+                                edges.append(((p1, p2), asp))
+                                break  # stop at first match
 
-                    # majors only
-                    for aspect in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
-                        data = ASPECTS[aspect]
-                        if abs(angle - data["angle"]) <= data["orb"]:
-                            edges.append(((p1, p2), aspect))
-                            break  # first major match wins
-
-    # --- draw from provided edges (or freshly computed ones), no recompute ---
     if ax is not None:
-        # map planet -> active parent index
         parent_of = {}
         for idx, pattern in enumerate(patterns):
             if idx in active_patterns:
@@ -124,19 +115,16 @@ def draw_aspect_lines(
         for ((p1, p2), aspect) in edges:
             i1 = parent_of.get(p1)
             i2 = parent_of.get(p2)
-            # draw only if both endpoints live in the same active parent
             if i1 is None or i2 is None or i1 != i2:
                 continue
-
             d1, d2 = pos.get(p1), pos.get(p2)
             if d1 is None or d2 is None:
                 continue
-
             r1 = deg_to_rad(d1, asc_deg)
             r2 = deg_to_rad(d2, asc_deg)
-            data = ASPECTS[aspect]
-            color = data["color"] if single_pattern_mode else group_colors[i1 % len(group_colors)]
-            ax.plot([r1, r2], [1, 1], linestyle=data["style"], color=color, linewidth=2)
+            asp_data = ASPECTS[aspect]
+            color = asp_data["color"] if single_pattern_mode else group_colors[i1 % len(group_colors)]
+            ax.plot([r1, r2], [1, 1], linestyle=asp_data["style"], color=color, linewidth=2)
 
     if return_edges:
         return edges

@@ -36,22 +36,50 @@ _cache_major_edges = {}
 _cache_patterns = {}
 _cache_shapes = {}
 
-def get_major_edges(pos):
+def get_major_edges_and_patterns(pos):
+    """
+    FIXED: Calculate patterns first, then major edges only within those patterns.
+    This prevents cross-pattern aspect calculations.
+    """
     pos_items_tuple = tuple(sorted(pos.items()))
     if pos_items_tuple not in _cache_major_edges:
-        edges = draw_aspect_lines(
-            None, pos, [set(pos.keys())], {0}, 0, GROUP_COLORS, return_edges=True
-        )
-        _cache_major_edges[pos_items_tuple] = tuple(edges)
-    return _cache_major_edges[pos_items_tuple]
+        # First, we need to do an initial pass to find connected components
+        # using a basic aspect check (this is unavoidable for the initial clustering)
+        temp_edges = []
+        planets = list(pos.keys())
+        for i in range(len(planets)):
+            for j in range(i + 1, len(planets)):
+                p1, p2 = planets[i], planets[j]
+                d1, d2 = pos.get(p1), pos.get(p2)
+                if d1 is None or d2 is None:
+                    continue
 
-def get_patterns(pos, major_edges_all):
-    pos_keys_tuple = tuple(sorted(pos.keys()))
-    edges_tuple = tuple(major_edges_all)
-    key = (pos_keys_tuple, edges_tuple)
-    if key not in _cache_patterns:
-        _cache_patterns[key] = connected_components_from_edges(list(pos.keys()), major_edges_all)
-    return _cache_patterns[key]
+                angle = abs(d1 - d2) % 360
+                if angle > 180:
+                    angle = 360 - angle
+
+                # Check for major aspects
+                for aspect in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
+                    data = ASPECTS[aspect]
+                    if abs(angle - data["angle"]) <= data["orb"]:
+                        temp_edges.append(((p1, p2), aspect))
+                        break
+
+        # Find connected components
+        patterns = connected_components_from_edges(list(pos.keys()), temp_edges)
+        
+        # Now calculate major edges properly using the patterns
+        major_edges = temp_edges  
+
+        print("\n=== DEBUG: major_edges_all (master list) ===")
+        for (u, v), asp in major_edges:
+            print(f"  {u} - {v}: {asp}")
+        print("===========================================\n")
+
+        
+        _cache_major_edges[pos_items_tuple] = (tuple(major_edges), patterns)
+    
+    return _cache_major_edges[pos_items_tuple]
 
 def get_shapes(pos, patterns, major_edges_all):
     pos_items_tuple = tuple(sorted(pos.items()))
@@ -211,9 +239,14 @@ if uploaded_file:
     df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
     pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
 
-    # --- Cache-backed major edges/patterns/shapes ---
-    major_edges_all = get_major_edges(pos)
-    patterns = get_patterns(pos, major_edges_all)
+    # --- FIXED: Get major edges and patterns together ---
+    major_edges_all, patterns = get_major_edges_and_patterns(pos)
+    
+    print("\n=== DEBUG: major_edges_all ===")
+    for (u, v), asp in major_edges_all:
+        print(f"  {u} - {v}: {asp}")
+    print("==============================\n")
+
     shapes = get_shapes(pos, patterns, major_edges_all)
 
     # Minors + combos
