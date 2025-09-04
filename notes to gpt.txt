@@ -1,0 +1,5 @@
+kites also need to suppress wedges
+
+New pattern: Envelope: 5 planets in 4 consecutive sextiles, where the two on each end all form a mystic rectangle, the three in the middle form a sextile wedge, the four on one side form a cradle and the four on the other side also form a cradle... and the middle one plus the two end points form a grand cross. 
+
+In the Envelope, I want BOTH cradles suppressed. I want all 4 wedges suppressed, and both kites. I want both sextile wedges that each share a sextile with the mystic rectangle suppressed. I ONLY want the mystic rectangle, the grand trine, and the sextile wedge that shares a trine with the mystic rectangle to display.

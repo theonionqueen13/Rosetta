@@ -1,3 +1,6 @@
+print("🧪 DEBUG: This is the current rosetta.py file being run!")
+
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -301,7 +304,6 @@ def render_chart(
     return fig, visible_objects
 
 
-
 ASPECTS = {
     "Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
     "Sextile": {"angle": 60, "orb": 3, "color": "purple", "style": "solid"},
@@ -415,99 +417,73 @@ def generate_combo_groups(filaments):
             G.add_edge(pat1, pat2)
     return [sorted(list(g)) for g in nx.connected_components(G) if len(g) > 1]
 
-    for deg in range(0, 360, 10):
-        rad = deg_to_rad(deg, asc_deg)
-        ax.plot(
-            [rad, rad],
-            [1.02, 1.08],
-            color="white" if dark_mode else "black",
-            linewidth=1,
-        )
-
-    for i, base_deg in enumerate(range(0, 360, 30)):
-        rad = deg_to_rad(base_deg + 15, asc_deg)
-
-    for name, degree in pos.items():
-        rad = deg_to_rad(degree, asc_deg)
-        label = name if label_style == "Text" else GLYPHS.get(name, name)
-
-    active_patterns = set(i for i, show in enumerate(toggles) if show)
-    for group in combo_toggles:
-        if combo_toggles[group]:
-            active_patterns.update(group)
-
-    for idx, pattern in enumerate(patterns):
-        if idx not in active_patterns:
-            continue
-        keys = list(pattern)
-        for i1 in range(len(keys)):
-            for i2 in range(i1 + 1, len(keys)):
-                p1, p2 = keys[i1], keys[i2]
-                angle = abs(pos[p1] - pos[p2])
-                if angle > 180:
-                    angle = 360 - angle
-                for asp, asp_data in ASPECTS.items():
-                    if asp not in ["Quincunx", "Sesquisquare"]:
-                        if abs(asp_data["angle"] - angle) <= asp_data["orb"]:
-                            r1 = deg_to_rad(pos[p1], asc_deg)
-                            r2 = deg_to_rad(pos[p2], asc_deg)
-                            ax.plot(
-                                [r1, r2],
-                                [1, 1],
-                                linestyle=asp_data["style"],
-                                color=GROUP_COLORS[idx % len(GROUP_COLORS)],
-                                linewidth=2,
-                            )
-
-    for p1, p2, asp_name, pat1, pat2 in filaments:
-        if (
-            pat1 in active_patterns
-            and pat2 in active_patterns
-            and not single_pattern_mode
-        ):
-            r1 = deg_to_rad(pos[p1], asc_deg)
-            r2 = deg_to_rad(pos[p2], asc_deg)
-            ax.plot(
-                [r1, r2],
-                [1, 1],
-                linestyle="dotted",
-                color=ASPECTS[asp_name]["color"],
-                linewidth=1,
-            )
-
-    return fig
-
-
-def format_planet_profile(row):
-    name = row["Object"]
-    meaning = OBJECT_MEANINGS.get(name, "")
-    dignity = row.get("Dignity", "None")
-    retro = row.get("Retrograde", "")
-    sabian = row.get("Sabian Symbol", "")
-    fixed_star = row.get("Fixed Star Conjunction", "")
-    oob = row.get("OOB Status", "")
-    sign = row.get("Sign", "")
-    lon = row.get("Longitude", "")
-    ruled_by_sign = row.get("Ruled by (sign)", "")
-    ruled_by_house = row.get("Ruled by (house)", "")
-    rules_sign = row.get("Rules sign", "")
-    rules_house = row.get("Rules house", "")
-    speed = row.get("Speed", "")
-    lat = row.get("Latitude", "")
-    dec = row.get("Declination", "")
-
 
 OBJECT_MEANINGS = {
-    "Sun": "Your core identity, purpose, and life force.",
+    "DC": "Relationship to others/to the archetypal 'other'",
+    "True Node": "Your soul’s growth direction in this life.",
+    "Mean Node": "A smoothed version of your soul growth path.",
+    "Sun": "Your primary soul expression.",
     "Moon": "Your emotions, inner world, and instinctive needs.",
     "Mercury": "Your mind, communication style, and how you think.",
-    "Venus": "How you love, attract, and experience beauty.",
-    "Mars": "How you act, assert yourself, and pursue desires.",
-    "Jupiter": "Your growth path, optimism, and what expands you.",
+    "Venus": "Value; Sensual comfort, security, and pleasure",
+    "Mars": "Asserting yourself; the Engine",
+    "Jupiter": "Your growth, philosophy, and what expands you.",
     "Saturn": "Your responsibilities, discipline, and long-term lessons.",
-    # Add more as needed
+    "Uranus": "Your rebellion and innovation, and surprise disruptions.",
+    "Neptune": "Your dreams, illusions, and connection to the divine.",
+    "Pluto": "Transformation, power dynamics, and hidden forces.",
+    "Chiron": "The wounded healer; your deepest wound and potential for healing.",
+    "Ceres": "Nurturing, caregiving, and cycles of nourishment.",
+    "Pallas": "Wisdom, strategic thinking, and creative problem solving.",
+    "Juno": "Commitment, marriage, and equality in relationships.",
+    "Vesta": "Devotion, focus, and your sacred inner flame.",
+    "Black Moon Lilith": "Repression, primal energy, and your wild power.",
+    "Lilith": "The untamed, wild feminine energy within.",
+    "Part of Fortune": "Where you find success, joy, and fulfillment.",
+    "Vertex": "A point of fate or serendipity in your life.",
+    "South Node": "Your past life patterns and karmic tendencies.",
+    "North Node": "Your soul’s growth direction in this life.",
+    "IC": "The deepest part of your identity, your roots.",
+    "MC": "Your public persona, career, and life direction.",
+    "DC": "Your relationships and how you interact with others.",
+    "AC": "The outward mask, the first impression you make on others.",
 }
 
+# Add more as needed
+
+
+def format_planet_header(row):
+    symbol = row.get("Symbol", "")
+    obj = row.get("Object", "")
+    dignity = row.get("Dignity", "")
+    dignity_str = f" ({dignity})" if dignity else ""
+    sabian = row.get("Sabian", "")
+    header = f"### {symbol} {obj}{dignity_str}\n> “{sabian}”"
+    return header
+
+def format_planet_subheading(row):
+    sign = row.get("Sign", "")
+    deg = row.get("Degree", "")
+    minute = row.get("Minute", "")
+    second = row.get("Second", "")
+    subheading = f"{sign} {deg}°{minute}'{second}\""
+    return subheading
+
+    return subheading
+
+    symbol = row.get("Symbol", "")
+    obj = row.get("Object", "")
+    dignity = row.get("Dignity", "")
+    dignity_str = f" ({dignity})" if dignity else ""
+    sabian = row.get("Sabian", "")
+    header = f"### {symbol} {obj}{dignity_str}\n> “{sabian}”"
+    return header
+
+def format_sabian(row):
+    sabian = row.get("Sabian", "")
+    if sabian:
+        return f'> “{sabian}”'
+    return ""
 
 def format_planet_profile(row):
     name = row["Object"]
@@ -528,28 +504,6 @@ def format_planet_profile(row):
     dec = row.get("Declination", "")
 
     header = f"### {GLYPHS.get(name, '')} {name}"
-    if str(dignity).lower() not in ["none", "nan"]:
-        header += f" ({dignity})"
-    if str(retro).strip().lower() == "rx":
-        header += " Retrograde"
-
-    profile = f"{header}\n*{meaning}*\n"
-    if sabian:
-        profile += f"“{sabian}”\n"
-    profile += f"{sign} {lon}"
-    if str(retro).strip().lower() == "rx":
-        profile += " Rx"
-    profile += "\n"
-    if str(oob).strip():
-        profile += f"Out Of Bounds: {oob}\n"
-    if str(fixed_star).strip():
-        profile += f"Conjunct Fixed Star: {fixed_star}\n"
-    profile += f"Ruled by (sign): {ruled_by_sign}\n"
-    profile += f"Ruled by (house): {ruled_by_house}\n"
-    profile += f"Rules sign: {rules_sign}\n"
-    profile += f"Rules house: {rules_house}\n"
-    profile += f"Speed: {speed}\nLatitude: {lat}\nDeclination: {dec}\n"
-    return profile.strip()
 
 
 OBJECT_MEANINGS = {
@@ -597,7 +551,6 @@ OBJECT_MEANINGS = {
     "Coppernicus": "Revolutionary vision and paradigm-breaking insight.",
     "Dionysus": "Ecstatic transformation, divine madness, and emotional release.",
     "Echo": "Unmet longing, repetition, and the search for your own voice.",
-    "Eris": "Victimhood to advocady for the underdog, through learning and speaking truth."
     "Eros": "Your passionate, magnetic drive and creative spark.",
     "Eurydike": "The longing for love lost or the cost of devotion.",
     "Euterpe": "Muse of music \u2014 inspires joy through melody and rhythm.",
@@ -663,81 +616,22 @@ OBJECT_MEANINGS = {
 
 
 def format_planet_profile(row):
-    glyphs = {
-        "Sun": "\u2609",
-        "Moon": "\u263d",
-        "Mercury": "\u263f",
-        "Venus": "\u2640\ufe0e",
-        "Mars": "\u2642\ufe0e",
-        "Jupiter": "\u2643",
-        "Saturn": "\u2644",
-        "Uranus": "\u2645",
-        "Neptune": "\u2646",
-        "Pluto": "\u2647",
-        "Chiron": "\u26b7",
-        "Ceres": "\u26b3",
-        "Pallas": "\u26b4",
-        "Juno": "\u26b5",
-        "Vesta": "\u26b6",
-        "North Node": "\u260a",
-        "South Node": "\u260b",
-        "Part of Fortune": "\u2297",
-        "Lilith": "\u26b8",
-        "Vertex": "\ud83d\udf0a",
-        "True Node": "\u260a",
-    }
-    name = row["Object"]
-    meaning = OBJECT_MEANINGS.get(name, "")
-    dignity = row.get("Dignity", "")
-    retro = row.get("Retrograde", "")
-    sabian = row.get("Sabian Symbol", "")
-    fixed_star = row.get("Fixed Star Conjunction", "")
-    oob = row.get("OOB Status", "")
-    sign = row.get("Sign", "")
-    lon = row.get("Longitude", "")
-    ruled_by_sign = row.get("Ruled by (sign)", "")
-    ruled_by_house = row.get("Ruled by (house)", "")
-    rules_sign = row.get("Rules sign", "")
-    rules_house = row.get("Rules house", "")
-    speed = row.get("Speed", "")
-    lat = row.get("Latitude", "")
-    dec = row.get("Declination", "")
-
-    header = f"### {glyphs.get(name, '')} {name}"
-    if str(dignity).strip().lower() not in ["none", "nan"]:
-        header += f" ({dignity})"
-    if str(retro).strip().lower() == "rx":
-        header += " Retrograde"
-
-    lines = [header]
-    if meaning:
-        lines.append(f"**{meaning}**")
-    if sabian and str(sabian).strip().lower() not in ["none", "nan"]:
-        lines.append(f"“{sabian}”")
-    if sign and lon:
-        position_line = f"{sign} {lon}"
-        if str(retro).strip().lower() == "rx":
-            position_line += " Rx"
-        lines.append(position_line)
-    if str(oob).strip().lower() not in ["no", "none", "nan"]:
-        lines.append(f"Out Of Bounds: {oob}")
-    if str(fixed_star).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Conjunct Fixed Star: {fixed_star}")
-    if str(ruled_by_sign).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Ruled by (sign): {ruled_by_sign}")
-    if str(ruled_by_house).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Ruled by (house): {ruled_by_house}")
-    if str(rules_sign).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Rules sign: {rules_sign}")
-    if str(rules_house).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Rules house: {rules_house}")
-    if str(speed).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Speed: {speed}")
-    if str(lat).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Latitude: {lat}")
-    if str(dec).strip().lower() not in ["none", "nan"]:
-        lines.append(f"Declination: {dec}")
-
+    lines = []
+    header = format_planet_header(row)
+    subheading = format_planet_subheading(row)
+    sabian = format_sabian(row)
+    sign_and_deg = format_sign_degree(row)
+    astro_lines = format_astronomical_details(row)
+    lines.append("")
+    lines.append(header)
+    lines.append("")
+    lines.append(subheading)
+    lines.append("")
+    lines.append(sabian)
+    lines.append("")
+    lines.append(sign_and_deg)
+    lines.append("")
+    lines.extend(astro_lines)
     return "\n\n".join(lines).strip()
 
 
@@ -749,6 +643,14 @@ label_style = st.radio("Label Style", ["Text", "Glyph"], index=1, horizontal=Tru
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
+
+    # Validate and extract Computed Absolute Degree
+    if "Computed Absolute Degree" in df.columns:
+        df = df[df["Computed Absolute Degree"].notna()].copy()
+        df["abs_deg"] = df["Computed Absolute Degree"]
+    else:
+        st.error("❌ The CSV is missing the 'Computed Absolute Degree' column.")
+        st.stop()
     df = df[df["Computed Absolute Degree"].notna()].copy()
     df["abs_deg"] = df["Computed Absolute Degree"].astype(float)
 
@@ -769,21 +671,21 @@ if uploaded_file:
     filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
     combos = generate_combo_groups(filaments)
 
-    
-    
     toggles = []
     pattern_labels = []
     left_col, right_col = st.columns(2)
     half = (len(patterns) + 1) // 2
     for i in range(len(patterns)):
-        key_prefix = 'left' if i < half else 'right'
+        key_prefix = "left" if i < half else "right"
         target_col = left_col if i < half else right_col
         with target_col:
             row = st.columns([0.5, 2.5])
             checkbox_key = f"toggle_{key_prefix}_{i}"
             textinput_key = f"label_{key_prefix}_{i}"
             toggles.append(row[0].checkbox("", value=True, key=checkbox_key))
-            pattern_labels.append(row[1].text_input("", f"Pattern {i+1}", key=textinput_key))
+            pattern_labels.append(
+                row[1].text_input("", f"Pattern {i+1}", key=textinput_key)
+            )
 
     use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
     dark_mode = st.checkbox("🌙 Dark Mode", value=False)
@@ -813,6 +715,16 @@ if uploaded_file:
             if not matched_rows.empty:
                 row = matched_rows.iloc[0].to_dict()
                 profile = format_planet_profile(row)
-                safe_profile = profile.encode("utf-16", "surrogatepass").decode("utf-16")
+                safe_profile = profile.encode("utf-16", "surrogatepass").decode(
+                    "utf-16"
+                )
                 st.sidebar.markdown(safe_profile)
                 st.sidebar.markdown("---")
+
+    st.markdown("### 🪐 Planet Profiles in View")
+    for _, row in df.iterrows():
+        name = row.get("Object", "")
+        if name in selected_objects:
+            profile = format_planet_profile(row)
+            st.markdown(profile)
+            st.markdown("---")

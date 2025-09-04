@@ -597,7 +597,6 @@ OBJECT_MEANINGS = {
     "Coppernicus": "Revolutionary vision and paradigm-breaking insight.",
     "Dionysus": "Ecstatic transformation, divine madness, and emotional release.",
     "Echo": "Unmet longing, repetition, and the search for your own voice.",
-    "Eris": "Victimhood to advocady for the underdog, through learning and speaking truth."
     "Eros": "Your passionate, magnetic drive and creative spark.",
     "Eurydike": "The longing for love lost or the cost of devotion.",
     "Euterpe": "Muse of music \u2014 inspires joy through melody and rhythm.",
@@ -749,6 +748,14 @@ label_style = st.radio("Label Style", ["Text", "Glyph"], index=1, horizontal=Tru
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
+
+    # Validate and extract Computed Absolute Degree
+    if "Computed Absolute Degree" in df.columns:
+        df = df[df["Computed Absolute Degree"].notna()].copy()
+        df["abs_deg"] = df["Computed Absolute Degree"]
+    else:
+        st.error("❌ The CSV is missing the 'Computed Absolute Degree' column.")
+        st.stop()
     df = df[df["Computed Absolute Degree"].notna()].copy()
     df["abs_deg"] = df["Computed Absolute Degree"].astype(float)
 
