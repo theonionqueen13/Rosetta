@@ -2,30 +2,11 @@
 import networkx as nx
 from itertools import combinations, permutations
 from rosetta.lookup import ASPECTS
-from rosetta.drawing import enumerate_major_edges
+
 
 # -------------------------------
 # Aspect graph (patterns as connected components)
 # -------------------------------
-def build_aspect_graph(pos, return_graph=False):
-    MAJORS = ("Conjunction", "Sextile", "Square", "Trine", "Opposition")
-    G = nx.Graph()
-    for p1, p2 in combinations(pos.keys(), 2):
-        d1, d2 = pos[p1], pos[p2]
-        angle = abs(d1 - d2) % 360
-        if angle > 180:
-            angle = 360 - angle
-        for asp in MAJORS:
-            data = ASPECTS[asp]
-            if abs(angle - data["angle"]) <= data["orb"]:
-                G.add_edge(p1, p2, aspect=asp)
-                break
-    comps = list(nx.connected_components(G))
-    if return_graph:
-        return comps, G
-    return comps
-
-
 def detect_minor_links_with_singletons(pos, patterns):
     minor_aspects = ["Quincunx", "Sesquisquare"]
     connections = []
@@ -123,37 +104,61 @@ def _cluster_conjunctions_for_detection(pos, members, orb=4.0):
 
     return rep_pos, rep_map, rep_anchor
 
+
 def _detect_shapes_for_members(pos, members, parent_idx, sid_start=0, G=None, widen_orb=False):
     """
     Detect shapes for the given members of a parent pattern.
-
-    - Strict mode: only use edges from the parent graph G.
-    - Approx mode: allow "almost" edges if within 4.5° orb.
+    - Conjunctions are clustered into rep nodes.
+    - Aspect checks are done using edges already present in G.
+    - If widen_orb=True, allow an expanded tolerance (4.5°) to catch "approx" edges.
     """
     if not members:
         return [], sid_start
 
-    # 1. Cluster conjunctions into reps
+    # 1. Cluster conjunctions into representative nodes
     rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(members))
     R = list(rep_pos.keys())
 
-    # 2. Build lookup table from the parent graph G
-    edge_lookup = {}
+    # 2. Build a rep-node graph using edges from G
+    G_rep = nx.Graph()
     for a, b in combinations(R, 2):
         planets_a, planets_b = rep_map[a], rep_map[b]
         for pa in planets_a:
             for pb in planets_b:
-                if G.has_edge(pa, pb):  # <-- authoritative: parent edges only
+                if G.has_edge(pa, pb):
                     asp = G.edges[pa, pb]["aspect"]
-                    edge_lookup[frozenset([a, b])] = asp
+                    G_rep.add_edge(a, b, aspect=asp)
 
     shapes, seen, sid = [], set(), sid_start
 
+    def add_once(sh_type, node_list, edge_specs, suppresses=None):
+        nonlocal sid
+        key = (sh_type, tuple(sorted(node_list)))
+        if key in seen:
+            return False
+        seen.add(key)
+        sid = _add_shape(
+            shapes, sh_type, parent_idx, sid,
+            node_list, edge_specs, rep_map, rep_anchor, suppresses
+        )
+        return True
+
     def has_edge(a, b, aspect):
-        """Check if rep a–b has this aspect in parent G (or orb fallback)."""
-        key = frozenset([a, b])
-        if key in edge_lookup and edge_lookup[key] == aspect:
-            return True
+        """Check for aspect a–b. Returns True, False, or 'approx' if widen_orb matched."""
+        if G_rep.has_edge(a, b):
+            return G_rep.edges[a, b]["aspect"] == aspect
+        if widen_orb:
+            angle = abs(rep_pos[a] - rep_pos[b]) % 360
+            if angle > 180:
+                angle = 360 - angle
+            data = ASPECTS[aspect]
+            if abs(angle - data["angle"]) <= 4.5:
+                return "approx"
+        return False
+
+    # -----------------------
+    # SHAPE DETECTION LOGIC
+    # -----------------------
 
     def add_once(sh_type, node_list, candidate_edges, suppresses=None):
         nonlocal sid
@@ -170,16 +175,11 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start=0, G=None, wi
             elif status == "approx":
                 specs.append(((x, y), f"{asp}_approx"))
 
-        if specs:
-            sid = _add_shape(
-                shapes, sh_type, parent_idx, sid,
-                node_list, specs, rep_map, rep_anchor, suppresses
-            )
+        sid = _add_shape(
+            shapes, sh_type, parent_idx, sid,
+            node_list, specs, rep_map, rep_anchor, suppresses
+        )
         return True
-
-    # -----------------------
-    # SHAPE DETECTION LOGIC
-    # -----------------------
 
     # --- Envelope ---
     for quint in combinations(R, 5):
@@ -378,36 +378,6 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start=0, G=None, wi
 
     return shapes, sid
 
-
-def detect_shapes(pos, patterns, G):
-    """Main entrypoint for strict + approx shape detection."""
-    shapes = []
-    sid = 0
-
-    # --- strict pass ---
-    for parent_idx, mems in enumerate(patterns):
-        shapes_here, sid = _detect_shapes_for_members(
-            pos, mems, parent_idx, sid, G, widen_orb=False
-        )
-        shapes.extend(shapes_here)
-
-    # collect all nodes used in strict shapes
-    strict_nodes = set()
-    for s in shapes:
-        strict_nodes.update(s["members"])
-
-    # --- approx pass (optional widened orb) ---
-    for parent_idx, mems in enumerate(patterns):
-        leftovers = [m for m in mems if m not in strict_nodes]
-        if leftovers:
-            approx_shapes, sid = _detect_shapes_for_members(
-                pos, leftovers, parent_idx, sid, G, widen_orb=True
-            )
-            for s in approx_shapes:
-                s["approx"] = True
-            shapes.extend(approx_shapes)
-
-    return shapes
 
 def _deduplicate_shapes(shapes, rep_map):
     seen = {}
