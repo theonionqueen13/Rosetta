@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import combinations
 
+if "reset_done" not in st.session_state:
+    st.session_state.clear()
+    st.session_state["reset_done"] = True
+
 # MUST be first Streamlit command
 st.set_page_config(layout="wide")
 
@@ -70,12 +74,6 @@ def get_major_edges_and_patterns(pos):
         
         # Now calculate major edges properly using the patterns
         major_edges = temp_edges  
-
-        print("\n=== DEBUG: major_edges_all (master list) ===")
-        for (u, v), asp in major_edges:
-            print(f"  {u} - {v}: {asp}")
-        print("===========================================\n")
-
         
         _cache_major_edges[pos_items_tuple] = (tuple(major_edges), patterns)
     
@@ -171,43 +169,83 @@ def render_chart_with_shapes(
     active_singletons = {obj for obj, on in singleton_toggles.items() if on}
     visible_objects = set()
 
+    # Build set of edges already claimed by active sub-shapes
+    shape_edges = {
+        frozenset((u, v))
+        for s in active_shapes
+        for (u, v), asp in s["edges"]
+    }
+
     # parents first
     for idx in active_parents:
         if idx < len(patterns):
             visible_objects.update(patterns[idx])
-    if active_parents:
-        draw_aspect_lines(ax, pos, patterns, active_parents, asc_deg, GROUP_COLORS,
-                          edges=major_edges_all)
-        for idx in active_parents:
-            minors = internal_minor_edges_for_pattern(pos, list(patterns[idx]))
-            draw_minor_edges(ax, pos, minors, asc_deg)
+            if active_parents:
+                draw_aspect_lines(ax, pos, patterns, active_parents, asc_deg, GROUP_COLORS,
+                                  edges=major_edges_all)
+                for idx in active_parents:
+                    minors = internal_minor_edges_for_pattern(pos, list(patterns[idx]))
 
-    # sub-shapes
+                    for (p1, p2, asp_name, pat1, pat2) in filaments:
+                        # Skip if this filament is already part of a visible sub-shape
+                        if frozenset((p1, p2)) in shape_edges:
+                            continue
+                        
+                        # check if each endpoint is active in ANY visible category
+                        in_parent1 = any((idx in active_parents) and (p1 in patterns[idx]) for idx in active_parents)
+                        in_parent2 = any((idx in active_parents) and (p2 in patterns[idx]) for idx in active_parents)
+
+                        in_shape1 = any(p1 in s["members"] for s in active_shapes)
+                        in_shape2 = any(p2 in s["members"] for s in active_shapes)
+
+                        in_singleton1 = p1 in active_singletons
+                        in_singleton2 = p2 in active_singletons
+
+                        if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
+                            from rosetta.helpers import deg_to_rad
+                            r1 = deg_to_rad(pos[p1], asc_deg)
+                            r2 = deg_to_rad(pos[p2], asc_deg)
+                            ax.plot(
+                                [r1, r2], [1, 1],
+                                linestyle="dotted",
+                                color=ASPECTS[asp_name]["color"],
+                                linewidth=1
+                            )
+
+    # --- sub-shapes ---
     for s in active_shapes:
         visible_objects.update(s["members"])
-    # persistent color map for ALL shapes, keyed by id
+
+    # 🔴 STABLE COLOR BLOCK — now applies to ALL subshapes 🔴
     if "shape_color_map" not in st.session_state:
         st.session_state.shape_color_map = {}
 
-    for s in shapes:
-        if s["id"] not in st.session_state.shape_color_map:
-            # assign color based on shape id (stable)
-            color = SUBSHAPE_COLORS[s["id"] % len(SUBSHAPE_COLORS)]
-            st.session_state.shape_color_map[s["id"]] = color
+    # Gather ALL shapes (strict, approx, remainders) once
+    all_subshapes = shapes  
 
-    # now render active shapes
+    # Assign colors to any shape id that doesn't already have one
+    for s in all_subshapes:
+        if s["id"] not in st.session_state.shape_color_map:
+            idx = len(st.session_state.shape_color_map) % len(SUBSHAPE_COLORS)
+            st.session_state.shape_color_map[s["id"]] = SUBSHAPE_COLORS[idx]
+
+    # Draw only the *active* subshapes, but use stable colors
     for s in active_shapes:
         draw_shape_edges(
             ax, pos, s["edges"], asc_deg,
             use_aspect_colors=False,
             override_color=st.session_state.shape_color_map[s["id"]]
         )
+    # 🔴 END STABLE COLOR BLOCK 🔴
 
     # singletons
     visible_objects.update(active_singletons)
 
-    # connectors
+    # connectors (deduped against shape edges)
     for (p1, p2, asp_name, pat1, pat2) in filaments:
+        if frozenset((p1, p2)) in shape_edges:
+            continue
+
         # check if each endpoint is active in ANY visible category
         in_parent1 = any((idx in active_parents) and (p1 in patterns[idx]) for idx in active_parents)
         in_parent2 = any((idx in active_parents) and (p2 in patterns[idx]) for idx in active_parents)
@@ -251,22 +289,50 @@ if uploaded_file:
 
     # --- FIXED: Get major edges and patterns together ---
     major_edges_all, patterns = get_major_edges_and_patterns(pos)
-    
-    print("\n=== DEBUG: major_edges_all ===")
-    for (u, v), asp in major_edges_all:
-        print(f"  {u} - {v}: {asp}")
-    print("==============================\n")
-
     shapes = get_shapes(pos, patterns, major_edges_all)
-
-    # Minors + combos
     filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
     combos = generate_combo_groups(filaments)
+
+    # --- one-time init so first run has everything visible ---
+    if "initialized_toggles" not in st.session_state:
+        for i in range(len(patterns)):
+            st.session_state[f"toggle_pattern_{i}"] = True
+            for sh in [sh for sh in shapes if sh["parent"] == i]:
+                members_key = "_".join(sorted(str(m) for m in sh["members"]))
+                unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                st.session_state[unique_key] = False
+        for planet in singleton_map.keys():
+            st.session_state[f"singleton_{planet}"] = False
+        st.session_state["initialized_toggles"] = True
 
     # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
         st.subheader("Patterns")
+
+        # Show/Hide all controls
+        col_all1, col_all2 = st.columns([1, 1])
+        with col_all1:
+            if st.button("Show All"):
+                for i in range(len(patterns)):
+                    st.session_state[f"toggle_pattern_{i}"] = True
+                    for sh in [sh for sh in shapes if sh["parent"] == i]:
+                        members_key = "_".join(sorted(str(m) for m in sh["members"]))
+                        unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                        st.session_state[unique_key] = True
+                for planet in singleton_map.keys():
+                    st.session_state[f"singleton_{planet}"] = True
+        with col_all2:
+            if st.button("Hide All"):
+                for i in range(len(patterns)):
+                    st.session_state[f"toggle_pattern_{i}"] = False
+                    for sh in [sh for sh in shapes if sh["parent"] == i]:
+                        members_key = "_".join(sorted(str(m) for m in sh["members"]))
+                        unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                        st.session_state[unique_key] = False
+                for planet in singleton_map.keys():
+                    st.session_state[f"singleton_{planet}"] = False
+
         toggles, pattern_labels = [], []
         half = (len(patterns) + 1) // 2
         left_patterns, right_patterns = st.columns(2)
@@ -277,49 +343,72 @@ if uploaded_file:
             label = f"Pattern {i+1}: {', '.join(component)}"
 
             with target_col:
-                cbox = st.checkbox("", value=True, key=checkbox_key)
+                cbox = st.checkbox("", key=checkbox_key)
                 toggles.append(cbox)
                 pattern_labels.append(label)
 
                 with st.expander(label, expanded=False):
-                    parent_shapes = [s for s in shapes if s["parent"] == i]
+                    parent_shapes = [sh for sh in shapes if sh["parent"] == i]
+                    print(f"Expander {i}: {[ (sh['id'], sh['type']) for sh in parent_shapes ]}")
 
                     if parent_shapes:
                         st.markdown("**Sub-shapes detected:**")
 
                         # --- Split into normal vs remainder ---
-                        remainder_shapes = [s for s in parent_shapes if s.get("remainder")]
-                        normal_shapes   = [s for s in parent_shapes if not s.get("remainder")]
+                        remainder_shapes = [sh for sh in parent_shapes if sh.get("remainder")]
+                        normal_shapes   = [sh for sh in parent_shapes if not sh.get("remainder")]
 
                         shape_entries = []
 
-                        # sort "normal" shapes nicely first
-                        def default_sort_key(s):
-                            return -len(s["members"]), s["type"]
+                        # sort "normal" shapes with strict + special ordering
+                        def default_sort_key(sh):
+                            return -len(sh["members"]), sh["type"]
 
-                        if any(s["type"] == "Envelope" for s in normal_shapes):
-                            order = ["Envelope", "Mystic Rectangle", "Sextile Wedge", "Grand Trine"]
-                            envelope_cluster = [s for s in normal_shapes if s["type"] in order]
-                            rest = [s for s in normal_shapes if s["type"] not in order]
-                            envelope_cluster.sort(key=lambda s: order.index(s["type"]))
+                        core_order = ["Envelope", "Mystic Rectangle", "Sextile Wedge", "Grand Trine"]
+                        special_order = ["Yod", "Wide Yod", "Unnamed"]
+
+                        if any(sh["type"] in core_order for sh in normal_shapes):
+                            cluster = [sh for sh in normal_shapes if sh["type"] in core_order + special_order]
+                            rest = [sh for sh in normal_shapes if sh["type"] not in core_order + special_order]
+                            cluster.sort(key=lambda sh: (core_order + special_order).index(sh["type"]))
                             rest.sort(key=default_sort_key)
-                            normal_shapes = envelope_cluster + rest
+                            normal_shapes = cluster + rest
                         else:
-                            normal_shapes.sort(key=default_sort_key)
+                            cluster = [sh for sh in normal_shapes if sh["type"] in special_order]
+                            rest = [sh for sh in normal_shapes if sh["type"] not in special_order]
+                            cluster.sort(key=lambda sh: special_order.index(sh["type"]))
+                            rest.sort(key=default_sort_key)
+                            normal_shapes = cluster + rest
 
                         # render normal + approx shapes first
-                        for s in normal_shapes:
-                            shape_name = f"({s['type']})" if s.get("approx") else s["type"]
-                            label_text = f"{shape_name} ({', '.join(s['members'])})"
-                            on = st.checkbox(label_text, value=False, key=f"shape_{i}_{s['id']}")
-                            shape_entries.append({"id": s["id"], "on": on})
+                        for sh in normal_shapes:
+                            shape_name = f"({sh['type']})" if sh.get("approx") else sh["type"]
+                            members_str = ", ".join(str(m) for m in sh["members"])
+                            label_text = f"{shape_name}: {members_str}"
+                            members_key = "_".join(sorted(str(m) for m in sh["members"]))
+                            unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                            print(f"  Rendering checkbox key={unique_key} label={label_text}")
+                            on = st.checkbox(
+                                label_text,
+                                value=st.session_state.get(unique_key, False),
+                                key=unique_key
+                            )
+                            shape_entries.append({"id": sh["id"], "on": on})
 
                         # render remainder groups last, with square brackets
                         if remainder_shapes:
-                            for s in remainder_shapes:
-                                label_text = f"[{', '.join(s['members'])}]"
-                                on = st.checkbox(label_text, value=False, key=f"shape_{i}_{s['id']}")
-                                shape_entries.append({"id": s["id"], "on": on})
+                            for sh in remainder_shapes:
+                                members_str = ", ".join(str(m) for m in sh["members"])
+                                label_text = f"[{members_str}]"
+                                members_key = "_".join(sorted(str(m) for m in sh["members"]))
+                                unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                                print(f"  Rendering remainder checkbox key={unique_key} label={label_text}")
+                                on = st.checkbox(
+                                    label_text,
+                                    value=st.session_state.get(unique_key, False),
+                                    key=unique_key
+                                )
+                                shape_entries.append({"id": sh["id"], "on": on})
 
                     else:
                         st.markdown("_(no sub-shapes found)_")
@@ -336,7 +425,7 @@ if uploaded_file:
             for j, (planet, idx) in enumerate(singleton_map.items()):
                 with cols[j]:
                     key = f"singleton_{planet}"
-                    on = st.checkbox(GLYPHS.get(planet, planet), value=False, key=key)
+                    on = st.checkbox(GLYPHS.get(planet, planet), value=st.session_state.get(key, False), key=key)
                     singleton_toggles[planet] = on
         else:
             st.markdown("_(none)_")
@@ -369,6 +458,3 @@ if uploaded_file:
             safe_profile = profile.encode("utf-16", "surrogatepass").decode("utf-16")
             st.sidebar.markdown(profile, unsafe_allow_html=True)
             st.sidebar.markdown("---")
-
-else:
-    st.info("👆 Upload a natal chart CSV to generate your chart.")

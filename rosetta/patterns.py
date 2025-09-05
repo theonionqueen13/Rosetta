@@ -7,6 +7,14 @@ from rosetta.lookup import ASPECTS
 # Connected components from edges
 # -------------------------------
 
+def aspect_match(pos, p1, p2, target_aspect):
+    """Check if planets form the given aspect within orb tolerance."""
+    angle = abs(pos[p1] - pos[p2]) % 360
+    if angle > 180:
+        angle = 360 - angle
+    data = ASPECTS[target_aspect]
+    return abs(angle - data["angle"]) <= data["orb"]
+
 def connected_components_from_edges(nodes, edges):
     nodes = list(nodes)
     adj = {n: set() for n in nodes}
@@ -104,7 +112,6 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
             edge_lookup.setdefault(edge_key, []).append(asp)
 
     # DEBUG: show what this parent actually kept from master edges
-    print(f"\nDEBUG: edge_lookup for parent {parent_idx}, members={members}")
     for k, asp_list in edge_lookup.items():
         u, v = tuple(k)
         print(f"   {u}-{v}: {asp_list}")
@@ -363,13 +370,33 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
 # Detect shapes (public API)
 # -------------------------------
 
+# -------------------------------
+# Aspect helpers
+# -------------------------------
+
+def _aspect_match_wide(pos, p1, p2, target_aspect, widen=1.0):
+    """Looser orb check than strict aspect_match, for special cases."""
+    angle = abs(pos[p1] - pos[p2]) % 360
+    if angle > 180:
+        angle = 360 - angle
+    data = ASPECTS[target_aspect]
+    return abs(angle - data["angle"]) <= data["orb"] * widen
+
+
+# -------------------------------
+# Detect shapes (public API)
+# -------------------------------
+
 def detect_shapes(pos, patterns, major_edges_all):
     shapes = []
     sid = 0
     used_members = set()
-    used_edges = set()  # track edges already consumed by strict/approx shapes
+    used_edges = set()
+    seen = set()   # <-- 🔑 global dedup set
 
+    # -------------------------------
     # strict pass
+    # -------------------------------
     for parent_idx, mems in enumerate(patterns):
         s_here, sid = _detect_shapes_for_members(
             pos, mems, parent_idx, sid, major_edges_all, widen_orb=False
@@ -380,7 +407,106 @@ def detect_shapes(pos, patterns, major_edges_all):
             for (u, v), asp in sh["edges"]:
                 used_edges.add((tuple(sorted((u, v))), asp))
 
+    # -------------------------------
+    # special-shape pass (orb-aware, with conjunction collapse)
+    # -------------------------------
+    rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, pos.keys())
+
+    def collapse_members(members):
+        return [rep_anchor.get(m, m) for m in members]
+
+    def aspect_match(p1, p2, target_aspect):
+        angle = abs(pos[p1] - pos[p2]) % 360
+        if angle > 180:
+            angle = 360 - angle
+        data = ASPECTS[target_aspect]
+        return abs(angle - data["angle"]) <= data["orb"]
+
+    def assign_parent_for_special(members, fallback=0):
+        for idx, mems in enumerate(patterns):
+            if all(m in mems for m in members):
+                return idx
+        for idx, mems in enumerate(patterns):
+            hits = sum(1 for m in members if m in mems)
+            if hits >= 2:
+                return idx
+        return fallback
+
+    def add_special(sh_type, members, edges):
+        nonlocal sid, seen
+        collapsed = tuple(sorted(set(collapse_members(members))))
+        key = (sh_type, collapsed)
+        if key in seen:
+            return
+        parent_idx = assign_parent_for_special(collapsed)
+        shape = {
+            "id": sid,
+            "type": sh_type,
+            "parent": parent_idx,
+            "members": list(collapsed),
+            "edges": edges,
+        }
+        print(f">>> SPECIAL ADD: {sh_type} id={sid}, parent={parent_idx}, members={collapsed}")
+        shapes.append(shape)
+        sid += 1
+        seen.add(key)
+        used_members.update(collapsed)
+        for (u, v), asp in edges:
+            used_edges.add((tuple(sorted((u, v))), asp))
+
+    # loop edges → add special shapes
+    for (a, b), asp in major_edges_all:
+        # Yod
+        if aspect_match(a, b, "Sextile"):
+            for c in pos.keys():
+                if c not in (a, b) and aspect_match(a, c, "Quincunx") and aspect_match(b, c, "Quincunx"):
+                    edges = [((a, b), "Sextile"), ((a, c), "Quincunx"), ((b, c), "Quincunx")]
+                    add_special("Yod", [a, b, c], edges)
+
+        # Wide Yod
+        if aspect_match(a, b, "Square"):
+            for c in pos.keys():
+                if c not in (a, b) and aspect_match(a, c, "Sesquisquare") and aspect_match(b, c, "Sesquisquare"):
+                    edges = [((a, b), "Square"), ((a, c), "Sesquisquare"), ((b, c), "Sesquisquare")]
+                    add_special("Wide Yod", [a, b, c], edges)
+
+        # Unnamed
+                # Unnamed (Square + Trine + Sesquisquare)
+                # Unnamed (Square + Trine + Sesquisquare)
+                # Unnamed (Square + Trine + Sesquisquare)
+        if aspect_match(a, b, "Square"):
+            for c in pos.keys():
+                if c in (a, b):
+                    continue
+                ca, cb = rep_anchor.get(a, a), rep_anchor.get(b, b)
+                cc = rep_anchor.get(c, c)
+                if len({ca, cb, cc}) < 3:
+                    continue
+
+                # Debug: print angles for clarity
+                def angle(p, q):
+                    ang = abs(pos[p] - pos[q]) % 360
+                    if ang > 180: ang = 360 - ang
+                    return ang
+                
+                print(f"Unnamed check: {ca}-{cb} square, "
+                    f"{ca}-{cc}={angle(ca,cc)}, "
+                    f"{cb}-{cc}={angle(cb,cc)}")
+
+                # Unnamed
+                if aspect_match(a, b, "Square"):
+                    for c in pos.keys():
+                        if c not in (a, b):
+                            if aspect_match(a, c, "Trine") and aspect_match(b, c, "Quincunx"):
+                                edges = [((a, b), "Square"), ((a, c), "Trine"), ((b, c), "Quincunx")]
+                                add_special("Unnamed", [a, b, c], edges)
+                            elif aspect_match(b, c, "Trine") and aspect_match(a, c, "Quincunx"):
+                                edges = [((a, b), "Square"), ((b, c), "Trine"), ((a, c), "Quincunx")]
+                                add_special("Unnamed", [a, b, c], edges)
+
+    # -------------------------------
     # approx pass
+    # -------------------------------
     for parent_idx, mems in enumerate(patterns):
         leftovers = set(mems) - used_members
         if not leftovers:
@@ -395,34 +521,40 @@ def detect_shapes(pos, patterns, major_edges_all):
                 used_edges.add((tuple(sorted((u, v))), asp))
         shapes.extend(s_here_approx)
 
-    # remainder pass (grouped by connectivity)
+    # -------------------------------
+    # remainder pass (conjunction-aware)
+    # -------------------------------
     for parent_idx, mems in enumerate(patterns):
-        members_set = set(mems)
+        if not mems:
+            continue
 
-        # collect unused edges
+        # Collapse conjunctions for this parent
+        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(mems))
+        members_set = set(rep_pos.keys())  # only use cluster reps
+
         remainders = []
         for (u, v), asp in major_edges_all:
-            edge_key = (tuple(sorted((u, v))), asp)
+            ru, rv = rep_anchor.get(u, u), rep_anchor.get(v, v)
+            if ru == rv:
+                continue  # ignore intra-cluster self-edge
+
+            edge_key = (tuple(sorted((ru, rv))), asp)
             if (
                 edge_key not in used_edges
-                and u in members_set
-                and v in members_set
+                and ru in members_set
+                and rv in members_set
             ):
-                remainders.append(((u, v), asp))
+                remainders.append(((ru, rv), asp))
 
         if remainders:
-            # build adjacency graph
-            import networkx as nx
             G = nx.Graph()
-            for (u, v), asp in remainders:
-                G.add_edge(u, v, aspect=asp)
-
+            for (ru, rv), asp in remainders:
+                G.add_edge(ru, rv, aspect=asp)
             for comp in nx.connected_components(G):
                 comp_edges = []
-                for u, v in G.subgraph(comp).edges():
-                    asp = G[u][v]["aspect"]
-                    comp_edges.append(((u, v), asp))
-
+                for ru, rv in G.subgraph(comp).edges():
+                    asp = G[ru][rv]["aspect"]
+                    comp_edges.append(((ru, rv), asp))
                 shapes.append({
                     "id": sid,
                     "type": "Remainder",
@@ -433,10 +565,16 @@ def detect_shapes(pos, patterns, major_edges_all):
                 })
                 sid += 1
 
-    # suppression at the very end
+    # -------------------------------
+    # suppression
+    # -------------------------------
+    print(">>> BEFORE SUPPRESSION:", [(s["id"], s["type"], s["members"]) for s in shapes])
     shapes = apply_suppression(shapes)
+    print(">>> AFTER SUPPRESSION:", [(s["id"], s["type"], s["members"]) for s in shapes])
 
-    # sort: strict+approx first, then remainder groups last
+    # -------------------------------
+    # final sort + return
+    # -------------------------------
     shapes.sort(key=lambda s: (s.get("remainder", False), s["id"]))
     return shapes
 

@@ -182,7 +182,13 @@ def draw_shape_edges(ax, pos, edges, asc_deg,
         else:
             color = base_color
 
-        ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=2)
+        # 🔑 Thickness: majors thick, minors thin
+        if asp_clean in ("Quincunx", "Sesquisquare"):
+            lw = 1   # minors → thin
+        else:
+            lw = 2   # majors → thick
+
+        ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=lw)
 
 
 def draw_minor_edges(ax, pos, edges, asc_deg):
