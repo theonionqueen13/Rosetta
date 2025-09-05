@@ -310,7 +310,7 @@ if uploaded_file:
     # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
-        st.subheader("Patterns")
+        st.subheader("Circuits")
 
         # Show/Hide all controls
         col_all1, col_all2 = st.columns([1, 1])
@@ -342,7 +342,7 @@ if uploaded_file:
         for i, component in enumerate(patterns):
             target_col = left_patterns if i < half else right_patterns
             checkbox_key = f"toggle_pattern_{i}"
-            label = f"Pattern {i+1}: {', '.join(component)}"
+            label = f"Circuit {i+1}: {', '.join(component)}"
 
             with target_col:
                 cbox = st.checkbox("", key=checkbox_key)
@@ -508,14 +508,13 @@ if uploaded_file:
             "yourself \"what does the whole thing do, as a machine?\" Then write the answer as the final paragraph, under a header "
             "called \"Circuit\"\n\n"
             + planet_profiles_block + "\n\n"
-            + "\n\n".join(aspect_blocks) + "\n\n"
-            + "\n\n".join(sorted(aspect_definitions))
+            + "### Aspects\n" + "\n\n".join(aspect_blocks) + "\n\n"
+            + "### Circuit\n" + "\n\n".join(sorted(aspect_definitions))
         ).strip()
 
         # --- Copy button with confirmation ---
         copy_button = f"""
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                <div style="font-size:1em; font-weight:bold; color:white;">Generated Prompt</div>
                 <button id="copy-btn"
                         onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {{
                             var btn = document.getElementById('copy-btn');
