@@ -58,3 +58,62 @@ OBJECT_MEANINGS = {
     "Part of Fortune": "Where you find natural ease and success.",
     # Add more meanings as needed...
 }
+
+ASPECT_INTERPRETATIONS = {
+    "Trine": (
+        "Complete, automatic connection and collaboration. "
+        "What happens to one happens to the other – these two planets are attached at the hip, "
+        "total besties, zero resistance, zero interference. Full mutual signal transfer."
+    ),
+    "Sextile": (
+        "Potential for strong harmonious connection, much like the trine, but not automatic. "
+        "Sextiles are opportunities for two planets to work together and develop a latent talent. "
+        "They require choice and active participation under normal circumstances – "
+        "but can be automatically activated by transits."
+    ),
+    "Square": (
+        "Work. Square does not necessarily mean conflict, but it always means work; "
+        "two planets that must work to reconcile their differences because they both feel "
+        "like the other is shoving them from the side and totally interfering with their trajectory. "
+        "They can be reconciled, and need to be – the keys are in the other two points "
+        "that complete the grand cross."
+    ),
+    "Conjunction": (
+        "Two or more planets that share the same perspective and location. "
+        "They work together as a singular node. If they are planets that naturally have a tense "
+        "relationship, such as Saturn and Uranus, then they can sometimes be tough roommates "
+        "together until the two archetypes are resolved into a working friendship."
+    ),
+    "Opposition": (
+        "The balance of opposites, like Yin and Yang. Each set of polarities is complementary, "
+        "but the tendency is for them to compete when ungrounded. "
+        "The dichotomy in a classic heterosexual marriage diagram explains the opposite polarities well: "
+        "either the man and woman recognize that they have different but complementary poles "
+        "and honor their differences, creating symbiotic balance, "
+        "or they compete, trying to dominate or control one another out of competition, superiority, or insecurity. "
+        "All major oppositions in a natal chart represent the major over-arching themes of the native’s life. "
+        "They are polarities that the native is always working to keep in balance, or their life goes out of balance."
+    ),
+    "Sesquisquare": (
+        "Activation overflow. This is an aspect of momentum, compulsion, and often service. "
+        "One planet reaches full activation, and the sesquisquare acts like a surge line — "
+        "it pushes energy into the other planet, activating it in a new capacity. "
+        "It’s not smooth like a trine, nor tense like a square — it’s quick, sometimes surprising, "
+        "and highly energetic. These are often 'helper circuits' or 'gift-wired compulsions,' "
+        "where someone finds themselves acting or serving without even planning to, simply because "
+        "the conditions are right for them to be 'in their element.' "
+        "They can be hijacked without good boundaries, but when integrated, "
+        "sesquisquares unlock multidimensional creativity and functional genius."
+    ),
+    "Quincunx": (
+        "A misaligned connection that demands adjustment. These planets feel like they should connect — "
+        "there’s tension and urgency — but the angles don’t support clean communication or mutual understanding. "
+        "This creates frustration, indecision, awkward compensations, or even complete disaster when pushed "
+        "against hard enough – until a new integration pathway is consciously invented. "
+        "It’s like trying to plug a round wire into a triangular socket. "
+        "You’re likely to fry or break something if you try too hard. "
+        "Quincunxes often signal health issues, compulsions that always seem to go badly, "
+        "patterns of bad luck, repeated disaster/trauma signatures, or parts of self that never seem to belong… "
+        "until the chart holder invents a whole new framework to hold them."
+    ),
+}

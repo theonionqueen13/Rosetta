@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import streamlit.components.v1 as components
 from itertools import combinations
 
 if "reset_done" not in st.session_state:
@@ -32,6 +33,7 @@ from rosetta.patterns import (
 )
 import rosetta.patterns
 print(">>> patterns.py loaded from:", rosetta.patterns.__file__)
+from rosetta.lookup import ASPECT_INTERPRETATIONS
 
 # --------------------------------
 # Simple caches to avoid recompute
@@ -262,7 +264,7 @@ def render_chart_with_shapes(
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
 
-    return fig, visible_objects
+    return fig, visible_objects, active_shapes
 
 # --- UI ---
 st.title("🧭️Rosetta Flight Deck")
@@ -441,13 +443,97 @@ if uploaded_file:
     dark_mode = st.checkbox("🌙 Dark Mode", value=False)
 
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
-    fig, visible_objects = render_chart_with_shapes(
+    fig, visible_objects, active_shapes = render_chart_with_shapes(
         pos, patterns, pattern_labels, toggles, filaments, combos,
         label_style, singleton_map, df, use_placidus, dark_mode,
         shapes, shape_toggles_by_parent, singleton_toggles, major_edges_all
     )
 
     st.pyplot(fig, use_container_width=False)
+
+    # --- Aspect Interpretation Prompt ---
+    st.subheader("Aspect Interpretation Prompt")
+    st.caption("Paste this prompt into an LLM (like ChatGPT).")
+
+    aspect_blocks = []
+    aspect_definitions = set()
+
+    for s in active_shapes:
+        lines = []
+        for (p1, p2), asp in s["edges"]:
+            asp_clean = asp.replace("_approx", "")
+            asp_text = ASPECT_INTERPRETATIONS.get(asp_clean, asp_clean)
+            lines.append(f"{p1} {asp_clean} {p2}")
+            aspect_definitions.add(f"{asp_clean}: {asp_text}")
+        if lines:
+            aspect_blocks.append(" + ".join(lines))
+
+    import re
+    def strip_html_tags(text):
+        """Remove HTML tags for clean plain-text copy."""
+        clean = re.sub(r'<[^>]+>', '', text)
+        return clean.strip()
+
+    if aspect_blocks:
+        # --- Gather Planet Profiles (from visible_objects) ---
+        planet_profiles_texts = []
+        for obj in sorted(visible_objects):
+            matched_rows = df[df["Object"] == obj]
+            if not matched_rows.empty:
+                row = matched_rows.iloc[0].to_dict()
+                profile_html = format_planet_profile(row)
+                profile_text = strip_html_tags(profile_html)
+                planet_profiles_texts.append(profile_text)
+
+        planet_profiles_block = (
+            "### Character Profiles\n" + "\n\n".join(planet_profiles_texts)
+            if planet_profiles_texts else ""
+        )
+
+        # --- Build full prompt ---
+        prompt = (
+            "Synthesize accurate poetic interpretations for each of these astrological aspects, "
+            "using only the precise method outlined. Do not default to traditional astrology. "
+            "For each planet or placement profile or conjunction cluster provided, use the planet/placement "
+            "meaning(s), sign, Sabian symbol, fixed star conjunction(s) (if present), Out of Bounds status (if present), "
+            "retrograde status or station point (if present), dignity (if present) and rulerships (if present) "
+            "to synthesize a personified planet \"character\" profile in one paragraph. "
+            "List these one-paragraph character profiles first in your output, under a heading called \"Character Profiles\" \n\n"
+            "Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided "
+            "below (not traditional astrology definitions) to personify the \"relationship dynamics\" between each combination (aspect) "
+            "of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the Character Profiles, "
+            "under a header called \"Aspects\" \n\n"
+            "Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary "
+            "relationship dynamics become a functioning system with a function when combined into the whole shape provided, and ask "
+            "yourself \"what does the whole thing do, as a machine?\" Then write the answer as the final paragraph, under a header "
+            "called \"Circuit\"\n\n"
+            + planet_profiles_block + "\n\n"
+            + "\n\n".join(aspect_blocks) + "\n\n"
+            + "\n\n".join(sorted(aspect_definitions))
+        ).strip()
+
+        # --- Copy button with confirmation ---
+        copy_button = f"""
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                <div style="font-size:1em; font-weight:bold; color:white;">Generated Prompt</div>
+                <button id="copy-btn"
+                        onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {{
+                            var btn = document.getElementById('copy-btn');
+                            var oldText = btn.innerHTML;
+                            btn.innerHTML = '✅ Copied!';
+                            setTimeout(() => btn.innerHTML = oldText, 2000);
+                        }})"
+                        style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
+                    📋 Copy
+                </button>
+            </div>
+            <div id="prompt-box" style="white-space:pre-wrap; font-family:monospace; font-size:0.9em; color:white; background:black; border:1px solid #555; padding:8px; border-radius:4px; max-height:600px; overflow:auto;">
+                {prompt.replace("\n", "<br>")}
+            </div>
+        """
+        components.html(copy_button, height=700, scrolling=True)
+    else:
+        st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
 
     st.sidebar.subheader("🪐 Planet Profiles in View")
     for obj in sorted(visible_objects):
