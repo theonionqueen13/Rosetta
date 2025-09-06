@@ -18,7 +18,7 @@ def get_ascendant_degree(df):
     for search_term in ["Ascendant", "ascendant", "AC"]:
         asc_row = df[df["Object"].str.contains(search_term, case=False, na=False)]
         if not asc_row.empty:
-            return float(asc_row["Computed Absolute Degree"].values[0])
+            return float(asc_row["abs_deg"].values[0])
     return 0
 
 def parse_declination(decl_str):
