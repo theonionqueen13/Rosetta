@@ -480,7 +480,7 @@ def render_chart_with_shapes(
     return fig, visible_objects, active_shapes
 
 from datetime import datetime
-from geopy.geocoders import Nominatim
+from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
 
 with st.expander("Enter Birth Data"):
@@ -497,18 +497,25 @@ with st.expander("Enter Birth Data"):
         minute = st.selectbox("Minute", list(range(0, 60)), index=00)
 
     # --- Right side: Location ---
+    # --- Right side: Location ---
     with col2:
+        from geopy.geocoders import OpenCage
+
+        # Load API key from secrets
+        opencage_key = st.secrets["OPENCAGE_API_KEY"]
+        geolocator = OpenCage(api_key=opencage_key)
+
         city_name = st.text_input("City of Birth", value="")
         lat, lon, tz_name = None, None, None
 
         if city_name:
-            geolocator = Nominatim(user_agent="rosetta", timeout=20)
             try:
                 location = geolocator.geocode(city_name)
                 if location:
                     st.success(f"Found: {location.address}")
                     lat, lon = location.latitude, location.longitude
 
+                    from timezonefinder import TimezoneFinder
                     tf = TimezoneFinder()
                     tz_name = tf.timezone_at(lng=lon, lat=lat)
                     st.write(f"Timezone: {tz_name}")
