@@ -646,6 +646,7 @@ if st.session_state.get("chart_ready", False):
     left_col, right_col = st.columns([2, 1])
     with left_col:
         st.subheader("Circuits")
+        st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. Expand circuits to see their sub-shapes. Below the chart, copy the prompt into your GPT for an aspect interpretation.")
 
         # Show/Hide all buttons
         col_all1, col_all2 = st.columns([1, 1])
@@ -725,6 +726,7 @@ if st.session_state.get("chart_ready", False):
             st.markdown("_(none)_")
 
         st.subheader("Expansion Options")
+        st.caption("(Coming soon - These buttons don't do anything yet)")
         st.checkbox("Show Minor Asteroids", value=False)
         st.markdown("#### Harmonics")
         cols = st.columns(6)
