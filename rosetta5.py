@@ -502,7 +502,7 @@ with st.expander("Enter Birth Data"):
         lat, lon, tz_name = None, None, None
 
         if city_name:
-            geolocator = Nominatim(user_agent="rosetta")
+            geolocator = Nominatim(user_agent="rosetta", timeout=10)
             try:
                 location = geolocator.geocode(city_name)
                 if location:
