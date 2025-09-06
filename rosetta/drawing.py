@@ -144,6 +144,31 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
             r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                    color=ASPECTS[asp_name]["color"], linewidth=1)
+            
+def draw_singleton_dots(ax, pos, singletons, active_objects, line_width=1.0):
+    """
+    Draw a dot for each singleton planet that is toggled on but has no active aspects.
+    - Twice the line width of solid aspects.
+    """
+    for planet in singletons:
+        if planet not in active_objects:
+            continue
+        if planet not in pos:
+            continue
+
+        angle = np.deg2rad(90 - pos[planet])  # your usual angle transform
+        radius = 0.9  # adjust to sit near circle
+        x = radius * np.cos(angle)
+        y = radius * np.sin(angle)
+
+        ax.plot(
+            x, y,
+            "o",
+            markersize=line_width * 2 * 2,  # twice width of lines, scaled up
+            color="white",                  # or use your planet color
+            markeredgecolor="black",
+            zorder=6,
+        )
 
 # -------------------------------
 # Shape drawing
