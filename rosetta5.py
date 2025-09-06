@@ -708,7 +708,7 @@ if st.session_state.get("chart_ready", False):
                     st.session_state.shape_toggles_by_parent[i] = shape_entries
 
     with right_col:
-        st.subheader("Singletons")
+        st.subheader("Single Placements")
         singleton_toggles = {}
         if singleton_map:
             cols_per_row = min(8, max(1, len(singleton_map)))
