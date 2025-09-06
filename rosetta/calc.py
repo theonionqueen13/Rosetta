@@ -51,17 +51,32 @@ def _calc_vertex(jd, lat, lon):
     return ascmc[3], 0.0, 0.0, 0.0  # lon, lat, dist, speed
 
 def _calc_pof(jd, lat, lon):
+    # Asc & Desc from Swiss Ephemeris
     cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
-    asc = ascmc[0]
-    sun_pos, _ = swe.calc_ut(jd, swe.SUN)
-    moon_pos, _ = swe.calc_ut(jd, swe.MOON)
-    sun = sun_pos[0]
-    moon = moon_pos[0]
-    is_day = (sun > asc and sun < (asc + 180) % 360)
+    asc = ascmc[0] % 360.0
+    desc = (asc + 180.0) % 360.0
+
+    # Sun & Moon ecliptic longitudes
+    sun = swe.calc_ut(jd, swe.SUN)[0][0] % 360.0
+    moon = swe.calc_ut(jd, swe.MOON)[0][0] % 360.0
+
+    def on_arc(start, end, x):
+        """True if x lies on the circular arc going CCW from start to end."""
+        start %= 360.0; end %= 360.0; x %= 360.0
+        if start <= end:
+            return start <= x <= end
+        else:
+            return x >= start or x <= end
+
+    # Above horizon is the arc Desc -> Asc
+    is_day = on_arc(desc, asc, sun)
+
+    # Day: Asc + Moon − Sun ; Night: Asc − Moon + Sun
     if is_day:
-        pof = (asc + moon - sun) % 360
+        pof = (asc + moon - sun) % 360.0
     else:
-        pof = (asc - moon + sun) % 360
+        pof = (asc - moon + sun) % 360.0
+
     return pof, 0.0, 0.0, 0.0
 
 # --- Object list (restored) ---
@@ -209,18 +224,6 @@ def calculate_chart(
         utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0,
         swe.GREG_CAL,
     )
-
-    print(f"[DEBUG] Local input: {year}-{month}-{day} {hour}:{minute}, tz_offset={tz_offset}, tz_name={tz_name}")
-    print(f"[DEBUG] TZ used: {tz_used}")
-    print(f"[DEBUG] UTC datetime: {utc_dt.isoformat()}")
-    print(f"[DEBUG] JD: {jd}")
-
-    # --- Test Lilith asteroid (1181) explicitly ---
-    try:
-        pos, _ = swe.calc_ut(jd, swe.AST_OFFSET + 1181)
-        print("[DEBUG] Lilith (Asteroid) position:", pos[0])
-    except Exception as e:
-        print("[DEBUG] Lilith (Asteroid) failed:", e)
 
     rows = []
     asc_val = None
