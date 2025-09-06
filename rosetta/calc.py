@@ -2,9 +2,24 @@
 from zoneinfo import ZoneInfo
 import os, swisseph as swe
 
-EPHE_PATH = r"C:\Users\imcur\Desktop\Rosetta Back-End\Rosetta\rosetta\ephe"
+import os, swisseph as swe
+
+import os, swisseph as swe
+
+# Force path to the ephe folder in your repo
+EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
+EPHE_PATH = EPHE_PATH.replace("\\", "/")
 os.environ["SE_EPHE_PATH"] = EPHE_PATH
 swe.set_ephe_path(EPHE_PATH)
+testfile = os.path.join(EPHE_PATH, "se01181s.se1")
+print("[DEBUG] se01181s.se1 manually exists?", os.path.exists(testfile))
+print("[DEBUG] swe.get_library_path():", swe.get_library_path())
+
+# Proper debug
+print("[DEBUG] Ephemeris path set to:", EPHE_PATH)
+print("[DEBUG] se01181s.se1 exists?", os.path.exists(os.path.join(EPHE_PATH, "se01181s.se1")))
+
+print("[DEBUG] Files in ephe dir:", os.listdir(EPHE_PATH))
 
 import datetime
 import pandas as pd
@@ -199,6 +214,13 @@ def calculate_chart(
     print(f"[DEBUG] TZ used: {tz_used}")
     print(f"[DEBUG] UTC datetime: {utc_dt.isoformat()}")
     print(f"[DEBUG] JD: {jd}")
+
+    # --- Test Lilith asteroid (1181) explicitly ---
+    try:
+        pos, _ = swe.calc_ut(jd, swe.AST_OFFSET + 1181)
+        print("[DEBUG] Lilith (Asteroid) position:", pos[0])
+    except Exception as e:
+        print("[DEBUG] Lilith (Asteroid) failed:", e)
 
     rows = []
     asc_val = None
