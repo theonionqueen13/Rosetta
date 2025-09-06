@@ -220,6 +220,14 @@ st.markdown(
 
 st.title("🧭 Rosetta Flight Deck")
 
+# Choose how to show planet labels
+label_style = st.radio(
+    "Label Style",
+    ["Text", "Glyph"],
+    index=1,
+    horizontal=True
+)
+
 # --- Custom CSS tweaks ---
 st.markdown(
     """
@@ -471,71 +479,86 @@ def render_chart_with_shapes(
 
     return fig, visible_objects, active_shapes
 
-# ------------------------
-# Birth Data entry (UI)
-# ------------------------
-label_style = st.radio("Label Style", ["Text", "Glyph"], index=1, horizontal=True)
+from datetime import datetime
+from geopy.geocoders import Nominatim
+from timezonefinder import TimezoneFinder
+
 with st.expander("Enter Birth Data"):
     col1, col2 = st.columns(2)
+
+    # --- Left side: Date & Time ---
     with col1:
-        year = st.number_input("Year", value=1990, step=1)
-        month = st.number_input("Month", value=7, min_value=1, max_value=12, step=1)
-        day = st.number_input("Day", value=29, min_value=1, max_value=31, step=1)
-        hour = st.number_input("Hour", value=1, min_value=0, max_value=23, step=1)
-        minute = st.number_input("Minute", value=39, min_value=0, max_value=59, step=1)
+        current_year = datetime.now().year
+        years = list(range(1900, current_year + 50))
+        year = st.number_input("Year", min_value=1000, max_value=3000, value=2000, step=1)
+        month = st.selectbox("Month", list(range(1, 13)), index=0)  # July default
+        day = st.selectbox("Day", list(range(1, 32)), index=0)     # 29th default
+        hour = st.selectbox("Hour", list(range(0, 24)), index=12)
+        minute = st.selectbox("Minute", list(range(0, 60)), index=00)
+
+    # --- Right side: Location ---
     with col2:
-        # Keep the numeric offset for manual/fallback
-        tz_offset = st.number_input("Timezone Offset (hours; west negative)", value=-6.0, step=0.5)
+        city_name = st.text_input("City of Birth", value="")
+        lat, lon, tz_name = None, None, None
 
-        # NEW: option to use automatic DST handling
-        use_auto_tz = st.checkbox("Use automatic DST (IANA timezone)", value=True)
-        tz_name = None
-        if use_auto_tz:
-            tz_name = st.text_input("IANA Timezone (e.g., America/Chicago)", value="America/Chicago")
+        if city_name:
+            geolocator = Nominatim(user_agent="rosetta")
+            try:
+                location = geolocator.geocode(city_name)
+                if location:
+                    st.success(f"Found: {location.address}")
+                    lat, lon = location.latitude, location.longitude
 
-        latitude = st.number_input("Latitude", value=38.046, format="%.6f")
-        longitude = st.number_input("Longitude", value=-97.345, format="%.6f")
+                    tf = TimezoneFinder()
+                    tz_name = tf.timezone_at(lng=lon, lat=lat)
+                    st.write(f"Timezone: {tz_name}")
+                else:
+                    st.error("City not found. Try a more specific query.")
+            except Exception as e:
+                st.error(f"Lookup error: {e}")
 
 # ------------------------
 # Calculate Chart Button
 # ------------------------
 if st.button("Calculate Chart"):
-    try:
-        # --- Generate DF from Swiss Ephemeris ---
-        df = calculate_chart(
-            int(year), int(month), int(day),
-            int(hour), int(minute),
-            float(tz_offset), float(latitude), float(longitude),
-            input_is_ut=False,
-            tz_name=tz_name  # <-- this enables auto DST if provided
-        )
+    if lat is None or lon is None or tz_name is None:
+        st.error("Please enter a valid city and make sure lookup succeeds.")
+    else:
+        try:
+            df = calculate_chart(
+                int(year), int(month), int(day),
+                int(hour), int(minute),
+                0.0,      # dummy tz_offset (real tz handled by tz_name)
+                lat, lon,
+                input_is_ut=False,
+                tz_name=tz_name
+            )
+            df["abs_deg"] = df["Longitude"].astype(float)
 
-        df["abs_deg"] = df["Longitude"].astype(float)
+            # positions for chart (major objects only)
+            df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
+            pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
 
-        # positions for chart (major objects only)
-        df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
-        pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
+            # aspects/patterns/shapes
+            major_edges_all, patterns = get_major_edges_and_patterns(pos)
+            shapes = get_shapes(pos, patterns, major_edges_all)
+            filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
+            combos = generate_combo_groups(filaments)
 
-        # aspects/patterns/shapes
-        major_edges_all, patterns = get_major_edges_and_patterns(pos)
-        shapes = get_shapes(pos, patterns, major_edges_all)
-        filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
-        combos = generate_combo_groups(filaments)
+            # --- Save to session for persistence ---
+            st.session_state.chart_ready = True
+            st.session_state.df = df
+            st.session_state.pos = pos
+            st.session_state.patterns = patterns
+            st.session_state.major_edges_all = major_edges_all 
+            st.session_state.shapes = shapes
+            st.session_state.filaments = filaments
+            st.session_state.singleton_map = singleton_map
+            st.session_state.combos = combos
 
-        # --- Save to session for persistence ---
-        st.session_state.chart_ready = True
-        st.session_state.df = df
-        st.session_state.pos = pos
-        st.session_state.patterns = patterns
-        st.session_state.major_edges_all = major_edges_all 
-        st.session_state.shapes = shapes
-        st.session_state.filaments = filaments
-        st.session_state.singleton_map = singleton_map
-        st.session_state.combos = combos
-
-    except Exception as e:
-        st.error(f"Chart calculation failed: {e}")
-        st.session_state.chart_ready = False
+        except Exception as e:
+            st.error(f"Chart calculation failed: {e}")
+            st.session_state.chart_ready = False
 
 # ------------------------
 # If chart data exists, render the chart UI
