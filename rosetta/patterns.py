@@ -111,11 +111,6 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
             edge_key = frozenset((ru, rv))
             edge_lookup.setdefault(edge_key, []).append(asp)
 
-    # DEBUG: show what this parent actually kept from master edges
-    for k, asp_list in edge_lookup.items():
-        u, v = tuple(k)
-        print(f"   {u}-{v}: {asp_list}")
-
     # 3) Shape bookkeeping
     shapes = []
     seen = set()
@@ -180,8 +175,6 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
             # Otherwise, if we're in widen_orb mode, allow an approximate edge
             elif has_edge_loose(x, y, asp, bonus=approx_bonus):
                 specs.append(((x, y), asp + "_approx"))
-                # DEBUG: show invented approx edges
-                # print(f"   [approx] {x}-{y} {asp} (bonus={approx_bonus})")
 
         if not specs:
             return False
@@ -446,7 +439,7 @@ def detect_shapes(pos, patterns, major_edges_all):
             "members": list(collapsed),
             "edges": edges,
         }
-        print(f">>> SPECIAL ADD: {sh_type} id={sid}, parent={parent_idx}, members={collapsed}")
+
         shapes.append(shape)
         sid += 1
         seen.add(key)
@@ -482,16 +475,6 @@ def detect_shapes(pos, patterns, major_edges_all):
                 cc = rep_anchor.get(c, c)
                 if len({ca, cb, cc}) < 3:
                     continue
-
-                # Debug: print angles for clarity
-                def angle(p, q):
-                    ang = abs(pos[p] - pos[q]) % 360
-                    if ang > 180: ang = 360 - ang
-                    return ang
-                
-                print(f"Unnamed check: {ca}-{cb} square, "
-                    f"{ca}-{cc}={angle(ca,cc)}, "
-                    f"{cb}-{cc}={angle(cb,cc)}")
 
                 # Unnamed
                 if aspect_match(a, b, "Square"):

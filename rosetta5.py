@@ -466,7 +466,9 @@ def render_chart_with_shapes(
 
     # ✅ draw singleton dots (twice as wide as aspect lines)
     if active_singletons:
-        draw_singleton_dots(ax, pos, active_singletons, line_width=2.0)
+        # Draw singleton dots last so they sit on top
+        # Draw singleton dots last so they sit on top
+        draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0)
 
     # connectors (filaments) not already claimed by shapes
     for (p1, p2, asp_name, pat1, pat2) in filaments:

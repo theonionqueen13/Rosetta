@@ -145,13 +145,18 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                    color=ASPECTS[asp_name]["color"], linewidth=1)
             
-def draw_singleton_dots(ax, pos, active_objects, visible_objects, asc_deg, line_width=2.0):
-    for obj in active_objects:
-        # skip only if object is already "claimed" by another aspect line
-        if obj in visible_objects and len(visible_objects) > len(active_objects):
-            continue  
+def draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0):
+    """
+    Draw a dot for each active singleton planet IF it has no visible aspect lines.
+    """
+    for obj in active_singletons:
+        if obj not in pos:
+            continue
 
-        if obj in pos:
+        # Check if this object participates in any drawn aspect edges
+        has_edge = any(obj in edge for edge in shape_edges)
+
+        if not has_edge:
             r = deg_to_rad(pos[obj], asc_deg)
             ax.plot([r], [1], 'o', color="red", markersize=6, linewidth=line_width)
 
