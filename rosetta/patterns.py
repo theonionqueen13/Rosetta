@@ -114,6 +114,7 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     # DEBUG: show what this parent actually kept from master edges
     for k, asp_list in edge_lookup.items():
         u, v = tuple(k)
+        print(f"   {u}-{v}: {asp_list}")
 
     # 3) Shape bookkeeping
     shapes = []
@@ -179,6 +180,8 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
             # Otherwise, if we're in widen_orb mode, allow an approximate edge
             elif has_edge_loose(x, y, asp, bonus=approx_bonus):
                 specs.append(((x, y), asp + "_approx"))
+                # DEBUG: show invented approx edges
+                # print(f"   [approx] {x}-{y} {asp} (bonus={approx_bonus})")
 
         if not specs:
             return False
@@ -443,7 +446,7 @@ def detect_shapes(pos, patterns, major_edges_all):
             "members": list(collapsed),
             "edges": edges,
         }
-
+        print(f">>> SPECIAL ADD: {sh_type} id={sid}, parent={parent_idx}, members={collapsed}")
         shapes.append(shape)
         sid += 1
         seen.add(key)
@@ -486,6 +489,10 @@ def detect_shapes(pos, patterns, major_edges_all):
                     if ang > 180: ang = 360 - ang
                     return ang
                 
+                print(f"Unnamed check: {ca}-{cb} square, "
+                    f"{ca}-{cc}={angle(ca,cc)}, "
+                    f"{cb}-{cc}={angle(cb,cc)}")
+
                 # Unnamed
                 if aspect_match(a, b, "Square"):
                     for c in pos.keys():
@@ -568,6 +575,22 @@ def detect_shapes(pos, patterns, major_edges_all):
     # -------------------------------
     shapes.sort(key=lambda s: (s.get("remainder", False), s["id"]))
     return shapes
+
+# -------------------------------
+# Detect shapes (public API)
+# -------------------------------
+
+# -------------------------------
+# Aspect helpers
+# -------------------------------
+
+def _aspect_match_wide(pos, p1, p2, target_aspect, widen=1.0):
+    """Looser orb check than strict aspect_match, for special cases."""
+    angle = abs(pos[p1] - pos[p2]) % 360
+    if angle > 180:
+        angle = 360 - angle
+    data = ASPECTS[target_aspect]
+    return abs(angle - data["angle"]) <= data["orb"] * widen
 
 # -------------------------------
 # Suppression

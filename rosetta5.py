@@ -18,7 +18,7 @@ from rosetta.helpers import get_ascendant_degree, deg_to_rad
 from rosetta.drawing import (
     draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
     draw_planet_labels, draw_aspect_lines, draw_filament_lines,
-    draw_shape_edges, draw_minor_edges,
+    draw_shape_edges, draw_minor_edges, draw_singleton_dots
 )
 from rosetta.patterns import (
     detect_minor_links_with_singletons, generate_combo_groups,
@@ -410,19 +410,21 @@ def render_chart_with_shapes(
             visible_objects.update(patterns[idx])
             if active_parents:
                 # draw only edges inside active patterns, using master edge list
-                draw_aspect_lines(ax, pos, patterns, active_patterns=active_parents,
-                                  asc_deg=asc_deg, group_colors=GROUP_COLORS,
-                                  edges=major_edges_all)
+                draw_aspect_lines(
+                    ax, pos, patterns,
+                    active_patterns=active_parents,
+                    asc_deg=asc_deg,
+                    group_colors=GROUP_COLORS,
+                    edges=major_edges_all
+                )
 
-                # optional: internal minors for those parents + filaments that connect active endpoints
+                # optional: internal minors + filaments
                 for idx in active_parents:
                     _ = internal_minor_edges_for_pattern(pos, list(patterns[idx]))
                     for (p1, p2, asp_name, pat1, pat2) in filaments:
-                        # skip if this link is part of a visible sub-shape already
                         if frozenset((p1, p2)) in shape_edges:
                             continue
 
-                        # endpoint visibility logic
                         in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
                         in_parent2 = any((i in active_parents) and (p2 in patterns[i]) for i in active_parents)
                         in_shape1 = any(p1 in s["members"] for s in active_shapes)
@@ -459,8 +461,12 @@ def render_chart_with_shapes(
             override_color=st.session_state.shape_color_map[s["id"]]
         )
 
-    # singletons
+    # singletons (always mark them visible if toggled)
     visible_objects.update(active_singletons)
+
+    # ✅ draw singleton dots (twice as wide as aspect lines)
+    if active_singletons:
+        draw_singleton_dots(ax, pos, active_singletons, line_width=2.0)
 
     # connectors (filaments) not already claimed by shapes
     for (p1, p2, asp_name, pat1, pat2) in filaments:
@@ -510,7 +516,7 @@ with st.expander("Enter Birth Data"):
 
         if city_name:
             try:
-                location = geolocator.geocode(city_name)
+                location = geolocator.geocode(city_name, timeout=20)
                 if location:
                     st.success(f"Found: {location.address}")
                     lat, lon = location.latitude, location.longitude
@@ -641,13 +647,14 @@ if st.session_state.get("chart_ready", False):
 
         # Show/Hide all buttons
         col_all1, col_all2 = st.columns([1, 1])
+        # Show/Hide all buttons
+        col_all1, col_all2 = st.columns([1, 1])
         with col_all1:
             if st.button("Show All"):
                 for i in range(len(patterns)):
                     st.session_state[f"toggle_pattern_{i}"] = True
                     for sh in [sh for sh in shapes if sh["parent"] == i]:
-                        members_key = "_".join(sorted(str(m) for m in sh["members"]))
-                        unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                        unique_key = f"shape_{i}_{sh['id']}"
                         st.session_state[unique_key] = True
                 for planet in singleton_map.keys():
                     st.session_state[f"singleton_{planet}"] = True
@@ -656,8 +663,7 @@ if st.session_state.get("chart_ready", False):
                 for i in range(len(patterns)):
                     st.session_state[f"toggle_pattern_{i}"] = False
                     for sh in [sh for sh in shapes if sh["parent"] == i]:
-                        members_key = "_".join(sorted(str(m) for m in sh["members"]))
-                        unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
+                        unique_key = f"shape_{i}_{sh['id']}"
                         st.session_state[unique_key] = False
                 for planet in singleton_map.keys():
                     st.session_state[f"singleton_{planet}"] = False
@@ -677,22 +683,19 @@ if st.session_state.get("chart_ready", False):
                 toggles.append(cbox)
                 pattern_labels.append(label)
 
+                print(">>> SHAPES DETECTED:", [(s["id"], s["type"], s["parent"], s["members"]) for s in shapes])
+
+
                 with st.expander(label, expanded=False):
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
+                    shape_entries = []
                     if parent_shapes:
                         st.markdown("**Sub-shapes detected:**")
-                        shape_entries = []
                         for sh in parent_shapes:
-                            members_str = ", ".join(str(m) for m in sh["members"])
-                            label_text = f"{sh['type']}: {members_str}"
-                            members_key = "_".join(sorted(str(m) for m in sh["members"]))
-                            unique_key = f"shape_{i}_{sh['id']}_{sh['type']}_{members_key}"
-                            # Only pass value= if Streamlit doesn't already know this key
-                            if unique_key not in st.session_state:
-                                on = st.checkbox(label_text, value=False, key=unique_key)
-                            else:
-                                on = st.checkbox(label_text, key=unique_key)
-
+                            # ✅ Use shape id only for uniqueness
+                            label_text = f"{sh['type']}: {', '.join(str(m) for m in sh['members'])}"
+                            unique_key = f"shape_{i}_{sh['id']}"
+                            on = st.checkbox(label_text, key=unique_key, value=st.session_state.get(unique_key, False))
                             shape_entries.append({"id": sh["id"], "on": on})
                     else:
                         st.markdown("_(no sub-shapes found)_")
