@@ -490,7 +490,7 @@ with st.expander("Enter Birth Data"):
     with col1:
         current_year = datetime.now().year
         years = list(range(1900, current_year + 50))
-        year = st.number_input("Year", min_value=1000, max_value=3000, value=2000, step=1)
+        year = st.number_input("Year", min_value=1000, max_value=3000, value=1990, step=1)
         month = st.selectbox("Month", list(range(1, 13)), index=0)  # July default
         day = st.selectbox("Day", list(range(1, 32)), index=0)     # 29th default
         hour = st.selectbox("Hour", list(range(0, 24)), index=12)
@@ -516,6 +516,60 @@ with st.expander("Enter Birth Data"):
                     st.error("City not found. Try a more specific query.")
             except Exception as e:
                 st.error(f"Lookup error: {e}")
+
+from datetime import datetime
+import pytz
+
+col_now1, col_now2 = st.columns([1, 3])
+with col_now1:
+    if st.button("🌟 Now"):
+        if lat is None or lon is None or tz_name is None:
+            st.error("Enter a valid city first to use the Now button.")
+        else:
+            # Get current time in the chosen city's timezone
+            tz = pytz.timezone(tz_name)
+            now = datetime.now(tz)
+
+            # Update the UI fields via session_state
+            st.session_state["year"] = now.year
+            st.session_state["month"] = now.month
+            st.session_state["day"] = now.day
+            st.session_state["hour"] = now.hour
+            st.session_state["minute"] = now.minute
+
+            # Run chart calculation immediately
+            try:
+                df = calculate_chart(
+                    now.year, now.month, now.day,
+                    now.hour, now.minute,
+                    0.0,        # dummy tz_offset
+                    lat, lon,
+                    input_is_ut=False,
+                    tz_name=tz_name
+                )
+                df["abs_deg"] = df["Longitude"].astype(float)
+
+                df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
+                pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
+
+                major_edges_all, patterns = get_major_edges_and_patterns(pos)
+                shapes = get_shapes(pos, patterns, major_edges_all)
+                filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
+                combos = generate_combo_groups(filaments)
+
+                st.session_state.chart_ready = True
+                st.session_state.df = df
+                st.session_state.pos = pos
+                st.session_state.patterns = patterns
+                st.session_state.major_edges_all = major_edges_all
+                st.session_state.shapes = shapes
+                st.session_state.filaments = filaments
+                st.session_state.singleton_map = singleton_map
+                st.session_state.combos = combos
+
+            except Exception as e:
+                st.error(f"Chart calculation failed: {e}")
+                st.session_state.chart_ready = False
 
 # ------------------------
 # Calculate Chart Button

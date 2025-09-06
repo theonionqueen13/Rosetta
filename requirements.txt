@@ -2,4 +2,7 @@ streamlit
 pandas
 matplotlib
 numpy
+geopy
+timezonefinder
 networkx
+pyswisseph
