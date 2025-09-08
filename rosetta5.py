@@ -614,6 +614,9 @@ if "_loaded_profile" in st.session_state:
     # Cleanup
     del st.session_state["_loaded_profile"]
 
+if "active_profile_tab" not in st.session_state:
+    st.session_state["active_profile_tab"] = "Load Profile"  # default
+
 # -------------------------
 # Outer layout: 3 columns
 # -------------------------
@@ -626,15 +629,16 @@ def run_chart(lat, lon, tz_name):
 
     try:
         df = calculate_chart(
-            int(st.session_state["profile_year"]),
-            int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
-            int(st.session_state["profile_day"]),
-            int(st.session_state.get("hour_val", st.session_state.get("profile_hour", 0))),
-            int(st.session_state.get("minute_val", st.session_state.get("profile_minute", 0))),
-            0.0, lat, lon,
-            input_is_ut=False,
-            tz_name=tz_name,
-        )
+        int(st.session_state["profile_year"]),
+        int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
+        int(st.session_state["profile_day"]),
+        int(st.session_state["profile_hour"]),
+        int(st.session_state["profile_minute"]),
+        0.0, lat, lon,
+        input_is_ut=False,
+        tz_name=tz_name,
+    )
+
         df["abs_deg"] = df["Longitude"].astype(float)
         df = annotate_fixed_stars(df)
         df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
@@ -727,7 +731,7 @@ with col_left:
             city_name = st.text_input(
                 "City of Birth",
                 value=st.session_state.get("profile_city", ""),
-                key="city"
+                key="city"   # you can just reuse profile_city as the widget key
             )
 
             lat, lon, tz_name = None, None, None
@@ -822,6 +826,9 @@ with col_mid:
                 location_info.write(f"Timezone: {st.session_state['last_timezone']}")
         elif st.session_state.get("last_timezone"):
             location_info.error(st.session_state["last_timezone"])
+        
+        # user calculated a new chart manually
+        st.session_state["active_profile_tab"] = "Add / Update Profile"
 
 # -------------------------
 # Right column: Profile Manager
@@ -839,20 +846,40 @@ with col_right:
     if "current_profile" not in st.session_state:
         st.session_state["current_profile"] = None
 
-    st.subheader("👤 Birth Profile Manager")
-    tabs = st.tabs(["Add / Update Profile", "Load Profile", "Delete Profile"])
+    # Track which tab is active
+    if "active_profile_tab" not in st.session_state:
+        st.session_state["active_profile_tab"] = "Load Profile"
 
-    # --- Add / Update ---
-    with tabs[0]:
+    st.subheader("👤 Birth Profile Manager")
+
+    tab_labels = ["Add / Update Profile", "Load Profile", "Delete Profile"]
+
+    active_tab = st.radio(
+        "Profile Manager Tabs",
+        tab_labels,
+        index=tab_labels.index(st.session_state["active_profile_tab"]),
+        horizontal=True,
+        key="profile_tab_selector"
+    )
+
+    st.session_state["active_profile_tab"] = active_tab  # keep synced
+
+    if active_tab == "Add / Update Profile":
         profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
         if st.button("💾 Save / Update Profile"):
             if profile_name.strip() == "":
                 st.error("Please enter a name for the profile.")
             else:
-                # Grab circuit names currently in session
-                if "patterns" in st.session_state:
+                # If updating existing profile, keep current circuit names
+                if profile_name in saved_profiles and "patterns" in st.session_state:
                     circuit_names = {
                         f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+                        for i in range(len(st.session_state.patterns))
+                    }
+                # If brand new profile, reset to defaults
+                elif "patterns" in st.session_state:
+                    circuit_names = {
+                        f"circuit_name_{i}": f"Circuit {i+1}"
                         for i in range(len(st.session_state.patterns))
                     }
                 else:
@@ -868,20 +895,21 @@ with col_right:
                     "lat": lat,
                     "lon": lon,
                     "tz_name": tz_name,
-                    "circuit_names": circuit_names,  # ✅ Save circuit names
+                    "circuit_names": circuit_names,
                 }
+
                 with open(DATA_FILE, "w") as f:
                     json.dump(saved_profiles, f, indent=2)
+
                 st.success(f"Profile '{profile_name}' saved!")
 
     # --- Load ---
-    with tabs[1]:
+    elif active_tab == "Load Profile":
         if saved_profiles:
             with st.expander("Saved Profiles", expanded=False):
-                # Make two columns inside the expander
                 cols = st.columns(2)
                 for i, (name, data) in enumerate(saved_profiles.items()):
-                    col = cols[i % 2]   # alternate between col 0 and col 1
+                    col = cols[i % 2]
                     with col:
                         if st.button(name, key=f"load_{name}"):
                             # Restore into session
@@ -897,9 +925,10 @@ with col_right:
                             st.session_state["profile_minute"] = data["minute"]
                             st.session_state["profile_city"] = data["city"]
 
-                            # Keep helpers in sync
+                            # Helpers
                             st.session_state["hour_val"] = data["hour"]
                             st.session_state["minute_val"] = data["minute"]
+                            st.session_state["city_input"] = data["city"]
 
                             st.session_state["last_location"] = data["city"]
                             st.session_state["last_timezone"] = data.get("tz_name")
@@ -920,7 +949,7 @@ with col_right:
             st.info("No saved profiles yet.")
 
     # --- Delete ---
-    with tabs[2]:
+    elif active_tab == "Delete Profile":
         if saved_profiles:
             delete_choice = st.selectbox("Select a profile to delete", list(saved_profiles.keys()), key="profile_delete")
             if st.button("🗑️ Delete Selected Profile"):
