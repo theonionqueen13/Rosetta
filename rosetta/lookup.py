@@ -6,7 +6,7 @@ GLYPHS = {
     "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇",
     "Chiron": "⚷", "Ceres": "⚳", "Pallas": "⚴", "Juno": "⚵", "Vesta": "⚶",
     "North Node": "☊", "South Node": "☋", "Part of Fortune": "⊗", "Black Moon Lilith (Mean)": "⚸",
-    "Vertex": "☩", "True Node": "☊", "Ascendant": "AC", "Descendant": "DC", "Psyche": "Ψ", "Eros": "♡", 
+    "Vertex": "☩", "North Node": "☊", "Ascendant": "AC", "Descendant": "DC", "Psyche": "Ψ", "Eros": "♡", 
 }
 
 ASPECTS = {
@@ -24,7 +24,7 @@ MAJOR_OBJECTS = [
     "Uranus", "Neptune", "Pluto", "Eris", "Chiron", "Vesta", "Pallas",
     "Ceres", "Juno", "Psyche", "Eros", "Part of Fortune", "Black Moon Lilith (Mean)",
     "Lilith", "Ascendant", "AC", "Descendant", "DC", "Midheaven", "MC", "IC",
-    "North Node", "True Node", "South Node", "Vertex",
+    "North Node", "North Node", "South Node", "Vertex",
 ]
 
 ZODIAC_SIGNS = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
@@ -39,6 +39,9 @@ OBJECT_MEANINGS = {
     "AC": "The mask you wear and how others first see you.",
     "Desc": "What you seek in relationships and partners.",
     "True Node": "Your soul's growth direction in this life.",
+    "South Node": "Where you are coming from, past lives, your comfort zone, what you bring with you into this life, and where you go to purge and be reborn.",
+    "MC": "Your career, public life, and reputation.",
+    "IC": "Your home, family, roots, and inner emotional foundation.",
     "Sun": "Your core identity, purpose, and life force.",
     "Moon": "Your emotions, inner world, and instinctive needs.",
     "Mercury": "Your mind, communication style, and how you think.",
