@@ -616,9 +616,41 @@ if "_loaded_profile" in st.session_state:
 # -------------------------
 col_left, col_mid, col_right = st.columns([2, 2, 2])
 
-# -------------------------
-# Left column: Birth Data
-# -------------------------
+def run_chart(lat, lon, tz_name):
+    try:
+        df = calculate_chart(
+            int(st.session_state["profile_year"]),
+            int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
+            int(st.session_state["profile_day"]),
+            int(st.session_state.get("hour_val", st.session_state.get("profile_hour", 0))),
+            int(st.session_state.get("minute_val", st.session_state.get("profile_minute", 0))),
+            0.0, lat, lon,
+            input_is_ut=False,
+            tz_name=tz_name,
+        )
+        df["abs_deg"] = df["Longitude"].astype(float)
+        df = annotate_fixed_stars(df)
+        df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
+        pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
+        major_edges_all, patterns = get_major_edges_and_patterns(pos)
+        shapes = get_shapes(pos, patterns, major_edges_all)
+        filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
+        combos = generate_combo_groups(filaments)
+
+        st.session_state.chart_ready = True
+        st.session_state.df = df
+        st.session_state.pos = pos
+        st.session_state.patterns = patterns
+        st.session_state.major_edges_all = major_edges_all
+        st.session_state.shapes = shapes
+        st.session_state.filaments = filaments
+        st.session_state.singleton_map = singleton_map
+        st.session_state.combos = combos
+
+    except Exception as e:
+        st.error(f"Chart calculation failed: {e}")
+        st.session_state.chart_ready = False
+
 # -------------------------
 # Left column: Birth Data
 # -------------------------
@@ -695,6 +727,7 @@ with col_left:
 
             city_name = st.text_input(
                 "City of Birth",
+                value=st.session_state.get("profile_city", ""),
                 key="city"
             )
 
@@ -774,48 +807,16 @@ with col_mid:
         if lat is None or lon is None or tz_name is None:
             st.error("Please enter a valid city and make sure lookup succeeds.")
         else:
-            try:
-                df = calculate_chart(
-                    int(st.session_state["profile_year"]),
-                    int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
-                    int(st.session_state["profile_day"]),
-                    int(st.session_state.get("hour_val", 0)),
-                    int(st.session_state.get("minute_val", 0)),
-                    0.0, lat, lon,
-                    input_is_ut=False,
-                    tz_name=tz_name,
-                )
-                df["abs_deg"] = df["Longitude"].astype(float)
-                df = annotate_fixed_stars(df)
-                df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
-                pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
-                major_edges_all, patterns = get_major_edges_and_patterns(pos)
-                shapes = get_shapes(pos, patterns, major_edges_all)
-                filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
-                combos = generate_combo_groups(filaments)
+            run_chart(lat, lon, tz_name)
 
-                st.session_state.chart_ready = True
-                st.session_state.df = df
-                st.session_state.pos = pos
-                st.session_state.patterns = patterns
-                st.session_state.major_edges_all = major_edges_all
-                st.session_state.shapes = shapes
-                st.session_state.filaments = filaments
-                st.session_state.singleton_map = singleton_map
-                st.session_state.combos = combos
-
-            except Exception as e:
-                st.error(f"Chart calculation failed: {e}")
-                st.session_state.chart_ready = False
-
-    # Location info BELOW buttons
-    location_info = st.container()
-    if st.session_state.get("last_location"):
-        location_info.success(f"Found: {st.session_state['last_location']}")
-        if st.session_state.get("last_timezone"):
-            location_info.write(f"Timezone: {st.session_state['last_timezone']}")
-    elif st.session_state.get("last_timezone"):
-        location_info.error(st.session_state["last_timezone"])
+        # Location info BELOW buttons
+        location_info = st.container()
+        if st.session_state.get("last_location"):
+            location_info.success(f"Found: {st.session_state['last_location']}")
+            if st.session_state.get("last_timezone"):
+                location_info.write(f"Timezone: {st.session_state['last_timezone']}")
+        elif st.session_state.get("last_timezone"):
+            location_info.error(st.session_state["last_timezone"])
 
 # -------------------------
 # Right column: Profile Manager
@@ -836,7 +837,6 @@ with col_right:
     st.subheader("👤 Birth Profile Manager")
     tabs = st.tabs(["Add / Update Profile", "Load Profile", "Delete Profile"])
 
-    # --- Add / Update ---
     # --- Add / Update ---
     with tabs[0]:
         profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
@@ -860,19 +860,29 @@ with col_right:
                 st.success(f"Profile '{profile_name}' saved!")
 
     # --- Load ---
-# --- Load ---
     with tabs[1]:
         if saved_profiles:
             choice = st.selectbox("Select a profile to load", list(saved_profiles.keys()), key="profile_loader")
             if st.button("📂 Load Selected Profile"):
                 data = saved_profiles[choice]
 
-                # Stash into temporary key, widgets will pick this up after rerun
+                # Restore into session
                 st.session_state["_loaded_profile"] = data
                 st.session_state["current_profile"] = choice
                 st.session_state["profile_loaded"] = True
 
-                st.success(f"Profile '{choice}' loaded and applied!")
+                # Update profile_* keys so run_chart uses them
+                st.session_state["profile_year"] = data["year"]
+                st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
+                st.session_state["profile_day"] = data["day"]
+                st.session_state["profile_hour"] = data["hour"]
+                st.session_state["profile_minute"] = data["minute"]
+                st.session_state["profile_city"] = data["city"]
+
+                # ✅ Immediately calculate chart
+                run_chart(data["lat"], data["lon"], data["tz_name"])
+
+                st.success(f"Profile '{choice}' loaded and chart calculated!")
                 st.rerun()
         else:
             st.info("No saved profiles yet.")
