@@ -1,5 +1,3 @@
-# rosetta5.py — full UI + live calculate_chart
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,6 +6,7 @@ import streamlit.components.v1 as components
 from itertools import combinations
 import datetime
 import swisseph as swe
+import re
 
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
@@ -25,8 +24,51 @@ from rosetta.patterns import (
     detect_shapes, internal_minor_edges_for_pattern,
     connected_components_from_edges,
 )
-import rosetta.patterns
-print(">>> patterns.py loaded from:", rosetta.patterns.__file__)
+
+# -------------------------
+# Load Fixed Star Table
+# -------------------------
+STAR_DF = pd.read_excel("2b) Fixed Star Lookup.xlsx", sheet_name="Sheet1")
+
+# normalize column headers
+STAR_DF = pd.read_excel("2b) Fixed Star Lookup.xlsx", sheet_name="Sheet1")
+
+# normalize headers
+STAR_DF.columns = STAR_DF.columns.str.strip()
+
+# ✅ Only rename degree
+STAR_DF = STAR_DF.rename(columns={
+    "Absolute Degree Decimal": "Degree"
+})
+
+STAR_DF = STAR_DF.dropna(subset=["Degree"])
+STAR_DF["Degree"] = STAR_DF["Degree"].astype(float)
+
+def annotate_fixed_stars(df, orb=1.0):
+    df["Fixed Star Conjunction"] = ""
+    df["Fixed Star Meaning"] = ""
+    for i, row in df.iterrows():
+        obj_deg = float(row["abs_deg"])
+        close_stars = STAR_DF[np.abs(STAR_DF["Degree"] - obj_deg) <= orb]
+        if not close_stars.empty:
+            star_names = "|||".join(close_stars["Fixed Star"].astype(str).tolist())
+            star_meanings = "|||".join(
+                [str(m).strip() for m in close_stars["Meaning"].dropna().astype(str).tolist() if str(m).strip()]
+            )
+            df.at[i, "Fixed Star Conjunction"] = star_names
+            df.at[i, "Fixed Star Meaning"] = star_meanings
+    return df
+
+def get_fixed_star_meaning(star_name: str):
+    """Lookup meaning text for a star name from STAR_DF."""
+    if not star_name:
+        return None
+    match = STAR_DF[STAR_DF["Fixed Star"].str.contains(star_name, case=False, na=False)]
+    if not match.empty:
+        meaning = match["Meaning"].dropna().iloc[0] if not match["Meaning"].dropna().empty else None
+        if isinstance(meaning, str) and meaning.strip():
+            return star_name, meaning.strip()
+    return None
 
 # -------------------------
 # Chart Math + Pattern Utils
@@ -487,6 +529,21 @@ def render_chart_with_shapes(
 
     return fig, visible_objects, active_shapes
 
+def get_fixed_star_meaning(star_name: str):
+    """Return (name, meaning) from STAR_DF if meaning exists."""
+    if not star_name:
+        return None
+    # exact match
+    match = STAR_DF[STAR_DF["Fixed Star"].str.strip().str.lower() == star_name.strip().lower()]
+    if match.empty:
+        # fallback: contains
+        match = STAR_DF[STAR_DF["Fixed Star"].str.contains(star_name, case=False, na=False)]
+    if not match.empty:
+        meaning = match.iloc[0]["Meaning"]
+        if isinstance(meaning, str) and meaning.strip():
+            return star_name, meaning.strip()
+    return None
+
 from datetime import datetime
 from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
@@ -563,6 +620,7 @@ with col_now1:
                     tz_name=tz_name
                 )
                 df["abs_deg"] = df["Longitude"].astype(float)
+                df = annotate_fixed_stars(df)
 
                 df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
                 pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
@@ -603,6 +661,8 @@ if st.button("Calculate Chart"):
                 tz_name=tz_name
             )
             df["abs_deg"] = df["Longitude"].astype(float)
+            df = annotate_fixed_stars(df)
+
 
             # positions for chart (major objects only)
             df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
@@ -646,7 +706,7 @@ if st.session_state.get("chart_ready", False):
     left_col, right_col = st.columns([2, 1])
     with left_col:
         st.subheader("Circuits")
-        st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. Expand circuits to see their sub-shapes. Below the chart, copy the prompt into your GPT for an aspect interpretation.")
+        st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. Expand circuits to see their sub-shapes. View planet profiles on the left sidebar (click the arrow at upper left on mobile). Below the chart, copy the prompt into your GPT for an aspect interpretation.")
 
         # Show/Hide all buttons
         col_all1, col_all2 = st.columns([1, 1])
@@ -685,9 +745,6 @@ if st.session_state.get("chart_ready", False):
                 cbox = st.checkbox("", key=checkbox_key)
                 toggles.append(cbox)
                 pattern_labels.append(label)
-
-                print(">>> SHAPES DETECTED:", [(s["id"], s["type"], s["parent"], s["members"]) for s in shapes])
-
 
                 with st.expander(label, expanded=False):
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
@@ -753,8 +810,6 @@ if st.session_state.get("chart_ready", False):
 
     st.pyplot(fig, use_container_width=False)
 
-    # (keep your Aspect Interpretation Prompt + Sidebar profiles exactly as before)
-
     # --- Aspect Interpretation Prompt ---
     st.subheader("Aspect Interpretation Prompt")
     st.caption("Paste this prompt into an LLM (like ChatGPT).")
@@ -778,8 +833,10 @@ if st.session_state.get("chart_ready", False):
         return clean.strip()
 
     if aspect_blocks:
-        # Character profiles for visible objects
         planet_profiles_texts = []
+        interpretation_flags = set()
+        fixed_star_meanings = {}
+
         for obj in sorted(visible_objects):
             matched_rows = df[df["Object"] == obj]
             if not matched_rows.empty:
@@ -788,28 +845,64 @@ if st.session_state.get("chart_ready", False):
                 profile_text = strip_html_tags(profile_html)
                 planet_profiles_texts.append(profile_text)
 
+                # ---- Out of Bounds check (separate) ----
+                if str(row.get("OOB Status", "")).lower() == "yes":
+                    interpretation_flags.add("Out of Bounds")
+
+                # ---- Retrograde / Station checks ----
+                retro_val = str(row.get("Retrograde", "")).lower()
+                if "station" in retro_val:
+                    interpretation_flags.add("Station Point")
+                if "rx" in retro_val:
+                    interpretation_flags.add("Retrograde")
+
+                # ---- Fixed Stars check (independent) ----
+                if row.get("Fixed Star Meaning"):
+                    stars = row["Fixed Star Conjunction"].split("|||")
+                    meanings = row["Fixed Star Meaning"].split("|||")
+                    for star, meaning in zip(stars, meanings):
+                        star, meaning = star.strip(), meaning.strip()
+                        if meaning:
+                            fixed_star_meanings[star] = meaning
+
         planet_profiles_block = (
             "### Character Profiles\n" + "\n\n".join(planet_profiles_texts)
             if planet_profiles_texts else ""
         )
 
+        # --- Build interpretation notes ---
+        interpretation_notes = []
+        if interpretation_flags or fixed_star_meanings:
+            interpretation_notes.append("### Interpretation Notes\n")
+
+        # OOB/Retro/Station
+        for flag in sorted(interpretation_flags):
+            if flag == "Out of Bounds":
+                interpretation_notes.append(
+                    "- Out of Bounds planets: Use OOB interpretation rules (expanded expression, boundary-pushing, destabilizing influence, etc.)."
+                )
+            elif flag == "Station Point":
+                interpretation_notes.append(
+                    "- Station Points: Treat as highly emphasized, frozen, or amplified energies."
+                )
+            elif flag == "Retrograde":
+                interpretation_notes.append(
+                    "- Retrograde planets: Use retrograde interpretation rules (internalized, revisiting, reversal of flow, etc.)."
+                )
+
+        # Fixed Stars
+        if fixed_star_meanings:
+            interpretation_notes.append("\nFixed Stars:")
+            for star, meaning in fixed_star_meanings.items():
+                interpretation_notes.append(f"- {star}: {meaning}")
+
+        interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
+
+        # --- Final prompt assembly ---
         prompt = (
-            "Synthesize accurate poetic interpretations for each of these astrological aspects, "
-            "using only the precise method outlined. Do not default to traditional astrology. "
-            "For each planet or placement profile or conjunction cluster provided, use the planet/placement "
-            "meaning(s), sign, Sabian symbol, fixed star conjunction(s) (if present), Out of Bounds status (if present), "
-            "retrograde status or station point (if present), dignity (if present) and rulerships (if present) "
-            "to synthesize a personified planet \"character\" profile in one paragraph. "
-            "List these one-paragraph character profiles first in your output, under a heading called \"Character Profiles\" \n\n"
-            "Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided "
-            "below (not traditional astrology definitions) to personify the \"relationship dynamics\" between each combination (aspect) "
-            "of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the Character Profiles, "
-            "under a header called \"Aspects\" \n\n"
-            "Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary "
-            "relationship dynamics become a functioning system with a function when combined into the whole shape provided, and ask "
-            "yourself \"what does the whole thing do, as a machine?\" Then write the answer as the final paragraph, under a header "
-            "called \"Circuit\"\n\n"
+            "Synthesize accurate poetic interpretations for each of these astrological aspects, ..."
             + planet_profiles_block + "\n\n"
+            + interpretation_notes_block + "\n\n"
             + "\n\n".join(aspect_blocks) + "\n\n"
             + "\n\n".join(sorted(aspect_definitions))
         ).strip()
