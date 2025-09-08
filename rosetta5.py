@@ -836,6 +836,15 @@ with col_right:
             if profile_name.strip() == "":
                 st.error("Please enter a name for the profile.")
             else:
+                # Grab circuit names currently in session
+                if "patterns" in st.session_state:
+                    circuit_names = {
+                        f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+                        for i in range(len(st.session_state.patterns))
+                    }
+                else:
+                    circuit_names = {}
+
                 saved_profiles[profile_name] = {
                     "year": int(st.session_state.get("profile_year", 1990)),
                     "month": int(MONTH_NAMES.index(st.session_state.get("profile_month_name", "July")) + 1),
@@ -846,6 +855,7 @@ with col_right:
                     "lat": lat,
                     "lon": lon,
                     "tz_name": tz_name,
+                    "circuit_names": circuit_names,  # ✅ Save circuit names
                 }
                 with open(DATA_FILE, "w") as f:
                     json.dump(saved_profiles, f, indent=2)
@@ -871,6 +881,11 @@ with col_right:
                 st.session_state["profile_minute"] = data["minute"]
                 st.session_state["profile_city"] = data["city"]
 
+                # ✅ Restore circuit names if present
+                if "circuit_names" in data:
+                    for key, val in data["circuit_names"].items():
+                        st.session_state[key] = val
+
                 # ✅ Immediately calculate chart
                 run_chart(data["lat"], data["lon"], data["tz_name"])
 
@@ -891,7 +906,6 @@ with col_right:
         else:
             st.info("No saved profiles yet.")
 
-
 # ------------------------
 # If chart data exists, render the chart UI
 # ------------------------
@@ -905,14 +919,14 @@ if st.session_state.get("chart_ready", False):
     singleton_map = st.session_state.singleton_map
     combos = st.session_state.combos
 
-    # --- UI Layout (restored) ---
+    # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
         st.subheader("Circuits")
-        st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. Expand circuits to see their sub-shapes. View planet profiles on the left sidebar (click the arrow at upper left on mobile). Below the chart, copy the prompt into your GPT for an aspect interpretation.")
+        st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
+                   "Expand circuits to see their sub-shapes. View planet profiles on the left sidebar. "
+                   "Below the chart, copy the prompt into your GPT for an aspect interpretation.")
 
-        # Show/Hide all buttons
-        col_all1, col_all2 = st.columns([1, 1])
         # Show/Hide all buttons
         col_all1, col_all2 = st.columns([1, 1])
         with col_all1:
@@ -920,8 +934,7 @@ if st.session_state.get("chart_ready", False):
                 for i in range(len(patterns)):
                     st.session_state[f"toggle_pattern_{i}"] = True
                     for sh in [sh for sh in shapes if sh["parent"] == i]:
-                        unique_key = f"shape_{i}_{sh['id']}"
-                        st.session_state[unique_key] = True
+                        st.session_state[f"shape_{i}_{sh['id']}"] = True
                 for planet in singleton_map.keys():
                     st.session_state[f"singleton_{planet}"] = True
         with col_all2:
@@ -929,8 +942,7 @@ if st.session_state.get("chart_ready", False):
                 for i in range(len(patterns)):
                     st.session_state[f"toggle_pattern_{i}"] = False
                     for sh in [sh for sh in shapes if sh["parent"] == i]:
-                        unique_key = f"shape_{i}_{sh['id']}"
-                        st.session_state[unique_key] = False
+                        st.session_state[f"shape_{i}_{sh['id']}"] = False
                 for planet in singleton_map.keys():
                     st.session_state[f"singleton_{planet}"] = False
 
@@ -942,23 +954,42 @@ if st.session_state.get("chart_ready", False):
         for i, component in enumerate(patterns):
             target_col = left_patterns if i < half else right_patterns
             checkbox_key = f"toggle_pattern_{i}"
-            label = f"Circuit {i+1}: {', '.join(component)}"
+
+            # Session key for circuit name
+            circuit_name_key = f"circuit_name_{i}"
+            default_label = f"Circuit {i+1}"
+            if circuit_name_key not in st.session_state:
+                st.session_state[circuit_name_key] = default_label
+
+            circuit_name = st.session_state.get(circuit_name_key, default_label)
+            expander_label = f"{circuit_name}: {', '.join(component)}"
 
             with target_col:
                 cbox = st.checkbox("", key=checkbox_key)
                 toggles.append(cbox)
-                pattern_labels.append(label)
+                pattern_labels.append(expander_label)
 
-                with st.expander(label, expanded=False):
+                with st.expander(expander_label, expanded=False):
+                    # Editable name inside expander
+                    st.text_input(
+                        f"Rename {default_label}",
+                        value=circuit_name,
+                        key=circuit_name_key
+                    )
+
+                    # Sub-shapes as before
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
                     shape_entries = []
                     if parent_shapes:
                         st.markdown("**Sub-shapes detected:**")
                         for sh in parent_shapes:
-                            # ✅ Use shape id only for uniqueness
                             label_text = f"{sh['type']}: {', '.join(str(m) for m in sh['members'])}"
                             unique_key = f"shape_{i}_{sh['id']}"
-                            on = st.checkbox(label_text, key=unique_key, value=st.session_state.get(unique_key, False))
+                            on = st.checkbox(
+                                label_text,
+                                key=unique_key,
+                                value=st.session_state.get(unique_key, False)
+                            )
                             shape_entries.append({"id": sh["id"], "on": on})
                     else:
                         st.markdown("_(no sub-shapes found)_")
