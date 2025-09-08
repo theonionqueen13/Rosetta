@@ -1163,16 +1163,19 @@ if st.session_state.get("chart_ready", False):
             for j, label in enumerate(["5", "7", "9", "10", "11", "12"]):
                 cols[j].checkbox(label, value=False, key=f"harmonic_{label}")
 
-    use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
-    dark_mode = st.checkbox("🌙 Dark Mode", value=False)
+    left_col, right_col = st.columns([2, 1])
+    with left_col:
+        use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
+        dark_mode = st.checkbox("🌙 Dark Mode", value=False)
     
-    # Choose how to show planet labels
-    label_style = st.radio(
-        "Label Style",
-        ["Text", "Glyph"],
-        index=1,
-        horizontal=True
-    )
+    with right_col:
+        # Choose how to show planet labels
+        label_style = st.radio(
+            "Label Style",
+            ["Text", "Glyph"],
+            index=1,
+            horizontal=True
+        )
 
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
     if not singleton_toggles:
