@@ -41,6 +41,18 @@ STAR_DF = STAR_DF.rename(columns={
 STAR_DF = STAR_DF.dropna(subset=["Degree"])
 STAR_DF["Degree"] = STAR_DF["Degree"].astype(float)
 
+def reset_chart_state():
+    """Clear transient UI keys so each chart loads cleanly."""
+    for key in list(st.session_state.keys()):
+        if key.startswith("toggle_pattern_"):
+            del st.session_state[key]
+        if key.startswith("shape_"):
+            del st.session_state[key]
+        if key.startswith("singleton_"):
+            del st.session_state[key]
+    if "shape_toggles_by_parent" in st.session_state:
+        del st.session_state["shape_toggles_by_parent"]
+
 def annotate_fixed_stars(df, orb=1.0):
     df["Fixed Star Conjunction"] = ""
     df["Fixed Star Meaning"] = ""
@@ -609,6 +621,10 @@ if "_loaded_profile" in st.session_state:
 col_left, col_mid, col_right = st.columns([2, 2, 2])
 
 def run_chart(lat, lon, tz_name):
+    reset_chart_state()
+    _cache_major_edges.clear()
+    _cache_shapes.clear()
+
     try:
         df = calculate_chart(
             int(st.session_state["profile_year"]),
@@ -761,6 +777,7 @@ with col_mid:
                 st.session_state["profile_hour"] = now.hour
                 st.session_state["profile_minute"] = now.minute
                 st.session_state["profile_city"] = city_name
+                
 
                 try:
                     df = calculate_chart(
@@ -851,7 +868,7 @@ with col_right:
                     "day": int(st.session_state.get("profile_day", 1)),
                     "hour": int(st.session_state.get("profile_hour", 0)),
                     "minute": int(st.session_state.get("profile_minute", 0)),
-                    "city": st.session_state.get("city", ""),   # 🔥 FIXED
+                    "city": st.session_state.get("profile_city", ""),
                     "lat": lat,
                     "lon": lon,
                     "tz_name": tz_name,
@@ -874,17 +891,31 @@ with col_right:
                 st.session_state["profile_loaded"] = True
 
                 # Update profile_* keys so run_chart uses them
+                # Update profile_* keys so run_chart uses them
                 st.session_state["profile_year"] = data["year"]
                 st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
                 st.session_state["profile_day"] = data["day"]
                 st.session_state["profile_hour"] = data["hour"]
                 st.session_state["profile_minute"] = data["minute"]
+
+                # ⏱️ keep 12/24 helpers in sync to prevent “borrowed time” bug
+                st.session_state["hour_val"] = data["hour"]
+                st.session_state["minute_val"] = data["minute"]
+
+                # 🏙️ city: set the canonical source of truth (do NOT set st.session_state["city"])
                 st.session_state["profile_city"] = data["city"]
+
+                # Optional: update the little location panel beneath the buttons so it's accurate
+                st.session_state["last_location"] = data["city"]
+                st.session_state["last_timezone"] = data.get("tz_name")
 
                 # ✅ Restore circuit names if present
                 if "circuit_names" in data:
                     for key, val in data["circuit_names"].items():
                         st.session_state[key] = val
+                    st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
+                else:
+                    st.session_state["saved_circuit_names"] = {}
 
                 # ✅ Immediately calculate chart
                 run_chart(data["lat"], data["lon"], data["tz_name"])
@@ -977,7 +1008,26 @@ if st.session_state.get("chart_ready", False):
                         key=circuit_name_key
                     )
 
-                    # Sub-shapes as before
+                    # --- Auto-save when circuit name changes ---
+                    if st.session_state.get("current_profile"):
+                        saved = st.session_state.get("saved_circuit_names", {})
+                        current_name = st.session_state[circuit_name_key]
+                        last_saved = saved.get(circuit_name_key, default_label)
+
+                        if current_name != last_saved:
+                            # Build updated set of circuit names
+                            current = {
+                                f"circuit_name_{j}": st.session_state.get(f"circuit_name_{j}", f"Circuit {j+1}")
+                                for j in range(len(patterns))
+                            }
+                            profile_name = st.session_state["current_profile"]
+                            saved_profiles[profile_name]["circuit_names"] = current
+                            with open(DATA_FILE, "w") as f:
+                                json.dump(saved_profiles, f, indent=2)
+                            st.session_state["saved_circuit_names"] = current.copy()
+                            st.success(f"Circuit names auto-saved for profile '{profile_name}'!")
+
+                    # Sub-shapes
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
                     shape_entries = []
                     if parent_shapes:
@@ -997,6 +1047,27 @@ if st.session_state.get("chart_ready", False):
                     if "shape_toggles_by_parent" not in st.session_state:
                         st.session_state.shape_toggles_by_parent = {}
                     st.session_state.shape_toggles_by_parent[i] = shape_entries
+
+        # --- Save Circuit Names button (only if edits exist) ---
+        unsaved_changes = False
+        if st.session_state.get("current_profile"):
+            saved = st.session_state.get("saved_circuit_names", {})
+            current = {
+                f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+                for i in range(len(patterns))
+            }
+            if current != saved:
+                unsaved_changes = True
+
+        if unsaved_changes:
+            st.markdown("---")
+            if st.button("💾 Save Circuit Names"):
+                profile_name = st.session_state["current_profile"]
+                saved_profiles[profile_name]["circuit_names"] = current
+                with open(DATA_FILE, "w") as f:
+                    json.dump(saved_profiles, f, indent=2)
+                st.session_state["saved_circuit_names"] = current.copy()
+                st.success("Circuit names updated!")
 
     with right_col:
         st.subheader("Single Placements")
