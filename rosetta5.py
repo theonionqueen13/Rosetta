@@ -547,74 +547,167 @@ def get_fixed_star_meaning(star_name: str):
 from datetime import datetime
 from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
-
-with st.expander("Enter Birth Data"):
-    col1, col2 = st.columns(2)
-
-    # --- Left side: Date & Time ---
-    with col1:
-        current_year = datetime.now().year
-        years = list(range(1900, current_year + 50))
-        year = st.number_input("Year", min_value=1000, max_value=3000, value=1990, step=1)
-        month = st.selectbox("Month", list(range(1, 13)), index=0)  # July default
-        day = st.selectbox("Day", list(range(1, 32)), index=0)     # 29th default
-        hour = st.selectbox("Hour", list(range(0, 24)), index=12)
-        minute = st.selectbox("Minute", list(range(0, 60)), index=00)
-
-    # --- Right side: Location ---
-    # --- Right side: Location ---
-    with col2:
-        from geopy.geocoders import OpenCage
-
-        # Load API key from secrets
-        opencage_key = st.secrets["OPENCAGE_API_KEY"]
-        geolocator = OpenCage(api_key=opencage_key)
-
-        city_name = st.text_input("City of Birth", value="")
-        lat, lon, tz_name = None, None, None
-
-        if city_name:
-            try:
-                location = geolocator.geocode(city_name, timeout=20)
-                if location:
-                    st.success(f"Found: {location.address}")
-                    lat, lon = location.latitude, location.longitude
-
-                    from timezonefinder import TimezoneFinder
-                    tf = TimezoneFinder()
-                    tz_name = tf.timezone_at(lng=lon, lat=lat)
-                    st.write(f"Timezone: {tz_name}")
-                else:
-                    st.error("City not found. Try a more specific query.")
-            except Exception as e:
-                st.error(f"Lookup error: {e}")
-
 from datetime import datetime
 import pytz
 
-col_now1, col_now2 = st.columns([1, 3])
-with col_now1:
-    if st.button("🌟 Now"):
-        if lat is None or lon is None or tz_name is None:
-            st.error("Enter a valid city first to use the Now button.")
+# -------------------------
+# Outer layout: 3 columns
+# -------------------------
+col_left, col_mid, col_right = st.columns([2,2,2])  # adjust ratios to taste
+
+# -------------------------
+# Left column: Birth Data
+# -------------------------
+MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
+
+# -------------------------
+# Left column: Birth Data
+# -------------------------
+with col_left:
+    with st.expander("Enter Birth Data"):
+        col1, col2 = st.columns([3,2])  # narrower balance
+
+        # --- Left side: Date & Time ---
+        with col1:
+            current_year = datetime.now().year
+            years = list(range(1900, current_year + 50))
+            year = st.number_input("Year", min_value=1000, max_value=3000, value=1990, step=1, key="year")
+
+        # --- Time input (iPhone-style mimic) ---
+        time_cols = st.columns(3)
+        with time_cols[0]:
+            hour_12 = st.selectbox("Birth Time", list(range(1,13)), index=1, key="hour_12")
+        with time_cols[1]:
+            minute_str = st.selectbox(" ", [f"{m:02d}" for m in range(60)], index=39, key="minute_str")
+        with time_cols[2]:
+            ampm = st.selectbox(" ", ["AM","PM"], index=0, key="ampm")
+
+        # Convert to 24h format for backend use
+        if ampm == "PM" and hour_12 != 12:
+            hour = hour_12 + 12
+        elif ampm == "AM" and hour_12 == 12:
+            hour = 0
         else:
-            # Get current time in the chosen city's timezone
-            tz = pytz.timezone(tz_name)
-            now = datetime.now(tz)
+            hour = hour_12
+        minute = int(minute_str)
 
-            # Update the UI fields via session_state
-            st.session_state["year"] = now.year
-            st.session_state["month"] = now.month
-            st.session_state["day"] = now.day
-            st.session_state["hour"] = now.hour
-            st.session_state["minute"] = now.minute
+        # Sync to session_state so Calculate Chart can always see them
+        st.session_state["hour"] = hour
+        st.session_state["minute"] = minute
 
-            # Run chart calculation immediately
+        # --- Right side: Location ---
+        with col2:
+            from geopy.geocoders import OpenCage
+            opencage_key = st.secrets["OPENCAGE_API_KEY"]
+            geolocator = OpenCage(api_key=opencage_key)
+
+            city_name = st.text_input("City of Birth", value="", key="city")
+            lat, lon, tz_name = None, None, None
+
+            if city_name:
+                try:
+                    location = geolocator.geocode(city_name, timeout=20)
+                    if location:
+                        lat, lon = location.latitude, location.longitude
+
+                        from timezonefinder import TimezoneFinder
+                        tf = TimezoneFinder()
+                        tz_name = tf.timezone_at(lng=lon, lat=lat)
+
+                        # 👇 move results to col_right
+                        with col_right:
+                            st.success(f"Found: {location.address}")
+                            st.write(f"Timezone: {tz_name}")
+                    else:
+                        with col_right:
+                            st.error("City not found. Try a more specific query.")
+                except Exception as e:
+                    with col_right:
+                        st.error(f"Lookup error: {e}")
+
+        with col1:
+            import calendar
+            # Month by name -> int conversion
+            month_name = st.selectbox("Month", MONTH_NAMES, index=6, key="month_name")
+            month = MONTH_NAMES.index(month_name) + 1
+
+            # Day auto-adjusts to month/year
+            days_in_month = calendar.monthrange(year, month)[1]
+
+        with col2:
+            day = st.selectbox("Day", list(range(1, days_in_month+1)), index=28, key="day")
+
+# -------------------------
+# Middle column: Now + Calculate Chart buttons
+# -------------------------
+with col_mid:
+    col_now1, col_now2 = st.columns([1,3])
+    with col_now1:
+        if st.button("🌟 Now"):
+            if lat is None or lon is None or tz_name is None:
+                st.error("Enter a valid city first to use the Now button.")
+            else:
+                # Get current time in the chosen city's timezone
+                tz = pytz.timezone(tz_name)
+                now = datetime.now(tz)
+
+                # Update the UI fields via session_state
+                st.session_state["year"] = now.year
+                st.session_state["month_name"] = MONTH_NAMES[now.month - 1]  # 👈 sync string to widget
+                st.session_state["day"] = now.day
+                st.session_state["hour"] = now.hour
+                st.session_state["minute"] = now.minute
+
+                # Run chart calculation immediately
+                try:
+                    df = calculate_chart(
+                        now.year, now.month, now.day,
+                        now.hour, now.minute,
+                        0.0,        # dummy tz_offset
+                        lat, lon,
+                        input_is_ut=False,
+                        tz_name=tz_name
+                    )
+                    df["abs_deg"] = df["Longitude"].astype(float)
+                    df = annotate_fixed_stars(df)
+
+                    df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
+                    pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
+
+                    major_edges_all, patterns = get_major_edges_and_patterns(pos)
+                    shapes = get_shapes(pos, patterns, major_edges_all)
+                    filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
+                    combos = generate_combo_groups(filaments)
+
+                    st.session_state.chart_ready = True
+                    st.session_state.df = df
+                    st.session_state.pos = pos
+                    st.session_state.patterns = patterns
+                    st.session_state.major_edges_all = major_edges_all
+                    st.session_state.shapes = shapes
+                    st.session_state.filaments = filaments
+                    st.session_state.singleton_map = singleton_map
+                    st.session_state.combos = combos
+
+                except Exception as e:
+                    st.error(f"Chart calculation failed: {e}")
+                    st.session_state.chart_ready = False
+
+    # ------------------------
+    # Calculate Chart Button
+    # ------------------------
+    if st.button("Calculate Chart"):
+        if lat is None or lon is None or tz_name is None:
+            st.error("Please enter a valid city and make sure lookup succeeds.")
+        else:
             try:
                 df = calculate_chart(
-                    now.year, now.month, now.day,
-                    now.hour, now.minute,
-                    0.0,        # dummy tz_offset
+                    int(st.session_state["year"]), int(month), int(st.session_state["day"]),  # 👈 use int month
+                    int(st.session_state["hour"]), int(st.session_state["minute"]),
+                    0.0,      # dummy tz_offset
                     lat, lon,
                     input_is_ut=False,
                     tz_name=tz_name
@@ -622,19 +715,22 @@ with col_now1:
                 df["abs_deg"] = df["Longitude"].astype(float)
                 df = annotate_fixed_stars(df)
 
+                # positions for chart (major objects only)
                 df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
                 pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
 
+                # aspects/patterns/shapes
                 major_edges_all, patterns = get_major_edges_and_patterns(pos)
                 shapes = get_shapes(pos, patterns, major_edges_all)
                 filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
                 combos = generate_combo_groups(filaments)
 
+                # Save to session for persistence
                 st.session_state.chart_ready = True
                 st.session_state.df = df
                 st.session_state.pos = pos
                 st.session_state.patterns = patterns
-                st.session_state.major_edges_all = major_edges_all
+                st.session_state.major_edges_all = major_edges_all 
                 st.session_state.shapes = shapes
                 st.session_state.filaments = filaments
                 st.session_state.singleton_map = singleton_map
@@ -644,50 +740,11 @@ with col_now1:
                 st.error(f"Chart calculation failed: {e}")
                 st.session_state.chart_ready = False
 
-# ------------------------
-# Calculate Chart Button
-# ------------------------
-if st.button("Calculate Chart"):
-    if lat is None or lon is None or tz_name is None:
-        st.error("Please enter a valid city and make sure lookup succeeds.")
-    else:
-        try:
-            df = calculate_chart(
-                int(year), int(month), int(day),
-                int(hour), int(minute),
-                0.0,      # dummy tz_offset (real tz handled by tz_name)
-                lat, lon,
-                input_is_ut=False,
-                tz_name=tz_name
-            )
-            df["abs_deg"] = df["Longitude"].astype(float)
-            df = annotate_fixed_stars(df)
-
-
-            # positions for chart (major objects only)
-            df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
-            pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
-
-            # aspects/patterns/shapes
-            major_edges_all, patterns = get_major_edges_and_patterns(pos)
-            shapes = get_shapes(pos, patterns, major_edges_all)
-            filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
-            combos = generate_combo_groups(filaments)
-
-            # --- Save to session for persistence ---
-            st.session_state.chart_ready = True
-            st.session_state.df = df
-            st.session_state.pos = pos
-            st.session_state.patterns = patterns
-            st.session_state.major_edges_all = major_edges_all 
-            st.session_state.shapes = shapes
-            st.session_state.filaments = filaments
-            st.session_state.singleton_map = singleton_map
-            st.session_state.combos = combos
-
-        except Exception as e:
-            st.error(f"Chart calculation failed: {e}")
-            st.session_state.chart_ready = False
+# -------------------------
+# Right column: leave blank for now
+# -------------------------
+with col_right:
+    st.write("")  # placeholder
 
 # ------------------------
 # If chart data exists, render the chart UI
