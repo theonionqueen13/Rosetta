@@ -30,13 +30,10 @@ from rosetta.patterns import (
 # -------------------------
 STAR_DF = pd.read_excel("2b) Fixed Star Lookup.xlsx", sheet_name="Sheet1")
 
-# normalize column headers
-STAR_DF = pd.read_excel("2b) Fixed Star Lookup.xlsx", sheet_name="Sheet1")
-
 # normalize headers
 STAR_DF.columns = STAR_DF.columns.str.strip()
 
-# ✅ Only rename degree
+# Only rename degree
 STAR_DF = STAR_DF.rename(columns={
     "Absolute Degree Decimal": "Degree"
 })
@@ -74,7 +71,6 @@ def get_fixed_star_meaning(star_name: str):
 # Chart Math + Pattern Utils
 # -------------------------
 import networkx as nx
-from itertools import combinations
 from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
 from rosetta.helpers import deg_to_rad
 
@@ -366,7 +362,7 @@ def format_planet_profile(row):
 
     # --- Sabian Symbol (italic, if present) ---
     if sabian and sabian.lower() not in ["none", "nan"]:
-        html_parts.append(f"<div style='font-style:italic;'>“{sabian}”</div>")
+            html_parts.append(f"<div style='font-style:italic;'>“{sabian}”</div>")
 
     # --- Longitude (bold) ---
     if lon != "":
@@ -395,17 +391,9 @@ def format_planet_profile(row):
             pass
         html_parts.append(f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
 
-    # ✅ Force single spacing with line-height here
+    # Force single spacing with line-height here
     return "<div style='line-height:1.1; margin-bottom:6px;'>" + "".join(html_parts) + "</div>"
 
-def draw_zodiac_signs(ax, asc_deg):
-    """Draw zodiac sign symbols around the chart"""
-    for i, base_deg in enumerate(range(0, 360, 30)):
-        rad = deg_to_rad(base_deg + 15, asc_deg)
-        ax.text(rad, 1.50, ZODIAC_SIGNS[i], ha="center", va="center",
-               fontsize=16, fontweight="bold", color=ZODIAC_COLORS[i])
-        ax.text(rad, 1.675, MODALITIES[i], ha="center", va="center",
-               fontsize=6, color="dimgray")
 # --- CHART RENDERER (full)
 def render_chart_with_shapes(
     pos, patterns, pattern_labels, toggles,
@@ -506,10 +494,8 @@ def render_chart_with_shapes(
     # singletons (always mark them visible if toggled)
     visible_objects.update(active_singletons)
 
-    # ✅ draw singleton dots (twice as wide as aspect lines)
+    # draw singleton dots (twice as wide as aspect lines)
     if active_singletons:
-        # Draw singleton dots last so they sit on top
-        # Draw singleton dots last so they sit on top
         draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0)
 
     # connectors (filaments) not already claimed by shapes
@@ -529,154 +515,240 @@ def render_chart_with_shapes(
 
     return fig, visible_objects, active_shapes
 
-def get_fixed_star_meaning(star_name: str):
-    """Return (name, meaning) from STAR_DF if meaning exists."""
-    if not star_name:
-        return None
-    # exact match
-    match = STAR_DF[STAR_DF["Fixed Star"].str.strip().str.lower() == star_name.strip().lower()]
-    if match.empty:
-        # fallback: contains
-        match = STAR_DF[STAR_DF["Fixed Star"].str.contains(star_name, case=False, na=False)]
-    if not match.empty:
-        meaning = match.iloc[0]["Meaning"]
-        if isinstance(meaning, str) and meaning.strip():
-            return star_name, meaning.strip()
-    return None
-
 from datetime import datetime
 from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
-from datetime import datetime
 import pytz
 
-# -------------------------
-# Outer layout: 3 columns
-# -------------------------
-col_left, col_mid, col_right = st.columns([2,2,2])  # adjust ratios to taste
-
-# -------------------------
-# Left column: Birth Data
-# -------------------------
 MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ]
 
 # -------------------------
+# CLEANED SESSION STATE INITIALIZATION
+# -------------------------
+
+# Initialize profile defaults (canonical values)
+profile_defaults = {
+    "profile_year": 1990,
+    "profile_month_name": "July",
+    "profile_day": 29,
+    "profile_hour": 1,       # 24h format
+    "profile_minute": 39,
+    "profile_city": "",
+    "profile_loaded": False,
+    "current_profile": None,
+}
+
+for k, v in profile_defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# Derive widget-friendly values from profile
+_profile_hour_24 = int(st.session_state["profile_hour"])
+if _profile_hour_24 == 0:
+    _ui_hour_12, _ui_ampm = 12, "AM"
+elif _profile_hour_24 == 12:
+    _ui_hour_12, _ui_ampm = 12, "PM"
+elif _profile_hour_24 > 12:
+    _ui_hour_12, _ui_ampm = _profile_hour_24 - 12, "PM"
+else:
+    _ui_hour_12, _ui_ampm = _profile_hour_24, "AM"
+
+_ui_minute_str = f"{int(st.session_state['profile_minute']):02d}"
+
+# Initialize widget keys only if missing (no conflicts with value/index params)
+widget_defaults = {
+    "year": st.session_state["profile_year"],
+    "month_name": st.session_state["profile_month_name"],
+    "day": st.session_state["profile_day"],
+    "hour_12": _ui_hour_12,
+    "minute_str": _ui_minute_str,
+    "ampm": _ui_ampm,
+    "city": st.session_state["profile_city"],
+}
+
+for k, v in widget_defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# Apply loaded profile if present
+if "_loaded_profile" in st.session_state:
+    prof = st.session_state["_loaded_profile"]
+    
+    # Update profile keys
+    st.session_state["profile_year"] = prof["year"]
+    st.session_state["profile_month_name"] = MONTH_NAMES[prof["month"] - 1]
+    st.session_state["profile_day"] = prof["day"]
+    st.session_state["profile_hour"] = prof["hour"]
+    st.session_state["profile_minute"] = prof["minute"]
+    st.session_state["profile_city"] = prof["city"]
+    
+    # Update widget keys to match
+    st.session_state["year"] = prof["year"]
+    st.session_state["month_name"] = MONTH_NAMES[prof["month"] - 1]
+    st.session_state["day"] = prof["day"]
+    
+    # Convert 24h to 12h for widget keys
+    hour_24 = prof["hour"]
+    if hour_24 == 0:
+        st.session_state["hour_12"] = 12
+        st.session_state["ampm"] = "AM"
+    elif hour_24 == 12:
+        st.session_state["hour_12"] = 12
+        st.session_state["ampm"] = "PM"
+    elif hour_24 > 12:
+        st.session_state["hour_12"] = hour_24 - 12
+        st.session_state["ampm"] = "PM"
+    else:
+        st.session_state["hour_12"] = hour_24
+        st.session_state["ampm"] = "AM"
+    
+    st.session_state["minute_str"] = f"{prof['minute']:02d}"
+    st.session_state["city"] = prof["city"]
+    
+    # Cleanup
+    del st.session_state["_loaded_profile"]
+
+# -------------------------
+# Outer layout: 3 columns
+# -------------------------
+col_left, col_mid, col_right = st.columns([2, 2, 2])
+
+# -------------------------
+# Left column: Birth Data
+# -------------------------
+# -------------------------
 # Left column: Birth Data
 # -------------------------
 with col_left:
     with st.expander("Enter Birth Data"):
-        col1, col2 = st.columns([3,2])  # narrower balance
+        col1, col2 = st.columns([3, 2])
 
         # --- Left side: Date & Time ---
         with col1:
-            current_year = datetime.now().year
-            years = list(range(1900, current_year + 50))
-            year = st.number_input("Year", min_value=1000, max_value=3000, value=1990, step=1, key="year")
+            # Year widget
+            year = st.number_input(
+                "Year",
+                min_value=1000,
+                max_value=3000,
+                step=1,
+                key="year"
+            )
 
-        # --- Time input (iPhone-style mimic) ---
+            # Month widget
+            import calendar
+            month_name = st.selectbox(
+                "Month",
+                MONTH_NAMES,
+                key="month_name"
+            )
+            month = MONTH_NAMES.index(month_name) + 1
+            days_in_month = calendar.monthrange(year, month)[1]
+
+        with col2:
+            # Day widget
+            day = st.selectbox(
+                "Day",
+                list(range(1, days_in_month + 1)),
+                key="day"
+            )
+
+        # Time widgets
         time_cols = st.columns(3)
         with time_cols[0]:
-            hour_12 = st.selectbox("Birth Time", list(range(1,13)), index=1, key="hour_12")
+            hour_12 = st.selectbox(
+                "Birth Time",
+                list(range(1, 13)),
+                key="hour_12"
+            )
         with time_cols[1]:
-            minute_str = st.selectbox(" ", [f"{m:02d}" for m in range(60)], index=39, key="minute_str")
+            minute_str = st.selectbox(
+                " ",
+                [f"{m:02d}" for m in range(60)],
+                key="minute_str"
+            )
         with time_cols[2]:
-            ampm = st.selectbox(" ", ["AM","PM"], index=0, key="ampm")
+            ampm = st.selectbox(
+                " ",
+                ["AM", "PM"],
+                key="ampm"
+            )
 
-        # Convert to 24h format for backend use
+        # Convert to 24h (helpers only, not widget keys)
         if ampm == "PM" and hour_12 != 12:
-            hour = hour_12 + 12
+            hour_val = hour_12 + 12
         elif ampm == "AM" and hour_12 == 12:
-            hour = 0
+            hour_val = 0
         else:
-            hour = hour_12
-        minute = int(minute_str)
+            hour_val = hour_12
+        minute_val = int(minute_str)
 
-        # Sync to session_state so Calculate Chart can always see them
-        st.session_state["hour"] = hour
-        st.session_state["minute"] = minute
+        st.session_state["hour_val"] = hour_val
+        st.session_state["minute_val"] = minute_val
 
         # --- Right side: Location ---
         with col2:
-            from geopy.geocoders import OpenCage
             opencage_key = st.secrets["OPENCAGE_API_KEY"]
             geolocator = OpenCage(api_key=opencage_key)
 
-            city_name = st.text_input("City of Birth", value="", key="city")
-            lat, lon, tz_name = None, None, None
+            city_name = st.text_input(
+                "City of Birth",
+                key="city"
+            )
 
+            lat, lon, tz_name = None, None, None
             if city_name:
                 try:
                     location = geolocator.geocode(city_name, timeout=20)
                     if location:
                         lat, lon = location.latitude, location.longitude
-
-                        from timezonefinder import TimezoneFinder
                         tf = TimezoneFinder()
                         tz_name = tf.timezone_at(lng=lon, lat=lat)
-
-                        # 👇 move results to col_right
-                        with col_right:
-                            st.success(f"Found: {location.address}")
-                            st.write(f"Timezone: {tz_name}")
+                        st.session_state["last_location"] = location.address
+                        st.session_state["last_timezone"] = tz_name
                     else:
-                        with col_right:
-                            st.error("City not found. Try a more specific query.")
+                        st.session_state["last_location"] = None
+                        st.session_state["last_timezone"] = "City not found. Try a more specific query."
                 except Exception as e:
-                    with col_right:
-                        st.error(f"Lookup error: {e}")
-
-        with col1:
-            import calendar
-            # Month by name -> int conversion
-            month_name = st.selectbox("Month", MONTH_NAMES, index=6, key="month_name")
-            month = MONTH_NAMES.index(month_name) + 1
-
-            # Day auto-adjusts to month/year
-            days_in_month = calendar.monthrange(year, month)[1]
-
-        with col2:
-            day = st.selectbox("Day", list(range(1, days_in_month+1)), index=28, key="day")
+                    st.session_state["last_location"] = None
+                    st.session_state["last_timezone"] = f"Lookup error: {e}"
 
 # -------------------------
 # Middle column: Now + Calculate Chart buttons
 # -------------------------
 with col_mid:
-    col_now1, col_now2 = st.columns([1,3])
+    col_now1, col_now2 = st.columns([1, 3])
+
     with col_now1:
         if st.button("🌟 Now"):
             if lat is None or lon is None or tz_name is None:
                 st.error("Enter a valid city first to use the Now button.")
             else:
-                # Get current time in the chosen city's timezone
                 tz = pytz.timezone(tz_name)
                 now = datetime.now(tz)
 
-                # Update the UI fields via session_state
-                st.session_state["year"] = now.year
-                st.session_state["month_name"] = MONTH_NAMES[now.month - 1]  # 👈 sync string to widget
-                st.session_state["day"] = now.day
-                st.session_state["hour"] = now.hour
-                st.session_state["minute"] = now.minute
+                # ✅ Update only profile_* keys
+                st.session_state["profile_year"] = now.year
+                st.session_state["profile_month_name"] = MONTH_NAMES[now.month - 1]
+                st.session_state["profile_day"] = now.day
+                st.session_state["profile_hour"] = now.hour
+                st.session_state["profile_minute"] = now.minute
+                st.session_state["profile_city"] = city_name
 
-                # Run chart calculation immediately
                 try:
                     df = calculate_chart(
                         now.year, now.month, now.day,
                         now.hour, now.minute,
-                        0.0,        # dummy tz_offset
-                        lat, lon,
+                        0.0, lat, lon,
                         input_is_ut=False,
-                        tz_name=tz_name
+                        tz_name=tz_name,
                     )
                     df["abs_deg"] = df["Longitude"].astype(float)
                     df = annotate_fixed_stars(df)
-
                     df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
                     pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
-
                     major_edges_all, patterns = get_major_edges_and_patterns(pos)
                     shapes = get_shapes(pos, patterns, major_edges_all)
                     filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
@@ -696,41 +768,37 @@ with col_mid:
                     st.error(f"Chart calculation failed: {e}")
                     st.session_state.chart_ready = False
 
-    # ------------------------
-    # Calculate Chart Button
-    # ------------------------
+                st.rerun()
+
     if st.button("Calculate Chart"):
         if lat is None or lon is None or tz_name is None:
             st.error("Please enter a valid city and make sure lookup succeeds.")
         else:
             try:
                 df = calculate_chart(
-                    int(st.session_state["year"]), int(month), int(st.session_state["day"]),  # 👈 use int month
-                    int(st.session_state["hour"]), int(st.session_state["minute"]),
-                    0.0,      # dummy tz_offset
-                    lat, lon,
+                    int(st.session_state["profile_year"]),
+                    int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
+                    int(st.session_state["profile_day"]),
+                    int(st.session_state.get("hour_val", 0)),
+                    int(st.session_state.get("minute_val", 0)),
+                    0.0, lat, lon,
                     input_is_ut=False,
-                    tz_name=tz_name
+                    tz_name=tz_name,
                 )
                 df["abs_deg"] = df["Longitude"].astype(float)
                 df = annotate_fixed_stars(df)
-
-                # positions for chart (major objects only)
                 df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
                 pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
-
-                # aspects/patterns/shapes
                 major_edges_all, patterns = get_major_edges_and_patterns(pos)
                 shapes = get_shapes(pos, patterns, major_edges_all)
                 filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
                 combos = generate_combo_groups(filaments)
 
-                # Save to session for persistence
                 st.session_state.chart_ready = True
                 st.session_state.df = df
                 st.session_state.pos = pos
                 st.session_state.patterns = patterns
-                st.session_state.major_edges_all = major_edges_all 
+                st.session_state.major_edges_all = major_edges_all
                 st.session_state.shapes = shapes
                 st.session_state.filaments = filaments
                 st.session_state.singleton_map = singleton_map
@@ -740,11 +808,87 @@ with col_mid:
                 st.error(f"Chart calculation failed: {e}")
                 st.session_state.chart_ready = False
 
+    # Location info BELOW buttons
+    location_info = st.container()
+    if st.session_state.get("last_location"):
+        location_info.success(f"Found: {st.session_state['last_location']}")
+        if st.session_state.get("last_timezone"):
+            location_info.write(f"Timezone: {st.session_state['last_timezone']}")
+    elif st.session_state.get("last_timezone"):
+        location_info.error(st.session_state["last_timezone"])
+
 # -------------------------
-# Right column: leave blank for now
+# Right column: Profile Manager
 # -------------------------
 with col_right:
-    st.write("")  # placeholder
+    import json, os
+    DATA_FILE = "saved_birth_data.json"
+
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            saved_profiles = json.load(f)
+    else:
+        saved_profiles = {}
+
+    if "current_profile" not in st.session_state:
+        st.session_state["current_profile"] = None
+
+    st.subheader("👤 Birth Profile Manager")
+    tabs = st.tabs(["Add / Update Profile", "Load Profile", "Delete Profile"])
+
+    # --- Add / Update ---
+    # --- Add / Update ---
+    with tabs[0]:
+        profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
+        if st.button("💾 Save / Update Profile"):
+            if profile_name.strip() == "":
+                st.error("Please enter a name for the profile.")
+            else:
+                saved_profiles[profile_name] = {
+                    "year": int(st.session_state.get("profile_year", 1990)),
+                    "month": int(MONTH_NAMES.index(st.session_state.get("profile_month_name", "July")) + 1),
+                    "day": int(st.session_state.get("profile_day", 1)),
+                    "hour": int(st.session_state.get("profile_hour", 0)),
+                    "minute": int(st.session_state.get("profile_minute", 0)),
+                    "city": st.session_state.get("city", ""),   # 🔥 FIXED
+                    "lat": lat,
+                    "lon": lon,
+                    "tz_name": tz_name,
+                }
+                with open(DATA_FILE, "w") as f:
+                    json.dump(saved_profiles, f, indent=2)
+                st.success(f"Profile '{profile_name}' saved!")
+
+    # --- Load ---
+# --- Load ---
+    with tabs[1]:
+        if saved_profiles:
+            choice = st.selectbox("Select a profile to load", list(saved_profiles.keys()), key="profile_loader")
+            if st.button("📂 Load Selected Profile"):
+                data = saved_profiles[choice]
+
+                # Stash into temporary key, widgets will pick this up after rerun
+                st.session_state["_loaded_profile"] = data
+                st.session_state["current_profile"] = choice
+                st.session_state["profile_loaded"] = True
+
+                st.success(f"Profile '{choice}' loaded and applied!")
+                st.rerun()
+        else:
+            st.info("No saved profiles yet.")
+
+    # --- Delete ---
+    with tabs[2]:
+        if saved_profiles:
+            delete_choice = st.selectbox("Select a profile to delete", list(saved_profiles.keys()), key="profile_delete")
+            if st.button("🗑️ Delete Selected Profile"):
+                del saved_profiles[delete_choice]
+                with open(DATA_FILE, "w") as f:
+                    json.dump(saved_profiles, f, indent=2)
+                st.success(f"Profile '{delete_choice}' deleted!")
+        else:
+            st.info("No saved profiles yet.")
+
 
 # ------------------------
 # If chart data exists, render the chart UI
