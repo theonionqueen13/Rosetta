@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit.components.v1 as components
-from itertools import combinations
 import datetime
 import swisseph as swe
 import re
@@ -11,9 +10,9 @@ import re
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
-    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS
+    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES
 )
-from rosetta.helpers import get_ascendant_degree, deg_to_rad
+from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
 from rosetta.drawing import (
     draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
     draw_planet_labels, draw_aspect_lines, draw_filament_lines,
@@ -24,122 +23,6 @@ from rosetta.patterns import (
     detect_shapes, internal_minor_edges_for_pattern,
     connected_components_from_edges,
 )
-
-# -------------------------
-# Load Fixed Star Table
-# -------------------------
-STAR_DF = pd.read_excel("2b) Fixed Star Lookup.xlsx", sheet_name="Sheet1")
-
-# normalize headers
-STAR_DF.columns = STAR_DF.columns.str.strip()
-
-# Only rename degree
-STAR_DF = STAR_DF.rename(columns={
-    "Absolute Degree Decimal": "Degree"
-})
-
-STAR_DF = STAR_DF.dropna(subset=["Degree"])
-STAR_DF["Degree"] = STAR_DF["Degree"].astype(float)
-
-def reset_chart_state():
-    """Clear transient UI keys so each chart loads cleanly."""
-    for key in list(st.session_state.keys()):
-        if key.startswith("toggle_pattern_"):
-            del st.session_state[key]
-        if key.startswith("shape_"):
-            del st.session_state[key]
-        if key.startswith("singleton_"):
-            del st.session_state[key]
-    if "shape_toggles_by_parent" in st.session_state:
-        del st.session_state["shape_toggles_by_parent"]
-
-def annotate_fixed_stars(df, orb=1.0):
-    df["Fixed Star Conjunction"] = ""
-    df["Fixed Star Meaning"] = ""
-    for i, row in df.iterrows():
-        obj_deg = float(row["abs_deg"])
-        close_stars = STAR_DF[np.abs(STAR_DF["Degree"] - obj_deg) <= orb]
-        if not close_stars.empty:
-            star_names = "|||".join(close_stars["Fixed Star"].astype(str).tolist())
-            star_meanings = "|||".join(
-                [str(m).strip() for m in close_stars["Meaning"].dropna().astype(str).tolist() if str(m).strip()]
-            )
-            df.at[i, "Fixed Star Conjunction"] = star_names
-            df.at[i, "Fixed Star Meaning"] = star_meanings
-    return df
-
-def get_fixed_star_meaning(star_name: str):
-    """Lookup meaning text for a star name from STAR_DF."""
-    if not star_name:
-        return None
-    match = STAR_DF[STAR_DF["Fixed Star"].str.contains(star_name, case=False, na=False)]
-    if not match.empty:
-        meaning = match["Meaning"].dropna().iloc[0] if not match["Meaning"].dropna().empty else None
-        if isinstance(meaning, str) and meaning.strip():
-            return star_name, meaning.strip()
-    return None
-
-# -------------------------
-# Chart Math + Pattern Utils
-# -------------------------
-import networkx as nx
-from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
-from rosetta.helpers import deg_to_rad
-
-def build_aspect_graph(pos):
-    """Find connected components of planets based on major aspects only."""
-    G = nx.Graph()
-    for p1, p2 in combinations(pos.keys(), 2):
-        angle = abs(pos[p1] - pos[p2])
-        if angle > 180:
-            angle = 360 - angle
-        for asp in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
-            asp_data = ASPECTS[asp]
-            if abs(asp_data["angle"] - angle) <= asp_data["orb"]:
-                G.add_edge(p1, p2, aspect=asp)
-                break
-    return list(nx.connected_components(G))
-
-def detect_minor_links_with_singletons(pos, patterns):
-    """Find quincunx/sesquisquare links and track singleton placements."""
-    minor_aspects = ["Quincunx", "Sesquisquare"]
-    connections = []
-
-    # map planets → parent pattern index
-    pattern_map = {}
-    for idx, pattern in enumerate(patterns):
-        for planet in pattern:
-            pattern_map[planet] = idx
-
-    all_patterned = set(pattern_map.keys())
-    all_placements = set(pos.keys())
-    singletons = all_placements - all_patterned
-    singleton_index_offset = len(patterns)
-    singleton_map = {
-        planet: singleton_index_offset + i for i, planet in enumerate(singletons)
-    }
-    pattern_map.update(singleton_map)
-
-    for p1, p2 in combinations(pos.keys(), 2):
-        angle = abs(pos[p1] - pos[p2])
-        if angle > 180:
-            angle = 360 - angle
-        for asp in minor_aspects:
-            if abs(ASPECTS[asp]["angle"] - angle) <= ASPECTS[asp]["orb"]:
-                pat1 = pattern_map.get(p1)
-                pat2 = pattern_map.get(p2)
-                if pat1 is not None and pat2 is not None:
-                    connections.append((p1, p2, asp, pat1, pat2))
-                break
-    return connections, singleton_map
-
-def generate_combo_groups(filaments):
-    """Group patterns connected by minor aspects into combos."""
-    G = nx.Graph()
-    for _, _, _, pat1, pat2 in filaments:
-        if pat1 != pat2:
-            G.add_edge(pat1, pat2)
-    return [sorted(list(g)) for g in nx.connected_components(G) if len(g) > 1]
 
 # -------------------------
 # Chart Drawing Functions
@@ -247,38 +130,18 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
             
-def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
-    """
-    Convert decimal degrees (or hours/day for speed) into DMS string with hemispheres.
-    
-    - value: float
-    - is_latlon: True for latitude (N/S)
-    - is_decl: True for declination (N/S)
-    - is_speed: True for speed (arcmin/sec per day, approximate)
-    """
-    try:
-        val = float(value)
-    except (TypeError, ValueError):
-        return str(value)
-
-    # Speed: treat as deg/day → break into deg/min/sec
-    if is_speed:
-        deg = int(val)
-        minutes = int((val - deg) * 60)
-        seconds = int(round(((val - deg) * 60 - minutes) * 60))
-        return f"{deg}°{minutes:02d}'{seconds:02d}\""
-
-    # Latitude / Declination: need hemisphere
-    sign = ""
-    if is_latlon or is_decl:
-        sign = "N" if val >= 0 else "S"
-        val = abs(val)
-
-    deg = int(val)
-    minutes = int((val - deg) * 60)
-    seconds = int(round(((val - deg) * 60 - minutes) * 60))
-    return f"{deg}°{minutes:02d}'{seconds:02d}\" {sign}".strip()
-
+def reset_chart_state():
+    """Clear transient UI keys so each chart loads cleanly."""
+    for key in list(st.session_state.keys()):
+        if key.startswith("toggle_pattern_"):
+            del st.session_state[key]
+        if key.startswith("shape_"):
+            del st.session_state[key]
+        if key.startswith("singleton_"):
+            del st.session_state[key]
+    if "shape_toggles_by_parent" in st.session_state:
+        del st.session_state["shape_toggles_by_parent"]
+            
 # -------------------------
 # Init / session management
 # -------------------------
@@ -369,19 +232,6 @@ SUBSHAPE_COLORS = [
 ]
 
 from rosetta.lookup import GLYPHS
-
-SIGN_NAMES = [
-    "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
-    "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
-]
-
-def format_longitude(lon):
-    """Turn decimal degrees into Sign + degree°minute′ string."""
-    sign_index = int(lon // 30)
-    deg_in_sign = lon % 30
-    deg = int(deg_in_sign)
-    minutes = int(round((deg_in_sign - deg) * 60))
-    return f"{SIGN_NAMES[sign_index]} {deg}°{minutes:02d}′"
 
 def format_planet_profile(row):
     """Styled planet profile with glyphs, line breaks, and conditional extras."""
@@ -1323,8 +1173,7 @@ if st.session_state.get("chart_ready", False):
                     <div id="prompt-box"
                         style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
                                 color:white; background:black; border:1px solid #555;
-                                padding:8px; border-radius:4px; max-height:600px; overflow:auto;">
-                        {prompt.strip().replace("\n", "<br>")}
+                                padding:8px; border-radius:4px; max-height:600px; overflow:auto;">{prompt.strip().replace("\n", "<br>")}
                     </div>
                 </div>
             """
