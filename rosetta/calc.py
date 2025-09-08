@@ -79,7 +79,7 @@ def calculate_chart(
     tz_offset, lat, lon,
     input_is_ut: bool = False,
     tz_name: str | None = None,
-    house_system: str = "placidus",   # <-- new option
+    house_system: str = "equal", 
 ):
     print(f"[DEBUG] calculate_chart called with house_system={house_system}")
     """
