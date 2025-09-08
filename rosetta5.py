@@ -258,14 +258,6 @@ st.markdown(
 
 st.title("🧭 Rosetta Flight Deck")
 
-# Choose how to show planet labels
-label_style = st.radio(
-    "Label Style",
-    ["Text", "Glyph"],
-    index=1,
-    horizontal=True
-)
-
 # --- Custom CSS tweaks ---
 st.markdown(
     """
@@ -1003,6 +995,14 @@ if st.session_state.get("chart_ready", False):
 
     use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
     dark_mode = st.checkbox("🌙 Dark Mode", value=False)
+    
+    # Choose how to show planet labels
+    label_style = st.radio(
+        "Label Style",
+        ["Text", "Glyph"],
+        index=1,
+        horizontal=True
+    )
 
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
     if not singleton_toggles:
