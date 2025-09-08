@@ -425,7 +425,7 @@ def detect_shapes(pos, patterns, major_edges_all):
                 return idx
         return fallback
 
-    def add_special(sh_type, members, edges):
+    def add_special(sh_type, members, edges, suppresses=None):
         nonlocal sid, seen
         collapsed = tuple(sorted(set(collapse_members(members))))
         key = (sh_type, collapsed)
@@ -439,7 +439,8 @@ def detect_shapes(pos, patterns, major_edges_all):
             "members": list(collapsed),
             "edges": edges,
         }
-
+        if suppresses is not None:
+            shape["suppresses"] = suppresses
         shapes.append(shape)
         sid += 1
         seen.add(key)
@@ -464,28 +465,121 @@ def detect_shapes(pos, patterns, major_edges_all):
                     add_special("Wide Yod", [a, b, c], edges)
 
         # Unnamed
-                # Unnamed (Square + Trine + Sesquisquare)
-                # Unnamed (Square + Trine + Sesquisquare)
-                # Unnamed (Square + Trine + Sesquisquare)
         if aspect_match(a, b, "Square"):
             for c in pos.keys():
                 if c in (a, b):
                     continue
-                ca, cb = rep_anchor.get(a, a), rep_anchor.get(b, b)
-                cc = rep_anchor.get(c, c)
-                if len({ca, cb, cc}) < 3:
-                    continue
+                if aspect_match(a, c, "Trine") and aspect_match(b, c, "Quincunx"):
+                    edges = [((a, b), "Square"), ((a, c), "Trine"), ((b, c), "Quincunx")]
+                    add_special("Unnamed", [a, b, c], edges)
+                elif aspect_match(b, c, "Trine") and aspect_match(a, c, "Quincunx"):
+                    edges = [((a, b), "Square"), ((b, c), "Trine"), ((a, c), "Quincunx")]
+                    add_special("Unnamed", [a, b, c], edges)
 
-                # Unnamed
-                if aspect_match(a, b, "Square"):
-                    for c in pos.keys():
-                        if c not in (a, b):
-                            if aspect_match(a, c, "Trine") and aspect_match(b, c, "Quincunx"):
-                                edges = [((a, b), "Square"), ((a, c), "Trine"), ((b, c), "Quincunx")]
-                                add_special("Unnamed", [a, b, c], edges)
-                            elif aspect_match(b, c, "Trine") and aspect_match(a, c, "Quincunx"):
-                                edges = [((a, b), "Square"), ((b, c), "Trine"), ((a, c), "Quincunx")]
-                                add_special("Unnamed", [a, b, c], edges)
+    # ⚡ Lightning Bolt collapse (after Unnameds exist)
+    unnamed_sets = [frozenset(s["members"]) for s in shapes if s["type"] == "Unnamed"]
+
+    for i in range(len(unnamed_sets)):
+        for j in range(i + 1, len(unnamed_sets)):
+            u1, u2 = unnamed_sets[i], unnamed_sets[j]
+            shared = u1 & u2
+            if len(shared) == 2:  # exactly two shared nodes
+                combined = u1 | u2
+                if len(combined) == 4:
+                    a, b, c, d = list(combined)
+                    if (aspect_match(a, b, "Square") and
+                        aspect_match(a, c, "Trine") and
+                        aspect_match(b, d, "Trine") and
+                        aspect_match(c, d, "Square") and
+                        aspect_match(a, d, "Quincunx")):
+
+                        candidate_edges = [
+                            ((a, b), "Square"),
+                            ((a, c), "Trine"),
+                            ((b, d), "Trine"),
+                            ((c, d), "Square"),
+                            ((a, d), "Quincunx"),
+                        ]
+
+                        suppresses = {
+                            "suppress": {
+                                "Unnamed": {frozenset(u1), frozenset(u2)}
+                            }
+                        }
+
+                        add_special("Lightning Bolt", [a, b, c, d], candidate_edges, suppresses)
+
+    # -------------------------------
+    # approx pass
+    # -------------------------------
+    for parent_idx, mems in enumerate(patterns):
+        leftovers = set(mems) - used_members
+        if not leftovers:
+            continue
+        s_here_approx, sid = _detect_shapes_for_members(
+            pos, leftovers, parent_idx, sid, major_edges_all, widen_orb=True
+        )
+        for sh in s_here_approx:
+            sh["approx"] = True
+            used_members.update(sh["members"])
+            for (u, v), asp in sh["edges"]:
+                used_edges.add((tuple(sorted((u, v))), asp))
+        shapes.extend(s_here_approx)
+
+    # -------------------------------
+    # remainder pass (conjunction-aware)
+    # -------------------------------
+    for parent_idx, mems in enumerate(patterns):
+        if not mems:
+            continue
+
+        # Collapse conjunctions for this parent
+        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(mems))
+        members_set = set(rep_pos.keys())  # only use cluster reps
+
+        remainders = []
+        for (u, v), asp in major_edges_all:
+            ru, rv = rep_anchor.get(u, u), rep_anchor.get(v, v)
+            if ru == rv:
+                continue  # ignore intra-cluster self-edge
+
+            edge_key = (tuple(sorted((ru, rv))), asp)
+            if (
+                edge_key not in used_edges
+                and ru in members_set
+                and rv in members_set
+            ):
+                remainders.append(((ru, rv), asp))
+
+        if remainders:
+            G = nx.Graph()
+            for (ru, rv), asp in remainders:
+                G.add_edge(ru, rv, aspect=asp)
+            for comp in nx.connected_components(G):
+                comp_edges = []
+                for ru, rv in G.subgraph(comp).edges():
+                    asp = G[ru][rv]["aspect"]
+                    comp_edges.append(((ru, rv), asp))
+                shapes.append({
+                    "id": sid,
+                    "type": "Remainder",
+                    "parent": parent_idx,
+                    "members": list(comp),
+                    "edges": comp_edges,
+                    "remainder": True,
+                })
+                sid += 1
+
+    # -------------------------------
+    # suppression
+    # -------------------------------
+    shapes = apply_suppression(shapes)
+
+    # -------------------------------
+    # final sort + return
+    # -------------------------------
+    shapes.sort(key=lambda s: (s.get("remainder", False), s["id"]))
+    return shapes
 
     # -------------------------------
     # approx pass
@@ -581,12 +675,29 @@ def _aspect_match_wide(pos, p1, p2, target_aspect, widen=1.0):
 
 def apply_suppression(shapes):
     suppressed = set()
+
+    # Define priority: higher number = stronger
+    priority = {
+        "Lightning Bolt": 3,
+        "Envelope": 2,
+        "Grand Cross": 2,
+        "Mystic Rectangle": 2,
+        "Cradle": 2,
+        "Kite": 2,
+        "Grand Trine": 1,
+        "T-Square": 1,
+        "Wedge": 1,
+        "Sextile Wedge": 1,
+        "Unnamed": 0,
+    }
+
     for i, s_big in enumerate(shapes):
         if "suppresses" not in s_big:
             continue
         sup_data = s_big["suppresses"]
         sup_sets = sup_data.get("suppress", {})
         keep_sets = sup_data.get("keep", {})
+
         for s_type, sub_sets in sup_sets.items():
             for sub_members in sub_sets:
                 for j, s_small in enumerate(shapes):
@@ -595,19 +706,22 @@ def apply_suppression(shapes):
                     if s_small["type"] != s_type:
                         continue
                     if frozenset(s_small["members"]) == sub_members:
-                        keep_hit = False
-                        for env in [sh for sh in shapes if "keep" in sh.get("suppresses", {})]:
-                            keep_map = env["suppresses"]["keep"]
-                            if (s_small["type"] in keep_map and
-                                frozenset(s_small["members"]) in keep_map[s_small["type"]]):
-                                keep_hit = True
-                                break
-                        if keep_hit:
-                            continue
-                        suppressed.add(j)
+                        # Only suppress if big shape has >= priority than small one
+                        if priority.get(s_big["type"], 0) >= priority.get(s_small["type"], 0):
+                            # Check keep rules
+                            keep_hit = False
+                            for env in [sh for sh in shapes if "keep" in sh.get("suppresses", {})]:
+                                keep_map = env["suppresses"]["keep"]
+                                if (s_small["type"] in keep_map and
+                                    frozenset(s_small["members"]) in keep_map[s_small["type"]]):
+                                    keep_hit = True
+                                    break
+                            if keep_hit:
+                                continue
+                            suppressed.add(j)
 
-    # Filter out suppressed shapes
-    return [s for i, s in enumerate(shapes) if i not in suppressed]
+        # Never suppress Lightning Bolt
+    return [s for i, s in enumerate(shapes) if i not in suppressed or s["type"] == "Lightning Bolt"]
 
 # -------------------------------
 # Minors (unchanged)
@@ -669,11 +783,19 @@ def internal_minor_edges_for_pattern(pos, members):
 
 def _add_shape(shapes, sh_type, parent_idx, sid, node_list, edge_specs,
                rep_map=None, rep_anchor=None, suppresses=None):
+    # Expand members to include all planets in each cluster
+    expanded_members = []
+    for n in node_list:
+        if rep_map and n in rep_map:
+            expanded_members.extend(rep_map[n])
+        else:
+            expanded_members.append(n)
+
     shape = {
         "id": sid,
         "type": sh_type,
         "parent": parent_idx,
-        "members": node_list,
+        "members": expanded_members,
         "edges": edge_specs,
     }
     if rep_map is not None:
