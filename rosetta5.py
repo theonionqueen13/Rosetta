@@ -985,13 +985,13 @@ if st.session_state.get("chart_ready", False):
         else:
             st.markdown("_(none)_")
 
-        st.subheader("Expansion Options")
-        st.caption("(Coming soon - These buttons don't do anything yet)")
-        st.checkbox("Show Minor Asteroids", value=False)
-        st.markdown("#### Harmonics")
-        cols = st.columns(6)
-        for j, label in enumerate(["5", "7", "9", "10", "11", "12"]):
-            cols[j].checkbox(label, value=False, key=f"harmonic_{label}")
+        with st.expander("Expansion Options (Coming Soon)"):
+            st.caption("(These buttons don't do anything yet)")
+            st.checkbox("Show Minor Asteroids", value=False)
+            st.markdown("#### Harmonics")
+            cols = st.columns(6)
+            for j, label in enumerate(["5", "7", "9", "10", "11", "12"]):
+                cols[j].checkbox(label, value=False, key=f"harmonic_{label}")
 
     use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
     dark_mode = st.checkbox("🌙 Dark Mode", value=False)
