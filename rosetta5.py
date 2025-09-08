@@ -877,47 +877,45 @@ with col_right:
     # --- Load ---
     with tabs[1]:
         if saved_profiles:
-            choice = st.selectbox("Select a profile to load", list(saved_profiles.keys()), key="profile_loader")
-            if st.button("📂 Load Selected Profile"):
-                data = saved_profiles[choice]
+            with st.expander("Saved Profiles", expanded=False):
+                # Make two columns inside the expander
+                cols = st.columns(2)
+                for i, (name, data) in enumerate(saved_profiles.items()):
+                    col = cols[i % 2]   # alternate between col 0 and col 1
+                    with col:
+                        if st.button(name, key=f"load_{name}"):
+                            # Restore into session
+                            st.session_state["_loaded_profile"] = data
+                            st.session_state["current_profile"] = name
+                            st.session_state["profile_loaded"] = True
 
-                # Restore into session
-                st.session_state["_loaded_profile"] = data
-                st.session_state["current_profile"] = choice
-                st.session_state["profile_loaded"] = True
+                            # Update canonical keys
+                            st.session_state["profile_year"] = data["year"]
+                            st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
+                            st.session_state["profile_day"] = data["day"]
+                            st.session_state["profile_hour"] = data["hour"]
+                            st.session_state["profile_minute"] = data["minute"]
+                            st.session_state["profile_city"] = data["city"]
 
-                # Update profile_* keys so run_chart uses them
-                # Update profile_* keys so run_chart uses them
-                st.session_state["profile_year"] = data["year"]
-                st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
-                st.session_state["profile_day"] = data["day"]
-                st.session_state["profile_hour"] = data["hour"]
-                st.session_state["profile_minute"] = data["minute"]
+                            # Keep helpers in sync
+                            st.session_state["hour_val"] = data["hour"]
+                            st.session_state["minute_val"] = data["minute"]
 
-                # ⏱️ keep 12/24 helpers in sync to prevent “borrowed time” bug
-                st.session_state["hour_val"] = data["hour"]
-                st.session_state["minute_val"] = data["minute"]
+                            st.session_state["last_location"] = data["city"]
+                            st.session_state["last_timezone"] = data.get("tz_name")
 
-                # 🏙️ city: set the canonical source of truth (do NOT set st.session_state["city"])
-                st.session_state["profile_city"] = data["city"]
+                            # Restore circuit names
+                            if "circuit_names" in data:
+                                for key, val in data["circuit_names"].items():
+                                    st.session_state[key] = val
+                                st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
+                            else:
+                                st.session_state["saved_circuit_names"] = {}
 
-                # Optional: update the little location panel beneath the buttons so it's accurate
-                st.session_state["last_location"] = data["city"]
-                st.session_state["last_timezone"] = data.get("tz_name")
-
-                # ✅ Restore circuit names if present
-                if "circuit_names" in data:
-                    for key, val in data["circuit_names"].items():
-                        st.session_state[key] = val
-                    st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
-                else:
-                    st.session_state["saved_circuit_names"] = {}
-
-                # ✅ Immediately calculate chart
-                run_chart(data["lat"], data["lon"], data["tz_name"])
-
-                st.success(f"Profile '{choice}' loaded and chart calculated!")
-                st.rerun()
+                            # Calculate chart
+                            run_chart(data["lat"], data["lon"], data["tz_name"])
+                            st.success(f"Profile '{name}' loaded and chart calculated!")
+                            st.rerun()
         else:
             st.info("No saved profiles yet.")
 
