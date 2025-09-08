@@ -40,6 +40,9 @@ def deg_to_sign(lon):
 
 def _calc_vertex(jd, lat, lon):
     cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+    if cusps is None or ascmc is None:      
+        raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
+
     return ascmc[3], 0.0, 0.0, 0.0  # lon, lat, dist, speed
 
 def _calc_pof(jd, lat, lon):
@@ -76,10 +79,12 @@ def calculate_chart(
     tz_offset, lat, lon,
     input_is_ut: bool = False,
     tz_name: str | None = None,
+    house_system: str = "placidus",   # <-- new option
 ):
+    print(f"[DEBUG] calculate_chart called with house_system={house_system}")
     """
     Build the chart using Swiss Ephemeris.
-    Adds Descendant and all three Liliths (True, Mean, Asteroid).
+    Adds Descendant, house cusps, and Liliths.
     """
 
     # -------- Time -> UTC --------
@@ -98,11 +103,8 @@ def calculate_chart(
             utc_dt = local_dt.astimezone(datetime.timezone.utc)
             tz_used = f"Fixed offset {tz_offset}"
 
-    # -------- Julian Day --------
     jd = swe.julday(
-        utc_dt.year,
-        utc_dt.month,
-        utc_dt.day,
+        utc_dt.year, utc_dt.month, utc_dt.day,
         utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0,
         swe.GREG_CAL,
     )
@@ -112,7 +114,6 @@ def calculate_chart(
 
     # --- Core object list (with Liliths) ---
     OBJECTS = {
-        # Luminaries & planets
         "Sun": swe.SUN,
         "Moon": swe.MOON,
         "Mercury": swe.MERCURY,
@@ -123,24 +124,16 @@ def calculate_chart(
         "Uranus": swe.URANUS,
         "Neptune": swe.NEPTUNE,
         "Pluto": swe.PLUTO,
-
-        # Nodes
-        "True Node": swe.TRUE_NODE,
-        "South Node": -1,   # calculated
-
-        # Angles / points
+        "North Node": swe.TRUE_NODE,
+        "South Node": -1,
         "Ascendant": "ASC",
         "MC": "MC",
         "Vertex": "VERTEX",
         "Part of Fortune": "POF",
-
-        # Wounds / shadow
         "Black Moon Lilith (True)": swe.OSCU_APOG,
         "Black Moon Lilith (Mean)": swe.MEAN_APOG,
         "Lilith (Asteroid)": swe.AST_OFFSET + 1181,
         "Chiron": swe.CHIRON,
-
-        # Core asteroids (keep your extended list here as before)...
         "Ceres": swe.AST_OFFSET + 1,
         "Pallas": swe.AST_OFFSET + 2,
         "Juno": swe.AST_OFFSET + 3,
@@ -161,6 +154,7 @@ def calculate_chart(
         elif ident == "MC":
             cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
             lon_, lat_, dist, speed = ascmc[1], 0.0, 0.0, 0.0
+            mc_val = lon_
 
         elif ident == "VERTEX":
             lon_, lat_, dist, speed = _calc_vertex(jd, lat, lon)
@@ -179,7 +173,6 @@ def calculate_chart(
 
         sign, dms, sabian_index = deg_to_sign(lon_)
         sabian_symbol = SABIAN_SYMBOLS.get((sign, int(lon_ % 30) + 1), "")
-
         retro = "Rx" if speed < 0 else ""
         if ident in ("ASC", "MC", "VERTEX", "POF", -1):
             decl = 0.0
@@ -187,7 +180,6 @@ def calculate_chart(
             eq, _ = swe.calc_ut(jd, ident, swe.FLG_EQUATORIAL)
             decl = eq[1]
         oob = "Yes" if is_out_of_bounds(decl) else "No"
-
         dignity = DIGNITIES.get(sign, "")
         rulership = PLANETARY_RULERS.get(sign, [])
 
@@ -208,7 +200,7 @@ def calculate_chart(
             "Speed": round(speed, 6),
         })
 
-    # --- Add Descendant (DC) ---
+    # --- Add Descendant ---
     if asc_val is not None:
         dc_val = (asc_val + 180.0) % 360.0
         sign, dms, sabian_index = deg_to_sign(dc_val)
@@ -230,7 +222,54 @@ def calculate_chart(
             "Speed": 0.0,
         })
 
-    return pd.DataFrame(rows)
+    # ----------------------------
+    # House cusps
+    # ----------------------------
+        # ----------------------------
+    # House cusps
+    # ----------------------------
+    cusp_rows = []
+
+    if house_system == "placidus":
+        cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+        if cusps is None or ascmc is None:
+            raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
+        for i, deg in enumerate(cusps[:12], start=1):
+            cusp_rows.append({
+                "Object": f"{i}H Cusp",
+                "Computed Absolute Degree": round(deg, 6),
+            })
+
+    elif house_system == "equal":
+        if asc_val is None:
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'E')
+            if ascmc is None:
+                raise ValueError("Swiss Ephemeris could not calculate Equal houses")
+            asc_val = ascmc[0]
+        for i in range(12):
+            deg = (asc_val + i * 30.0) % 360.0
+            cusp_rows.append({
+                "Object": f"{i+1}H Cusp",
+                "Computed Absolute Degree": round(deg, 6),
+            })
+
+    elif house_system == "whole":
+        if asc_val is None:
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+            asc_val = ascmc[0]
+
+        asc_sign = int(asc_val // 30) * 30.0   # snap Asc to start of sign
+        for i in range(12):
+            deg = (asc_sign + i * 30.0) % 360.0
+            cusp_rows.append({
+                "Object": f"{i+1}H Cusp",
+                "Computed Absolute Degree": round(deg, 6),
+            })
+
+    # merge with main planet rows
+    cusp_df = pd.DataFrame(cusp_rows)
+    base_df = pd.DataFrame(rows)
+    return pd.concat([base_df, cusp_df], ignore_index=True)
 
 if __name__ == "__main__":
     try:

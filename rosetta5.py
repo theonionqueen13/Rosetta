@@ -27,29 +27,6 @@ from rosetta.patterns import (
 # -------------------------
 # Chart Drawing Functions
 # -------------------------
-
-def draw_house_cusps(ax, df, asc_deg, use_placidus, dark_mode):
-    """Draw house cusp lines (Placidus or Equal)."""
-    import pandas as pd
-    if use_placidus:
-        cusp_rows = df[df["Object"].str.match(r"^\d{1,2}H Cusp$", na=False)]
-        for i, (_, row) in enumerate(cusp_rows.iterrows()):
-            if pd.notna(row["abs_deg"]):
-                deg = float(row["abs_deg"])
-                rad = deg_to_rad(deg, asc_deg)
-                ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="dashed", linewidth=1)
-                ax.text(rad - 0.05, 0.2, str(i+1),
-                        ha="center", va="center", fontsize=8,
-                        color="white" if dark_mode else "black")
-    else:
-        for i in range(12):
-            deg = (asc_deg + i * 30) % 360
-            rad = deg_to_rad(deg, asc_deg)
-            ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-            ax.text(rad - 0.05, 0.2, str(i+1),
-                    ha="center", va="center", fontsize=8,
-                    color="white" if dark_mode else "black")
-
 def draw_degree_markers(ax, asc_deg, dark_mode):
     """Draw small tick marks every 10° with labels."""
     for deg in range(0, 360, 10):
@@ -295,7 +272,7 @@ def format_planet_profile(row):
 def render_chart_with_shapes(
     pos, patterns, pattern_labels, toggles,
     filaments, combo_toggles, label_style, singleton_map, df,
-    use_placidus, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
+    house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
     major_edges_all
 ):
     asc_deg = get_ascendant_degree(df)
@@ -310,7 +287,7 @@ def render_chart_with_shapes(
     ax.axis("off")
 
     # Base wheel
-    draw_house_cusps(ax, df, asc_deg, use_placidus, dark_mode)
+    draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
     draw_degree_markers(ax, asc_deg, dark_mode)
     draw_zodiac_signs(ax, asc_deg)
     draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
@@ -515,22 +492,23 @@ if "active_profile_tab" not in st.session_state:
 # -------------------------
 col_left, col_mid, col_right = st.columns([2, 2, 2])
 
-def run_chart(lat, lon, tz_name):
+def run_chart(lat, lon, tz_name, house_system):
     reset_chart_state()
     _cache_major_edges.clear()
     _cache_shapes.clear()
 
     try:
         df = calculate_chart(
-        int(st.session_state["profile_year"]),
-        int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
-        int(st.session_state["profile_day"]),
-        int(st.session_state["profile_hour"]),
-        int(st.session_state["profile_minute"]),
-        0.0, lat, lon,
-        input_is_ut=False,
-        tz_name=tz_name,
-    )
+            int(st.session_state["profile_year"]),
+            int(MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1),
+            int(st.session_state["profile_day"]),
+            int(st.session_state["profile_hour"]),
+            int(st.session_state["profile_minute"]),
+            0.0, lat, lon,
+            input_is_ut=False,
+            tz_name=tz_name,
+            house_system=house_system, 
+        )
 
         df["abs_deg"] = df["Longitude"].astype(float)
         df = annotate_fixed_stars(df)
@@ -679,6 +657,7 @@ with col_mid:
                         0.0, lat, lon,
                         input_is_ut=False,
                         tz_name=tz_name,
+                        house_system=house_system, 
                     )
                     df["abs_deg"] = df["Longitude"].astype(float)
                     df = annotate_fixed_stars(df)
@@ -709,7 +688,7 @@ with col_mid:
         if lat is None or lon is None or tz_name is None:
             st.error("Please enter a valid city and make sure lookup succeeds.")
         else:
-            run_chart(lat, lon, tz_name)
+            run_chart(lat, lon, tz_name, house_system)
 
         # Location info BELOW buttons
         location_info = st.container()
@@ -835,7 +814,12 @@ with col_right:
                                 st.session_state["saved_circuit_names"] = {}
 
                             # Calculate chart
-                            run_chart(data["lat"], data["lon"], data["tz_name"])
+                            run_chart(
+                                data["lat"],
+                                data["lon"],
+                                data["tz_name"],
+                                st.session_state.get("house_system", "placidus").lower().replace(" sign", "")
+                            )
                             st.success(f"Profile '{name}' loaded and chart calculated!")
                             st.rerun()
         else:
@@ -1015,8 +999,15 @@ if st.session_state.get("chart_ready", False):
 
     left_col, right_col = st.columns([2, 1])
     with left_col:
-        use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
-        dark_mode = st.checkbox("🌙 Dark Mode", value=False)
+        choice = st.radio(
+            "House System",
+            ["Equal", "Whole Sign", "Placidus",],
+            index=0,
+            key="house_system"
+        )
+
+        # Normalize into a separate variable
+        house_system = choice.lower().replace(" sign", "")
     
     with right_col:
         # Choose how to show planet labels
@@ -1026,6 +1017,8 @@ if st.session_state.get("chart_ready", False):
             index=1,
             horizontal=True
         )
+        
+        dark_mode = st.checkbox("🌙 Dark Mode", value=False)
 
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
     if not singleton_toggles:
@@ -1037,7 +1030,8 @@ if st.session_state.get("chart_ready", False):
         toggles=[st.session_state.get(f"toggle_pattern_{i}", False) for i in range(len(patterns))],
         filaments=filaments, combo_toggles=combos,
         label_style=label_style, singleton_map=singleton_map, df=df,
-        use_placidus=use_placidus, dark_mode=dark_mode,
+        house_system=house_system, 
+        dark_mode=dark_mode,
         shapes=shapes, shape_toggles_by_parent=shape_toggles_by_parent,
         singleton_toggles=singleton_toggles, major_edges_all=major_edges_all
     )
@@ -1106,7 +1100,7 @@ if st.session_state.get("chart_ready", False):
                                 fixed_star_meanings[star] = meaning
 
             planet_profiles_block = (
-                "### Character Profiles\n" + "\n\n".join(planet_profiles_texts)
+                "Character Profiles\n" + "\n\n".join(planet_profiles_texts)
                 if planet_profiles_texts else ""
             )
 
@@ -1116,7 +1110,7 @@ if st.session_state.get("chart_ready", False):
             # --- Build interpretation notes ---
             interpretation_notes = []
             if interpretation_flags or fixed_star_meanings:
-                interpretation_notes.append("### Interpretation Notes\n")
+                interpretation_notes.append("Interpretation Notes\n")
 
             # General flags (each only once)
             for flag in sorted(interpretation_flags):
@@ -1136,17 +1130,18 @@ if st.session_state.get("chart_ready", False):
             interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
 
             # --- Final prompt assembly ---
+            import textwrap
+
+            instructions = textwrap.dedent("""
+            Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. For each planet or placement profile or conjunction cluster provided, use all information provided to synthesize a personified planet "character" profile in one paragraph. Use only the interpretation instructions provided for each item. List these one-paragraph character profiles first in your output, under a heading called "Character Profiles."
+
+            Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to personify the "relationship dynamics" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the Character Profiles, under a header called "Aspects."
+
+            Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary relationship dynamics become a functioning system with a function when combined into the whole shape provided, and ask yourself "what does the whole thing do when you put it together?" Describe the function, and suggest a name for the circuit. Output this synthesis under a header called "Circuit."
+            """).strip()
+
             sections = [
-                "Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. "
-                "For each planet or placement profile or conjunction cluster provided, use the planet/placement meaning(s), sign, Sabian symbol, fixed star conjunction(s) (if present), "
-                "Out of Bounds status (if present), retrograde status or station point (if present), dignity (if present) and rulerships (if present) to synthesize a personified planet "
-                "\"character\" profile in one paragraph. List these one-paragraph character profiles first in your output, under a heading called \"Character Profiles\".\n\n"
-                "Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to "
-                "personify the \"relationship dynamics\" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the "
-                "Character Profiles, under a header called \"Aspects\".\n\n"
-                "Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary relationship dynamics become a functioning system with "
-                "a function when combined into the whole shape provided, and ask yourself \"what does the whole thing do when you put it together?\" Output this synthesis under a header "
-                "called \"Circuit\".",
+                instructions,
                 planet_profiles_block.strip() if planet_profiles_block else "",
                 interpretation_notes_block.strip() if interpretation_notes_block else "",
                 "\n\n".join(aspect_blocks).strip() if aspect_blocks else "",

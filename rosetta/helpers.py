@@ -14,6 +14,16 @@ sys.stdout.flush()
 # -------------------------
 # Core math + chart helpers
 # -------------------------
+import swisseph as swe
+
+def calculate_houses(jd_ut, lat, lon, use_placidus=True):
+    if use_placidus:
+        # swe.HOUSES_PLACIDUS is default (b'A' or 'P')
+        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'P')
+    else:
+        # Equal houses
+        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'E')
+    return cusps, ascmc
 
 def deg_to_rad(deg, asc_shift=0):
     """Convert degrees to radians for polar chart positioning"""
