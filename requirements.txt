@@ -6,3 +6,5 @@ geopy
 timezonefinder
 networkx
 pyswisseph
+openpyxl
+watchdog
