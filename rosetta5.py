@@ -610,7 +610,6 @@ if "_loaded_profile" in st.session_state:
         st.session_state["ampm"] = "AM"
     
     st.session_state["minute_str"] = f"{prof['minute']:02d}"
-    st.session_state["city"] = prof["city"]
     
     # Cleanup
     del st.session_state["_loaded_profile"]
@@ -687,14 +686,6 @@ with col_left:
             month = MONTH_NAMES.index(month_name) + 1
             days_in_month = calendar.monthrange(year, month)[1]
 
-        with col2:
-            # Day widget
-            day = st.selectbox(
-                "Day",
-                list(range(1, days_in_month + 1)),
-                key="day"
-            )
-
         # Time widgets
         time_cols = st.columns(3)
         with time_cols[0]:
@@ -755,7 +746,12 @@ with col_left:
                 except Exception as e:
                     st.session_state["last_location"] = None
                     st.session_state["last_timezone"] = f"Lookup error: {e}"
-
+            # Day widget
+            day = st.selectbox(
+                "Day",
+                list(range(1, days_in_month + 1)),
+                key="day"
+            )
 # -------------------------
 # Middle column: Now + Calculate Chart buttons
 # -------------------------
@@ -992,8 +988,11 @@ if st.session_state.get("chart_ready", False):
             if circuit_name_key not in st.session_state:
                 st.session_state[circuit_name_key] = default_label
 
-            circuit_name = st.session_state.get(circuit_name_key, default_label)
-            expander_label = f"{circuit_name}: {', '.join(component)}"
+            # Ensure circuit name exists in session
+            if circuit_name_key not in st.session_state:
+                st.session_state[circuit_name_key] = default_label
+
+            expander_label = f"{st.session_state[circuit_name_key]}: {', '.join(component)}"
 
             with target_col:
                 cbox = st.checkbox("", key=checkbox_key)
@@ -1004,7 +1003,6 @@ if st.session_state.get("chart_ready", False):
                     # Editable name inside expander
                     st.text_input(
                         f"Rename {default_label}",
-                        value=circuit_name,
                         key=circuit_name_key
                     )
 
@@ -1124,134 +1122,143 @@ if st.session_state.get("chart_ready", False):
     st.pyplot(fig, use_container_width=False)
 
     # --- Aspect Interpretation Prompt ---
-    st.subheader("Aspect Interpretation Prompt")
-    st.caption("Paste this prompt into an LLM (like ChatGPT).")
+    with st.expander("Aspect Interpretation Prompt"):
+        st.caption("Paste this prompt into an LLM (like ChatGPT).")
 
-    aspect_blocks = []
-    aspect_definitions = set()
+        aspect_blocks = []
+        aspect_definitions = set()
 
-    for s in active_shapes:
-        lines = []
-        for (p1, p2), asp in s["edges"]:
-            asp_clean = asp.replace("_approx", "")
-            asp_text = ASPECT_INTERPRETATIONS.get(asp_clean, asp_clean)
-            lines.append(f"{p1} {asp_clean} {p2}")
-            aspect_definitions.add(f"{asp_clean}: {asp_text}")
-        if lines:
-            aspect_blocks.append(" + ".join(lines))
+        for s in active_shapes:
+            lines = []
+            for (p1, p2), asp in s["edges"]:
+                asp_clean = asp.replace("_approx", "")
+                asp_text = ASPECT_INTERPRETATIONS.get(asp_clean, asp_clean)
+                lines.append(f"{p1} {asp_clean} {p2}")
+                aspect_definitions.add(f"{asp_clean}: {asp_text}")
+            if lines:
+                aspect_blocks.append(" + ".join(lines))
 
-    import re
-    def strip_html_tags(text):
-        # Replace divs and <br> with spaces
-        text = re.sub(r'</div>|<br\s*/?>', ' ', text)
-        text = re.sub(r'<div[^>]*>', '', text)
-        # Remove any other HTML tags
-        text = re.sub(r'<[^>]+>', '', text)
-        # Collapse multiple spaces
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
+        import re
+        def strip_html_tags(text):
+            # Replace divs and <br> with spaces
+            text = re.sub(r'</div>|<br\s*/?>', ' ', text)
+            text = re.sub(r'<div[^>]*>', '', text)
+            # Remove any other HTML tags
+            text = re.sub(r'<[^>]+>', '', text)
+            # Collapse multiple spaces
+            text = re.sub(r'\s+', ' ', text)
+            return text.strip()
 
-    if aspect_blocks:
-        planet_profiles_texts = []
-        interpretation_flags = set()
-        fixed_star_meanings = {}
+        if aspect_blocks:
+            planet_profiles_texts = []
+            interpretation_flags = set()
+            fixed_star_meanings = {}
 
-        for obj in sorted(visible_objects):
-            matched_rows = df[df["Object"] == obj]
-            if not matched_rows.empty:
-                row = matched_rows.iloc[0].to_dict()
-                profile_html = format_planet_profile(row)
-                profile_text = strip_html_tags(profile_html)
-                planet_profiles_texts.append(profile_text)
+            for obj in sorted(visible_objects):
+                matched_rows = df[df["Object"] == obj]
+                if not matched_rows.empty:
+                    row = matched_rows.iloc[0].to_dict()
+                    profile_html = format_planet_profile(row)
+                    profile_text = strip_html_tags(profile_html)
+                    planet_profiles_texts.append(profile_text)
 
-                # ---- Out of Bounds check (separate) ----
-                if str(row.get("OOB Status", "")).lower() == "yes":
-                    interpretation_flags.add("Out of Bounds")
+                    # ---- Out of Bounds check (separate) ----
+                    if str(row.get("OOB Status", "")).lower() == "yes":
+                        interpretation_flags.add("Out of Bounds")
 
-                # ---- Retrograde / Station checks ----
-                retro_val = str(row.get("Retrograde", "")).lower()
-                if "station" in retro_val:
-                    interpretation_flags.add("Station Point")
-                if "rx" in retro_val:
-                    interpretation_flags.add("Retrograde")
+                    # ---- Retrograde / Station checks ----
+                    retro_val = str(row.get("Retrograde", "")).lower()
+                    if "station" in retro_val:
+                        interpretation_flags.add("Station Point")
+                    if "rx" in retro_val:
+                        interpretation_flags.add("Retrograde")
 
-                # ---- Fixed Stars check (independent) ----
-                if row.get("Fixed Star Meaning"):
-                    stars = row["Fixed Star Conjunction"].split("|||")
-                    meanings = row["Fixed Star Meaning"].split("|||")
-                    for star, meaning in zip(stars, meanings):
-                        star, meaning = star.strip(), meaning.strip()
-                        if meaning:
-                            fixed_star_meanings[star] = meaning
+                    # ---- Fixed Stars check (independent) ----
+                    if row.get("Fixed Star Meaning"):
+                        stars = row["Fixed Star Conjunction"].split("|||")
+                        meanings = row["Fixed Star Meaning"].split("|||")
+                        for star, meaning in zip(stars, meanings):
+                            star, meaning = star.strip(), meaning.strip()
+                            if meaning:
+                                fixed_star_meanings[star] = meaning
 
-        planet_profiles_block = (
-            "### Character Profiles\n" + "\n\n".join(planet_profiles_texts)
-            if planet_profiles_texts else ""
-        )
+            planet_profiles_block = (
+                "### Character Profiles\n" + "\n\n".join(planet_profiles_texts)
+                if planet_profiles_texts else ""
+            )
 
-        # --- Build interpretation notes ---
-        from rosetta.lookup import INTERPRETATION_FLAGS
+            # --- Build interpretation notes ---
+            from rosetta.lookup import INTERPRETATION_FLAGS
 
-        # --- Build interpretation notes ---
-        interpretation_notes = []
-        if interpretation_flags or fixed_star_meanings:
-            interpretation_notes.append("### Interpretation Notes\n")
+            # --- Build interpretation notes ---
+            interpretation_notes = []
+            if interpretation_flags or fixed_star_meanings:
+                interpretation_notes.append("### Interpretation Notes\n")
 
-        # General flags (each only once)
-        for flag in sorted(interpretation_flags):
-            meaning = INTERPRETATION_FLAGS.get(flag)
-            if meaning:
-                interpretation_notes.append(f"- {meaning}")
+            # General flags (each only once)
+            for flag in sorted(interpretation_flags):
+                meaning = INTERPRETATION_FLAGS.get(flag)
+                if meaning:
+                    interpretation_notes.append(f"- {meaning}")
 
-        # Fixed Star note (general rule once, then list specifics)
-        if fixed_star_meanings:
-            general_star_note = INTERPRETATION_FLAGS.get("Fixed Star")
-            if general_star_note:
-                interpretation_notes.append(f"- {general_star_note}")
-            for star, meaning in fixed_star_meanings.items():
-                interpretation_notes.append(f"- {star}: {meaning}")
+            # Fixed Star note (general rule once, then list specifics)
+            if fixed_star_meanings:
+                general_star_note = INTERPRETATION_FLAGS.get("Fixed Star")
+                if general_star_note:
+                    interpretation_notes.append(f"- {general_star_note}")
+                for star, meaning in fixed_star_meanings.items():
+                    interpretation_notes.append(f"- {star}: {meaning}")
 
-        # Collapse into single block for prompt
-        interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
+            # Collapse into single block for prompt
+            interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
 
-        # --- Final prompt assembly ---
-        sections = [
-            "Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. "
-            "For each planet or placement profile or conjunction cluster provided, use the planet/placement meaning(s), sign, Sabian symbol, fixed star conjunction(s) (if present), "
-            "Out of Bounds status (if present), retrograde status or station point (if present), dignity (if present) and rulerships (if present) to synthesize a personified planet "
-            "\"character\" profile in one paragraph. List these one-paragraph character profiles first in your output, under a heading called \"Character Profiles\".\n\n"
-            "Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to "
-            "personify the \"relationship dynamics\" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the "
-            "Character Profiles, under a header called \"Aspects\".\n\n"
-            "Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary relationship dynamics become a functioning system with "
-            "a function when combined into the whole shape provided, and ask yourself \"what does the whole thing do when you put it together?\" Output this synthesis under a header "
-            "called \"Circuit\".",
-            planet_profiles_block.strip() if planet_profiles_block else "",
-            interpretation_notes_block.strip() if interpretation_notes_block else "",
-            "\n\n".join(aspect_blocks).strip() if aspect_blocks else "",
-            "\n\n".join(sorted(aspect_definitions)).strip() if aspect_definitions else "",
-        ]
+            # --- Final prompt assembly ---
+            sections = [
+                "Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. "
+                "For each planet or placement profile or conjunction cluster provided, use the planet/placement meaning(s), sign, Sabian symbol, fixed star conjunction(s) (if present), "
+                "Out of Bounds status (if present), retrograde status or station point (if present), dignity (if present) and rulerships (if present) to synthesize a personified planet "
+                "\"character\" profile in one paragraph. List these one-paragraph character profiles first in your output, under a heading called \"Character Profiles\".\n\n"
+                "Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to "
+                "personify the \"relationship dynamics\" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the "
+                "Character Profiles, under a header called \"Aspects\".\n\n"
+                "Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary relationship dynamics become a functioning system with "
+                "a function when combined into the whole shape provided, and ask yourself \"what does the whole thing do when you put it together?\" Output this synthesis under a header "
+                "called \"Circuit\".",
+                planet_profiles_block.strip() if planet_profiles_block else "",
+                interpretation_notes_block.strip() if interpretation_notes_block else "",
+                "\n\n".join(aspect_blocks).strip() if aspect_blocks else "",
+                "\n\n".join(sorted(aspect_definitions)).strip() if aspect_definitions else "",
+            ]
 
-        # filter out empties and join with two line breaks
-        prompt = "\n\n".join([s for s in sections if s]).strip()
+            # filter out empties and join with two line breaks
+            prompt = "\n\n".join([s for s in sections if s]).strip()
 
-        copy_button = f"""
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                <button id="copy-btn"
-                        onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {{
-                            var btn = document.getElementById('copy-btn');
-                            var oldText = btn.innerHTML;
-                            btn.innerHTML = '✅ Copied!';
-                            setTimeout(() => btn.innerHTML = oldText, 2000);
-                        }})"
-                        style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
-                    📋 Copy
-                </button>
-            <div id="prompt-box" style="white-space:pre-wrap; font-family:monospace; font-size:0.9em; color:white; background:black; border:1px solid #555; padding:8px; border-radius:4px; max-height:600px; overflow:auto;">{prompt.strip().replace("\n", "<br>")}</div>
-        """
-        components.html(copy_button, height=700, scrolling=True)
-    else:
-        st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+            copy_button = f"""
+                <div style="display:flex; flex-direction:column; align-items:stretch;">
+                    <div style="display:flex; justify-content:flex-end; margin-bottom:5px;">
+                        <button id="copy-btn"
+                                onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {{
+                                    var btn = document.getElementById('copy-btn');
+                                    var oldText = btn.innerHTML;
+                                    btn.innerHTML = '✅ Copied!';
+                                    setTimeout(() => btn.innerHTML = oldText, 2000);
+                                }})"
+                                style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
+                            📋 Copy
+                        </button>
+                    </div>
+                    <div id="prompt-box"
+                        style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
+                                color:white; background:black; border:1px solid #555;
+                                padding:8px; border-radius:4px; max-height:600px; overflow:auto;">
+                        {prompt.strip().replace("\n", "<br>")}
+                    </div>
+                </div>
+            """
+
+            components.html(copy_button, height=700, scrolling=True)
+        else:
+            st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
 
     # --- Sidebar planet profiles ---
     st.sidebar.subheader("🪐 Planet Profiles in View")
