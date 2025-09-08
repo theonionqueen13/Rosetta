@@ -12,14 +12,6 @@ EPHE_PATH = EPHE_PATH.replace("\\", "/")
 os.environ["SE_EPHE_PATH"] = EPHE_PATH
 swe.set_ephe_path(EPHE_PATH)
 testfile = os.path.join(EPHE_PATH, "se01181s.se1")
-print("[DEBUG] se01181s.se1 manually exists?", os.path.exists(testfile))
-print("[DEBUG] swe.get_library_path():", swe.get_library_path())
-
-# Proper debug
-print("[DEBUG] Ephemeris path set to:", EPHE_PATH)
-print("[DEBUG] se01181s.se1 exists?", os.path.exists(os.path.join(EPHE_PATH, "se01181s.se1")))
-
-print("[DEBUG] Files in ephe dir:", os.listdir(EPHE_PATH))
 
 import datetime
 import pandas as pd
@@ -78,116 +70,6 @@ def _calc_pof(jd, lat, lon):
         pof = (asc - moon + sun) % 360.0
 
     return pof, 0.0, 0.0, 0.0
-
-# --- Object list (restored) ---
-OBJECTS = {
-    # Luminaries & planets
-    "Sun": swe.SUN,
-    "Moon": swe.MOON,
-    "Mercury": swe.MERCURY,
-    "Venus": swe.VENUS,
-    "Mars": swe.MARS,
-    "Jupiter": swe.JUPITER,
-    "Saturn": swe.SATURN,
-    "Uranus": swe.URANUS,
-    "Neptune": swe.NEPTUNE,
-    "Pluto": swe.PLUTO,
-
-    # Nodes
-    "True Node": swe.TRUE_NODE,
-    "South Node": -1,   # calculated
-
-    # Angles / points
-    "Ascendant": "AS",
-    "Descendant": "DS",
-    "MC": "MC",
-    "Vertex": "VERTEX",
-    "Part of Fortune": "POF",
-
-    # Wounds / shadow
-    "Chiron": swe.CHIRON,
-    "Black Moon Lilith (Mean)": swe.MEAN_APOG,
-    "Lilith (Asteroid)": swe.AST_OFFSET + 1181,
-
-    # Core asteroids
-    "Ceres": swe.AST_OFFSET + 1,
-    "Pallas": swe.AST_OFFSET + 2,
-    "Juno": swe.AST_OFFSET + 3,
-    "Vesta": swe.AST_OFFSET + 4,
-    "Pholus": swe.AST_OFFSET + 5145,
-    "Eris": swe.AST_OFFSET + 136199,
-    "Eros": swe.AST_OFFSET + 433,
-    "Psyche": swe.AST_OFFSET + 16,
-    "Magdalena": swe.AST_OFFSET + 318,
-    "Minerva": swe.AST_OFFSET + 93,
-    "Nessus": swe.AST_OFFSET + 7066,
-    "Nemesis": swe.AST_OFFSET + 128,
-    "Orcus": swe.AST_OFFSET + 90482,
-    "Ixion": swe.AST_OFFSET + 28978,
-    "Makemake": swe.AST_OFFSET + 136472,
-    "Sedna": swe.AST_OFFSET + 90377,
-
-    # Extended myth/archetype set
-    "Apollo": swe.AST_OFFSET + 1862,
-    "Osiris": swe.AST_OFFSET + 1923,
-    "Isis": swe.AST_OFFSET + 42,
-    "Haumea": swe.AST_OFFSET + 136108,
-    "Hygiea": swe.AST_OFFSET + 10,
-    "Quaoar": swe.AST_OFFSET + 50000,
-    "Varuna": swe.AST_OFFSET + 20000,
-    "Typhon": swe.AST_OFFSET + 42355,
-    "Arachne": swe.AST_OFFSET + 407,
-    "Hekate": swe.AST_OFFSET + 100,
-    "Medusa": swe.AST_OFFSET + 149,
-    "Kaali": swe.AST_OFFSET + 4227,
-    "Angel": swe.AST_OFFSET + 11911,
-    "Hypnos": swe.AST_OFFSET + 14827,
-    "Singer": swe.AST_OFFSET + 10669,
-    "Siva": swe.AST_OFFSET + 1170,
-    "Hidalgo": swe.AST_OFFSET + 944,
-    "Toro": swe.AST_OFFSET + 1685,
-    "Freia": swe.AST_OFFSET + 76,
-    "Zephyr": swe.AST_OFFSET + 106,
-    "Euterpe": swe.AST_OFFSET + 27,
-    "Harmonia": swe.AST_OFFSET + 40,
-    "Polyhymnia": swe.AST_OFFSET + 33,
-    "Echo": swe.AST_OFFSET + 60,
-    "Sirene": swe.AST_OFFSET + 1009,
-    "Fama": swe.AST_OFFSET + 408,
-    "Mnemosyne": swe.AST_OFFSET + 57,
-    "Panacea": swe.AST_OFFSET + 2878,
-    "Icarus": swe.AST_OFFSET + 1566,
-    "Hephaistos": swe.AST_OFFSET + 2212,
-    "Pomona": swe.AST_OFFSET + 32,
-    "Asclepius": swe.AST_OFFSET + 4581,
-    "Odysseus": swe.AST_OFFSET + 1143,
-    "Ulysses": swe.AST_OFFSET + 5254,
-    "Iris": swe.AST_OFFSET + 7,
-    "Anteros": swe.AST_OFFSET + 1943,
-    "Aletheia": swe.AST_OFFSET + 259,
-    "Justitia": swe.AST_OFFSET + 269,
-    "Veritas": swe.AST_OFFSET + 490,
-    "Sphinx": swe.AST_OFFSET + 896,
-    "Bacchus": swe.AST_OFFSET + 2063,
-    "Dionysus": swe.AST_OFFSET + 3671,
-    "Thalia": swe.AST_OFFSET + 23,
-    "Terpsichore": swe.AST_OFFSET + 81,
-    "Lucifer": swe.AST_OFFSET + 1930,
-    "Copernicus": swe.AST_OFFSET + 1322,
-    "Koussevitzky": swe.AST_OFFSET + 1889,
-    "Pamela": swe.AST_OFFSET + 3525,
-    "Tezcatlipoca": swe.AST_OFFSET + 1980,
-    "Niobe": swe.AST_OFFSET + 71,
-    "Lachesis": swe.AST_OFFSET + 120,
-    "Kassandra": swe.AST_OFFSET + 114,
-    "Eurydike": swe.AST_OFFSET + 75,
-    "Orpheus": swe.AST_OFFSET + 3361,
-    "West": swe.AST_OFFSET + 2022,
-    "Morpheus": swe.AST_OFFSET + 4197,
-    "Kafka": swe.AST_OFFSET + 3412,
-    "Karma": swe.AST_OFFSET + 3811,
-    "Ariadne": swe.AST_OFFSET + 43,
-}
 
 def calculate_chart(
     year, month, day, hour, minute,
@@ -256,6 +138,7 @@ def calculate_chart(
         "Black Moon Lilith (True)": swe.OSCU_APOG,
         "Black Moon Lilith (Mean)": swe.MEAN_APOG,
         "Lilith (Asteroid)": swe.AST_OFFSET + 1181,
+        "Chiron": swe.CHIRON,
 
         # Core asteroids (keep your extended list here as before)...
         "Ceres": swe.AST_OFFSET + 1,
@@ -346,7 +229,6 @@ def calculate_chart(
             "Distance": 0.0,
             "Speed": 0.0,
         })
-        print(f"[DEBUG] Ascendant = {asc_val:.4f}, Descendant = {dc_val:.4f}")
 
     return pd.DataFrame(rows)
 
