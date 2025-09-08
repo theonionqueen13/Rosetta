@@ -11,7 +11,7 @@ import re
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
-    GROUP_COLORS, ASPECT_INTERPRETATIONS
+    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS
 )
 from rosetta.helpers import get_ascendant_degree, deg_to_rad
 from rosetta.drawing import (
@@ -829,8 +829,14 @@ if st.session_state.get("chart_ready", False):
 
     import re
     def strip_html_tags(text):
-        clean = re.sub(r'<[^>]+>', '', text)
-        return clean.strip()
+        # Replace divs and <br> with spaces
+        text = re.sub(r'</div>|<br\s*/?>', ' ', text)
+        text = re.sub(r'<div[^>]*>', '', text)
+        # Remove any other HTML tags
+        text = re.sub(r'<[^>]+>', '', text)
+        # Collapse multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
 
     if aspect_blocks:
         planet_profiles_texts = []
@@ -871,41 +877,50 @@ if st.session_state.get("chart_ready", False):
         )
 
         # --- Build interpretation notes ---
+        from rosetta.lookup import INTERPRETATION_FLAGS
+
+        # --- Build interpretation notes ---
         interpretation_notes = []
         if interpretation_flags or fixed_star_meanings:
             interpretation_notes.append("### Interpretation Notes\n")
 
-        # OOB/Retro/Station
+        # General flags (each only once)
         for flag in sorted(interpretation_flags):
-            if flag == "Out of Bounds":
-                interpretation_notes.append(
-                    "- Out of Bounds planets: Use OOB interpretation rules (expanded expression, boundary-pushing, destabilizing influence, etc.)."
-                )
-            elif flag == "Station Point":
-                interpretation_notes.append(
-                    "- Station Points: Treat as highly emphasized, frozen, or amplified energies."
-                )
-            elif flag == "Retrograde":
-                interpretation_notes.append(
-                    "- Retrograde planets: Use retrograde interpretation rules (internalized, revisiting, reversal of flow, etc.)."
-                )
+            meaning = INTERPRETATION_FLAGS.get(flag)
+            if meaning:
+                interpretation_notes.append(f"- {meaning}")
 
-        # Fixed Stars
+        # Fixed Star note (general rule once, then list specifics)
         if fixed_star_meanings:
-            interpretation_notes.append("\nFixed Stars:")
+            general_star_note = INTERPRETATION_FLAGS.get("Fixed Star")
+            if general_star_note:
+                interpretation_notes.append(f"- {general_star_note}")
             for star, meaning in fixed_star_meanings.items():
                 interpretation_notes.append(f"- {star}: {meaning}")
 
+        # Collapse into single block for prompt
         interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
 
         # --- Final prompt assembly ---
-        prompt = (
-            "Synthesize accurate poetic interpretations for each of these astrological aspects, ..."
-            + planet_profiles_block + "\n\n"
-            + interpretation_notes_block + "\n\n"
-            + "\n\n".join(aspect_blocks) + "\n\n"
-            + "\n\n".join(sorted(aspect_definitions))
-        ).strip()
+        sections = [
+            "Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. "
+            "For each planet or placement profile or conjunction cluster provided, use the planet/placement meaning(s), sign, Sabian symbol, fixed star conjunction(s) (if present), "
+            "Out of Bounds status (if present), retrograde status or station point (if present), dignity (if present) and rulerships (if present) to synthesize a personified planet "
+            "\"character\" profile in one paragraph. List these one-paragraph character profiles first in your output, under a heading called \"Character Profiles\".\n\n"
+            "Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to "
+            "personify the \"relationship dynamics\" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the "
+            "Character Profiles, under a header called \"Aspects\".\n\n"
+            "Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary relationship dynamics become a functioning system with "
+            "a function when combined into the whole shape provided, and ask yourself \"what does the whole thing do when you put it together?\" Output this synthesis under a header "
+            "called \"Circuit\".",
+            planet_profiles_block.strip() if planet_profiles_block else "",
+            interpretation_notes_block.strip() if interpretation_notes_block else "",
+            "\n\n".join(aspect_blocks).strip() if aspect_blocks else "",
+            "\n\n".join(sorted(aspect_definitions)).strip() if aspect_definitions else "",
+        ]
+
+        # filter out empties and join with two line breaks
+        prompt = "\n\n".join([s for s in sections if s]).strip()
 
         copy_button = f"""
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
@@ -919,10 +934,7 @@ if st.session_state.get("chart_ready", False):
                         style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
                     📋 Copy
                 </button>
-            </div>
-            <div id="prompt-box" style="white-space:pre-wrap; font-family:monospace; font-size:0.9em; color:white; background:black; border:1px solid #555; padding:8px; border-radius:4px; max-height:600px; overflow:auto;">
-                {prompt.replace("\n", "<br>")}
-            </div>
+            <div id="prompt-box" style="white-space:pre-wrap; font-family:monospace; font-size:0.9em; color:white; background:black; border:1px solid #555; padding:8px; border-radius:4px; max-height:600px; overflow:auto;">{prompt.strip().replace("\n", "<br>")}</div>
         """
         components.html(copy_button, height=700, scrolling=True)
     else:
