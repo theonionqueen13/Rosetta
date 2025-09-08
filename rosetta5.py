@@ -246,6 +246,38 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
             r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
+            
+def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
+    """
+    Convert decimal degrees (or hours/day for speed) into DMS string with hemispheres.
+    
+    - value: float
+    - is_latlon: True for latitude (N/S)
+    - is_decl: True for declination (N/S)
+    - is_speed: True for speed (arcmin/sec per day, approximate)
+    """
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+    # Speed: treat as deg/day → break into deg/min/sec
+    if is_speed:
+        deg = int(val)
+        minutes = int((val - deg) * 60)
+        seconds = int(round(((val - deg) * 60 - minutes) * 60))
+        return f"{deg}°{minutes:02d}'{seconds:02d}\""
+
+    # Latitude / Declination: need hemisphere
+    sign = ""
+    if is_latlon or is_decl:
+        sign = "N" if val >= 0 else "S"
+        val = abs(val)
+
+    deg = int(val)
+    minutes = int((val - deg) * 60)
+    seconds = int(round(((val - deg) * 60 - minutes) * 60))
+    return f"{deg}°{minutes:02d}'{seconds:02d}\" {sign}".strip()
 
 # -------------------------
 # Init / session management
@@ -378,6 +410,7 @@ def format_planet_profile(row):
         html_parts.append(f"<div style='font-weight:bold;'>{formatted}</div>")
 
     # --- Extra details (only if present) ---
+    # --- Extra details (only if present, with formatting) ---
     for label, value in [
         ("Speed", row.get("Speed", "")),
         ("Latitude", row.get("Latitude", "")),
@@ -389,10 +422,20 @@ def format_planet_profile(row):
         if not val_str or val_str.lower() in ["none", "nan", "no"]:
             continue
         try:
-            if float(val_str) == 0.0:
+            fval = float(val_str)
+            if fval == 0.0:
                 continue
         except Exception:
-            pass
+            fval = None
+
+        # Apply special DMS formatting
+        if label == "Speed" and fval is not None:
+            val_str = format_dms(fval, is_speed=True)
+        elif label == "Latitude" and fval is not None:
+            val_str = format_dms(fval, is_latlon=True)
+        elif label == "Declination" and fval is not None:
+            val_str = format_dms(fval, is_decl=True)
+
         html_parts.append(f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
 
     # Force single spacing with line-height here
