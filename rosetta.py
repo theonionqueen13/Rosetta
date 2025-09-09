@@ -1,3 +1,8 @@
+from datetime import datetime
+import pytz
+from timezonefinder import TimezoneFinder
+from geopy.geocoders import OpenCage
+from rosetta.lookup import GLYPHS
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,17 +26,20 @@ from rosetta.drawing import (
 from rosetta.patterns import (
     detect_minor_links_with_singletons, generate_combo_groups,
     detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges, _cluster_conjunctions_for_detection, 
+    connected_components_from_edges, _cluster_conjunctions_for_detection,
 )
 
 # -------------------------
 # Chart Drawing Functions
 # -------------------------
+
+
 def _in_forward_arc(start_deg, end_deg, x_deg):
     """True if x lies on the forward arc from start->end (mod 360)."""
     span = (end_deg - start_deg) % 360.0
-    off  = (x_deg   - start_deg) % 360.0
+    off = (x_deg - start_deg) % 360.0
     return off < span if span != 0 else off == 0
+
 
 def _house_of_degree(deg, cusps):
     """Given a degree and a 12-length cusp list (House 1..12), return 1..12."""
@@ -44,6 +52,7 @@ def _house_of_degree(deg, cusps):
             return i + 1
     return 12
 
+
 def draw_degree_markers(ax, asc_deg, dark_mode):
     """Draw small tick marks every 10° with labels."""
     for deg in range(0, 360, 10):
@@ -54,6 +63,7 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
                 ha="center", va="center", fontsize=7,
                 color="white" if dark_mode else "black")
 
+
 def draw_zodiac_signs(ax, asc_deg):
     """Draw zodiac signs + modalities around the wheel."""
     for i, base_deg in enumerate(range(0, 360, 30)):
@@ -62,6 +72,7 @@ def draw_zodiac_signs(ax, asc_deg):
                 fontsize=16, fontweight="bold", color=ZODIAC_COLORS[i])
         ax.text(rad, 1.675, MODALITIES[i], ha="center", va="center",
                 fontsize=6, color="dimgray")
+
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
     """Label planets/points, clustered to avoid overlap."""
@@ -86,6 +97,7 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
                     ha="center", va="center", fontsize=9,
                     color="white" if dark_mode else "black")
 
+
 def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg,
                       group_colors=None, edges=None):
     """Draw major aspect lines for active patterns."""
@@ -100,7 +112,7 @@ def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg,
                 angle = abs(pos[p1] - pos[p2])
                 if angle > 180:
                     angle = 360 - angle
-                for asp in ("Conjunction","Sextile","Square","Trine","Opposition"):
+                for asp in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
                     asp_data = ASPECTS[asp]
                     if abs(asp_data["angle"] - angle) <= asp_data["orb"]:
                         r1 = deg_to_rad(pos[p1], asc_deg)
@@ -111,6 +123,7 @@ def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg,
                                 linestyle=asp_data["style"],
                                 color=line_color, linewidth=2)
                         break
+
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
     """Draw dotted lines for minor aspects between active patterns."""
@@ -123,7 +136,8 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
             r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
-            
+
+
 def reset_chart_state():
     """Clear transient UI keys so each chart loads cleanly."""
     for key in list(st.session_state.keys()):
@@ -135,7 +149,8 @@ def reset_chart_state():
             del st.session_state[key]
     if "shape_toggles_by_parent" in st.session_state:
         del st.session_state["shape_toggles_by_parent"]
-            
+
+
 # -------------------------
 # Init / session management
 # -------------------------
@@ -183,6 +198,7 @@ st.markdown(
 _cache_major_edges = {}
 _cache_shapes = {}
 
+
 def get_major_edges_and_patterns(pos):
     """
     Build master list of major edges from positions, then cluster into patterns.
@@ -205,9 +221,11 @@ def get_major_edges_and_patterns(pos):
                     if abs(angle - data["angle"]) <= data["orb"]:
                         temp_edges.append(((p1, p2), aspect))
                         break
-        patterns = connected_components_from_edges(list(pos.keys()), temp_edges)
+        patterns = connected_components_from_edges(
+            list(pos.keys()), temp_edges)
         _cache_major_edges[pos_items_tuple] = (tuple(temp_edges), patterns)
     return _cache_major_edges[pos_items_tuple]
+
 
 def get_shapes(pos, patterns, major_edges_all):
     pos_items_tuple = tuple(sorted(pos.items()))
@@ -218,6 +236,7 @@ def get_shapes(pos, patterns, major_edges_all):
         _cache_shapes[key] = detect_shapes(pos, patterns, major_edges_all)
     return _cache_shapes[key]
 
+
 SUBSHAPE_COLORS = [
     "#FF5214", "#FFA600", "#FBFF00", "#87DB00",
     "#00B828", "#049167", "#006EFF", "#1100FF",
@@ -225,7 +244,6 @@ SUBSHAPE_COLORS = [
     "#4B2C06", "#534546", "#C4A5A5", "#5F7066",
 ]
 
-from rosetta.lookup import GLYPHS
 
 def format_planet_profile(row):
     """Styled planet profile with glyphs, line breaks, and conditional extras."""
@@ -242,7 +260,7 @@ def format_planet_profile(row):
 
     # --- Sabian Symbol (italic, if present) ---
     if sabian and sabian.lower() not in ["none", "nan"]:
-            html_parts.append(f"<div style='font-style:italic;'>“{sabian}”</div>")
+        html_parts.append(f"<div style='font-style:italic;'>“{sabian}”</div>")
 
     # --- Longitude (bold) ---
     if lon != "":
@@ -257,7 +275,8 @@ def format_planet_profile(row):
     h = row.get("House", None)
     try:
         if h is not None and int(h) >= 1:
-            html_parts.append(f"<div style='font-size:0.9em;'>House: {int(h)}</div>")
+            html_parts.append(
+                f"<div style='font-size:0.9em;'>House: {int(h)}</div>")
     except Exception:
         pass
 
@@ -291,12 +310,15 @@ def format_planet_profile(row):
             parts = [p.strip() for p in val_str.split("|||") if p.strip()]
             val_str = ", ".join(parts)
 
-        html_parts.append(f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
+        html_parts.append(
+            f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
 
     # Force single spacing with line-height here
     return "<div style='line-height:1.1; margin-bottom:6px;'>" + "".join(html_parts) + "</div>"
 
 # --- CHART RENDERER (full)
+
+
 def render_chart_with_shapes(
     pos, patterns, pattern_labels, toggles,
     filaments, combo_toggles, label_style, singleton_map, df,
@@ -304,7 +326,8 @@ def render_chart_with_shapes(
     major_edges_all
 ):
     asc_deg = get_ascendant_degree(df)
-    fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
+    fig, ax = plt.subplots(figsize=(5, 5), dpi=100,
+                           subplot_kw={"projection": "polar"})
     if dark_mode:
         ax.set_facecolor("black")
         fig.patch.set_facecolor("black")
@@ -352,15 +375,20 @@ def render_chart_with_shapes(
 
                 # optional: internal minors + filaments
                 for idx in active_parents:
-                    _ = internal_minor_edges_for_pattern(pos, list(patterns[idx]))
+                    _ = internal_minor_edges_for_pattern(
+                        pos, list(patterns[idx]))
                     for (p1, p2, asp_name, pat1, pat2) in filaments:
                         if frozenset((p1, p2)) in shape_edges:
                             continue
 
-                        in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
-                        in_parent2 = any((i in active_parents) and (p2 in patterns[i]) for i in active_parents)
-                        in_shape1 = any(p1 in s["members"] for s in active_shapes)
-                        in_shape2 = any(p2 in s["members"] for s in active_shapes)
+                        in_parent1 = any((i in active_parents) and (
+                            p1 in patterns[i]) for i in active_parents)
+                        in_parent2 = any((i in active_parents) and (
+                            p2 in patterns[i]) for i in active_parents)
+                        in_shape1 = any(p1 in s["members"]
+                                        for s in active_shapes)
+                        in_shape2 = any(p2 in s["members"]
+                                        for s in active_shapes)
                         in_singleton1 = p1 in active_singletons
                         in_singleton2 = p2 in active_singletons
 
@@ -398,29 +426,29 @@ def render_chart_with_shapes(
 
     # draw singleton dots (twice as wide as aspect lines)
     if active_singletons:
-        draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0)
+        draw_singleton_dots(ax, pos, active_singletons,
+                            shape_edges, asc_deg, line_width=2.0)
 
     # connectors (filaments) not already claimed by shapes
     for (p1, p2, asp_name, pat1, pat2) in filaments:
         if frozenset((p1, p2)) in shape_edges:
             continue
-        in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
-        in_parent2 = any((i in active_parents) and (p2 in patterns[i]) for i in active_parents)
+        in_parent1 = any((i in active_parents) and (
+            p1 in patterns[i]) for i in active_parents)
+        in_parent2 = any((i in active_parents) and (
+            p2 in patterns[i]) for i in active_parents)
         in_shape1 = any(p1 in s["members"] for s in active_shapes)
         in_shape2 = any(p2 in s["members"] for s in active_shapes)
         in_singleton1 = p1 in active_singletons
         in_singleton2 = p2 in active_singletons
         if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
-            r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
+            r1 = deg_to_rad(pos[p1], asc_deg)
+            r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
 
     return fig, visible_objects, active_shapes, cusps
 
-from datetime import datetime
-from geopy.geocoders import OpenCage
-from timezonefinder import TimezoneFinder
-import pytz
 
 MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -478,7 +506,7 @@ for k, v in widget_defaults.items():
 # Apply loaded profile if present
 if "_loaded_profile" in st.session_state:
     prof = st.session_state["_loaded_profile"]
-    
+
     # Update profile keys
     st.session_state["profile_year"] = prof["year"]
     st.session_state["profile_month_name"] = MONTH_NAMES[prof["month"] - 1]
@@ -486,12 +514,12 @@ if "_loaded_profile" in st.session_state:
     st.session_state["profile_hour"] = prof["hour"]
     st.session_state["profile_minute"] = prof["minute"]
     st.session_state["profile_city"] = prof["city"]
-    
+
     # Update widget keys to match
     st.session_state["year"] = prof["year"]
     st.session_state["month_name"] = MONTH_NAMES[prof["month"] - 1]
     st.session_state["day"] = prof["day"]
-    
+
     # Convert 24h to 12h for widget keys
     hour_24 = prof["hour"]
     if hour_24 == 0:
@@ -506,9 +534,9 @@ if "_loaded_profile" in st.session_state:
     else:
         st.session_state["hour_12"] = hour_24
         st.session_state["ampm"] = "AM"
-    
+
     st.session_state["minute_str"] = f"{prof['minute']:02d}"
-    
+
     # Cleanup
     del st.session_state["_loaded_profile"]
 
@@ -519,6 +547,7 @@ if "active_profile_tab" not in st.session_state:
 # Outer layout: 3 columns
 # -------------------------
 col_left, col_mid, col_right = st.columns([2, 2, 2])
+
 
 def run_chart(lat, lon, tz_name, house_system):
     reset_chart_state()
@@ -535,7 +564,7 @@ def run_chart(lat, lon, tz_name, house_system):
             0.0, lat, lon,
             input_is_ut=False,
             tz_name=tz_name,
-            house_system=house_system, 
+            house_system=house_system,
         )
 
         df["abs_deg"] = df["Longitude"].astype(float)
@@ -544,7 +573,8 @@ def run_chart(lat, lon, tz_name, house_system):
         pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
         major_edges_all, patterns = get_major_edges_and_patterns(pos)
         shapes = get_shapes(pos, patterns, major_edges_all)
-        filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
+        filaments, singleton_map = detect_minor_links_with_singletons(
+            pos, patterns)
         combos = generate_combo_groups(filaments)
 
         st.session_state.chart_ready = True
@@ -560,6 +590,7 @@ def run_chart(lat, lon, tz_name, house_system):
     except Exception as e:
         st.error(f"Chart calculation failed: {e}")
         st.session_state.chart_ready = False
+
 
 # -------------------------
 # Left column: Birth Data
@@ -676,7 +707,6 @@ with col_mid:
                 st.session_state["profile_hour"] = now.hour
                 st.session_state["profile_minute"] = now.minute
                 st.session_state["profile_city"] = city_name
-                
 
                 try:
                     df = calculate_chart(
@@ -690,10 +720,13 @@ with col_mid:
                     df["abs_deg"] = df["Longitude"].astype(float)
                     df = annotate_fixed_stars(df)
                     df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
-                    pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
-                    major_edges_all, patterns = get_major_edges_and_patterns(pos)
+                    pos = dict(
+                        zip(df_filtered["Object"], df_filtered["abs_deg"]))
+                    major_edges_all, patterns = get_major_edges_and_patterns(
+                        pos)
                     shapes = get_shapes(pos, patterns, major_edges_all)
-                    filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
+                    filaments, singleton_map = detect_minor_links_with_singletons(
+                        pos, patterns)
                     combos = generate_combo_groups(filaments)
 
                     st.session_state.chart_ready = True
@@ -721,12 +754,14 @@ with col_mid:
         # Location info BELOW buttons
         location_info = st.container()
         if st.session_state.get("last_location"):
-            location_info.success(f"Found: {st.session_state['last_location']}")
+            location_info.success(
+                f"Found: {st.session_state['last_location']}")
             if st.session_state.get("last_timezone"):
-                location_info.write(f"Timezone: {st.session_state['last_timezone']}")
+                location_info.write(
+                    f"Timezone: {st.session_state['last_timezone']}")
         elif st.session_state.get("last_timezone"):
             location_info.error(st.session_state["last_timezone"])
-        
+
         # user calculated a new chart manually
         st.session_state["active_profile_tab"] = "Add / Update Profile"
 
@@ -734,7 +769,8 @@ with col_mid:
 # Right column: Profile Manager
 # -------------------------
 with col_right:
-    import json, os
+    import json
+    import os
     DATA_FILE = "saved_birth_data.json"
 
     if os.path.exists(DATA_FILE):
@@ -765,7 +801,8 @@ with col_right:
     st.session_state["active_profile_tab"] = active_tab  # keep synced
 
     if active_tab == "Add / Update Profile":
-        profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
+        profile_name = st.text_input(
+            "Profile Name (unique)", value="", key="profile_name_input")
         if st.button("💾 Save / Update Profile"):
             if profile_name.strip() == "":
                 st.error("Please enter a name for the profile.")
@@ -831,13 +868,15 @@ with col_right:
                             st.session_state["city_input"] = data["city"]
 
                             st.session_state["last_location"] = data["city"]
-                            st.session_state["last_timezone"] = data.get("tz_name")
+                            st.session_state["last_timezone"] = data.get(
+                                "tz_name")
 
                             # Restore circuit names
                             if "circuit_names" in data:
                                 for key, val in data["circuit_names"].items():
                                     st.session_state[key] = val
-                                st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
+                                st.session_state["saved_circuit_names"] = data["circuit_names"].copy(
+                                )
                             else:
                                 st.session_state["saved_circuit_names"] = {}
 
@@ -848,7 +887,8 @@ with col_right:
                                 data["tz_name"],
                                 "Equal"
                             )
-                            st.success(f"Profile '{name}' loaded and chart calculated!")
+                            st.success(
+                                f"Profile '{name}' loaded and chart calculated!")
                             st.rerun()
         else:
             st.info("No saved profiles yet.")
@@ -856,7 +896,8 @@ with col_right:
     # --- Delete ---
     elif active_tab == "Delete Profile":
         if saved_profiles:
-            delete_choice = st.selectbox("Select a profile to delete", list(saved_profiles.keys()), key="profile_delete")
+            delete_choice = st.selectbox("Select a profile to delete", list(
+                saved_profiles.keys()), key="profile_delete")
             if st.button("🗑️ Delete Selected Profile"):
                 del saved_profiles[delete_choice]
                 with open(DATA_FILE, "w") as f:
@@ -954,8 +995,10 @@ if st.session_state.get("chart_ready", False):
                             saved_profiles[profile_name]["circuit_names"] = current
                             with open(DATA_FILE, "w") as f:
                                 json.dump(saved_profiles, f, indent=2)
-                            st.session_state["saved_circuit_names"] = current.copy()
-                            st.success(f"Circuit names auto-saved for profile '{profile_name}'!")
+                            st.session_state["saved_circuit_names"] = current.copy(
+                            )
+                            st.success(
+                                f"Circuit names auto-saved for profile '{profile_name}'!")
 
                     # Sub-shapes
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
@@ -1009,7 +1052,8 @@ if st.session_state.get("chart_ready", False):
                 with cols[j % cols_per_row]:
                     key = f"singleton_{planet}"
                     if key not in st.session_state:
-                        on = st.checkbox(GLYPHS.get(planet, planet), value=False, key=key)
+                        on = st.checkbox(GLYPHS.get(
+                            planet, planet), value=False, key=key)
                     else:
                         on = st.checkbox(GLYPHS.get(planet, planet), key=key)
 
@@ -1036,7 +1080,7 @@ if st.session_state.get("chart_ready", False):
 
         # Normalize into a separate variable
         house_system = choice.lower().replace(" sign", "")
-    
+
     with right_col:
         # Choose how to show planet labels
         label_style = st.radio(
@@ -1045,20 +1089,23 @@ if st.session_state.get("chart_ready", False):
             index=1,
             horizontal=True
         )
-        
+
         dark_mode = st.checkbox("🌙 Dark Mode", value=False)
 
-    shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
+    shape_toggles_by_parent = st.session_state.get(
+        "shape_toggles_by_parent", {})
     if not singleton_toggles:
-        singleton_toggles = {p: st.session_state.get(f"singleton_{p}", False) for p in singleton_map}
+        singleton_toggles = {p: st.session_state.get(
+            f"singleton_{p}", False) for p in singleton_map}
 
     # --- Render the chart ---
     fig, visible_objects, active_shapes, cusps = render_chart_with_shapes(
         pos, patterns, pattern_labels=[],
-        toggles=[st.session_state.get(f"toggle_pattern_{i}", False) for i in range(len(patterns))],
+        toggles=[st.session_state.get(
+            f"toggle_pattern_{i}", False) for i in range(len(patterns))],
         filaments=filaments, combo_toggles=combos,
         label_style=label_style, singleton_map=singleton_map, df=df,
-        house_system=house_system, 
+        house_system=house_system,
         dark_mode=dark_mode,
         shapes=shapes, shape_toggles_by_parent=shape_toggles_by_parent,
         singleton_toggles=singleton_toggles, major_edges_all=major_edges_all
@@ -1066,7 +1113,6 @@ if st.session_state.get("chart_ready", False):
 
     st.pyplot(fig, use_container_width=False)
 
-    
     # --- Sidebar planet profiles ---
     st.sidebar.subheader("🪐 Planet Profiles in View")
 
@@ -1121,7 +1167,8 @@ if st.session_state.get("chart_ready", False):
 
         # --- Conjunction clusters using the SAME logic as patterns.py (no re-implementation) ---
         # Feed it the current positions and exactly the set of objects that are currently visible.
-        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
+        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(
+            pos, list(visible_objects))
 
         # rep_map is {representative: [cluster_members...]}
         _conj_clusters = list(rep_map.values())
@@ -1134,6 +1181,7 @@ if st.session_state.get("chart_ready", False):
         #            ", ".join("{" + ", ".join(c) + "}" for c in _conj_clusters))
 
         import re
+
         def strip_html_tags(text):
             # Replace divs and <br> with spaces
             text = re.sub(r'</div>|<br\s*/?>', ' ', text)
@@ -1216,7 +1264,8 @@ if st.session_state.get("chart_ready", False):
                     interpretation_notes.append(f"- {star}: {meaning}")
 
             # Collapse into single block for prompt
-            interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
+            interpretation_notes_block = "\n".join(
+                interpretation_notes) if interpretation_notes else ""
 
             # --- Final prompt assembly ---
             import textwrap
@@ -1234,7 +1283,8 @@ if st.session_state.get("chart_ready", False):
                 planet_profiles_block.strip() if planet_profiles_block else "",
                 interpretation_notes_block.strip() if interpretation_notes_block else "",
                 "\n\n".join(aspect_blocks).strip() if aspect_blocks else "",
-                "\n\n".join(sorted(aspect_definitions)).strip() if aspect_definitions else "",
+                "\n\n".join(sorted(aspect_definitions)
+                            ).strip() if aspect_definitions else "",
             ]
 
             # filter out empties and join with two line breaks
@@ -1264,4 +1314,5 @@ if st.session_state.get("chart_ready", False):
 
             components.html(copy_button, height=700, scrolling=True)
         else:
-            st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+            st.markdown(
+                "_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
