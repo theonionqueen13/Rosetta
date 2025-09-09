@@ -1675,7 +1675,7 @@ if st.session_state.get("chart_ready", False):
     with left_col:
         st.subheader("Circuits")
         st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
-                   "Expand circuits for sub-shapes. View planet profiles on the left sidebar (» on mobile) "
+                   "Expand circuits for sub-shapes. View planet profiles on the left sidebar (» on mobile). "
                    "Below the chart, copy the prompt into your GPT for an aspect interpretation.")
 
         # Pattern checkboxes + expanders
@@ -2069,7 +2069,7 @@ if st.session_state.get("chart_ready", False):
 
     # --- Aspect Interpretation Prompt ---
     with st.expander("Aspect Interpretation Prompt"):
-        st.caption("Paste this prompt into an LLM (like ChatGPT). Start with one subshape at a time, then add connections as you learn them.")
+        st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
 
         aspect_blocks = []
         aspect_definitions = set()
