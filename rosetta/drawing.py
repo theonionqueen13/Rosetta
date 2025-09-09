@@ -7,51 +7,100 @@ from rosetta.lookup import ASPECTS, GLYPHS
 # -------------------------------
 # Chart element drawing
 # -------------------------------
-def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
-    """Draw house cusp lines for Placidus, Equal, or Whole Sign houses.
-    Returns a list of 12 cusp longitudes (House 1..12) exactly as used for drawing.
+def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode,
+                     label_r=0.18, label_frac=0.50,  # ← knobs: radius & where along the house arc (0..1)
+                     ):
+    """
+    Draw house cusp lines and numbers. Numbers are placed inside each house,
+    at 'label_frac' of the forward arc from cusp i to cusp i+1 (0=at cusp, 0.5=midpoint).
+    Returns a list of 12 cusp longitudes (House 1..12) in drawing order.
     """
     import pandas as pd
+
+    def _forward_span(a, b):
+        return (b - a) % 360.0
+
+    def _forward_pos(a, b, frac):
+        return (a + _forward_span(a, b) * frac) % 360.0
+
     cusps = []
 
+# --- build cusp list only ---
     if house_system == "placidus":
-        # Placidus cusps come from Swiss Ephemeris, stored in df
-        cusp_rows = df[df["Object"].str.match(r"^\d{1,2}H Cusp$", na=False)].copy()
+        # 1) find the degree column robustly
+        lower_cols = {c.lower().strip(): c for c in df.columns}
+        deg_col = None
+        for c in df.columns:
+            nm = c.lower().strip()
+            if "degree" in nm and ("computed" in nm or "abs" in nm or "absolute" in nm):
+                deg_col = c
+                break
+        if deg_col is None:
+            # last resort: accept a plain "longitude" for cusps if present
+            if "longitude" in lower_cols:
+                deg_col = lower_cols["longitude"]
+
+        # 2) capture all rows that look like house cusps, regardless of exact naming
+        #    (tolerates '1H Cusp', '1 H Cusp', 'House 1 Cusp', etc.)
+        obj = df["Object"].astype("string")
+        mask_cusp = obj.str.contains(r"\b(house\s*\d{1,2}|\d{1,2}\s*h)\s*cusp\b", case=False, regex=True, na=False)
+        # also tolerate the exact legacy '1H Cusp' form:
+        mask_cusp |= obj.str.match(r"^\s*\d{1,2}\s*H\s*Cusp\s*$", case=False, na=False)
+
+        cusp_rows = df[mask_cusp].copy()
+
+        # 3) if the calc tagged house system on cusp rows, filter to placidus
+        if "House System" in cusp_rows.columns and cusp_rows["House System"].notna().any():
+            hs = cusp_rows["House System"].astype("string").str.strip().str.lower()
+            cusp_rows = cusp_rows[hs == "placidus"]
+
+        # 4) extract the house index robustly (first 1–2 digits anywhere in the label)
         if not cusp_rows.empty:
-            cusp_rows["__H"] = cusp_rows["Object"].str.extract(r"^(\d{1,2})").astype(int)
+            cusp_rows["__H"] = cusp_rows["Object"].astype("string").str.extract(r"(\d{1,2})").astype(int)
             cusp_rows = cusp_rows.sort_values("__H")
-            for i, (_, row) in enumerate(cusp_rows.iterrows(), start=1):
-                if pd.notna(row.get("Computed Absolute Degree")):
-                    deg = float(row["Computed Absolute Degree"])
-                    cusps.append(deg)
-                    rad = deg_to_rad(deg, asc_deg)
-                    ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-                    ax.text(rad, 0.2, str(i),
-                            ha="center", va="center", fontsize=8,
-                            color="white" if dark_mode else "black")
+
+        # 5) build the list of 12 degrees
+        cusps = []
+        for _, row in cusp_rows.iterrows():
+            val = row.get(deg_col)
+            if pd.notna(val):
+                try:
+                    cusps.append(float(val))
+                except Exception:
+                    pass
 
     elif house_system == "equal":
-        # Equal = 30° increments starting at Ascendant degree
-        for i in range(12):
-            deg = (asc_deg + i * 30.0) % 360.0
-            cusps.append(deg)
-            rad = deg_to_rad(deg, asc_deg)
-            ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-            ax.text(rad, 0.2, str(i + 1),
-                    ha="center", va="center", fontsize=8,
-                    color="white" if dark_mode else "black")
-
+        start = asc_deg % 360.0
+        cusps = [ (start + i*30.0) % 360.0 for i in range(12) ]
     elif house_system == "whole":
-        # Whole Sign = 0° of Ascendant’s sign + 30° increments
         asc_sign_start = int(asc_deg // 30) * 30.0
-        for i in range(12):
-            deg = (asc_sign_start + i * 30.0) % 360.0
-            cusps.append(deg)
-            rad = deg_to_rad(deg, asc_deg)
-            ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-            ax.text(rad, 0.2, str(i + 1),
-                    ha="center", va="center", fontsize=8,
-                    color="white" if dark_mode else "black")
+        cusps = [ (asc_sign_start + i*30.0) % 360.0 for i in range(12) ]
+    else:
+        # fallback: behave like equal
+        start = asc_deg % 360.0
+        cusps = [ (start + i*30.0) % 360.0 for i in range(12) ]
+
+    # If Placidus rows were missing for some reason, guard:
+    if len(cusps) != 12:
+        # fill evenly to avoid crashes
+        start = asc_deg % 360.0
+        cusps = [ (start + i*30.0) % 360.0 for i in range(12) ]
+
+    # --- draw cusp lines ---
+    line_color = "gray"
+    for deg in cusps:
+        rad = deg_to_rad(deg, asc_deg)
+        ax.plot([rad, rad], [0, 1.0], color=line_color, linestyle="solid", linewidth=1)
+
+    # --- place labels INSIDE each house (away from the line) ---
+    lbl_color = "white" if dark_mode else "black"
+    for i in range(12):
+        a = cusps[i]
+        b = cusps[(i + 1) % 12]
+        label_deg = _forward_pos(a, b, label_frac)     # e.g., midpoint if 0.50
+        label_rad = deg_to_rad(label_deg, asc_deg)
+        ax.text(label_rad, label_r, str(i + 1),
+                ha="center", va="center", fontsize=8, color=lbl_color)
 
     return cusps
 

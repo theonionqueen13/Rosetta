@@ -3,14 +3,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit.components.v1 as components
-import datetime
 import swisseph as swe
 import re
+import os, sqlite3, json, bcrypt
+import streamlit_authenticator as stauth
+import datetime as dt
 
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
-    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_SYSTEM_INTERPRETATIONS
+    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, HOUSE_SYSTEM_INTERPRETATIONS
 )
 from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
 from rosetta.drawing import (
@@ -23,10 +25,293 @@ from rosetta.patterns import (
     detect_shapes, internal_minor_edges_for_pattern,
     connected_components_from_edges, _cluster_conjunctions_for_detection, 
 )
+            
+# -------------------------
+# Init / session management
+# -------------------------
+if "reset_done" not in st.session_state:
+    st.session_state.clear()
+    st.session_state["reset_done"] = True
+
+if "last_house_system" not in st.session_state:
+    st.session_state["last_house_system"] = "equal"
+
+st.set_page_config(layout="wide")
+st.markdown(
+    """
+    <style>
+    /* tighten planet profile line spacing */
+    .planet-profile div {
+        line-height: 1.1;   /* normal single-space */
+        margin-bottom: 2px; /* tiny gap only */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+# ---- DB bootstrap & helpers (put this ONCE, above auth) ----
+BASE_DIR = os.path.dirname(__file__)
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "profiles.db")
+
+def _db():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+
+    # users table (with role)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            name     TEXT NOT NULL,
+            email    TEXT NOT NULL,
+            pw_hash  TEXT NOT NULL,
+            role     TEXT NOT NULL DEFAULT 'user'
+        )
+    """)
+
+    # migrate 'role' if missing (for older DBs)
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(users)")]
+    if "role" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+        conn.commit()
+
+    # private, per-user profiles
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS profiles (
+            user_id      TEXT NOT NULL,
+            profile_name TEXT NOT NULL,
+            payload      TEXT NOT NULL,
+            PRIMARY KEY (user_id, profile_name),
+            FOREIGN KEY (user_id) REFERENCES users(username)
+        )
+    """)
+
+    # community profiles table (opt-in, shared)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS community_profiles (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_name TEXT NOT NULL,
+            payload      TEXT NOT NULL,
+            submitted_by TEXT NOT NULL,
+            created_at   TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
+        )
+    """)
+
+    return conn
+
+def _credentials_from_db():
+    conn = _db()
+    rows = conn.execute("SELECT username, name, email, pw_hash FROM users").fetchall()
+    return {"usernames": {u: {"name": n, "email": e, "password": h} for (u, n, e, h) in rows}}
+
+def user_exists(username: str) -> bool:
+    conn = _db()
+    return conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is not None
+
+def create_user(username: str, name: str, email: str, plain_password: str, role: str = "user") -> None:
+    conn = _db()
+    pw_hash = bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    conn.execute(
+        "INSERT OR REPLACE INTO users (username, name, email, pw_hash, role) VALUES (?, ?, ?, ?, ?)",
+        (username, name, email, pw_hash, role)
+    )
+    conn.commit()
+
+def get_user_role(username: str) -> str:
+    conn = _db()
+    row = conn.execute("SELECT role FROM users WHERE username = ?", (username,)).fetchone()
+    return row[0] if row else "user"
+
+def is_admin(username: str) -> bool:
+    return get_user_role(username) == "admin"
+
+def verify_password(username: str, candidate_password: str) -> bool:
+    conn = _db()
+    row = conn.execute("SELECT pw_hash FROM users WHERE username = ?", (username,)).fetchone()
+    if not row:
+        return False
+    return bcrypt.checkpw(candidate_password.encode("utf-8"), row[0].encode() if isinstance(row[0], str) else row[0])
+
+def set_password(username: str, new_plain_password: str) -> None:
+    conn = _db()
+    pw_hash = bcrypt.hashpw(new_plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    conn.execute("UPDATE users SET pw_hash = ? WHERE username = ?", (pw_hash, username))
+    conn.commit()
+
+def load_user_profiles_db(user_id: str) -> dict:
+    conn = _db()
+    rows = conn.execute("SELECT profile_name, payload FROM profiles WHERE user_id = ?", (user_id,)).fetchall()
+    return {name: json.loads(payload) for (name, payload) in rows}
+
+def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None:
+    conn = _db()
+    conn.execute(
+        "INSERT OR REPLACE INTO profiles (user_id, profile_name, payload) VALUES (?, ?, ?)",
+        (user_id, profile_name, json.dumps(payload))
+    )
+    conn.commit()
+
+def delete_user_profile_db(user_id: str, profile_name: str) -> None:
+    conn = _db()
+    conn.execute("DELETE FROM profiles WHERE user_id = ? AND profile_name = ?", (user_id, profile_name))
+    conn.commit()
+
+# --- Community helpers ---
+def community_list(limit: int = 200) -> list[dict]:
+    conn = _db()
+    rows = conn.execute(
+        "SELECT id, profile_name, payload, submitted_by, created_at, updated_at "
+        "FROM community_profiles ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    out = []
+    for id_, name, payload, by, c_at, u_at in rows:
+        out.append({
+            "id": id_,
+            "profile_name": name,
+            "payload": json.loads(payload),
+            "submitted_by": by,
+            "created_at": c_at,
+            "updated_at": u_at,
+        })
+    return out
+
+def community_get(pid: int) -> dict | None:
+    conn = _db()
+    row = conn.execute(
+        "SELECT id, profile_name, payload, submitted_by, created_at, updated_at "
+        "FROM community_profiles WHERE id = ?", (pid,)
+    ).fetchone()
+    if not row:
+        return None
+    id_, name, payload, by, c_at, u_at = row
+    return {
+        "id": id_,
+        "profile_name": name,
+        "payload": json.loads(payload),
+        "submitted_by": by,
+        "created_at": c_at,
+        "updated_at": u_at,
+    }
+
+def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
+    conn = _db()
+    ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    cur = conn.execute(
+        "INSERT INTO community_profiles (profile_name, payload, submitted_by, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (profile_name, json.dumps(payload), submitted_by, ts, ts)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+def community_delete(pid: int) -> None:
+    conn = _db()
+    conn.execute("DELETE FROM community_profiles WHERE id = ?", (pid,))
+    conn.commit()
+
+# --- Authentication (admin-gated user management; no public registration) ---
+creds = _credentials_from_db()
+auth_cfg = st.secrets.get("auth", {})
+cookie_name  = auth_cfg.get("cookie_name", "rosetta_auth")
+cookie_key   = auth_cfg.get("cookie_key", "change_me")
+cookie_days  = int(auth_cfg.get("cookie_expiry_days", 30))
+
+authenticator = stauth.Authenticate(
+    credentials=creds,
+    cookie_name=cookie_name,
+    key=cookie_key,
+    cookie_expiry_days=cookie_days
+)
+
+# Version-agnostic login shim
+try:
+    out = authenticator.login(location="sidebar", form_name="Login")
+except TypeError:
+    try:
+        out = authenticator.login("sidebar", "Login")
+    except TypeError:
+        out = authenticator.login("sidebar", fields={"Form name": "Login"})
+
+if isinstance(out, tuple) and len(out) == 3:
+    name, auth_status, username = out
+else:
+    name = st.session_state.get("name")
+    auth_status = st.session_state.get("authentication_status")
+    username = st.session_state.get("username")
+
+if auth_status is True:
+    current_user_id = username
+    admin_flag = is_admin(current_user_id)  # <- role check
+
+    with st.sidebar:
+        st.caption(f"Logged in as **{name}** ({username}) — role: **{get_user_role(current_user_id)}**")
+        authenticator.logout("Logout", location="sidebar")
+
+        # Self-serve: Change Password (available to everyone)
+        with st.expander("Change Password"):
+            cur = st.text_input("Current password", type="password")
+            new1 = st.text_input("New password", type="password")
+            new2 = st.text_input("Repeat new password", type="password")
+            if st.button("Update password"):
+                if not (cur and new1 and new2):
+                    st.error("All fields are required.")
+                elif new1 != new2:
+                    st.error("New passwords must match.")
+                elif not verify_password(current_user_id, cur):
+                    st.error("Current password is incorrect.")
+                else:
+                    set_password(current_user_id, new1)
+                    st.success("Password updated.")
+
+        # Admin-only: user management (create users / reset passwords)
+        if admin_flag:
+            with st.expander("Admin: User Management"):
+                st.markdown("**Create user**")
+                u = st.text_input("Username", key="admin_new_user")
+                full = st.text_input("Full name", key="admin_new_name")
+                em = st.text_input("Email", key="admin_new_email")
+                role = st.selectbox("Role", ["user", "admin"], index=0, key="admin_new_role")
+                temp = st.text_input("Temp password", type="password", key="admin_new_pw")
+                if st.button("Create user", key="admin_create_user"):
+                    if not (u and full and em and temp):
+                        st.error("All fields are required.")
+                    elif user_exists(u):
+                        st.error("Username already exists.")
+                    else:
+                        create_user(u, full, em, temp, role=role)
+                        st.success(f"User '{u}' created with role '{role}'.")
+
+                st.markdown("---")
+                st.markdown("**Reset a user's password**")
+                target = st.text_input("Username to reset", key="admin_reset_user")
+                npw1 = st.text_input("New password", type="password", key="admin_reset_pw1")
+                npw2 = st.text_input("Repeat new password", type="password", key="admin_reset_pw2")
+                if st.button("Reset password", key="admin_reset_pw_btn"):
+                    if not (target and npw1 and npw2):
+                        st.error("All fields are required.")
+                    elif npw1 != npw2:
+                        st.error("Passwords must match.")
+                    elif not user_exists(target):
+                        st.error("No such username.")
+                    else:
+                        set_password(target, npw1)
+                        st.success(f"Password reset for '{target}'.")
+
+elif auth_status is False:
+    st.error("Incorrect username or password.")
+    st.stop()
+else:
+    st.info("Please log in to continue.")
+    st.stop()
 
 # -------------------------
 # Chart Drawing Functions
 # -------------------------
+def _selected_house_system():
+    s = st.session_state.get("house_system_main", "Equal")
+    return s.lower().replace(" sign", "")
+
 def _in_forward_arc(start_deg, end_deg, x_deg):
     """True if x lies on the forward arc from start->end (mod 360)."""
     span = (end_deg - start_deg) % 360.0
@@ -88,29 +373,18 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
 
 def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg,
                       group_colors=None, edges=None):
-    """Draw major aspect lines for active patterns."""
     single_pattern_mode = len(active_patterns) == 1
-    for idx, pattern in enumerate(patterns):
-        if idx not in active_patterns:
-            continue
-        keys = list(pattern)
-        for i1 in range(len(keys)):
-            for i2 in range(i1+1, len(keys)):
-                p1, p2 = keys[i1], keys[i2]
-                angle = abs(pos[p1] - pos[p2])
-                if angle > 180:
-                    angle = 360 - angle
-                for asp in ("Conjunction","Sextile","Square","Trine","Opposition"):
-                    asp_data = ASPECTS[asp]
-                    if abs(asp_data["angle"] - angle) <= asp_data["orb"]:
-                        r1 = deg_to_rad(pos[p1], asc_deg)
-                        r2 = deg_to_rad(pos[p2], asc_deg)
-                        line_color = (asp_data["color"] if single_pattern_mode
-                                      else GROUP_COLORS[idx % len(GROUP_COLORS)])
-                        ax.plot([r1, r2], [1, 1],
-                                linestyle=asp_data["style"],
-                                color=line_color, linewidth=2)
-                        break
+    if edges:
+        # only draw edges where both nodes sit inside one active pattern
+        active_sets = [set(patterns[i]) for i in active_patterns]
+        for (p1, p2), asp in edges:
+            if any((p1 in s and p2 in s) for s in active_sets):
+                r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
+                color = (ASPECTS[asp]["color"] if single_pattern_mode
+                         else GROUP_COLORS[list(active_patterns)[0] % len(GROUP_COLORS)])
+                ax.plot([r1, r2], [1, 1], linestyle=ASPECTS[asp]["style"], color=color, linewidth=2)
+        return
+    # fallback: current recompute path ...
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
     """Draw dotted lines for minor aspects between active patterns."""
@@ -135,27 +409,6 @@ def reset_chart_state():
             del st.session_state[key]
     if "shape_toggles_by_parent" in st.session_state:
         del st.session_state["shape_toggles_by_parent"]
-            
-# -------------------------
-# Init / session management
-# -------------------------
-if "reset_done" not in st.session_state:
-    st.session_state.clear()
-    st.session_state["reset_done"] = True
-
-st.set_page_config(layout="wide")
-st.markdown(
-    """
-    <style>
-    /* tighten planet profile line spacing */
-    .planet-profile div {
-        line-height: 1.1;   /* normal single-space */
-        margin-bottom: 2px; /* tiny gap only */
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 st.title("🧭 Rosetta Flight Deck")
 
@@ -225,7 +478,7 @@ SUBSHAPE_COLORS = [
     "#4B2C06", "#534546", "#C4A5A5", "#5F7066",
 ]
 
-from rosetta.lookup import GLYPHS
+_HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 
 def format_planet_profile(row):
     """Styled planet profile with glyphs, line breaks, and conditional extras."""
@@ -295,6 +548,106 @@ def format_planet_profile(row):
 
     # Force single spacing with line-height here
     return "<div style='line-height:1.1; margin-bottom:6px;'>" + "".join(html_parts) + "</div>"
+from matplotlib.patches import FancyBboxPatch
+
+def _current_chart_header_lines():
+    name = (
+        st.session_state.get("current_profile_title")
+        or st.session_state.get("current_profile")
+        or "Untitled Chart"
+    )
+    if isinstance(name, str) and name.startswith("community:"):
+        name = "Community Chart"
+
+    month  = st.session_state.get("profile_month_name", "")
+    day    = st.session_state.get("profile_day", "")
+    year   = st.session_state.get("profile_year", "")
+    hour   = st.session_state.get("profile_hour")
+    minute = st.session_state.get("profile_minute")
+    city   = st.session_state.get("profile_city", "")
+
+    # 12-hour time
+    time_str = ""
+    if hour is not None and minute is not None:
+        h = int(hour); m = int(minute)
+        ampm = "AM" if h < 12 else "PM"
+        h12  = 12 if (h % 12 == 0) else (h % 12)
+        time_str = f"{h12}:{m:02d} {ampm}"
+
+    date_line = f"{month} {day}, {year}".strip()
+    if date_line and time_str:
+        date_line = f"{date_line}, {time_str}"
+    elif time_str:
+        date_line = time_str
+
+    return name, date_line, city
+import matplotlib.patheffects as pe
+
+import matplotlib.patheffects as pe
+
+def _draw_header_on_figure(fig, name, date_line, city, dark_mode):
+    """Paint a 3-line header in the figure margin (top-left), never over the wheel."""
+    color  = "white" if dark_mode else "black"
+    stroke = "black" if dark_mode else "white"
+    effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+
+    y0 = 0.99   # top margin in figure coords
+    x0 = 0.00   # left margin
+
+    fig.text(x0, y0, name, ha="left", va="top",
+             fontsize=12, fontweight="bold", color=color, path_effects=effects)
+    if date_line:
+        fig.text(x0, y0 - 0.035, date_line, ha="left", va="top",
+                 fontsize=9, color=color, path_effects=effects)
+    if city:
+        fig.text(x0, y0 - 0.065, city, ha="left", va="top",
+                 fontsize=9, color=color, path_effects=effects)
+
+def _draw_header_on_ax(ax, name, date_line, city, dark_mode, loc="upper left"):
+    """
+    Write a compact 3-line header near the top of the chart without covering the wheel.
+    Uses a subtle stroke outline for readability instead of a background panel.
+    loc: 'upper left' | 'top center' | 'upper right'
+    """
+    fg      = "white" if dark_mode else "black"
+    stroke  = "black" if dark_mode else "white"
+    effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+
+    # anchor & alignment
+    if loc == "upper right":
+        x, ha = 0.98, "right"
+    elif loc == "top center":
+        x, ha = 0.50, "center"
+    else:
+        x, ha = 0.02, "left"     # upper left (default)
+
+    # y just inside the axes so it doesn't sit on the frame
+    y0 = 0.995
+    line_h = 0.048   # vertical spacing between lines
+
+    # Name (bold)
+    ax.text(
+        x, y0, name,
+        transform=ax.transAxes, ha=ha, va="top",
+        fontsize=11, fontweight="bold", color=fg,
+        path_effects=effects, clip_on=False, zorder=10,
+    )
+    # Date/time
+    if date_line:
+        ax.text(
+            x, y0 - line_h, date_line,
+            transform=ax.transAxes, ha=ha, va="top",
+            fontsize=9, color=fg,
+            path_effects=effects, clip_on=False, zorder=10,
+        )
+    # City
+    if city:
+        ax.text(
+            x, y0 - 2*line_h, city,
+            transform=ax.transAxes, ha=ha, va="top",
+            fontsize=9, color=fg,
+            path_effects=effects, clip_on=False, zorder=10,
+        )
 
 # --- CHART RENDERER (full)
 def render_chart_with_shapes(
@@ -313,6 +666,41 @@ def render_chart_with_shapes(
     ax.set_theta_direction(-1)
     ax.set_rlim(0, 1.25)
     ax.axis("off")
+
+    # carve a little headroom for the figure-level header
+    fig.subplots_adjust(top=0.86)  # tweak 0.82–0.90 to taste
+
+    # Header above the wheel (figure-level, so it won't overlap the plot)
+    name, date_line, city = _current_chart_header_lines()
+    _draw_header_on_figure(fig, name, date_line, city, dark_mode)
+
+    # --- auto-heal: ensure DF cusps match the selected house system ---
+    def _df_house_system(df):
+        obj = df["Object"].astype("string")
+        mask = obj.str.contains(r"\b(house\s*\d{1,2}|\d{1,2}\s*h)\s*cusp\b", case=False, regex=True, na=False)
+        mask |= obj.str.match(r"^\s*\d{1,2}\s*H\s*Cusp\s*$", case=False, na=False)
+        c = df[mask].copy()
+        if c.empty:
+            return None  # no cusp rows at all
+        if "House System" in c.columns and c["House System"].notna().any():
+            return c["House System"].astype("string").str.strip().str.lower().mode().iat[0]
+        # if not tagged, assume whatever was last selected
+        return st.session_state.get("last_house_system")
+
+    # 1) see what system is actually in the DF (if any)
+    _df_sys = _df_house_system(df)
+
+    # 2) if mismatch or missing cusps, recompute once with the selected system
+    if (_df_sys != house_system) or (_df_sys is None):
+        lat0 = st.session_state.get("calc_lat")
+        lon0 = st.session_state.get("calc_lon")
+        tz0  = st.session_state.get("calc_tz")
+        if None not in (lat0, lon0, tz0):
+            run_chart(lat0, lon0, tz0, house_system)
+            df = st.session_state.df  # use the freshly computed DF
+            st.session_state["last_house_system"] = house_system
+        else:
+            st.warning("No cached location for recompute; enter a city or load a profile, then toggle again.")
 
     # Base wheel
     cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
@@ -417,7 +805,6 @@ def render_chart_with_shapes(
 
     return fig, visible_objects, active_shapes, cusps
 
-from datetime import datetime
 from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
 import pytz
@@ -427,6 +814,85 @@ MONTH_NAMES = [
     "July", "August", "September", "October", "November", "December"
 ]
 
+def _coerce_int(v, default=None):
+    try:
+        if v is None: return default
+        return int(v)
+    except Exception:
+        return default
+
+def _month_to_index(m):
+    # Accept int 1-12, or month name like "July"
+    if m is None: return None
+    if isinstance(m, int): 
+        return m if 1 <= m <= 12 else None
+    s = str(m).strip()
+    # maybe it's a number string
+    if s.isdigit():
+        iv = int(s)
+        return iv if 1 <= iv <= 12 else None
+    # try name
+    try:
+        return MONTH_NAMES.index(s) + 1
+    except ValueError:
+        return None
+
+def normalize_profile(prof: dict) -> dict:
+    """
+    Accepts any of:
+      - {'year', 'month', 'day', 'hour', 'minute', 'city', 'lat','lon','tz_name','circuit_names'?}
+      - {'payload': { ...same as above... }}
+      - legacy keys like 'profile_year', 'profile_month_name', etc.
+    Returns a dict with canonical keys as above. Missing values fall back to current session defaults.
+    """
+    # unwrap payload
+    if isinstance(prof, dict) and "payload" in prof and isinstance(prof["payload"], dict):
+        prof = prof["payload"]
+
+    # Gather possible sources
+    year   = prof.get("year",   prof.get("profile_year"))
+    month  = prof.get("month",  prof.get("profile_month", prof.get("month_name", prof.get("profile_month_name"))))
+    day    = prof.get("day",    prof.get("profile_day"))
+    hour   = prof.get("hour",   prof.get("profile_hour"))
+    minute = prof.get("minute", prof.get("profile_minute"))
+    city   = prof.get("city",   prof.get("profile_city"))
+
+    # Fallbacks from session (so we don't explode)
+    year   = _coerce_int(year,   st.session_state.get("profile_year", 1990))
+    day    = _coerce_int(day,    st.session_state.get("profile_day", 1))
+    hour   = _coerce_int(hour,   st.session_state.get("profile_hour", 0))
+    minute = _coerce_int(minute, st.session_state.get("profile_minute", 0))
+    if not city:
+        city = st.session_state.get("profile_city", "")
+
+    # Month can be int or name
+    m_idx = _month_to_index(month)
+    if m_idx is None:
+        # try session default
+        m_idx = _month_to_index(st.session_state.get("profile_month_name", "July"))
+        if m_idx is None:
+            m_idx = 7  # July as a last resort
+
+    lat    = prof.get("lat")
+    lon    = prof.get("lon")
+    tzname = prof.get("tz_name")
+
+    # Optional circuit names
+    circuit_names = prof.get("circuit_names", {})
+
+    return {
+        "year": year,
+        "month": m_idx,                 # 1..12
+        "day": day,
+        "hour": hour,                   # 0..23
+        "minute": minute,               # 0..59
+        "city": city,
+        "lat": lat,
+        "lon": lon,
+        "tz_name": tzname,
+        "circuit_names": circuit_names,
+    }
+
 # -------------------------
 # CLEANED SESSION STATE INITIALIZATION
 # -------------------------
@@ -434,10 +900,10 @@ MONTH_NAMES = [
 # Initialize profile defaults (canonical values)
 profile_defaults = {
     "profile_year": 1990,
-    "profile_month_name": "July",
-    "profile_day": 29,
-    "profile_hour": 1,       # 24h format
-    "profile_minute": 39,
+    "profile_month_name": "January",
+    "profile_day": 1,
+    "profile_hour": 12,       # 24h format
+    "profile_minute": 00,
     "profile_city": "",
     "profile_loaded": False,
     "current_profile": None,
@@ -476,23 +942,25 @@ for k, v in widget_defaults.items():
         st.session_state[k] = v
 
 # Apply loaded profile if present
+# Apply loaded profile if present (robust to legacy/community formats)
 if "_loaded_profile" in st.session_state:
-    prof = st.session_state["_loaded_profile"]
-    
-    # Update profile keys
+    raw_prof = st.session_state["_loaded_profile"]
+    prof = normalize_profile(raw_prof)
+
+    # Update canonical profile_* keys
     st.session_state["profile_year"] = prof["year"]
     st.session_state["profile_month_name"] = MONTH_NAMES[prof["month"] - 1]
     st.session_state["profile_day"] = prof["day"]
     st.session_state["profile_hour"] = prof["hour"]
     st.session_state["profile_minute"] = prof["minute"]
     st.session_state["profile_city"] = prof["city"]
-    
-    # Update widget keys to match
+
+    # Update widget-facing keys (year/month_name/day are your input widgets)
     st.session_state["year"] = prof["year"]
     st.session_state["month_name"] = MONTH_NAMES[prof["month"] - 1]
     st.session_state["day"] = prof["day"]
-    
-    # Convert 24h to 12h for widget keys
+
+    # Convert 24h to 12h UI widgets
     hour_24 = prof["hour"]
     if hour_24 == 0:
         st.session_state["hour_12"] = 12
@@ -506,19 +974,28 @@ if "_loaded_profile" in st.session_state:
     else:
         st.session_state["hour_12"] = hour_24
         st.session_state["ampm"] = "AM"
-    
+
     st.session_state["minute_str"] = f"{prof['minute']:02d}"
-    
-    # Cleanup
-    del st.session_state["_loaded_profile"]
 
-if "active_profile_tab" not in st.session_state:
-    st.session_state["active_profile_tab"] = "Load Profile"  # default
+    # Helpers some parts of your app expect
+    st.session_state["hour_val"] = prof["hour"]
+    st.session_state["minute_val"] = prof["minute"]
+    st.session_state["city_input"] = prof["city"]
+    st.session_state["last_location"] = prof["city"]
+    st.session_state["last_timezone"] = prof.get("tz_name")
 
-# -------------------------
-# Outer layout: 3 columns
-# -------------------------
-col_left, col_mid, col_right = st.columns([2, 2, 2])
+    # Restore circuit names if present
+    if prof.get("circuit_names"):
+        for key, val in prof["circuit_names"].items():
+            st.session_state[key] = val
+        st.session_state["saved_circuit_names"] = prof["circuit_names"].copy()
+    else:
+        st.session_state["saved_circuit_names"] = {}
+
+# --- safe no-op debug hook (prevents NameError if debug calls remain) ---
+def _debug_cusps(*args, **kwargs):
+    # intentionally does nothing
+    return
 
 def run_chart(lat, lon, tz_name, house_system):
     reset_chart_state()
@@ -535,11 +1012,18 @@ def run_chart(lat, lon, tz_name, house_system):
             0.0, lat, lon,
             input_is_ut=False,
             tz_name=tz_name,
-            house_system=house_system, 
+            house_system=house_system,        # <<< use the param, not _selected_house_system()
         )
 
-        df["abs_deg"] = df["Longitude"].astype(float)
-        df = annotate_fixed_stars(df)
+        # keep numeric conversion benign (don’t drop rows)
+        df["abs_deg"] = pd.to_numeric(df["Longitude"], errors="coerce")
+
+        # store exactly what we'll render with
+        st.session_state.chart_ready = True
+        st.session_state.df = df
+        _debug_cusps(st.session_state.df, "in session_state")  # <<< probe 3
+
+        # build the rest as you had
         df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
         pos = dict(zip(df_filtered["Object"], df_filtered["abs_deg"]))
         major_edges_all, patterns = get_major_edges_and_patterns(pos)
@@ -547,8 +1031,6 @@ def run_chart(lat, lon, tz_name, house_system):
         filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
         combos = generate_combo_groups(filaments)
 
-        st.session_state.chart_ready = True
-        st.session_state.df = df
         st.session_state.pos = pos
         st.session_state.patterns = patterns
         st.session_state.major_edges_all = major_edges_all
@@ -557,10 +1039,19 @@ def run_chart(lat, lon, tz_name, house_system):
         st.session_state.singleton_map = singleton_map
         st.session_state.combos = combos
 
+        # cache location for recomputes on radio toggle
+        st.session_state["calc_lat"] = lat
+        st.session_state["calc_lon"] = lon
+        st.session_state["calc_tz"]  = tz_name
+
     except Exception as e:
         st.error(f"Chart calculation failed: {e}")
         st.session_state.chart_ready = False
 
+# -------------------------
+# Outer layout: 3 columns
+# -------------------------
+col_left, col_mid, col_right = st.columns([2, 2, 2])
 # -------------------------
 # Left column: Birth Data
 # -------------------------
@@ -643,6 +1134,10 @@ with col_left:
                         tz_name = tf.timezone_at(lng=lon, lat=lat)
                         st.session_state["last_location"] = location.address
                         st.session_state["last_timezone"] = tz_name
+                        # Store location data in session state
+                        st.session_state["current_lat"] = lat
+                        st.session_state["current_lon"] = lon
+                        st.session_state["current_tz_name"] = tz_name
                     else:
                         st.session_state["last_location"] = None
                         st.session_state["last_timezone"] = "City not found. Try a more specific query."
@@ -655,6 +1150,7 @@ with col_left:
                 list(range(1, days_in_month + 1)),
                 key="day"
             )
+
 # -------------------------
 # Middle column: Now + Calculate Chart buttons
 # -------------------------
@@ -667,7 +1163,7 @@ with col_mid:
                 st.error("Enter a valid city first to use the Now button.")
             else:
                 tz = pytz.timezone(tz_name)
-                now = datetime.now(tz)
+                now = dt.datetime.now(tz)
 
                 # ✅ Update only profile_* keys
                 st.session_state["profile_year"] = now.year
@@ -676,17 +1172,23 @@ with col_mid:
                 st.session_state["profile_hour"] = now.hour
                 st.session_state["profile_minute"] = now.minute
                 st.session_state["profile_city"] = city_name
-                
+                        # Store location data
+                st.session_state["current_lat"] = lat
+                st.session_state["current_lon"] = lon
+                st.session_state["current_tz_name"] = tz_name
+                run_chart(lat, lon, tz_name, "Equal")
+
+                # Store location data in session state
+                st.session_state["current_lat"] = lat
+                st.session_state["current_lon"] = lon
+                st.session_state["current_tz_name"] = tz_name
+                run_chart(lat, lon, tz_name, "Equal")
 
                 try:
-                    df = calculate_chart(
-                        now.year, now.month, now.day,
-                        now.hour, now.minute,
-                        0.0, lat, lon,
-                        input_is_ut=False,
-                        tz_name=tz_name,
-                        house_system="Equal",
-                    )
+                    run_chart(lat, lon, tz_name, _selected_house_system())
+                    st.session_state["last_house_system"] = _selected_house_system()
+                    st.rerun()
+
                     df["abs_deg"] = df["Longitude"].astype(float)
                     df = annotate_fixed_stars(df)
                     df_filtered = df[df["Object"].isin(MAJOR_OBJECTS)]
@@ -713,9 +1215,21 @@ with col_mid:
                 st.rerun()
 
     if st.button("Calculate Chart"):
+        st.session_state["profile_year"] = st.session_state["year"]
+        st.session_state["profile_month_name"] = st.session_state["month_name"]
+        st.session_state["profile_day"] = st.session_state["day"]
+        st.session_state["profile_hour"] = hour_val
+        st.session_state["profile_minute"] = minute_val
+        st.session_state["profile_city"] = city_name
+
         if lat is None or lon is None or tz_name is None:
             st.error("Please enter a valid city and make sure lookup succeeds.")
         else:
+            run_chart(lat, lon, tz_name, _selected_house_system())
+            # Store location data in session state
+            st.session_state["current_lat"] = lat
+            st.session_state["current_lon"] = lon
+            st.session_state["current_tz_name"] = tz_name
             run_chart(lat, lon, tz_name, "Equal")
 
         # Location info BELOW buttons
@@ -729,43 +1243,50 @@ with col_mid:
         
         # user calculated a new chart manually
         st.session_state["active_profile_tab"] = "Add / Update Profile"
-
+        
 # -------------------------
 # Right column: Profile Manager
 # -------------------------
 with col_right:
-    import json, os
-    DATA_FILE = "saved_birth_data.json"
-
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            saved_profiles = json.load(f)
-    else:
-        saved_profiles = {}
+    saved_profiles = load_user_profiles_db(current_user_id)
 
     if "current_profile" not in st.session_state:
         st.session_state["current_profile"] = None
-
-    # Track which tab is active
     if "active_profile_tab" not in st.session_state:
         st.session_state["active_profile_tab"] = "Load Profile"
 
-    st.subheader("👤 Birth Profile Manager")
+    st.subheader("👤 Birth Chart Profile Manager")
 
-    tab_labels = ["Add / Update Profile", "Load Profile", "Delete Profile"]
+    # Admin gating
+    admin_flag = is_admin(current_user_id)
+
+    if admin_flag:
+        tab_labels = ["Add / Update Profile", "Load Profile", "Delete Profile"]
+    else:
+        tab_labels = ["Load Profile", "Delete Profile"]
+
+    # Pick default index safely
+    default_tab = st.session_state["active_profile_tab"]
+    if default_tab not in tab_labels:
+        default_tab = tab_labels[0]
 
     active_tab = st.radio(
         "Profile Manager Tabs",
         tab_labels,
-        index=tab_labels.index(st.session_state["active_profile_tab"]),
+        index=tab_labels.index(default_tab),
         horizontal=True,
         key="profile_tab_selector"
     )
+    st.session_state["active_profile_tab"] = active_tab
 
-    st.session_state["active_profile_tab"] = active_tab  # keep synced
-
+    # --- Add / Update ---
     if active_tab == "Add / Update Profile":
+        if not admin_flag:
+            st.warning("Only admins can create or update profiles during beta.")
+            st.stop()
+
         profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
+
         if st.button("💾 Save / Update Profile"):
             if profile_name.strip() == "":
                 st.error("Please enter a name for the profile.")
@@ -785,7 +1306,18 @@ with col_right:
                 else:
                     circuit_names = {}
 
-                saved_profiles[profile_name] = {
+                # Guard: require a valid geocode before saving
+                if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
+                    st.error("Please enter a valid city (lat/lon/timezone lookup must succeed) before saving the profile.")
+                    st.stop()
+
+                # Optional: sanity-check timezone string
+                import pytz
+                if tz_name not in pytz.all_timezones:
+                    st.error(f"Unrecognized timezone '{tz_name}'. Please refine the city and try again.")
+                    st.stop()
+
+                profile_data = {
                     "year": int(st.session_state.get("profile_year", 1990)),
                     "month": int(MONTH_NAMES.index(st.session_state.get("profile_month_name", "July")) + 1),
                     "day": int(st.session_state.get("profile_day", 1)),
@@ -798,10 +1330,11 @@ with col_right:
                     "circuit_names": circuit_names,
                 }
 
-                with open(DATA_FILE, "w") as f:
-                    json.dump(saved_profiles, f, indent=2)
-
+                # Save to DB for this logged-in user
+                save_user_profile_db(current_user_id, profile_name, profile_data)
                 st.success(f"Profile '{profile_name}' saved!")
+                # refresh cache
+                saved_profiles = load_user_profiles_db(current_user_id)
 
     # --- Load ---
     elif active_tab == "Load Profile":
@@ -841,29 +1374,289 @@ with col_right:
                             else:
                                 st.session_state["saved_circuit_names"] = {}
 
-                            # Calculate chart
-                            run_chart(
-                                data["lat"],
-                                data["lon"],
-                                data["tz_name"],
-                                "Equal"
-                            )
-                            st.success(f"Profile '{name}' loaded and chart calculated!")
-                            st.rerun()
+                            # Guard run_chart()
+                            if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
+                                st.error(f"Profile '{name}' is missing location/timezone info. Re-save it after a successful city lookup.")
+                            else:
+                                run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
+                                st.success(f"Profile '{name}' loaded and chart calculated!")
+                                st.rerun()
         else:
             st.info("No saved profiles yet.")
 
-    # --- Delete ---
+    # --- Delete (private, per-user) ---
     elif active_tab == "Delete Profile":
+        saved_profiles = load_user_profiles_db(current_user_id)
         if saved_profiles:
-            delete_choice = st.selectbox("Select a profile to delete", list(saved_profiles.keys()), key="profile_delete")
-            if st.button("🗑️ Delete Selected Profile"):
-                del saved_profiles[delete_choice]
-                with open(DATA_FILE, "w") as f:
-                    json.dump(saved_profiles, f, indent=2)
-                st.success(f"Profile '{delete_choice}' deleted!")
+            delete_choice = st.selectbox(
+                "Select a profile to delete",
+                options=sorted(saved_profiles.keys()),
+                key="profile_delete"
+            )
+
+            # Step 1: ask for confirmation
+            if st.button("🗑️ Delete Selected Profile", key="priv_delete_ask"):
+                st.session_state["priv_delete_target"] = delete_choice
+                st.rerun()
+
+            # Step 2: confirmation panel
+            target = st.session_state.get("priv_delete_target")
+            if target:
+                st.warning(f"Are you sure you want to delete this chart: **{target}**?")
+                d1, d2 = st.columns([1, 1], gap="small")
+                with d1:
+                    if st.button("Delete", key="priv_delete_yes", use_container_width=True):
+                        delete_user_profile_db(current_user_id, target)
+                        st.session_state.pop("priv_delete_target", None)
+                        st.success(f"Deleted profile '{target}'.")
+                        st.rerun()
+                with d2:
+                    if st.button("No!", key="priv_delete_no", use_container_width=True):
+                        st.session_state.pop("priv_delete_target", None)
+                        st.info("Delete canceled.")
+                        st.rerun()
         else:
             st.info("No saved profiles yet.")
+
+    # ===============================
+    # 🌌 Community Constellation (chart sharing)
+    # ===============================
+    with st.expander("🌌 Community Constellation (chart sharing)"):
+        st.caption(
+            "Optional participation: Share a chart profile to the community dataset (visible to all beta users). "
+            "Please do not share a natal chart that is not your own (event charts are fine)."
+        )
+
+        # Info-only button (opens the confirm panel without saving anything)
+        if st.button("Tell me more", key="comm_info_btn"):
+            st.session_state["comm_confirm_open"] = True
+            st.session_state["comm_confirm_mode"] = "info"
+            st.session_state.pop("comm_confirm_payload", None)
+            st.session_state.pop("comm_confirm_name", None)
+
+        # --- Publish current inputs as a community profile (with final confirmation) ---
+        comm_name = st.text_input("Name or Event", key="comm_profile_name")
+        pub_c1, pub_c2 = st.columns([1, 1], gap="small")
+
+        with pub_c1:
+            if st.button("Publish current chart to Community", key="comm_publish_btn"):
+                # Preflight validation
+                valid = True
+                if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
+                    st.error("Enter a valid city (lat/lon/timezone lookup must succeed) before publishing.")
+                    valid = False
+                else:
+                    import pytz
+                    if tz_name not in pytz.all_timezones:
+                        st.error(f"Unrecognized timezone '{tz_name}'. Refine the city and try again.")
+                        valid = False
+                if not comm_name.strip():
+                    st.error("Please provide a public title.")
+                    valid = False
+
+                if valid:
+                    circuit_names = {
+                        f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+                        for i in range(len(st.session_state.get("patterns", [])))
+                    }
+                    payload = {
+                        "year":   int(st.session_state.get("profile_year", 1990)),
+                        "month":  int(MONTH_NAMES.index(st.session_state.get("profile_month_name", "July")) + 1),
+                        "day":    int(st.session_state.get("profile_day", 1)),
+                        "hour":   int(st.session_state.get("profile_hour", 0)),
+                        "minute": int(st.session_state.get("profile_minute", 0)),
+                        "city":   st.session_state.get("profile_city", ""),
+                        "lat":    lat,
+                        "lon":    lon,
+                        "tz_name": tz_name,
+                        "circuit_names": circuit_names,
+                    }
+                    # Stash for confirm step
+                    st.session_state["comm_confirm_open"] = True
+                    st.session_state["comm_confirm_mode"] = "publish"  # <-- important
+                    st.session_state["comm_confirm_name"] = comm_name.strip()
+                    st.session_state["comm_confirm_payload"] = payload
+
+        with pub_c2:
+            st.info("Sharing your chart is 100% optional!")
+
+        # --- Final confirmation UI (works for 'publish' and 'info' modes) ---
+        if st.session_state.get("comm_confirm_open"):
+            mode = st.session_state.get("comm_confirm_mode", "info")
+
+            confirm_text_publish = (
+                "Sharing your chart is not public, but it will be shared with all other beta users of this app. "
+                "They are all personal friends of Joylin, and have to log in with their passwords to access these "
+                "profiles and the app. If you do share your chart, Joylin may study it for app development and "
+                "astrology pattern learning purposes. Do you want to do this? "
+                "There is no pressure or obligation to share your chart. You can also delete it later at any time."
+            )
+            confirm_text_info = (
+                "Sharing your chart is not public, but it will be shared with all other beta users of this app. "
+                "They are all personal friends of Joylin, and have to log in with their passwords to access these "
+                "profiles and the app. If you do share your chart, Joylin may study it for app development and "
+                "astrology pattern learning purposes. "
+                "There is no pressure or obligation to share your chart. You can also delete it later at any time."
+            )
+            st.warning(confirm_text_publish if mode == "publish" else confirm_text_info)
+
+            c_yes, c_no = st.columns([1, 1], gap="small")
+            with c_yes:
+                if st.button("Study me!", key="comm_confirm_yes", use_container_width=True):
+                    payload = st.session_state.get("comm_confirm_payload")
+                    name_to_publish = st.session_state.get("comm_confirm_name", "")
+                    if payload:
+                        pid = community_save(name_to_publish, payload, submitted_by=current_user_id)
+                        st.success(f"Published to Community as “{name_to_publish}”.")
+                    else:
+                        st.info("This was an info-only view. To share, click “Publish current chart to Community” first.")
+                    for k in ("comm_confirm_open", "comm_confirm_mode", "comm_confirm_name", "comm_confirm_payload"):
+                        st.session_state.pop(k, None)
+                    st.rerun()
+
+            with c_no:
+                if st.button("Nevermind, I don't want to share my chart.", key="comm_confirm_no", use_container_width=True):
+                    for k in ("comm_confirm_open", "comm_confirm_mode", "comm_confirm_name", "comm_confirm_payload"):
+                        st.session_state.pop(k, None)
+                    st.info("No problem—nothing was shared.")
+                    st.rerun()
+
+        # --- Browse community dataset (inside the expander, outside the confirm-if) ---
+        st.markdown("**Browse Community Profiles**")
+        rows = community_list(limit=300)
+
+        if not rows:
+            st.caption("No community profiles yet.")
+        else:
+            admin_flag = is_admin(current_user_id)  # safe if already set; cheap call otherwise
+
+            for r in rows:
+                by = r["submitted_by"]
+                admin_flag = is_admin(current_user_id)  # or pull from session
+                can_delete = admin_flag or (by == current_user_id)
+                confirm_id = st.session_state.get("comm_delete_confirm_id")
+
+                with st.container(border=True):
+                    st.markdown(f"**{r['profile_name']}** · by **{by}**")
+
+                    # First row of buttons
+                    b1, b2 = st.columns([1, 1], gap="small")
+                    with b1:
+                        load_clicked = st.button("Load", key=f"comm_load_{r['id']}", use_container_width=True)
+
+                    # we'll handle confirm buttons OUTSIDE of b2 to avoid nested columns
+                    ask = cancel = really = False
+                    with b2:
+                        if can_delete:
+                            if confirm_id == r["id"]:
+                                st.warning("Are you sure you want to delete this chart?")
+                                # no columns here!
+                            else:
+                                ask = st.button("Delete", key=f"comm_delete_{r['id']}", use_container_width=True)
+                        else:
+                            st.caption(" ")  # keep row heights aligned
+
+                    # ⬇️ confirm buttons go at the container level (not inside b2)
+                    if can_delete and confirm_id == r["id"]:
+                        cdel1, cdel2 = st.columns([1, 1], gap="small")
+                        with cdel1:
+                            really = st.button("Delete", key=f"comm_delete_yes_{r['id']}", use_container_width=True)
+                        with cdel2:
+                            cancel = st.button("No!", key=f"comm_delete_no_{r['id']}", use_container_width=True)
+
+                # --- handle clicks (outside the container, still inside the loop) ---
+                if load_clicked:
+                    data = r["payload"]
+                    st.session_state["_loaded_profile"] = data
+                    st.session_state["current_profile"] = f"community:{r['id']}"
+                    st.session_state["profile_loaded"] = True
+                    st.session_state["profile_year"] = data["year"]
+                    st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
+                    st.session_state["profile_day"] = data["day"]
+                    st.session_state["profile_hour"] = data["hour"]
+                    st.session_state["profile_minute"] = data["minute"]
+                    st.session_state["profile_city"] = data["city"]
+                    st.session_state["hour_val"] = data["hour"]
+                    st.session_state["minute_val"] = data["minute"]
+                    st.session_state["city_input"] = data["city"]
+                    st.session_state["last_location"] = data["city"]
+                    st.session_state["last_timezone"] = data.get("tz_name")
+                    if "circuit_names" in data:
+                        for key, val in data["circuit_names"].items():
+                            st.session_state[key] = val
+                        st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
+                    else:
+                        st.session_state["saved_circuit_names"] = {}
+                    if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
+                        st.error("This community profile is missing location/timezone info.")
+                    else:
+                        run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
+                        st.success(f"Loaded community profile: {r['profile_name']}")
+                        st.rerun()
+
+                if ask:
+                    st.session_state["comm_delete_confirm_id"] = r["id"]
+                    st.rerun()
+
+                if cancel:
+                    st.session_state.pop("comm_delete_confirm_id", None)
+                    st.info("Delete canceled.")
+                    st.rerun()
+
+                if really:
+                    rec = community_get(r["id"])
+                    if rec and (admin_flag or rec["submitted_by"] == current_user_id):
+                        community_delete(r["id"])
+                        st.session_state.pop("comm_delete_confirm_id", None)
+                        st.success(f"Deleted community profile: {r['profile_name']}")
+                        st.rerun()
+                    else:
+                        st.error("You can only delete profiles you submitted.")
+
+
+# --- Current Chart Header ---
+def _current_chart_title():
+    # Prefer explicit title set by loaders; fall back to profile name; else a default
+    title = (
+        st.session_state.get("current_profile_title")
+        or st.session_state.get("current_profile")
+        or "Untitled Chart"
+    )
+    # If it's a community marker like "community:123", don't show that literal
+    if isinstance(title, str) and title.startswith("community:"):
+        title = "Community Chart"
+
+    month = st.session_state.get("profile_month_name", "")
+    day   = st.session_state.get("profile_day", "")
+    year  = st.session_state.get("profile_year", "")
+    hour  = st.session_state.get("profile_hour", None)
+    minute = st.session_state.get("profile_minute", None)
+    city  = st.session_state.get("profile_city", "")
+
+    # Format time to 12-hour
+    time_str = ""
+    if hour is not None and minute is not None:
+        h = int(hour); m = int(minute)
+        ampm = "AM" if h < 12 else "PM"
+        h12 = 12 if h % 12 == 0 else h % 12
+        time_str = f"{h12}:{m:02d} {ampm}"
+
+    date_line = f"{month} {day}, {year}" if month and day and year else ""
+    if date_line and time_str:
+        date_line = f"{date_line}, {time_str}"
+    elif time_str:
+        date_line = time_str
+
+    st.markdown(
+        f"""
+        <div style="margin:0.25rem 0 0.75rem 0">
+        <div style="font-weight:700; font-size:1.2rem; line-height:1.1">{title}</div>
+        <div>{date_line}</div>
+        <div>{city}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ------------------------
 # If chart data exists, render the chart UI
@@ -885,25 +1678,6 @@ if st.session_state.get("chart_ready", False):
         st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
                    "Expand circuits to see their sub-shapes. View planet profiles on the left sidebar. "
                    "Below the chart, copy the prompt into your GPT for an aspect interpretation.")
-
-        # Show/Hide all buttons
-        col_all1, col_all2 = st.columns([1, 1])
-        with col_all1:
-            if st.button("Show All"):
-                for i in range(len(patterns)):
-                    st.session_state[f"toggle_pattern_{i}"] = True
-                    for sh in [sh for sh in shapes if sh["parent"] == i]:
-                        st.session_state[f"shape_{i}_{sh['id']}"] = True
-                for planet in singleton_map.keys():
-                    st.session_state[f"singleton_{planet}"] = True
-        with col_all2:
-            if st.button("Hide All"):
-                for i in range(len(patterns)):
-                    st.session_state[f"toggle_pattern_{i}"] = False
-                    for sh in [sh for sh in shapes if sh["parent"] == i]:
-                        st.session_state[f"shape_{i}_{sh['id']}"] = False
-                for planet in singleton_map.keys():
-                    st.session_state[f"singleton_{planet}"] = False
 
         # Pattern checkboxes + expanders
         toggles, pattern_labels = [], []
@@ -951,11 +1725,12 @@ if st.session_state.get("chart_ready", False):
                                 for j in range(len(patterns))
                             }
                             profile_name = st.session_state["current_profile"]
-                            saved_profiles[profile_name]["circuit_names"] = current
-                            with open(DATA_FILE, "w") as f:
-                                json.dump(saved_profiles, f, indent=2)
+                            payload = saved_profiles.get(profile_name, {}).copy()
+                            payload["circuit_names"] = current
+                            save_user_profile_db(current_user_id, profile_name, payload)
+                            # refresh cache
+                            saved_profiles = load_user_profiles_db(current_user_id)
                             st.session_state["saved_circuit_names"] = current.copy()
-                            st.success(f"Circuit names auto-saved for profile '{profile_name}'!")
 
                     # Sub-shapes
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
@@ -993,11 +1768,11 @@ if st.session_state.get("chart_ready", False):
             st.markdown("---")
             if st.button("💾 Save Circuit Names"):
                 profile_name = st.session_state["current_profile"]
-                saved_profiles[profile_name]["circuit_names"] = current
-                with open(DATA_FILE, "w") as f:
-                    json.dump(saved_profiles, f, indent=2)
+                payload = saved_profiles.get(profile_name, {}).copy()
+                payload["circuit_names"] = current
+                save_user_profile_db(current_user_id, profile_name, payload)
+                saved_profiles = load_user_profiles_db(current_user_id)
                 st.session_state["saved_circuit_names"] = current.copy()
-                st.success("Circuit names updated!")
 
     with right_col:
         st.subheader("Single Placements")
@@ -1024,34 +1799,81 @@ if st.session_state.get("chart_ready", False):
             cols = st.columns(6)
             for j, label in enumerate(["5", "7", "9", "10", "11", "12"]):
                 cols[j].checkbox(label, value=False, key=f"harmonic_{label}")
-
-    left_col, right_col = st.columns([2, 1])
-    with left_col:
-        choice = st.radio(
-            "House System",
-            ["Equal", "Whole Sign", "Placidus",],
-            index=0,
-            key="house_system"
-        )
-
-        # Normalize into a separate variable
-        house_system = choice.lower().replace(" sign", "")
-    
-    with right_col:
-        # Choose how to show planet labels
-        label_style = st.radio(
-            "Label Style",
-            ["Text", "Glyph"],
-            index=1,
-            horizontal=True
-        )
         
-        dark_mode = st.checkbox("🌙 Dark Mode", value=False)
+        
+        c1, c2 = st.columns([2, 2])
+    
+        with c1:
+            # ✅ real, functional control
+            house_choice = st.radio(
+                "House System",
+                ["Equal", "Whole Sign", "Placidus"],
+                index=0,
+                key="house_system_main",
+            )
+            house_system = house_choice.lower().replace(" sign", "")
+            
+            # Recompute chart if the house system changed
+            prev = st.session_state.get("last_house_system")
+            if st.session_state.get("chart_ready") and house_system != prev:
+                # Get stored location data from session state
+                stored_lat = st.session_state.get("current_lat")
+                stored_lon = st.session_state.get("current_lon") 
+                stored_tz = st.session_state.get("current_tz_name")
+    
+                if stored_lat and stored_lon and stored_tz:
+                    run_chart(stored_lat, stored_lon, stored_tz, house_system)
+                    st.session_state["last_house_system"] = house_system
+                else:
+                    st.error("Location data not available. Please recalculate the chart first.")
+
+            # 🚧 placeholder group 1 (does nothing)
+            st.radio(
+                "(Coming soon)",
+                ["Campanus", "Koch", "Regiomontanus"],
+                index=0,
+                key="house_system_placeholder_a",
+                disabled=True,
+            )
+            if st.button("Show All"):
+                for i in range(len(patterns)):
+                    st.session_state[f"toggle_pattern_{i}"] = True
+                    for sh in [sh for sh in shapes if sh["parent"] == i]:
+                        st.session_state[f"shape_{i}_{sh['id']}"] = True
+                for planet in singleton_map.keys():
+                    st.session_state[f"singleton_{planet}"] = True
+        with c2:
+            # Choose how to show planet labels
+            label_style = st.radio(
+                "Label Style",
+                ["Text", "Glyph"],
+                index=1,
+                horizontal=True
+            )
+
+            dark_mode = st.checkbox("🌙 Dark Mode", value=False)
+            
+            # 🚧 placeholder group 1 (does nothing)
+            st.radio(
+                "(Coming soon)",
+                [ "Porphyry", "Topocentric", "Alcabitius"],
+                index=0,
+                key="house_system_placeholder_b",
+                disabled=True,
+            )
+            
+            if st.button("Hide All"):
+                for i in range(len(patterns)):
+                    st.session_state[f"toggle_pattern_{i}"] = False
+                    for sh in [sh for sh in shapes if sh["parent"] == i]:
+                        st.session_state[f"shape_{i}_{sh['id']}"] = False
+                for planet in singleton_map.keys():
+                    st.session_state[f"singleton_{planet}"] = False
 
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
     if not singleton_toggles:
         singleton_toggles = {p: st.session_state.get(f"singleton_{p}", False) for p in singleton_map}
-
+    
     # --- Render the chart ---
     fig, visible_objects, active_shapes, cusps = render_chart_with_shapes(
         pos, patterns, pattern_labels=[],
@@ -1166,17 +1988,6 @@ if st.session_state.get("chart_ready", False):
             if lines:
                 aspect_blocks.append(" + ".join(lines))
 
-        # --- Conjunction clusters using the SAME logic as patterns.py (no re-implementation) ---
-        # Feed it the current positions and exactly the set of objects that are currently visible.
-        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
-
-        # rep_map is {representative: [cluster_members...]}
-        _conj_clusters = list(rep_map.values())
-
-        # Conjunction clusters trigger the special note.
-        num_conj_clusters = sum(1 for c in _conj_clusters if len(c) >= 2)
-
-        import re
         def strip_html_tags(text):
             # Replace divs and <br> with spaces
             text = re.sub(r'</div>|<br\s*/?>', ' ', text)
@@ -1238,8 +2049,13 @@ if st.session_state.get("chart_ready", False):
                 if planet_profiles_texts else ""
             )
 
-            # --- Build interpretation notes ---
-            from rosetta.lookup import INTERPRETATION_FLAGS, HOUSE_INTERPRETATIONS
+            rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
+
+            # rep_map is {representative: [cluster_members...]}
+            _conj_clusters = list(rep_map.values())
+
+            # Conjunction clusters trigger the special note.
+            num_conj_clusters = sum(1 for c in _conj_clusters if len(c) >= 2)
 
             # --- Build interpretation notes ---
             interpretation_notes = []
@@ -1270,11 +2086,13 @@ if st.session_state.get("chart_ready", False):
                     interpretation_notes.append(f"- {general_star_note}")
                 for star, meaning in fixed_star_meanings.items():
                     interpretation_notes.append(f"- {star}: {meaning}")
-                    
+
             # House system interpretation
             house_system_meaning = HOUSE_SYSTEM_INTERPRETATIONS.get(house_system)
             if house_system_meaning:
-                interpretation_notes.append(f"- House System ({house_system.title()}): {house_system_meaning}")
+                interpretation_notes.append(
+                    f"- House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
+                )
 
             # House interpretations (collect unique houses from enhanced_objects_data)
             present_houses = set()

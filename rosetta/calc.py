@@ -81,7 +81,7 @@ def calculate_chart(
     tz_name: str | None = None,
     house_system: str = "equal", 
 ):
-    print(f"[DEBUG] calculate_chart called with house_system={house_system}")
+
     """
     Build the chart using Swiss Ephemeris.
     Adds Descendant, house cusps, and Liliths.
@@ -257,6 +257,7 @@ def calculate_chart(
             cusp_rows.append({
                 "Object": f"{i}H Cusp",
                 "Computed Absolute Degree": round(deg, 6),
+                "House System": house_system,
             })
 
     elif house_system == "equal":
@@ -270,6 +271,7 @@ def calculate_chart(
             cusp_rows.append({
                 "Object": f"{i+1}H Cusp",
                 "Computed Absolute Degree": round(deg, 6),
+                "House System": house_system,
             })
 
     elif house_system == "whole":
@@ -283,6 +285,7 @@ def calculate_chart(
             cusp_rows.append({
                 "Object": f"{i+1}H Cusp",
                 "Computed Absolute Degree": round(deg, 6),
+                "House System": house_system,
             })
 
     # merge with main planet rows
