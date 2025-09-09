@@ -8,3 +8,4 @@ networkx
 pyswisseph
 openpyxl
 watchdog
+bcrypt
