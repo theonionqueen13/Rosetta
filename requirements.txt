@@ -9,3 +9,4 @@ pyswisseph
 openpyxl
 watchdog
 bcrypt
+streamlit_authenticator
