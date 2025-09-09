@@ -4,8 +4,7 @@ matplotlib
 networkx
 numpy
 openpyxl
-pandas
-profiles
+pandas>=1.5.0
 pyswisseph
 streamlit
 timezonefinder
