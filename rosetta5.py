@@ -21,7 +21,7 @@ from rosetta.drawing import (
 from rosetta.patterns import (
     detect_minor_links_with_singletons, generate_combo_groups,
     detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges,
+    connected_components_from_edges, _cluster_conjunctions_for_detection, 
 )
 
 # -------------------------
@@ -1117,6 +1117,22 @@ if st.session_state.get("chart_ready", False):
             if lines:
                 aspect_blocks.append(" + ".join(lines))
 
+        # Keep your existing “include aspect definitions …” loop as-is, then:
+
+        # --- Conjunction clusters using the SAME logic as patterns.py (no re-implementation) ---
+        # Feed it the current positions and exactly the set of objects that are currently visible.
+        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
+
+        # rep_map is {representative: [cluster_members...]}
+        _conj_clusters = list(rep_map.values())
+
+        # Per your spec: ONLY clusters with more than 2 planets (i.e., size >= 2) trigger the special note.
+        num_conj_clusters = sum(1 for c in _conj_clusters if len(c) >= 2)
+
+        # Optional debug to see exactly what it counted (shows above the HTML prompt)
+        # st.warning(f"(debug) 3+ conjunction clusters: {num_conj_clusters} | clusters: " +
+        #            ", ".join("{" + ", ".join(c) + "}" for c in _conj_clusters))
+
         import re
         def strip_html_tags(text):
             # Replace divs and <br> with spaces
@@ -1171,8 +1187,19 @@ if st.session_state.get("chart_ready", False):
 
             # --- Build interpretation notes ---
             interpretation_notes = []
-            if interpretation_flags or fixed_star_meanings:
+            if interpretation_flags or fixed_star_meanings or num_conj_clusters > 0:
                 interpretation_notes.append("Interpretation Notes\n")
+
+            # Conjunction cluster rule (singular vs plural)
+            if num_conj_clusters >= 1:
+                if num_conj_clusters == 1:
+                    interpretation_notes.append(
+                        '- When more than 2 planets are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                    )
+                elif num_conj_clusters >= 2:
+                    interpretation_notes.append(
+                        '- When more than 2 planets are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profiles."'
+                    )
 
             # General flags (each only once)
             for flag in sorted(interpretation_flags):
