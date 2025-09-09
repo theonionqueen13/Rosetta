@@ -98,8 +98,6 @@ def _db():
         )
     """)
 
-    st.write("AUTH DB PATH:", DB_PATH)
-
     return conn
 
 def _credentials_from_db():
