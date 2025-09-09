@@ -50,6 +50,9 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+st.title("🧭 Rosetta Flight Deck")
+
 # ---- DB bootstrap & helpers (put this ONCE, above auth) ----
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -410,8 +413,6 @@ def reset_chart_state():
             del st.session_state[key]
     if "shape_toggles_by_parent" in st.session_state:
         del st.session_state["shape_toggles_by_parent"]
-
-st.title("🧭 Rosetta Flight Deck")
 
 # --- Custom CSS tweaks ---
 st.markdown(
