@@ -27,6 +27,23 @@ from rosetta.patterns import (
 # -------------------------
 # Chart Drawing Functions
 # -------------------------
+def _in_forward_arc(start_deg, end_deg, x_deg):
+    """True if x lies on the forward arc from start->end (mod 360)."""
+    span = (end_deg - start_deg) % 360.0
+    off  = (x_deg   - start_deg) % 360.0
+    return off < span if span != 0 else off == 0
+
+def _house_of_degree(deg, cusps):
+    """Given a degree and a 12-length cusp list (House 1..12), return 1..12."""
+    if not cusps or len(cusps) != 12:
+        return None
+    for i in range(12):
+        a = cusps[i]
+        b = cusps[(i + 1) % 12]
+        if _in_forward_arc(a, b, deg):
+            return i + 1
+    return 12
+
 def draw_degree_markers(ax, asc_deg, dark_mode):
     """Draw small tick marks every 10° with labels."""
     for deg in range(0, 360, 10):
@@ -236,8 +253,15 @@ def format_planet_profile(row):
             formatted = str(lon)
         html_parts.append(f"<div style='font-weight:bold;'>{formatted}</div>")
 
+        # --- House (always show if available) ---
+    h = row.get("House", None)
+    try:
+        if h is not None and int(h) >= 1:
+            html_parts.append(f"<div style='font-size:0.9em;'>House: {int(h)}</div>")
+    except Exception:
+        pass
+
     # --- Extra details (only if present) ---
-    # --- Extra details (only if present, with formatting) ---
     for label, value in [
         ("Speed", row.get("Speed", "")),
         ("Latitude", row.get("Latitude", "")),
@@ -287,7 +311,7 @@ def render_chart_with_shapes(
     ax.axis("off")
 
     # Base wheel
-    draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
+    cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
     draw_degree_markers(ax, asc_deg, dark_mode)
     draw_zodiac_signs(ax, asc_deg)
     draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
@@ -387,7 +411,7 @@ def render_chart_with_shapes(
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
 
-    return fig, visible_objects, active_shapes
+    return fig, visible_objects, active_shapes, cusps
 
 from datetime import datetime
 from geopy.geocoders import OpenCage
@@ -1025,7 +1049,7 @@ if st.session_state.get("chart_ready", False):
         singleton_toggles = {p: st.session_state.get(f"singleton_{p}", False) for p in singleton_map}
 
     # --- Render the chart ---
-    fig, visible_objects, active_shapes = render_chart_with_shapes(
+    fig, visible_objects, active_shapes, cusps = render_chart_with_shapes(
         pos, patterns, pattern_labels=[],
         toggles=[st.session_state.get(f"toggle_pattern_{i}", False) for i in range(len(patterns))],
         filaments=filaments, combo_toggles=combos,
@@ -1037,6 +1061,40 @@ if st.session_state.get("chart_ready", False):
     )
 
     st.pyplot(fig, use_container_width=False)
+
+    
+    # --- Sidebar planet profiles ---
+    st.sidebar.subheader("🪐 Planet Profiles in View")
+
+    cusps_list = cusps
+
+    objs_iter = sorted(visible_objects)
+
+    for obj in objs_iter:
+        matched_rows = df[df["Object"] == obj]
+        if matched_rows.empty:
+            continue
+
+        row = matched_rows.iloc[0].to_dict()
+
+        # Assign House using the already-drawn cusp set (no recalculation)
+        deg_val = None
+        for key in ("abs_deg", "Longitude"):
+            if key in row and row[key] not in (None, "", "nan"):
+                try:
+                    deg_val = float(row[key])
+                    break
+                except Exception:
+                    pass
+
+        if deg_val is not None and cusps_list:
+            house_num = _house_of_degree(deg_val, cusps_list)
+            if house_num:
+                row["House"] = int(house_num)
+
+        profile = format_planet_profile(row)
+        st.sidebar.markdown(profile, unsafe_allow_html=True)
+        st.sidebar.markdown("---")
 
     # --- Aspect Interpretation Prompt ---
     with st.expander("Aspect Interpretation Prompt"):
@@ -1176,13 +1234,3 @@ if st.session_state.get("chart_ready", False):
             components.html(copy_button, height=700, scrolling=True)
         else:
             st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
-
-    # --- Sidebar planet profiles ---
-    st.sidebar.subheader("🪐 Planet Profiles in View")
-    for obj in sorted(visible_objects):
-        matched_rows = df[df["Object"] == obj]
-        if not matched_rows.empty:
-            row = matched_rows.iloc[0].to_dict()
-            profile = format_planet_profile(row)
-            st.sidebar.markdown(profile, unsafe_allow_html=True)
-            st.sidebar.markdown("---")

@@ -1,4 +1,5 @@
 # rosetta/drawing.py
+import swisseph as swe
 import matplotlib.pyplot as plt
 from rosetta.helpers import deg_to_rad
 from rosetta.lookup import ASPECTS, GLYPHS
@@ -6,27 +7,34 @@ from rosetta.lookup import ASPECTS, GLYPHS
 # -------------------------------
 # Chart element drawing
 # -------------------------------
-
 def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
-    """Draw house cusp lines for Placidus, Equal, or Whole Sign houses."""
+    """Draw house cusp lines for Placidus, Equal, or Whole Sign houses.
+    Returns a list of 12 cusp longitudes (House 1..12) exactly as used for drawing.
+    """
     import pandas as pd
+    cusps = []
 
     if house_system == "placidus":
         # Placidus cusps come from Swiss Ephemeris, stored in df
-        cusp_rows = df[df["Object"].str.match(r"^\d{1,2}H Cusp$", na=False)]
-        for i, (_, row) in enumerate(cusp_rows.iterrows(), start=1):
-            if pd.notna(row["Computed Absolute Degree"]):
-                deg = float(row["Computed Absolute Degree"])
-                rad = deg_to_rad(deg, asc_deg)
-                ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-                ax.text(rad, 0.2, str(i),
-                        ha="center", va="center", fontsize=8,
-                        color="white" if dark_mode else "black")
+        cusp_rows = df[df["Object"].str.match(r"^\d{1,2}H Cusp$", na=False)].copy()
+        if not cusp_rows.empty:
+            cusp_rows["__H"] = cusp_rows["Object"].str.extract(r"^(\d{1,2})").astype(int)
+            cusp_rows = cusp_rows.sort_values("__H")
+            for i, (_, row) in enumerate(cusp_rows.iterrows(), start=1):
+                if pd.notna(row.get("Computed Absolute Degree")):
+                    deg = float(row["Computed Absolute Degree"])
+                    cusps.append(deg)
+                    rad = deg_to_rad(deg, asc_deg)
+                    ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
+                    ax.text(rad, 0.2, str(i),
+                            ha="center", va="center", fontsize=8,
+                            color="white" if dark_mode else "black")
 
     elif house_system == "equal":
         # Equal = 30° increments starting at Ascendant degree
         for i in range(12):
             deg = (asc_deg + i * 30.0) % 360.0
+            cusps.append(deg)
             rad = deg_to_rad(deg, asc_deg)
             ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
             ax.text(rad, 0.2, str(i + 1),
@@ -38,11 +46,14 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
         asc_sign_start = int(asc_deg // 30) * 30.0
         for i in range(12):
             deg = (asc_sign_start + i * 30.0) % 360.0
+            cusps.append(deg)
             rad = deg_to_rad(deg, asc_deg)
             ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
             ax.text(rad, 0.2, str(i + 1),
                     ha="center", va="center", fontsize=8,
                     color="white" if dark_mode else "black")
+
+    return cusps
 
 def draw_degree_markers(ax, asc_deg, dark_mode):
     """Draw tick marks every 10° around the chart."""
