@@ -9,10 +9,15 @@ import os, sqlite3, json, bcrypt
 import streamlit_authenticator as stauth
 import datetime as dt
 
+import streamlit_authenticator as stauth
+import streamlit as st
+st.sidebar.write("auth version:", getattr(stauth, "__version__", "unknown"))
+
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
-    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, HOUSE_SYSTEM_INTERPRETATIONS
+    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
+    ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
 )
 from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
 from rosetta.drawing import (
@@ -1423,31 +1428,31 @@ with col_right:
             st.info("No saved profiles yet.")
 
     # ===============================
-    # 🌌 Community Constellation (chart sharing)
+    # 🧪 Donate Your Chart to Science
     # ===============================
-    with st.expander("🌌 Community Constellation (chart sharing)"):
+    with st.expander("🧪 Donate Your Chart to Science 🧬"):
         st.caption(
-            "Optional participation: Share a chart profile to the community dataset (visible to all beta users). "
-            "Please do not share a natal chart that is not your own (event charts are fine)."
+            "Optional participation: Donate a chart profile to the research dataset. "
+            "Joylin may study donated charts for app development and pattern research."
         )
 
         # Info-only button (opens the confirm panel without saving anything)
-        if st.button("Tell me more", key="comm_info_btn"):
+        if st.button("Whaaaat?", key="comm_info_btn"):
             st.session_state["comm_confirm_open"] = True
             st.session_state["comm_confirm_mode"] = "info"
             st.session_state.pop("comm_confirm_payload", None)
             st.session_state.pop("comm_confirm_name", None)
 
-        # --- Publish current inputs as a community profile (with final confirmation) ---
+        # --- Donate current inputs (with final confirmation) ---
         comm_name = st.text_input("Name or Event", key="comm_profile_name")
         pub_c1, pub_c2 = st.columns([1, 1], gap="small")
 
         with pub_c1:
-            if st.button("Publish current chart to Community", key="comm_publish_btn"):
+            if st.button("Donate current chart", key="comm_publish_btn"):
                 # Preflight validation
                 valid = True
                 if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
-                    st.error("Enter a valid city (lat/lon/timezone lookup must succeed) before publishing.")
+                    st.error("Enter a valid city (lat/lon/timezone lookup must succeed) before donating.")
                     valid = False
                 else:
                     import pytz
@@ -1455,7 +1460,7 @@ with col_right:
                         st.error(f"Unrecognized timezone '{tz_name}'. Refine the city and try again.")
                         valid = False
                 if not comm_name.strip():
-                    st.error("Please provide a public title.")
+                    st.error("Please provide a label for the donated chart.")
                     valid = False
 
                 if valid:
@@ -1482,141 +1487,135 @@ with col_right:
                     st.session_state["comm_confirm_payload"] = payload
 
         with pub_c2:
-            st.info("Sharing your chart is 100% optional!")
+            st.info("100% optional!")
 
         # --- Final confirmation UI (works for 'publish' and 'info' modes) ---
         if st.session_state.get("comm_confirm_open"):
             mode = st.session_state.get("comm_confirm_mode", "info")
 
             confirm_text_publish = (
-                "Sharing your chart is not public, but it will be shared with all other beta users of this app. "
-                "They are all personal friends of Joylin, and have to log in with their passwords to access these "
-                "profiles and the app. If you do share your chart, Joylin may study it for app development and "
-                "astrology pattern learning purposes. Do you want to do this? "
-                "There is no pressure or obligation to share your chart. You can also delete it later at any time."
+                "✨Do you want to donate your chart to Science?💫"
             )
             confirm_text_info = (
-                "Sharing your chart is not public, but it will be shared with all other beta users of this app. "
-                "They are all personal friends of Joylin, and have to log in with their passwords to access these "
-                "profiles and the app. If you do share your chart, Joylin may study it for app development and "
-                "astrology pattern learning purposes. "
-                "There is no pressure or obligation to share your chart. You can also delete it later at any time."
+                "This is entirely voluntary. If you choose to donate your chart, it will only be available to the app admin (Joylin) for research and development. Joylin will NOT share your chart with others.\n\n"
+                "Potential uses:\n\n"
+                "• Testing this app's features throughout development to make sure that they work on many charts\n\n"
+                "• Studying patterns in astrology for further development of the 'thinking brain' of the app\n\n"
+                "• Long-term, as this app is further developed, it will become the foundation for studies with a data scientist to 1) prove that astrology is a legitimate science, 2) hone that science with precision, and 3) use it to decode neurodivergence and unique genetic variants.\n\n"
+                "All of this research and development is leading toward those goals, and your chart can be one of the first to inform the early stages of the system.\n\n"
+                "Additionally, if you would like to volunteer further information to aid pattern recognition, please reach out."
             )
+
             st.warning(confirm_text_publish if mode == "publish" else confirm_text_info)
 
             c_yes, c_no = st.columns([1, 1], gap="small")
             with c_yes:
-                if st.button("Study me!", key="comm_confirm_yes", use_container_width=True):
+                if st.button("Donate", key="comm_confirm_yes", use_container_width=True):
                     payload = st.session_state.get("comm_confirm_payload")
                     name_to_publish = st.session_state.get("comm_confirm_name", "")
                     if payload:
                         pid = community_save(name_to_publish, payload, submitted_by=current_user_id)
-                        st.success(f"Published to Community as “{name_to_publish}”.")
+                        st.success(f"Thank you! Donated as “{name_to_publish}”.")
                     else:
-                        st.info("This was an info-only view. To share, click “Publish current chart to Community” first.")
+                        st.info("This was an info-only view. Click “Donate current chart” first.")
                     for k in ("comm_confirm_open", "comm_confirm_mode", "comm_confirm_name", "comm_confirm_payload"):
                         st.session_state.pop(k, None)
                     st.rerun()
 
             with c_no:
-                if st.button("Nevermind, I don't want to share my chart.", key="comm_confirm_no", use_container_width=True):
+                if st.button("Cancel", key="comm_confirm_no", use_container_width=True):
                     for k in ("comm_confirm_open", "comm_confirm_mode", "comm_confirm_name", "comm_confirm_payload"):
                         st.session_state.pop(k, None)
-                    st.info("No problem—nothing was shared.")
+                    st.info("No problem—nothing was donated.")
                     st.rerun()
 
-        # --- Browse community dataset (inside the expander, outside the confirm-if) ---
-        st.markdown("**Browse Community Profiles**")
-        rows = community_list(limit=300)
+        # --- Admin-only browser for donated charts ---
+        if is_admin(current_user_id):
+            st.markdown("**Browse Donated Charts (admin-only)**")
+            rows = community_list(limit=300)
 
-        if not rows:
-            st.caption("No community profiles yet.")
-        else:
-            admin_flag = is_admin(current_user_id)  # safe if already set; cheap call otherwise
+            if not rows:
+                st.caption("No donated charts yet.")
+            else:
+                for r in rows:
+                    by = r["submitted_by"]
+                    can_delete = True  # admin can always delete
+                    confirm_id = st.session_state.get("comm_delete_confirm_id")
 
-            for r in rows:
-                by = r["submitted_by"]
-                admin_flag = is_admin(current_user_id)  # or pull from session
-                can_delete = admin_flag or (by == current_user_id)
-                confirm_id = st.session_state.get("comm_delete_confirm_id")
+                    with st.container(border=True):
+                        st.markdown(f"**{r['profile_name']}** · submitted by **{by}**")
 
-                with st.container(border=True):
-                    st.markdown(f"**{r['profile_name']}** · by **{by}**")
+                        # First row of buttons
+                        b1, b2 = st.columns([1, 1], gap="small")
+                        with b1:
+                            load_clicked = st.button("Load", key=f"comm_load_{r['id']}", use_container_width=True)
 
-                    # First row of buttons
-                    b1, b2 = st.columns([1, 1], gap="small")
-                    with b1:
-                        load_clicked = st.button("Load", key=f"comm_load_{r['id']}", use_container_width=True)
-
-                    # we'll handle confirm buttons OUTSIDE of b2 to avoid nested columns
-                    ask = cancel = really = False
-                    with b2:
-                        if can_delete:
+                        ask = cancel = really = False
+                        with b2:
                             if confirm_id == r["id"]:
-                                st.warning("Are you sure you want to delete this chart?")
-                                # no columns here!
+                                st.warning("Delete this donated chart?")
                             else:
                                 ask = st.button("Delete", key=f"comm_delete_{r['id']}", use_container_width=True)
+
+                        # Confirm row
+                        if confirm_id == r["id"]:
+                            cdel1, cdel2 = st.columns([1, 1], gap="small")
+                            with cdel1:
+                                really = st.button("Delete", key=f"comm_delete_yes_{r['id']}", use_container_width=True)
+                            with cdel2:
+                                cancel = st.button("No!", key=f"comm_delete_no_{r['id']}", use_container_width=True)
+
+                    # --- handle clicks ---
+                    if load_clicked:
+                        data = r["payload"]
+                        st.session_state["_loaded_profile"] = data
+                        st.session_state["current_profile"] = f"community:{r['id']}"
+                        st.session_state["profile_loaded"] = True
+                        st.session_state["profile_year"] = data["year"]
+                        st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
+                        st.session_state["profile_day"] = data["day"]
+                        st.session_state["profile_hour"] = data["hour"]
+                        st.session_state["profile_minute"] = data["minute"]
+                        st.session_state["profile_city"] = data["city"]
+                        st.session_state["hour_val"] = data["hour"]
+                        st.session_state["minute_val"] = data["minute"]
+                        st.session_state["city_input"] = data["city"]
+                        st.session_state["last_location"] = data["city"]
+                        st.session_state["last_timezone"] = data.get("tz_name")
+
+                        if "circuit_names" in data:
+                            for key, val in data["circuit_names"].items():
+                                st.session_state[key] = val
+                            st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
                         else:
-                            st.caption(" ")  # keep row heights aligned
+                            st.session_state["saved_circuit_names"] = {}
 
-                    # ⬇️ confirm buttons go at the container level (not inside b2)
-                    if can_delete and confirm_id == r["id"]:
-                        cdel1, cdel2 = st.columns([1, 1], gap="small")
-                        with cdel1:
-                            really = st.button("Delete", key=f"comm_delete_yes_{r['id']}", use_container_width=True)
-                        with cdel2:
-                            cancel = st.button("No!", key=f"comm_delete_no_{r['id']}", use_container_width=True)
+                        if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
+                            st.error("This donated profile is missing location/timezone info.")
+                        else:
+                            run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
+                            st.success(f"Loaded donated profile: {r['profile_name']}")
+                            st.rerun()
 
-                # --- handle clicks (outside the container, still inside the loop) ---
-                if load_clicked:
-                    data = r["payload"]
-                    st.session_state["_loaded_profile"] = data
-                    st.session_state["current_profile"] = f"community:{r['id']}"
-                    st.session_state["profile_loaded"] = True
-                    st.session_state["profile_year"] = data["year"]
-                    st.session_state["profile_month_name"] = MONTH_NAMES[data["month"] - 1]
-                    st.session_state["profile_day"] = data["day"]
-                    st.session_state["profile_hour"] = data["hour"]
-                    st.session_state["profile_minute"] = data["minute"]
-                    st.session_state["profile_city"] = data["city"]
-                    st.session_state["hour_val"] = data["hour"]
-                    st.session_state["minute_val"] = data["minute"]
-                    st.session_state["city_input"] = data["city"]
-                    st.session_state["last_location"] = data["city"]
-                    st.session_state["last_timezone"] = data.get("tz_name")
-                    if "circuit_names" in data:
-                        for key, val in data["circuit_names"].items():
-                            st.session_state[key] = val
-                        st.session_state["saved_circuit_names"] = data["circuit_names"].copy()
-                    else:
-                        st.session_state["saved_circuit_names"] = {}
-                    if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
-                        st.error("This community profile is missing location/timezone info.")
-                    else:
-                        run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
-                        st.success(f"Loaded community profile: {r['profile_name']}")
+                    if ask:
+                        st.session_state["comm_delete_confirm_id"] = r["id"]
                         st.rerun()
 
-                if ask:
-                    st.session_state["comm_delete_confirm_id"] = r["id"]
-                    st.rerun()
-
-                if cancel:
-                    st.session_state.pop("comm_delete_confirm_id", None)
-                    st.info("Delete canceled.")
-                    st.rerun()
-
-                if really:
-                    rec = community_get(r["id"])
-                    if rec and (admin_flag or rec["submitted_by"] == current_user_id):
-                        community_delete(r["id"])
+                    if cancel:
                         st.session_state.pop("comm_delete_confirm_id", None)
-                        st.success(f"Deleted community profile: {r['profile_name']}")
+                        st.info("Delete canceled.")
                         st.rerun()
-                    else:
-                        st.error("You can only delete profiles you submitted.")
 
+                    if really:
+                        rec = community_get(r["id"])
+                        if rec:  # admin-only here
+                            community_delete(r["id"])
+                            st.session_state.pop("comm_delete_confirm_id", None)
+                            st.success(f"Deleted donated profile: {r['profile_name']}")
+                            st.rerun()
+                        else:
+                            st.error("Record not found.")
+        # Non-admins see nothing for browsing; they can only donate.
 
 # --- Current Chart Header ---
 def _current_chart_title():
@@ -1892,6 +1891,27 @@ if st.session_state.get("chart_ready", False):
 
     st.pyplot(fig, use_container_width=False)
 
+    def _sign_from_degree(deg):
+        # 0=Aries ... 11=Pisces
+        idx = int((deg % 360) // 30)
+        return ZODIAC_SIGNS[idx]
+
+    def _invert_rulerships(planetary_rulers):
+        """Return {Ruler: set(SignsItRules)}"""
+        rev = {}
+        for sign, rulers in planetary_rulers.items():
+            for r in rulers:
+                rev.setdefault(r, set()).add(sign)
+        return rev
+
+    def _join_names(seq):
+        return ", ".join(seq)
+
+    def _compute_cusp_signs(cusps_list):
+        """Return {house_num: sign_name} for 1..12 using active cusps."""
+        return {i+1: _sign_from_degree(cusps_list[i]) for i in range(min(12, len(cusps_list)))}
+
+
     # --- Sidebar planet profiles ---
     st.sidebar.subheader("🪐 Planet Profiles in View")
 
@@ -1949,14 +1969,106 @@ if st.session_state.get("chart_ready", False):
             
             enhanced_objects_data[obj] = row
 
+    # Ensure Sign is set for each visible object
+    for obj, row in enhanced_objects_data.items():
+        # Prefer existing 'Sign' if present; otherwise derive from degree
+        if "Sign" not in row or not row["Sign"]:
+            deg_val = None
+            for key in ("abs_deg", "Longitude"):
+                if key in row and row[key] not in (None, "", "nan"):
+                    try:
+                        deg_val = float(row[key])
+                        break
+                    except Exception:
+                        pass
+            if deg_val is not None:
+                row["Sign"] = _sign_from_degree(deg_val)
+
+    # Precompute: cusp signs for each house in the CURRENT system,
+    # and a reverse map of signs ruled by each ruler
+    cusp_signs = _compute_cusp_signs(cusps_list)
+    SIGNS_BY_RULER = _invert_rulerships(PLANETARY_RULERS)
+
+    # Precompute which houses each ruler governs (via cusp sign)
+    HOUSES_BY_RULER = {
+        ruler: {h for h, s in cusp_signs.items() if s in signs}
+        for ruler, signs in SIGNS_BY_RULER.items()
+    }
+
+    def _build_rulership_html(obj_name, row, enhanced_objects_data, ordered_objects, cusp_signs):
+        # --- Rulership BY HOUSE (who rules *this obj* by house it occupies)
+        house_num = row.get("House")
+        house_rulers = []
+        if house_num in cusp_signs:
+            house_sign = cusp_signs[house_num]
+            house_rulers = PLANETARY_RULERS.get(house_sign, [])
+
+        # --- Rulership BY SIGN (who rules *this obj* by its sign)
+        obj_sign = row.get("Sign")
+        sign_rulers = PLANETARY_RULERS.get(obj_sign, []) if obj_sign else []
+
+        # --- Which objects does THIS OBJECT rule (two ways)
+        signs_this_obj_rules = SIGNS_BY_RULER.get(obj_name, set())
+        houses_this_obj_rules = HOUSES_BY_RULER.get(obj_name, set())
+
+        # Keep list order consistent with your sidebar order
+        ruled_by_sign = []
+        ruled_by_house = []
+        for other in ordered_objects:
+            if other == obj_name:
+                continue
+            o_row = enhanced_objects_data.get(other, {})
+            # By Sign: object sits in a sign ruled by obj_name
+            if o_row.get("Sign") in signs_this_obj_rules:
+                ruled_by_sign.append(other)
+            # By House: object's HOUSE cusp sign is ruled by obj_name
+            h = o_row.get("House")
+            if h in houses_this_obj_rules:
+                ruled_by_house.append(other)
+
+        # Format lines
+        # Example target: "Mars rules Mercury rules Jupiter, Venus"
+        house_chain = ""
+        if house_rulers:
+            left = _join_names(house_rulers)
+            house_chain = f"{left} rules {obj_name}"
+            if ruled_by_house:
+                house_chain += f" rules {_join_names(ruled_by_house)}"
+
+        sign_chain = ""
+        if sign_rulers:
+            left = _join_names(sign_rulers)
+            sign_chain = f"{left} rules {obj_name}"
+            if ruled_by_sign:
+                sign_chain += f" rules {_join_names(ruled_by_sign)}"
+
+        # Always emit both headers; if no chain, show just the header with nothing?
+        # Per your examples, when non-ruler objects exist we still want the shorter entry.
+        # If we have no ruler (shouldn't happen), fall back to empty string.
+        house_line = house_chain or f"{obj_name}"  # minimal fallback
+        sign_line  = sign_chain  or f"{obj_name}"  # minimal fallback
+
+        # HTML block added at end of profile
+        return (
+            "<div style='margin-top:6px'>"
+            "<strong>Rulership by House:</strong><br>"
+            f"{house_line}<br>"
+            "<strong>Rulership by Sign:</strong><br>"
+            f"{sign_line}"
+            "</div>"
+        )
+
     # Display profiles using enhanced data
     for obj in ordered_objects:
         if obj not in enhanced_objects_data:
             continue
-        
+
         row = enhanced_objects_data[obj]
         profile = format_planet_profile(row)
-        st.sidebar.markdown(profile, unsafe_allow_html=True)
+
+        # Append the two rulership sections
+        rulership_html = _build_rulership_html(obj, row, enhanced_objects_data, ordered_objects, cusp_signs)
+        st.sidebar.markdown(profile + rulership_html, unsafe_allow_html=True)
         st.sidebar.markdown("---")
 
     # --- Aspect Interpretation Prompt ---
