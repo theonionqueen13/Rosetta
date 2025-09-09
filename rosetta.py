@@ -1,33 +1,32 @@
+import datetime
+import re
 from datetime import datetime
-import pytz
-from timezonefinder import TimezoneFinder
-from geopy.geocoders import OpenCage
-from rosetta.lookup import GLYPHS
-import streamlit as st
-import pandas as pd
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import pytz
+import streamlit as st
 import streamlit.components.v1 as components
-import datetime
 import swisseph as swe
-import re
+from geopy.geocoders import OpenCage
+from timezonefinder import TimezoneFinder
 
 from rosetta.calc import calculate_chart
-from rosetta.lookup import (
-    GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
-    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES
-)
-from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
-from rosetta.drawing import (
-    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
-    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
-    draw_shape_edges, draw_minor_edges, draw_singleton_dots
-)
-from rosetta.patterns import (
-    detect_minor_links_with_singletons, generate_combo_groups,
-    detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges, _cluster_conjunctions_for_detection,
-)
+from rosetta.drawing import (draw_aspect_lines, draw_degree_markers,
+                             draw_house_cusps, draw_planet_labels,
+                             draw_shape_edges, draw_singleton_dots,
+                             draw_zodiac_signs)
+from rosetta.helpers import (annotate_fixed_stars, deg_to_rad, format_dms,
+                             format_longitude, get_ascendant_degree)
+from rosetta.lookup import (ASPECT_INTERPRETATIONS, ASPECTS, GLYPHS,
+                            GROUP_COLORS, INTERPRETATION_FLAGS, MAJOR_OBJECTS,
+                            MODALITIES, ZODIAC_COLORS, ZODIAC_SIGNS)
+from rosetta.patterns import (_cluster_conjunctions_for_detection,
+                              connected_components_from_edges,
+                              detect_minor_links_with_singletons,
+                              detect_shapes, generate_combo_groups,
+                              internal_minor_edges_for_pattern)
 
 # -------------------------
 # Chart Drawing Functions
@@ -655,8 +654,16 @@ with col_left:
 
         # --- Right side: Location ---
         with col2:
-            opencage_key = st.secrets["OPENCAGE_API_KEY"]
-            geolocator = OpenCage(api_key=opencage_key)
+            # Try to get OpenCage API key from secrets, fall back gracefully if not available
+            try:
+                opencage_key = st.secrets["OPENCAGE_API_KEY"]
+                geolocator = OpenCage(api_key=opencage_key)
+                geocoding_available = True
+            except (KeyError, FileNotFoundError):
+                st.warning(
+                    "⚠️ Geocoding not available: OpenCage API key not configured in secrets.toml")
+                geolocator = None
+                geocoding_available = False
 
             city_name = st.text_input(
                 "City of Birth",
@@ -665,7 +672,7 @@ with col_left:
             )
 
             lat, lon, tz_name = None, None, None
-            if city_name:
+            if city_name and geocoding_available:
                 try:
                     location = geolocator.geocode(city_name, timeout=20)
                     if location:
@@ -680,6 +687,9 @@ with col_left:
                 except Exception as e:
                     st.session_state["last_location"] = None
                     st.session_state["last_timezone"] = f"Lookup error: {e}"
+            elif city_name and not geocoding_available:
+                st.session_state["last_location"] = None
+                st.session_state["last_timezone"] = "Geocoding unavailable - please enter coordinates manually"
             # Day widget
             day = st.selectbox(
                 "Day",
@@ -1307,7 +1317,7 @@ if st.session_state.get("chart_ready", False):
                     <div id="prompt-box"
                         style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
                                 color:white; background:black; border:1px solid #555;
-                                padding:8px; border-radius:4px; max-height:600px; overflow:auto;">{prompt.strip().replace("\n", "<br>")}
+                                padding:8px; border-radius:4px; max-height:600px; overflow:auto;">{prompt.strip().replace(chr(10), "<br>")}
                     </div>
                 </div>
             """
