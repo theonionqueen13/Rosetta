@@ -14,16 +14,15 @@ Rosetta is a Streamlit-based astrology chart visualization and pattern analysis 
 
 ### Main Applications
 - **`rosetta.py`**: Primary Streamlit application with full feature set (modern modular architecture)
-- **`rosetta-experimental-shapes.py`**: Experimental version with advanced shape detection features
 - **`rosetta/` package**: Core modular components (calc, drawing, patterns, lookup, helpers)
 - **`backups/`**: Legacy files and development iterations
+- **Experimental features**: Available in the `experimental-shapes` branch
 
 ## Development Workflow
 
 ### Running the Application
 ```bash
-streamlit run rosetta.py                      # Main application
-streamlit run rosetta-experimental-shapes.py  # Experimental shapes version
+streamlit run rosetta.py  # Main application
 ```
 The devcontainer auto-starts `rosetta.py` on port 8501 with CORS disabled.
 
