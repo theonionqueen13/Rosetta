@@ -13,19 +13,17 @@ Rosetta is a Streamlit-based astrology chart visualization and pattern analysis 
 - **`helpers.py`**: Coordinate conversion, house calculations, and utility functions
 
 ### Main Applications
-- **`rosetta5.py`**: Modern architecture with full feature set using `rosetta/` package imports
-- **`rosetta.py`**: Legacy main entry point (configured in devcontainer)
-- **`rosetta6.py`**: Experimental version with shape detection
-- **Numbered variants (1-4)**: Development snapshots with inline definitions
-- **`rosetta/` package**: Modular components (calc, drawing, patterns, lookup, helpers)
+- **`rosetta.py`**: Primary Streamlit application with full feature set (modern modular architecture)
+- **`rosetta-experimental-shapes.py`**: Experimental version with advanced shape detection features
+- **`rosetta/` package**: Core modular components (calc, drawing, patterns, lookup, helpers)
+- **`backups/`**: Legacy files and development iterations
 
 ## Development Workflow
 
 ### Running the Application
 ```bash
-streamlit run rosetta.py     # Legacy main (devcontainer default)
-streamlit run rosetta5.py    # Modern modular version
-streamlit run rosetta6.py    # Experimental with shape detection
+streamlit run rosetta.py                      # Main application
+streamlit run rosetta-experimental-shapes.py  # Experimental shapes version
 ```
 The devcontainer auto-starts `rosetta.py` on port 8501 with CORS disabled.
 
@@ -61,23 +59,20 @@ def connected_components_from_edges(nodes, edges):
 5. **UI**: Streamlit manages toggles and interactive controls
 
 ### File Organization Conventions
-**⚠️ CRITICAL**: This project has **two different organizational patterns**:
+The project now uses a **unified modular architecture**:
 
-1. **Modern modular structure** (rosetta5.py, rosetta6.py):
-   - Uses `from rosetta.calc import calculate_chart`
-   - Imports from `rosetta/` package modules
-   - Constants centralized in `rosetta/lookup.py`
-   - Functions in dedicated `rosetta/` modules
+- **Main applications**: `rosetta.py` (primary app) and `rosetta-experimental-shapes.py` (experimental features)
+- **Core modules**: All functionality organized in the `rosetta/` package
+  - `rosetta/calc.py`: Swiss Ephemeris calculations
+  - `rosetta/drawing.py`: Chart rendering
+  - `rosetta/patterns.py`: Aspect pattern detection
+  - `rosetta/lookup.py`: Constants and lookup data
+  - `rosetta/helpers.py`: Utility functions
+- **Legacy files**: Moved to `backups/` directory
+- **Import pattern**: `from rosetta.module import function`
 
-2. **Legacy monolithic structure** (rosetta.py, rosetta1-4.py):
-   - Self-contained files with duplicated constants
-   - `ASPECTS = {...}` redefined in each file
-   - All functions defined inline
-   - No imports from `rosetta/` package
-
-**Project root**: `/workspaces/Rosetta` (not `/workspaces/Rosetta/rosetta/`)
-**Package location**: `/workspaces/Rosetta/rosetta/` contains the modular components
-**Main entry**: `rosetta.py` (legacy) vs `rosetta5.py` (modern architecture)
+**Project root**: `/workspaces/Rosetta`
+**Package location**: `/workspaces/Rosetta/rosetta/`
 
 ### Swiss Ephemeris Integration
 - Ephemeris data files stored in `rosetta/ephe/`
