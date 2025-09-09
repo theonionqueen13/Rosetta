@@ -98,6 +98,8 @@ def _db():
         )
     """)
 
+    st.write("AUTH DB PATH:", DB_PATH)
+
     return conn
 
 def _credentials_from_db():
@@ -709,8 +711,12 @@ def render_chart_with_shapes(
     draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
 
     active_parents = set(i for i, show in enumerate(toggles) if show)
-    active_shape_ids = [s['id'] for parent, entries in shape_toggles_by_parent.items()
-                        for s in entries if s['on']]
+    # Read the checkbox states directly from session (avoids the one-run lag)
+    active_shape_ids = [
+        s["id"]
+        for s in shapes
+        if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+    ]
     active_shapes = [s for s in shapes if s["id"] in active_shape_ids]
 
     # collect active singletons
