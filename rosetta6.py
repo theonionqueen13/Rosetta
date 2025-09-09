@@ -1,5 +1,6 @@
 # rosetta6.py
 import streamlit as st
+
 st.set_page_config(layout="wide")
 
 import pandas as pd
@@ -34,6 +35,7 @@ from rosetta.helpers import (
 )
 from rosetta.patterns import detect_shapes
 
+
 # -------------------------------
 # Format planet profiles
 # -------------------------------
@@ -56,9 +58,13 @@ def format_planet_profile(row):
 
     html_parts = [f'<div style="margin-bottom: 8px;">{header}</div>']
     if meaning:
-        html_parts.append(f'<div style="margin-bottom: 4px;"><strong>{meaning}</strong></div>')
+        html_parts.append(
+            f'<div style="margin-bottom: 4px;"><strong>{meaning}</strong></div>'
+        )
     if sabian and str(sabian).strip().lower() not in ["none", "nan", ""]:
-        html_parts.append(f'<div style="margin-bottom: 4px; font-style: italic;">"{sabian}"</div>')
+        html_parts.append(
+            f'<div style="margin-bottom: 4px; font-style: italic;">"{sabian}"</div>'
+        )
     if sign and lon:
         pos_line = f"{sign} {lon}"
         if str(retro).strip().lower() == "rx":
@@ -74,21 +80,31 @@ def format_planet_profile(row):
         ("Declination", row.get("Declination", "")),
     ]:
         if str(value).strip().lower() not in ["none", "nan", "", "no"]:
-            details.append(f'<div style="margin-bottom: 2px; font-size: 0.9em;">{label}: {value}</div>')
+            details.append(
+                f'<div style="margin-bottom: 2px; font-size: 0.9em;">{label}: {value}</div>'
+            )
 
     if details:
         html_parts.extend(details)
 
-    return ''.join(html_parts)
+    return "".join(html_parts)
 
 
 # -------------------------------
 # Main renderer
 # -------------------------------
 def render_chart(
-    pos, patterns, pattern_labels, toggles,
-    filaments, combo_toggles, label_style,
-    singleton_map, df, use_placidus, dark_mode
+    pos,
+    patterns,
+    pattern_labels,
+    toggles,
+    filaments,
+    combo_toggles,
+    label_style,
+    singleton_map,
+    df,
+    use_placidus,
+    dark_mode,
 ):
     asc_deg = get_ascendant_degree(df)
 
@@ -117,9 +133,17 @@ def render_chart(
     # Auto-expand for filament-linked singletons
     if not single_pattern_mode:
         for p1, p2, asp_name, pat1, pat2 in filaments:
-            if (pat1 in active_patterns and pat2 not in active_patterns and pat2 >= len(patterns)):
+            if (
+                pat1 in active_patterns
+                and pat2 not in active_patterns
+                and pat2 >= len(patterns)
+            ):
                 active_patterns.add(pat2)
-            elif (pat2 in active_patterns and pat1 not in active_patterns and pat1 >= len(patterns)):
+            elif (
+                pat2 in active_patterns
+                and pat1 not in active_patterns
+                and pat1 >= len(patterns)
+            ):
                 active_patterns.add(pat1)
 
     # Combo toggles (future expansion)
@@ -218,9 +242,17 @@ if uploaded_file:
 
     # Render chart
     fig, visible_objects = render_chart(
-        pos, patterns, pattern_labels, toggles,
-        filaments, {}, label_style, singleton_map,
-        df, use_placidus, dark_mode
+        pos,
+        patterns,
+        pattern_labels,
+        toggles,
+        filaments,
+        {},
+        label_style,
+        singleton_map,
+        df,
+        use_placidus,
+        dark_mode,
     )
 
     st.pyplot(fig, use_container_width=False)

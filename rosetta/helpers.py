@@ -6,7 +6,14 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from itertools import combinations
-from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
+from rosetta.lookup import (
+    GLYPHS,
+    ASPECTS,
+    ZODIAC_SIGNS,
+    ZODIAC_COLORS,
+    MODALITIES,
+    GROUP_COLORS,
+)
 
 print("HELPERS FILE LOADED:", __file__)
 sys.stdout.flush()
@@ -16,18 +23,21 @@ sys.stdout.flush()
 # -------------------------
 import swisseph as swe
 
+
 def calculate_houses(jd_ut, lat, lon, use_placidus=True):
     if use_placidus:
         # swe.HOUSES_PLACIDUS is default (b'A' or 'P')
-        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'P')
+        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b"P")
     else:
         # Equal houses
-        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'E')
+        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b"E")
     return cusps, ascmc
+
 
 def deg_to_rad(deg, asc_shift=0):
     """Convert degrees to radians for polar chart positioning"""
     return np.deg2rad((360 - (deg - asc_shift + 180) % 360 + 90) % 360)
+
 
 def get_ascendant_degree(df):
     """Find Ascendant degree from CSV data"""
@@ -37,6 +47,7 @@ def get_ascendant_degree(df):
             return float(asc_row["abs_deg"].values[0])
     return 0
 
+
 def parse_declination(decl_str):
     """Parse declination string and return decimal degrees with direction (N/S)"""
     if not decl_str or str(decl_str).strip().lower() in ["none", "nan", ""]:
@@ -44,10 +55,10 @@ def parse_declination(decl_str):
 
     decl_str = str(decl_str).strip()
     pattern = (
-        r'([+-]?\d+)'                       # degrees
-        r'(?:[°d]\s*(\d+))?'                # optional minutes
-        r'(?:[\'m]\s*(\d+(?:\.\d+)?))?'     # optional seconds
-        r'(?:["s]?)\s*([NSns]?)'            # optional N/S
+        r"([+-]?\d+)"  # degrees
+        r"(?:[°d]\s*(\d+))?"  # optional minutes
+        r"(?:[\'m]\s*(\d+(?:\.\d+)?))?"  # optional seconds
+        r'(?:["s]?)\s*([NSns]?)'  # optional N/S
     )
     match = re.match(pattern, decl_str)
     if match:
@@ -71,17 +82,21 @@ def parse_declination(decl_str):
     except:
         return None, None
 
+
 # -------------------------
 # Fixed star loader (lazy cache)
 # -------------------------
 
 _STAR_DF_CACHE = None
 
+
 def load_star_df():
     """Load and cache the fixed star lookup table once."""
     global _STAR_DF_CACHE
     if _STAR_DF_CACHE is None:
-        path = os.path.join(os.path.dirname(__file__), "..", "2b) Fixed Star Lookup.xlsx")
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "2b) Fixed Star Lookup.xlsx"
+        )
         df = pd.read_excel(path, sheet_name="Sheet1")
         df.columns = df.columns.str.strip()
         df = df.rename(columns={"Absolute Degree Decimal": "Degree"})
@@ -89,6 +104,7 @@ def load_star_df():
         df["Degree"] = df["Degree"].astype(float)
         _STAR_DF_CACHE = df
     return _STAR_DF_CACHE
+
 
 def annotate_fixed_stars(df, orb=1.0):
     star_df = load_star_df()
@@ -100,11 +116,16 @@ def annotate_fixed_stars(df, orb=1.0):
         if not close_stars.empty:
             star_names = "|||".join(close_stars["Fixed Star"].astype(str).tolist())
             star_meanings = "|||".join(
-                [str(m).strip() for m in close_stars["Meaning"].dropna().astype(str).tolist() if str(m).strip()]
+                [
+                    str(m).strip()
+                    for m in close_stars["Meaning"].dropna().astype(str).tolist()
+                    if str(m).strip()
+                ]
             )
             df.at[i, "Fixed Star Conjunction"] = star_names
             df.at[i, "Fixed Star Meaning"] = star_meanings
     return df
+
 
 def get_fixed_star_meaning(star_name: str):
     star_df = load_star_df()
@@ -112,14 +133,20 @@ def get_fixed_star_meaning(star_name: str):
         return None
     match = star_df[star_df["Fixed Star"].str.contains(star_name, case=False, na=False)]
     if not match.empty:
-        meaning = match["Meaning"].dropna().iloc[0] if not match["Meaning"].dropna().empty else None
+        meaning = (
+            match["Meaning"].dropna().iloc[0]
+            if not match["Meaning"].dropna().empty
+            else None
+        )
         if isinstance(meaning, str) and meaning.strip():
             return star_name, meaning.strip()
     return None
 
+
 # -------------------------
 # Aspect + formatting utils
 # -------------------------
+
 
 def build_aspect_graph(pos):
     """Find connected components of planets based on major aspects only."""
@@ -134,6 +161,7 @@ def build_aspect_graph(pos):
                 G.add_edge(p1, p2, aspect=asp)
                 break
     return list(nx.connected_components(G))
+
 
 def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
     """Convert decimal degrees (or hours/day for speed) into DMS string with hemispheres."""
@@ -158,10 +186,22 @@ def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
     seconds = int(round(((val - deg) * 60 - minutes) * 60))
     return f"{deg}°{minutes:02d}'{seconds:02d}\" {sign}".strip()
 
+
 SIGN_NAMES = [
-    "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
-    "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
+    "Aries",
+    "Taurus",
+    "Gemini",
+    "Cancer",
+    "Leo",
+    "Virgo",
+    "Libra",
+    "Scorpio",
+    "Sagittarius",
+    "Capricorn",
+    "Aquarius",
+    "Pisces",
 ]
+
 
 def format_longitude(lon):
     """Turn decimal degrees into Sign + degree°minute′ string."""
@@ -170,6 +210,7 @@ def format_longitude(lon):
     deg = int(deg_in_sign)
     minutes = int(round((deg_in_sign - deg) * 60))
     return f"{SIGN_NAMES[sign_index]} {deg}°{minutes:02d}′"
+
 
 def calculate_oob_status(declination_str):
     """Calculate Out of Bounds status from declination"""
@@ -182,8 +223,8 @@ def calculate_oob_status(declination_str):
         return None
 
     abs_decl = abs(decimal_deg)
-    oob_threshold = 23 + 26/60.0    # 23°26′
-    extreme_threshold = 25 + 26/60.0  # 25°26′
+    oob_threshold = 23 + 26 / 60.0  # 23°26′
+    extreme_threshold = 25 + 26 / 60.0  # 25°26′
 
     if abs_decl <= oob_threshold:
         return "No"

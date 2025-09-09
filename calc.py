@@ -6,17 +6,31 @@ import pandas as pd
 from rosetta.lookup import SABIAN_SYMBOLS, DIGNITIES, RULERSHIPS
 
 # --- CONFIG ---
-swe.set_ephe_path(r"C:\Users\imcur\Downloads\swisseph")  # adjust to where you put ephemeris files
+swe.set_ephe_path(
+    r"C:\Users\imcur\Downloads\swisseph"
+)  # adjust to where you put ephemeris files
 
 SIGNS = [
-    "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
-    "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    "Aries",
+    "Taurus",
+    "Gemini",
+    "Cancer",
+    "Leo",
+    "Virgo",
+    "Libra",
+    "Scorpio",
+    "Sagittarius",
+    "Capricorn",
+    "Aquarius",
+    "Pisces",
 ]
 
 OOB_LIMIT = 23.44  # degrees declination
 
+
 def is_out_of_bounds(declination: float) -> bool:
     return abs(declination) > OOB_LIMIT
+
 
 def deg_to_sign(lon):
     sign_index = int(lon // 30)
@@ -29,29 +43,33 @@ def deg_to_sign(lon):
     sabian_index = sign_index * 30 + int(degree) + 1
     return sign, f"{d}°{m:02d}'{s:02d}\"", sabian_index
 
+
 def get_sabian_symbol(sign: str, degree: int) -> str:
     key = (sign, degree)
     return SABIAN_SYMBOLS.get(key, f"No Sabian symbol for {sign} {degree}°")
 
+
 # --- Special calcs ---
 def _calc_vertex(jd, lat, lon):
-    cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+    cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
     return ascmc[3], 0.0, 0.0, 0.0  # lon, lat, dist, speed
 
+
 def _calc_pof(jd, lat, lon):
-    cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+    cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
     asc = ascmc[0]
     sun_pos, _ = swe.calc_ut(jd, swe.SUN)
     moon_pos, _ = swe.calc_ut(jd, swe.MOON)
     sun = sun_pos[0]
     moon = moon_pos[0]
     # check diurnal / nocturnal
-    is_day = (sun > asc and sun < (asc + 180) % 360)
+    is_day = sun > asc and sun < (asc + 180) % 360
     if is_day:
         pof = (asc + moon - sun) % 360
     else:
         pof = (asc - moon + sun) % 360
     return pof, 0.0, 0.0, 0.0
+
 
 # --- Object list ---
 OBJECTS = {
@@ -67,7 +85,7 @@ OBJECTS = {
     "Pluto": swe.PLUTO,
     "Chiron": 2060,
     "True Node": swe.TRUE_NODE,
-    "South Node": -1,      # special
+    "South Node": -1,  # special
     "Lilith (Mean)": swe.MEAN_APOG,
     "Lilith (Asteroid)": 1181,
     "Ceres": 1,
@@ -93,20 +111,23 @@ OBJECTS = {
     "Part of Fortune": "POF",
 }
 
+
 # --- Chart calc ---
 def calculate_chart(year, month, day, hour, minute, tz_offset, lat, lon):
     # UTC datetime → Julian day
-    ut = datetime.datetime(year, month, day, hour, minute) - datetime.timedelta(hours=tz_offset)
+    ut = datetime.datetime(year, month, day, hour, minute) - datetime.timedelta(
+        hours=tz_offset
+    )
     jd = swe.julday(ut.year, ut.month, ut.day, ut.hour + ut.minute / 60.0)
 
     rows = []
 
     for name, ident in OBJECTS.items():
         if ident == "ASC":
-            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
             lon_, lat_, dist, speed = ascmc[0], 0.0, 0.0, 0.0
         elif ident == "MC":
-            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
             lon_, lat_, dist, speed = ascmc[1], 0.0, 0.0, 0.0
         elif ident == "VERTEX":
             lon_, lat_, dist, speed = _calc_vertex(jd, lat, lon)
@@ -138,25 +159,28 @@ def calculate_chart(year, month, day, hour, minute, tz_offset, lat, lon):
         dignity = DIGNITIES.get(sign, "")
         rulership = RULERSHIPS.get(name, {})
 
-        rows.append({
-            "Object": name,
-            "Longitude": round(lon_, 6),
-            "Sign": sign,
-            "DMS": dms,
-            "Sabian Index": sabian_index,
-            "Sabian Symbol": sabian_symbol,
-            "Retrograde": retro,
-            "OOB Status": oob,
-            "Dignity": dignity,
-            "Ruled by (sign)": rulership.get("sign", ""),
-            "Ruled by (house)": rulership.get("house", ""),
-            "Latitude": round(lat_, 6),
-            "Declination": round(decl, 6),
-            "Distance": round(dist, 6),
-            "Speed": round(speed, 6),
-        })
+        rows.append(
+            {
+                "Object": name,
+                "Longitude": round(lon_, 6),
+                "Sign": sign,
+                "DMS": dms,
+                "Sabian Index": sabian_index,
+                "Sabian Symbol": sabian_symbol,
+                "Retrograde": retro,
+                "OOB Status": oob,
+                "Dignity": dignity,
+                "Ruled by (sign)": rulership.get("sign", ""),
+                "Ruled by (house)": rulership.get("house", ""),
+                "Latitude": round(lat_, 6),
+                "Declination": round(decl, 6),
+                "Distance": round(dist, 6),
+                "Speed": round(speed, 6),
+            }
+        )
 
     return pd.DataFrame(rows)
+
 
 # Example run
 if __name__ == "__main__":

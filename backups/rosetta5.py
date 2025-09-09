@@ -44,6 +44,7 @@ SUBSHAPE_COLORS = [
     "#00CED1",  # dark turquoise
 ]
 
+
 # --- FORMATTER (unchanged) ---
 def format_planet_profile(row):
     name = row["Object"]
@@ -62,9 +63,13 @@ def format_planet_profile(row):
         header += " Retrograde"
     html_parts = [f'<div style="margin-bottom: 8px;">{header}</div>']
     if meaning:
-        html_parts.append(f'<div style="margin-bottom: 4px;"><strong>{meaning}</strong></div>')
+        html_parts.append(
+            f'<div style="margin-bottom: 4px;"><strong>{meaning}</strong></div>'
+        )
     if sabian and str(sabian).strip().lower() not in ["none", "nan", ""]:
-        html_parts.append(f'<div style="margin-bottom: 4px; font-style: italic;">"{sabian}"</div>')
+        html_parts.append(
+            f'<div style="margin-bottom: 4px; font-style: italic;">"{sabian}"</div>'
+        )
     if sign and lon:
         pos_line = f"{sign} {lon}"
         if str(retro).strip().lower() == "rx":
@@ -79,14 +84,28 @@ def format_planet_profile(row):
         ("Declination", row.get("Declination", "")),
     ]:
         if str(value).strip().lower() not in ["none", "nan", "", "no"]:
-            details.append(f'<div style="margin-bottom: 2px; font-size: 0.9em;">{label}: {value}</div>')
+            details.append(
+                f'<div style="margin-bottom: 2px; font-size: 0.9em;">{label}: {value}</div>'
+            )
     if details:
         html_parts.extend(details)
-    return ''.join(html_parts)
+    return "".join(html_parts)
+
 
 # --- CHART RENDERER ---
-def render_chart(pos, patterns, pattern_labels, toggles, filaments, combo_toggles,
-                label_style, singleton_map, df, use_placidus, dark_mode):
+def render_chart(
+    pos,
+    patterns,
+    pattern_labels,
+    toggles,
+    filaments,
+    combo_toggles,
+    label_style,
+    singleton_map,
+    df,
+    use_placidus,
+    dark_mode,
+):
     asc_deg = get_ascendant_degree(df)
 
     fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
@@ -110,9 +129,17 @@ def render_chart(pos, patterns, pattern_labels, toggles, filaments, combo_toggle
 
     if not single_pattern_mode:
         for p1, p2, asp_name, pat1, pat2 in filaments:
-            if (pat1 in active_patterns and pat2 not in active_patterns and pat2 >= len(patterns)):
+            if (
+                pat1 in active_patterns
+                and pat2 not in active_patterns
+                and pat2 >= len(patterns)
+            ):
                 active_patterns.add(pat2)
-            elif (pat2 in active_patterns and pat1 not in active_patterns and pat1 >= len(patterns)):
+            elif (
+                pat2 in active_patterns
+                and pat1 not in active_patterns
+                and pat1 >= len(patterns)
+            ):
                 active_patterns.add(pat1)
 
     for group in combo_toggles:
@@ -132,11 +159,23 @@ def render_chart(pos, patterns, pattern_labels, toggles, filaments, combo_toggle
 
     return fig, visible_objects
 
+
 # --- sub-shape aware renderer ---
 def render_chart_with_shapes(
-    pos, patterns, pattern_labels, toggles,
-    filaments, combo_toggles, label_style, singleton_map, df,
-    use_placidus, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles
+    pos,
+    patterns,
+    pattern_labels,
+    toggles,
+    filaments,
+    combo_toggles,
+    label_style,
+    singleton_map,
+    df,
+    use_placidus,
+    dark_mode,
+    shapes,
+    shape_toggles_by_parent,
+    singleton_toggles,
 ):
     asc_deg = get_ascendant_degree(df)
     fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
@@ -155,8 +194,12 @@ def render_chart_with_shapes(
     draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
 
     active_parents = set(i for i, show in enumerate(toggles) if show)
-    active_shape_ids = [s['id'] for parent, entries in shape_toggles_by_parent.items()
-                        for s in entries if s['on']]
+    active_shape_ids = [
+        s["id"]
+        for parent, entries in shape_toggles_by_parent.items()
+        for s in entries
+        if s["on"]
+    ]
     active_shapes = [s for s in shapes if s["id"] in active_shape_ids]
 
     # collect active singletons
@@ -179,48 +222,70 @@ def render_chart_with_shapes(
         visible_objects.update(s["members"])
 
     if len(active_shapes) > 1:
-        color_map = {s["id"]: SUBSHAPE_COLORS[i % len(SUBSHAPE_COLORS)]
-                     for i, s in enumerate(active_shapes)}
+        color_map = {
+            s["id"]: SUBSHAPE_COLORS[i % len(SUBSHAPE_COLORS)]
+            for i, s in enumerate(active_shapes)
+        }
         for s in active_shapes:
-            draw_shape_edges(ax, pos, s["edges"], asc_deg,
-                             use_aspect_colors=False,
-                             override_color=color_map[s["id"]])
+            draw_shape_edges(
+                ax,
+                pos,
+                s["edges"],
+                asc_deg,
+                use_aspect_colors=False,
+                override_color=color_map[s["id"]],
+            )
     elif len(active_shapes) == 1:
         s = active_shapes[0]
-        draw_shape_edges(ax, pos, s["edges"], asc_deg,
-                         use_aspect_colors=False,
-                         override_color=SUBSHAPE_COLORS[0])
+        draw_shape_edges(
+            ax,
+            pos,
+            s["edges"],
+            asc_deg,
+            use_aspect_colors=False,
+            override_color=SUBSHAPE_COLORS[0],
+        )
 
     # add visible singletons
     visible_objects.update(active_singletons)
 
     # connectors
-    for (p1, p2, asp_name, pat1, pat2) in filaments:
-        in_parent1 = any((idx in active_parents) and (p1 in patterns[idx]) for idx in active_parents)
-        in_parent2 = any((idx in active_parents) and (p2 in patterns[idx]) for idx in active_parents)
+    for p1, p2, asp_name, pat1, pat2 in filaments:
+        in_parent1 = any(
+            (idx in active_parents) and (p1 in patterns[idx]) for idx in active_parents
+        )
+        in_parent2 = any(
+            (idx in active_parents) and (p2 in patterns[idx]) for idx in active_parents
+        )
         in_shape1 = any(p1 in s["members"] for s in active_shapes)
         in_shape2 = any(p2 in s["members"] for s in active_shapes)
         in_singleton1 = p1 in active_singletons
         in_singleton2 = p2 in active_singletons
 
-        if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
-            r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
-            ax.plot([r1, r2], [1, 1], linestyle="dotted",
-                    color=ASPECTS[asp_name]["color"], linewidth=1)
+        if (in_parent1 or in_shape1 or in_singleton1) and (
+            in_parent2 or in_shape2 or in_singleton2
+        ):
+            r1 = deg_to_rad(pos[p1], asc_deg)
+            r2 = deg_to_rad(pos[p2], asc_deg)
+            ax.plot(
+                [r1, r2],
+                [1, 1],
+                linestyle="dotted",
+                color=ASPECTS[asp_name]["color"],
+                linewidth=1,
+            )
 
     # fail-safe: draw isolated singletons as colored dots
     color_idx = 0
     for planet in active_singletons:
-        involved = any(
-            planet in (p1, p2) for (p1, p2, _, _, _) in filaments
-        )
+        involved = any(planet in (p1, p2) for (p1, p2, _, _, _) in filaments)
         if not involved:
             r = deg_to_rad(pos[planet], asc_deg)
             color = SUBSHAPE_COLORS[color_idx % len(SUBSHAPE_COLORS)]
-            ax.plot([r], [1], marker="o", markersize=6,
-                    color=color, linewidth=2)
+            ax.plot([r], [1], marker="o", markersize=6, color=color, linewidth=2)
             color_idx += 1
     return fig, visible_objects
+
 
 # --- UI ---
 st.title("🧭️Rosetta Flight Deck")
@@ -283,9 +348,16 @@ if uploaded_file:
                             return -len(s["members"]), s["type"]
 
                         if any(s["type"] == "Envelope" for s in parent_shapes):
-                            order = ["Envelope", "Mystic Rectangle", "Sextile Wedge", "Grand Trine"]
+                            order = [
+                                "Envelope",
+                                "Mystic Rectangle",
+                                "Sextile Wedge",
+                                "Grand Trine",
+                            ]
 
-                            envelope_cluster = [s for s in parent_shapes if s["type"] in order]
+                            envelope_cluster = [
+                                s for s in parent_shapes if s["type"] in order
+                            ]
                             rest = [s for s in parent_shapes if s["type"] not in order]
 
                             # Envelope cluster fixed order
@@ -302,11 +374,13 @@ if uploaded_file:
                             on = st.checkbox(
                                 f"{s['type']} ({', '.join(s['members'])})",
                                 value=False,
-                                key=f"shape_{i}_{s['id']}"
+                                key=f"shape_{i}_{s['id']}",
                             )
                             shape_entries.append({"id": s["id"], "on": on})
                     else:
-                        st.markdown("_(no closed/open sub-shapes found in this pattern)_")
+                        st.markdown(
+                            "_(no closed/open sub-shapes found in this pattern)_"
+                        )
 
                     if "shape_toggles_by_parent" not in st.session_state:
                         st.session_state.shape_toggles_by_parent = {}
@@ -337,9 +411,20 @@ if uploaded_file:
 
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
     fig, visible_objects = render_chart_with_shapes(
-        pos, patterns, pattern_labels, toggles, filaments, combos,
-        label_style, singleton_map, df, use_placidus, dark_mode,
-        shapes, shape_toggles_by_parent, singleton_toggles
+        pos,
+        patterns,
+        pattern_labels,
+        toggles,
+        filaments,
+        combos,
+        label_style,
+        singleton_map,
+        df,
+        use_placidus,
+        dark_mode,
+        shapes,
+        shape_toggles_by_parent,
+        singleton_toggles,
     )
 
     st.pyplot(fig, use_container_width=False)

@@ -1,11 +1,27 @@
 # rosetta/lookup.py
 # # CONSTANTS - All the lookup data in one place
 GLYPHS = {
-    "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
-    "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇",
-    "Chiron": "⚷", "Ceres": "⚳", "Pallas": "⚴", "Juno": "⚵", "Vesta": "⚶",
-    "North Node": "☊", "South Node": "☋", "Part of Fortune": "⊗", "Lilith": "⚸",
-    "Vertex": "🜊", "True Node": "☊",
+    "Sun": "☉",
+    "Moon": "☽",
+    "Mercury": "☿",
+    "Venus": "♀",
+    "Mars": "♂",
+    "Jupiter": "♃",
+    "Saturn": "♄",
+    "Uranus": "♅",
+    "Neptune": "♆",
+    "Pluto": "♇",
+    "Chiron": "⚷",
+    "Ceres": "⚳",
+    "Pallas": "⚴",
+    "Juno": "⚵",
+    "Vesta": "⚶",
+    "North Node": "☊",
+    "South Node": "☋",
+    "Part of Fortune": "⊗",
+    "Lilith": "⚸",
+    "Vertex": "🜊",
+    "True Node": "☊",
 }
 
 ASPECTS = {
@@ -19,19 +35,53 @@ ASPECTS = {
 }
 
 MAJOR_OBJECTS = [
-    "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
-    "Uranus", "Neptune", "Pluto", "Eris", "Chiron", "Vesta", "Pallas",
-    "Ceres", "Juno", "Psyche", "Eros", "Part of Fortune", "Black Moon Lilith",
-    "Lilith", "Ascendant", "AC", "Descendant", "DC", "Midheaven", "MC", "IC",
-    "North Node", "True Node", "South Node", "Vertex",
+    "Sun",
+    "Moon",
+    "Mercury",
+    "Venus",
+    "Mars",
+    "Jupiter",
+    "Saturn",
+    "Uranus",
+    "Neptune",
+    "Pluto",
+    "Eris",
+    "Chiron",
+    "Vesta",
+    "Pallas",
+    "Ceres",
+    "Juno",
+    "Psyche",
+    "Eros",
+    "Part of Fortune",
+    "Black Moon Lilith",
+    "Lilith",
+    "Ascendant",
+    "AC",
+    "Descendant",
+    "DC",
+    "Midheaven",
+    "MC",
+    "IC",
+    "North Node",
+    "True Node",
+    "South Node",
+    "Vertex",
 ]
 
 ZODIAC_SIGNS = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
 ZODIAC_COLORS = ["red", "green", "#DAA520", "blue"] * 3
 MODALITIES = ["Cardinal", "Fixed", "Mutable"] * 4
 GROUP_COLORS = [
-    "crimson", "teal", "darkorange", "slateblue", "seagreen",
-    "hotpink", "gold", "deepskyblue", "orchid"
+    "crimson",
+    "teal",
+    "darkorange",
+    "slateblue",
+    "seagreen",
+    "hotpink",
+    "gold",
+    "deepskyblue",
+    "orchid",
 ]
 
 OBJECT_MEANINGS = {

@@ -1,4 +1,3 @@
-
 from zoneinfo import ZoneInfo
 import os, swisseph as swe
 
@@ -18,14 +17,26 @@ import pandas as pd
 from rosetta.lookup import SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS
 
 SIGNS = [
-    "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
-    "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    "Aries",
+    "Taurus",
+    "Gemini",
+    "Cancer",
+    "Leo",
+    "Virgo",
+    "Libra",
+    "Scorpio",
+    "Sagittarius",
+    "Capricorn",
+    "Aquarius",
+    "Pisces",
 ]
 
 OOB_LIMIT = 23.44  # degrees declination
 
+
 def is_out_of_bounds(declination: float) -> bool:
     return abs(declination) > OOB_LIMIT
+
 
 def deg_to_sign(lon):
     sign_index = int(lon // 30)
@@ -38,16 +49,18 @@ def deg_to_sign(lon):
     sabian_index = sign_index * 30 + int(degree) + 1
     return sign, f"{d}°{m:02d}'{s:02d}\"", sabian_index
 
+
 def _calc_vertex(jd, lat, lon):
-    cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
-    if cusps is None or ascmc is None:      
+    cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
+    if cusps is None or ascmc is None:
         raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
 
     return ascmc[3], 0.0, 0.0, 0.0  # lon, lat, dist, speed
 
+
 def _calc_pof(jd, lat, lon):
     # Asc & Desc from Swiss Ephemeris
-    cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+    cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
     asc = ascmc[0] % 360.0
     desc = (asc + 180.0) % 360.0
 
@@ -57,7 +70,9 @@ def _calc_pof(jd, lat, lon):
 
     def on_arc(start, end, x):
         """True if x lies on the circular arc going CCW from start to end."""
-        start %= 360.0; end %= 360.0; x %= 360.0
+        start %= 360.0
+        end %= 360.0
+        x %= 360.0
         if start <= end:
             return start <= x <= end
         else:
@@ -74,12 +89,19 @@ def _calc_pof(jd, lat, lon):
 
     return pof, 0.0, 0.0, 0.0
 
+
 def calculate_chart(
-    year, month, day, hour, minute,
-    tz_offset, lat, lon,
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    tz_offset,
+    lat,
+    lon,
     input_is_ut: bool = False,
     tz_name: str | None = None,
-    house_system: str = "equal", 
+    house_system: str = "equal",
 ):
     print(f"[DEBUG] calculate_chart called with house_system={house_system}")
     """
@@ -89,7 +111,9 @@ def calculate_chart(
 
     # -------- Time -> UTC --------
     if input_is_ut:
-        utc_dt = datetime.datetime(year, month, day, hour, minute, tzinfo=datetime.timezone.utc)
+        utc_dt = datetime.datetime(
+            year, month, day, hour, minute, tzinfo=datetime.timezone.utc
+        )
         tz_used = "UTC (input_is_ut=True)"
     else:
         if tz_name:
@@ -104,7 +128,9 @@ def calculate_chart(
             tz_used = f"Fixed offset {tz_offset}"
 
     jd = swe.julday(
-        utc_dt.year, utc_dt.month, utc_dt.day,
+        utc_dt.year,
+        utc_dt.month,
+        utc_dt.day,
         utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0,
         swe.GREG_CAL,
     )
@@ -147,12 +173,12 @@ def calculate_chart(
     # --- Main loop ---
     for name, ident in OBJECTS.items():
         if ident == "ASC":
-            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
             lon_, lat_, dist, speed = ascmc[0], 0.0, 0.0, 0.0
             asc_val = lon_
 
         elif ident == "MC":
-            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
             lon_, lat_, dist, speed = ascmc[1], 0.0, 0.0, 0.0
             mc_val = lon_
 
@@ -183,93 +209,104 @@ def calculate_chart(
         dignity = DIGNITIES.get(sign, "")
         rulership = PLANETARY_RULERS.get(sign, [])
 
-        rows.append({
-            "Object": name,
-            "Longitude": round(lon_, 6),
-            "Sign": sign,
-            "DMS": dms,
-            "Sabian Index": sabian_index,
-            "Sabian Symbol": sabian_symbol,
-            "Retrograde": retro,
-            "OOB Status": oob,
-            "Dignity": dignity,
-            "Ruled by (sign)": ", ".join(rulership),
-            "Latitude": round(lat_, 6),
-            "Declination": round(decl, 6),
-            "Distance": round(dist, 6),
-            "Speed": round(speed, 6),
-        })
+        rows.append(
+            {
+                "Object": name,
+                "Longitude": round(lon_, 6),
+                "Sign": sign,
+                "DMS": dms,
+                "Sabian Index": sabian_index,
+                "Sabian Symbol": sabian_symbol,
+                "Retrograde": retro,
+                "OOB Status": oob,
+                "Dignity": dignity,
+                "Ruled by (sign)": ", ".join(rulership),
+                "Latitude": round(lat_, 6),
+                "Declination": round(decl, 6),
+                "Distance": round(dist, 6),
+                "Speed": round(speed, 6),
+            }
+        )
 
     # --- Add Descendant ---
     if asc_val is not None:
         dc_val = (asc_val + 180.0) % 360.0
         sign, dms, sabian_index = deg_to_sign(dc_val)
         sabian_symbol = SABIAN_SYMBOLS.get((sign, int(dc_val % 30) + 1), "")
-        rows.append({
-            "Object": "Descendant",
-            "Longitude": round(dc_val, 6),
-            "Sign": sign,
-            "DMS": dms,
-            "Sabian Index": sabian_index,
-            "Sabian Symbol": sabian_symbol,
-            "Retrograde": "",
-            "OOB Status": "No",
-            "Dignity": "",
-            "Ruled by (sign)": "",
-            "Latitude": 0.0,
-            "Declination": 0.0,
-            "Distance": 0.0,
-            "Speed": 0.0,
-        })
+        rows.append(
+            {
+                "Object": "Descendant",
+                "Longitude": round(dc_val, 6),
+                "Sign": sign,
+                "DMS": dms,
+                "Sabian Index": sabian_index,
+                "Sabian Symbol": sabian_symbol,
+                "Retrograde": "",
+                "OOB Status": "No",
+                "Dignity": "",
+                "Ruled by (sign)": "",
+                "Latitude": 0.0,
+                "Declination": 0.0,
+                "Distance": 0.0,
+                "Speed": 0.0,
+            }
+        )
 
     # ----------------------------
     # House cusps
     # ----------------------------
-        # ----------------------------
+    # ----------------------------
     # House cusps
     # ----------------------------
     cusp_rows = []
 
     if house_system == "placidus":
-        cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+        cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
         if cusps is None or ascmc is None:
             raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
         for i, deg in enumerate(cusps[:12], start=1):
-            cusp_rows.append({
-                "Object": f"{i}H Cusp",
-                "Computed Absolute Degree": round(deg, 6),
-            })
+            cusp_rows.append(
+                {
+                    "Object": f"{i}H Cusp",
+                    "Computed Absolute Degree": round(deg, 6),
+                }
+            )
 
     elif house_system == "equal":
         if asc_val is None:
-            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'E')
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b"E")
             if ascmc is None:
                 raise ValueError("Swiss Ephemeris could not calculate Equal houses")
             asc_val = ascmc[0]
         for i in range(12):
             deg = (asc_val + i * 30.0) % 360.0
-            cusp_rows.append({
-                "Object": f"{i+1}H Cusp",
-                "Computed Absolute Degree": round(deg, 6),
-            })
+            cusp_rows.append(
+                {
+                    "Object": f"{i+1}H Cusp",
+                    "Computed Absolute Degree": round(deg, 6),
+                }
+            )
 
     elif house_system == "whole":
         if asc_val is None:
-            cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
+            cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
             asc_val = ascmc[0]
 
-        asc_sign = int(asc_val // 30) * 30.0   # snap Asc to start of sign
+        asc_sign = int(asc_val // 30) * 30.0  # snap Asc to start of sign
         for i in range(12):
             deg = (asc_sign + i * 30.0) % 360.0
-            cusp_rows.append({
-                "Object": f"{i+1}H Cusp",
-                "Computed Absolute Degree": round(deg, 6),
-            })
+            cusp_rows.append(
+                {
+                    "Object": f"{i+1}H Cusp",
+                    "Computed Absolute Degree": round(deg, 6),
+                }
+            )
 
     # merge with main planet rows
     cusp_df = pd.DataFrame(cusp_rows)
     base_df = pd.DataFrame(rows)
     return pd.concat([base_df, cusp_df], ignore_index=True)
+
 
 if __name__ == "__main__":
     try:

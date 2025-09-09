@@ -7,6 +7,7 @@ from rosetta.lookup import ASPECTS, GLYPHS
 # Chart element drawing
 # -------------------------------
 
+
 def draw_house_cusps(ax, df, asc_deg, use_placidus, dark_mode):
     """Draw house cusp lines on the chart"""
     if use_placidus:
@@ -16,39 +17,56 @@ def draw_house_cusps(ax, df, asc_deg, use_placidus, dark_mode):
                 deg = float(row["Computed Absolute Degree"])
                 r = deg_to_rad(deg, asc_deg)
                 ax.plot([r, r], [0, 1], color="gray", linestyle="dashed", linewidth=1)
-                ax.text(r, 0.2, str(i + 1), ha="center", va="center",
-                        fontsize=8, color="white" if dark_mode else "black")
+                ax.text(
+                    r,
+                    0.2,
+                    str(i + 1),
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="white" if dark_mode else "black",
+                )
     else:
         # Equal houses
         for i in range(12):
             deg = (asc_deg + i * 30) % 360
             r = deg_to_rad(deg, asc_deg)
             ax.plot([r, r], [0, 1], color="gray", linestyle="solid", linewidth=1)
-            ax.text(r, 0.2, str(i + 1), ha="center", va="center",
-                    fontsize=8, color="white" if dark_mode else "black")
+            ax.text(
+                r,
+                0.2,
+                str(i + 1),
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="white" if dark_mode else "black",
+            )
 
 
 def draw_degree_markers(ax, asc_deg, dark_mode):
     """Draw tick marks every 10° around the chart."""
     for deg in range(0, 360, 10):
         r = deg_to_rad(deg, asc_deg)
-        ax.plot([r, r], [1.02, 1.08],
-                color="white" if dark_mode else "black", linewidth=1)
-        ax.text(r, 1.12, f"{deg % 30}°",
-                ha="center", va="center", fontsize=7,
-                color="white" if dark_mode else "black")
+        ax.plot(
+            [r, r], [1.02, 1.08], color="white" if dark_mode else "black", linewidth=1
+        )
+        ax.text(
+            r,
+            1.12,
+            f"{deg % 30}°",
+            ha="center",
+            va="center",
+            fontsize=7,
+            color="white" if dark_mode else "black",
+        )
 
 
 def draw_zodiac_signs(ax, asc_deg):
     """Draw zodiac glyphs around the wheel."""
-    glyphs = [
-        "♈️","♉️","♊️","♋️","♌️","♍️",
-        "♎️","♏️","♐️","♑️","♒️","♓️"
-    ]
+    glyphs = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
     for i, glyph in enumerate(glyphs):
         r = deg_to_rad(i * 30 + 15, asc_deg)
-        ax.text(r, 1.5, glyph,
-                ha="center", va="center", fontsize=16, fontweight="bold")
+        ax.text(r, 1.5, glyph, ha="center", va="center", fontsize=16, fontweight="bold")
 
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
@@ -56,14 +74,22 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
     for planet, deg in pos.items():
         r = deg_to_rad(deg, asc_deg)
         label = GLYPHS.get(planet, planet) if label_style == "Glyph" else planet
-        ax.text(r, 1.3, label,
-                ha="center", va="center", fontsize=9,
-                color="white" if dark_mode else "black")
-        
+        ax.text(
+            r,
+            1.3,
+            label,
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="white" if dark_mode else "black",
+        )
+
+
 # --- put near the bottom of rosetta/drawing.py (anywhere above the shape drawing is fine) ---
 
 # Major aspects used for detection/drawing
 MAJOR_ASPECTS = ("Conjunction", "Sextile", "Square", "Trine", "Opposition")
+
 
 def classify_major_aspect_pair(pos, p1, p2):
     """Return the major aspect name for (p1,p2) using the same logic as draw_aspect_lines, or None."""
@@ -79,9 +105,11 @@ def classify_major_aspect_pair(pos, p1, p2):
             return asp
     return None
 
+
 # -------------------------------
 # Aspect lines
 # -------------------------------
+
 
 def enumerate_major_edges(pos, members):
     """
@@ -91,12 +119,13 @@ def enumerate_major_edges(pos, members):
     nodes = [m for m in members if m in pos]
     edges = []
     for i in range(len(nodes)):
-        for j in range(i+1, len(nodes)):
+        for j in range(i + 1, len(nodes)):
             a, b = nodes[i], nodes[j]
             asp = classify_major_aspect_pair(pos, a, b)
             if asp:
                 edges.append(((a, b), asp))
     return edges
+
 
 def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg, group_colors):
     """Draw major aspect lines between planets in active patterns."""
@@ -107,7 +136,7 @@ def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg, group_colors)
             continue
         planets = list(pattern)
         for i in range(len(planets)):
-            for j in range(i+1, len(planets)):
+            for j in range(i + 1, len(planets)):
                 p1, p2 = planets[i], planets[j]
                 d1, d2 = pos.get(p1), pos.get(p2)
                 if d1 is None or d2 is None:
@@ -116,14 +145,29 @@ def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg, group_colors)
                 if angle > 180:
                     angle = 360 - angle
                 for aspect, data in ASPECTS.items():
-                    if aspect not in ["Conjunction","Sextile","Square","Trine","Opposition"]:
+                    if aspect not in [
+                        "Conjunction",
+                        "Sextile",
+                        "Square",
+                        "Trine",
+                        "Opposition",
+                    ]:
                         continue
                     if abs(angle - data["angle"]) <= data["orb"]:
                         r1 = deg_to_rad(d1, asc_deg)
                         r2 = deg_to_rad(d2, asc_deg)
-                        color = data["color"] if single_pattern_mode else group_colors[idx % len(group_colors)]
-                        ax.plot([r1, r2], [1, 1],
-                                linestyle=data["style"], color=color, linewidth=2)
+                        color = (
+                            data["color"]
+                            if single_pattern_mode
+                            else group_colors[idx % len(group_colors)]
+                        )
+                        ax.plot(
+                            [r1, r2],
+                            [1, 1],
+                            linestyle=data["style"],
+                            color=color,
+                            linewidth=2,
+                        )
                         break
 
 
@@ -136,14 +180,23 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
                 continue
             r1 = deg_to_rad(pos[p1], asc_deg)
             r2 = deg_to_rad(pos[p2], asc_deg)
-            ax.plot([r1, r2], [1, 1], linestyle="dotted",
-                   color=ASPECTS[asp_name]["color"], linewidth=1)
+            ax.plot(
+                [r1, r2],
+                [1, 1],
+                linestyle="dotted",
+                color=ASPECTS[asp_name]["color"],
+                linewidth=1,
+            )
+
 
 # -------------------------------
 # Shape drawing
 # -------------------------------
 
-def draw_shape_edges(ax, pos, edges, asc_deg, use_aspect_colors=True, override_color=None):
+
+def draw_shape_edges(
+    ax, pos, edges, asc_deg, use_aspect_colors=True, override_color=None
+):
     """
     Draw edges of a detected shape.
     edges: list of ((p1, p2), aspect_name)
@@ -156,8 +209,11 @@ def draw_shape_edges(ax, pos, edges, asc_deg, use_aspect_colors=True, override_c
         r2 = deg_to_rad(d2, asc_deg)
 
         style = ASPECTS[asp]["style"] if asp in ASPECTS else "dotted"
-        color = (ASPECTS[asp]["color"] if (use_aspect_colors and asp in ASPECTS)
-                 else override_color or "gray")
+        color = (
+            ASPECTS[asp]["color"]
+            if (use_aspect_colors and asp in ASPECTS)
+            else override_color or "gray"
+        )
 
         ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=2)
 

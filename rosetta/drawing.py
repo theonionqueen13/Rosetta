@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from rosetta.helpers import deg_to_rad
 from rosetta.lookup import ASPECTS, GLYPHS
 
+
 # -------------------------------
 # Chart element drawing
 # -------------------------------
@@ -12,23 +13,38 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
     Returns a list of 12 cusp longitudes (House 1..12) exactly as used for drawing.
     """
     import pandas as pd
+
     cusps = []
 
     if house_system == "placidus":
         # Placidus cusps come from Swiss Ephemeris, stored in df
         cusp_rows = df[df["Object"].str.match(r"^\d{1,2}H Cusp$", na=False)].copy()
         if not cusp_rows.empty:
-            cusp_rows["__H"] = cusp_rows["Object"].str.extract(r"^(\d{1,2})").astype(int)
+            cusp_rows["__H"] = (
+                cusp_rows["Object"].str.extract(r"^(\d{1,2})").astype(int)
+            )
             cusp_rows = cusp_rows.sort_values("__H")
             for i, (_, row) in enumerate(cusp_rows.iterrows(), start=1):
                 if pd.notna(row.get("Computed Absolute Degree")):
                     deg = float(row["Computed Absolute Degree"])
                     cusps.append(deg)
                     rad = deg_to_rad(deg, asc_deg)
-                    ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-                    ax.text(rad, 0.2, str(i),
-                            ha="center", va="center", fontsize=8,
-                            color="white" if dark_mode else "black")
+                    ax.plot(
+                        [rad, rad],
+                        [0, 1.0],
+                        color="gray",
+                        linestyle="solid",
+                        linewidth=1,
+                    )
+                    ax.text(
+                        rad,
+                        0.2,
+                        str(i),
+                        ha="center",
+                        va="center",
+                        fontsize=8,
+                        color="white" if dark_mode else "black",
+                    )
 
     elif house_system == "equal":
         # Equal = 30° increments starting at Ascendant degree
@@ -37,9 +53,15 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
             cusps.append(deg)
             rad = deg_to_rad(deg, asc_deg)
             ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-            ax.text(rad, 0.2, str(i + 1),
-                    ha="center", va="center", fontsize=8,
-                    color="white" if dark_mode else "black")
+            ax.text(
+                rad,
+                0.2,
+                str(i + 1),
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="white" if dark_mode else "black",
+            )
 
     elif house_system == "whole":
         # Whole Sign = 0° of Ascendant’s sign + 30° increments
@@ -49,33 +71,43 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
             cusps.append(deg)
             rad = deg_to_rad(deg, asc_deg)
             ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
-            ax.text(rad, 0.2, str(i + 1),
-                    ha="center", va="center", fontsize=8,
-                    color="white" if dark_mode else "black")
+            ax.text(
+                rad,
+                0.2,
+                str(i + 1),
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="white" if dark_mode else "black",
+            )
 
     return cusps
+
 
 def draw_degree_markers(ax, asc_deg, dark_mode):
     """Draw tick marks every 10° around the chart."""
     for deg in range(0, 360, 10):
         r = deg_to_rad(deg, asc_deg)
-        ax.plot([r, r], [1.02, 1.08],
-                color="white" if dark_mode else "black", linewidth=1)
-        ax.text(r, 1.12, f"{deg % 30}°",
-                ha="center", va="center", fontsize=7,
-                color="white" if dark_mode else "black")
+        ax.plot(
+            [r, r], [1.02, 1.08], color="white" if dark_mode else "black", linewidth=1
+        )
+        ax.text(
+            r,
+            1.12,
+            f"{deg % 30}°",
+            ha="center",
+            va="center",
+            fontsize=7,
+            color="white" if dark_mode else "black",
+        )
 
 
 def draw_zodiac_signs(ax, asc_deg):
     """Draw zodiac glyphs around the wheel."""
-    glyphs = [
-        "♈️","♉️","♊️","♋️","♌️","♍️",
-        "♎️","♏️","♐️","♑️","♒️","♓️"
-    ]
+    glyphs = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
     for i, glyph in enumerate(glyphs):
         r = deg_to_rad(i * 30 + 15, asc_deg)
-        ax.text(r, 1.5, glyph,
-                ha="center", va="center", fontsize=16, fontweight="bold")
+        ax.text(r, 1.5, glyph, ha="center", va="center", fontsize=16, fontweight="bold")
 
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
@@ -83,13 +115,21 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
     for planet, deg in pos.items():
         r = deg_to_rad(deg, asc_deg)
         label = GLYPHS.get(planet, planet) if label_style == "Glyph" else planet
-        ax.text(r, 1.3, label,
-                ha="center", va="center", fontsize=9,
-                color="white" if dark_mode else "black")
+        ax.text(
+            r,
+            1.3,
+            label,
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="white" if dark_mode else "black",
+        )
+
 
 # -------------------------------
 # Aspect lines (master truth)
 # -------------------------------
+
 
 def draw_aspect_lines(
     ax,
@@ -139,7 +179,7 @@ def draw_aspect_lines(
                 for p in pattern:
                     parent_of[p] = idx
 
-        for ((p1, p2), aspect) in edges:
+        for (p1, p2), aspect in edges:
             i1 = parent_of.get(p1)
             i2 = parent_of.get(p2)
             if i1 is None or i2 is None or i1 != i2:
@@ -150,15 +190,23 @@ def draw_aspect_lines(
             r1 = deg_to_rad(d1, asc_deg)
             r2 = deg_to_rad(d2, asc_deg)
             asp_data = ASPECTS[aspect]
-            color = asp_data["color"] if single_pattern_mode else group_colors[i1 % len(group_colors)]
-            ax.plot([r1, r2], [1, 1], linestyle=asp_data["style"], color=color, linewidth=2)
+            color = (
+                asp_data["color"]
+                if single_pattern_mode
+                else group_colors[i1 % len(group_colors)]
+            )
+            ax.plot(
+                [r1, r2], [1, 1], linestyle=asp_data["style"], color=color, linewidth=2
+            )
 
     if return_edges:
         return edges
 
+
 # -------------------------------
 # Filaments (minors)
 # -------------------------------
+
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
     """Draw minor aspect (filament) connections"""
@@ -169,10 +217,18 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
                 continue
             r1 = deg_to_rad(pos[p1], asc_deg)
             r2 = deg_to_rad(pos[p2], asc_deg)
-            ax.plot([r1, r2], [1, 1], linestyle="dotted",
-                   color=ASPECTS[asp_name]["color"], linewidth=1)
-            
-def draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0):
+            ax.plot(
+                [r1, r2],
+                [1, 1],
+                linestyle="dotted",
+                color=ASPECTS[asp_name]["color"],
+                linewidth=1,
+            )
+
+
+def draw_singleton_dots(
+    ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0
+):
     """
     Draw a dot for each active singleton planet IF it has no visible aspect lines.
     """
@@ -185,14 +241,17 @@ def draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_w
 
         if not has_edge:
             r = deg_to_rad(pos[obj], asc_deg)
-            ax.plot([r], [1], 'o', color="red", markersize=6, linewidth=line_width)
+            ax.plot([r], [1], "o", color="red", markersize=6, linewidth=line_width)
+
 
 # -------------------------------
 # Shape drawing
 # -------------------------------
 
-def draw_shape_edges(ax, pos, edges, asc_deg,
-                     use_aspect_colors=True, override_color=None):
+
+def draw_shape_edges(
+    ax, pos, edges, asc_deg, use_aspect_colors=True, override_color=None
+):
     """
     Draw edges of a detected shape.
     edges: list of ((p1, p2), aspect_name)
@@ -218,6 +277,7 @@ def draw_shape_edges(ax, pos, edges, asc_deg,
         if is_approx:
             # fade the color (lighter version)
             import matplotlib.colors as mcolors
+
             rgb = mcolors.to_rgb(base_color)
             faded = tuple(min(1, c + 0.5 * (1 - c)) for c in rgb)
             color = faded
@@ -226,9 +286,9 @@ def draw_shape_edges(ax, pos, edges, asc_deg,
 
         # 🔑 Thickness: majors thick, minors thin
         if asp_clean in ("Quincunx", "Sesquisquare"):
-            lw = 1   # minors → thin
+            lw = 1  # minors → thin
         else:
-            lw = 2   # majors → thick
+            lw = 2  # majors → thick
 
         ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=lw)
 

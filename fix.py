@@ -461,6 +461,7 @@ def format_planet_header(row):
     header = f"### {symbol} {obj}{dignity_str}\n> “{sabian}”"
     return header
 
+
 def format_planet_subheading(row):
     sign = row.get("Sign", "")
     deg = row.get("Degree", "")
@@ -479,11 +480,13 @@ def format_planet_subheading(row):
     header = f"### {symbol} {obj}{dignity_str}\n> “{sabian}”"
     return header
 
+
 def format_sabian(row):
     sabian = row.get("Sabian", "")
     if sabian:
-        return f'> “{sabian}”'
+        return f"> “{sabian}”"
     return ""
+
 
 def format_planet_profile(row):
     name = row["Object"]

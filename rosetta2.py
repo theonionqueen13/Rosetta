@@ -301,7 +301,6 @@ def render_chart(
     return fig, visible_objects
 
 
-
 ASPECTS = {
     "Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
     "Sextile": {"angle": 60, "orb": 3, "color": "purple", "style": "solid"},
@@ -776,21 +775,21 @@ if uploaded_file:
     filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
     combos = generate_combo_groups(filaments)
 
-    
-    
     toggles = []
     pattern_labels = []
     left_col, right_col = st.columns(2)
     half = (len(patterns) + 1) // 2
     for i in range(len(patterns)):
-        key_prefix = 'left' if i < half else 'right'
+        key_prefix = "left" if i < half else "right"
         target_col = left_col if i < half else right_col
         with target_col:
             row = st.columns([0.5, 2.5])
             checkbox_key = f"toggle_{key_prefix}_{i}"
             textinput_key = f"label_{key_prefix}_{i}"
             toggles.append(row[0].checkbox("", value=True, key=checkbox_key))
-            pattern_labels.append(row[1].text_input("", f"Pattern {i+1}", key=textinput_key))
+            pattern_labels.append(
+                row[1].text_input("", f"Pattern {i+1}", key=textinput_key)
+            )
 
     use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
     dark_mode = st.checkbox("🌙 Dark Mode", value=False)
@@ -820,6 +819,8 @@ if uploaded_file:
             if not matched_rows.empty:
                 row = matched_rows.iloc[0].to_dict()
                 profile = format_planet_profile(row)
-                safe_profile = profile.encode("utf-16", "surrogatepass").decode("utf-16")
+                safe_profile = profile.encode("utf-16", "surrogatepass").decode(
+                    "utf-16"
+                )
                 st.sidebar.markdown(safe_profile)
                 st.sidebar.markdown("---")

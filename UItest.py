@@ -13,7 +13,9 @@ if uploaded_file:
     # ----------------------------
     # Main layout: two columns
     # ----------------------------
-    left_col, right_col = st.columns([2, 1])  # wider for patterns, narrower for expansions
+    left_col, right_col = st.columns(
+        [2, 1]
+    )  # wider for patterns, narrower for expansions
 
     # ----------------------------------
     # Left column: Patterns & Shapes

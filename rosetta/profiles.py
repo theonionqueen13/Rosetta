@@ -1,6 +1,7 @@
 from rosetta.lookup import GLYPHS, OBJECT_MEANINGS
 from rosetta.helpers import calculate_oob_status
 
+
 def format_planet_profile(row):
     """Format planet information for display (single-spaced, skip empty values)."""
     name = row["Object"]
@@ -54,7 +55,13 @@ def format_planet_profile(row):
         ("Latitude", row.get("Latitude", "")),
         ("Declination", declination),
     ]:
-        if value and str(value).strip().lower() not in ["none", "nan", "", "no", "no data"]:
+        if value and str(value).strip().lower() not in [
+            "none",
+            "nan",
+            "",
+            "no",
+            "no data",
+        ]:
             if label == "Out Of Bounds" and value == "No":
                 # Skip "No" to save space
                 continue

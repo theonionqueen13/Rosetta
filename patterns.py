@@ -7,6 +7,7 @@ from rosetta.lookup import ASPECTS
 # Connected components from edges
 # -------------------------------
 
+
 def connected_components_from_edges(nodes, edges):
     nodes = list(nodes)
     adj = {n: set() for n in nodes}
@@ -32,11 +33,13 @@ def connected_components_from_edges(nodes, edges):
         comps.append(comp)
     return comps
 
+
 # -------------------------------
 # Conjunction clustering
 # -------------------------------
 
 from rosetta.lookup import ASPECTS
+
 
 def _cluster_conjunctions_for_detection(pos, members, orb=None):
     """
@@ -74,11 +77,15 @@ def _cluster_conjunctions_for_detection(pos, members, orb=None):
 
     return rep_pos, rep_map, rep_anchor
 
+
 # -------------------------------
 # Shape detection - FIXED VERSION
 # -------------------------------
 
-def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_all, widen_orb=False):
+
+def _detect_shapes_for_members(
+    pos, members, parent_idx, sid_start, major_edges_all, widen_orb=False
+):
     """
     Detect shapes for this parent using ONLY the provided major edge list.
     - Strict mode uses only edges present in major_edges_all.
@@ -88,7 +95,9 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
         return [], sid_start
 
     # 1) Conjunction clustering
-    rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(members))
+    rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(
+        pos, list(members)
+    )
     R = list(rep_pos.keys())
 
     # 2) Build an edge lookup by FILTERING the precomputed master list
@@ -134,8 +143,15 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
             return False
 
         sid = _add_shape(
-            shapes, sh_type, parent_idx, sid,
-            node_list, specs, rep_map, rep_anchor, suppresses
+            shapes,
+            sh_type,
+            parent_idx,
+            sid,
+            node_list,
+            specs,
+            rep_map,
+            rep_anchor,
+            suppresses,
         )
         seen.add(key)
         return True
@@ -149,17 +165,24 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     for quint in combinations(R, 5):
         for perm in permutations(quint):
             a, b, c, d, e = perm
-            if (has_edge(a, b, "Sextile") and has_edge(b, c, "Sextile") and
-                has_edge(c, d, "Sextile") and has_edge(d, e, "Sextile")):
+            if (
+                has_edge(a, b, "Sextile")
+                and has_edge(b, c, "Sextile")
+                and has_edge(c, d, "Sextile")
+                and has_edge(d, e, "Sextile")
+            ):
 
                 suppresses = {
                     "Sextile Wedge": {frozenset([a, b, c]), frozenset([c, d, e])},
                     "Kite": {frozenset([a, b, c, e]), frozenset([a, c, d, e])},
                     "Cradle": {frozenset([a, b, c, d]), frozenset([b, c, d, e])},
                     "Wedge": {
-                        frozenset([a, b, d]), frozenset([c, d, e]),
-                        frozenset([a, c, d]), frozenset([a, b, e]),
-                        frozenset([a, d, e]), frozenset([b, c, e]),
+                        frozenset([a, b, d]),
+                        frozenset([c, d, e]),
+                        frozenset([a, c, d]),
+                        frozenset([a, b, e]),
+                        frozenset([a, d, e]),
+                        frozenset([b, c, e]),
                         frozenset([b, d, e]),
                     },
                 }
@@ -169,70 +192,115 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
                     "Grand Trine": {frozenset([a, c, e])},
                 }
                 candidate_edges = [
-                    ((a, b), "Sextile"), ((b, c), "Sextile"),
-                    ((c, d), "Sextile"), ((d, e), "Sextile"),
-                    ((a, d), "Opposition"), ((b, e), "Opposition"),
-                    ((a, e), "Trine"), ((b, d), "Trine"),
+                    ((a, b), "Sextile"),
+                    ((b, c), "Sextile"),
+                    ((c, d), "Sextile"),
+                    ((d, e), "Sextile"),
+                    ((a, d), "Opposition"),
+                    ((b, e), "Opposition"),
+                    ((a, e), "Trine"),
+                    ((b, d), "Trine"),
                 ]
-                add_once("Envelope", (a, b, c, d, e), candidate_edges,
-                         {"suppress": suppresses, "keep": keep})
+                add_once(
+                    "Envelope",
+                    (a, b, c, d, e),
+                    candidate_edges,
+                    {"suppress": suppresses, "keep": keep},
+                )
                 break
 
     # Grand Cross
     for quad in combinations(R, 4):
         a, b, c, d = quad
-        if (has_edge(a, c, "Opposition") and has_edge(b, d, "Opposition") and
-            has_edge(a, b, "Square") and has_edge(b, c, "Square") and
-            has_edge(c, d, "Square") and has_edge(d, a, "Square")):
+        if (
+            has_edge(a, c, "Opposition")
+            and has_edge(b, d, "Opposition")
+            and has_edge(a, b, "Square")
+            and has_edge(b, c, "Square")
+            and has_edge(c, d, "Square")
+            and has_edge(d, a, "Square")
+        ):
 
-            suppresses = {"T-Square": {
-                frozenset([a, b, c]), frozenset([b, c, d]),
-                frozenset([c, d, a]), frozenset([d, a, b]),
-            }}
+            suppresses = {
+                "T-Square": {
+                    frozenset([a, b, c]),
+                    frozenset([b, c, d]),
+                    frozenset([c, d, a]),
+                    frozenset([d, a, b]),
+                }
+            }
             candidate_edges = [
-                ((a, c), "Opposition"), ((b, d), "Opposition"),
-                ((a, b), "Square"), ((b, c), "Square"),
-                ((c, d), "Square"), ((d, a), "Square"),
+                ((a, c), "Opposition"),
+                ((b, d), "Opposition"),
+                ((a, b), "Square"),
+                ((b, c), "Square"),
+                ((c, d), "Square"),
+                ((d, a), "Square"),
             ]
-            add_once("Grand Cross", (a, b, c, d), candidate_edges,
-                     {"suppress": suppresses})
+            add_once(
+                "Grand Cross", (a, b, c, d), candidate_edges, {"suppress": suppresses}
+            )
 
     # Mystic Rectangle
     for quad in combinations(R, 4):
         a, b, c, d = quad
-        if (has_edge(a, c, "Opposition") and has_edge(b, d, "Opposition") and
-            has_edge(a, b, "Sextile") and has_edge(c, d, "Sextile") and
-            has_edge(a, d, "Trine") and has_edge(b, c, "Trine")):
+        if (
+            has_edge(a, c, "Opposition")
+            and has_edge(b, d, "Opposition")
+            and has_edge(a, b, "Sextile")
+            and has_edge(c, d, "Sextile")
+            and has_edge(a, d, "Trine")
+            and has_edge(b, c, "Trine")
+        ):
 
-            suppresses = {"Wedge": {
-                frozenset([a, b, c]), frozenset([a, b, d]),
-                frozenset([b, c, d]), frozenset([a, c, d]),
-            }}
+            suppresses = {
+                "Wedge": {
+                    frozenset([a, b, c]),
+                    frozenset([a, b, d]),
+                    frozenset([b, c, d]),
+                    frozenset([a, c, d]),
+                }
+            }
             candidate_edges = [
-                ((a, c), "Opposition"), ((b, d), "Opposition"),
-                ((a, b), "Sextile"), ((c, d), "Sextile"),
-                ((a, d), "Trine"), ((b, c), "Trine"),
+                ((a, c), "Opposition"),
+                ((b, d), "Opposition"),
+                ((a, b), "Sextile"),
+                ((c, d), "Sextile"),
+                ((a, d), "Trine"),
+                ((b, c), "Trine"),
             ]
-            add_once("Mystic Rectangle", (a, b, c, d), candidate_edges,
-                     {"suppress": suppresses})
+            add_once(
+                "Mystic Rectangle",
+                (a, b, c, d),
+                candidate_edges,
+                {"suppress": suppresses},
+            )
 
     # Cradle
     for quad in permutations(R, 4):
         a, b, c, d = quad
-        if (has_edge(a, b, "Sextile") and has_edge(b, c, "Sextile") and
-            has_edge(c, d, "Sextile") and has_edge(a, d, "Opposition") and
-            has_edge(a, c, "Trine") and has_edge(b, d, "Trine")):
+        if (
+            has_edge(a, b, "Sextile")
+            and has_edge(b, c, "Sextile")
+            and has_edge(c, d, "Sextile")
+            and has_edge(a, d, "Opposition")
+            and has_edge(a, c, "Trine")
+            and has_edge(b, d, "Trine")
+        ):
 
             suppresses = {
                 "Wedge": {frozenset([a, b, d]), frozenset([a, c, d])},
                 "Sextile Wedge": {frozenset([a, b, c]), frozenset([b, c, d])},
             }
             candidate_edges = [
-                ((a, b), "Sextile"), ((b, c), "Sextile"), ((c, d), "Sextile"),
-                ((a, d), "Opposition"), ((a, c), "Trine"), ((b, d), "Trine"),
+                ((a, b), "Sextile"),
+                ((b, c), "Sextile"),
+                ((c, d), "Sextile"),
+                ((a, d), "Opposition"),
+                ((a, c), "Trine"),
+                ((b, d), "Trine"),
             ]
-            add_once("Cradle", (a, b, c, d), candidate_edges,
-                     {"suppress": suppresses})
+            add_once("Cradle", (a, b, c, d), candidate_edges, {"suppress": suppresses})
             break
 
     # Kite
@@ -240,7 +308,11 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
         for trio in combinations(quad, 3):
             a, b, c = trio
             apex = list(set(quad) - set(trio))[0]
-            if (has_edge(a, b, "Trine") and has_edge(b, c, "Trine") and has_edge(a, c, "Trine")):
+            if (
+                has_edge(a, b, "Trine")
+                and has_edge(b, c, "Trine")
+                and has_edge(a, c, "Trine")
+            ):
                 for t in (a, b, c):
                     if has_edge(apex, t, "Opposition"):
                         rest = [x for x in (a, b, c) if x != t]
@@ -257,18 +329,29 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
                             "Grand Trine": {frozenset([a, b, c])},
                         }
                         candidate_edges = [
-                            ((a, b), "Trine"), ((b, c), "Trine"), ((a, c), "Trine"),
+                            ((a, b), "Trine"),
+                            ((b, c), "Trine"),
+                            ((a, c), "Trine"),
                             ((apex, t), "Opposition"),
-                            ((apex, rest[0]), "Sextile"), ((apex, rest[1]), "Sextile"),
+                            ((apex, rest[0]), "Sextile"),
+                            ((apex, rest[1]), "Sextile"),
                         ]
-                        add_once("Kite", (a, b, c, apex), candidate_edges,
-                                 {"suppress": suppresses})
+                        add_once(
+                            "Kite",
+                            (a, b, c, apex),
+                            candidate_edges,
+                            {"suppress": suppresses},
+                        )
                         break
 
     # Grand Trine
     for trio in combinations(R, 3):
         a, b, c = trio
-        if (has_edge(a, b, "Trine") and has_edge(b, c, "Trine") and has_edge(a, c, "Trine")):
+        if (
+            has_edge(a, b, "Trine")
+            and has_edge(b, c, "Trine")
+            and has_edge(a, c, "Trine")
+        ):
             candidate_edges = [((a, b), "Trine"), ((b, c), "Trine"), ((a, c), "Trine")]
             add_once("Grand Trine", (a, b, c), candidate_edges)
 
@@ -276,8 +359,11 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     for trio in combinations(R, 3):
         for apex in trio:
             a, b = [n for n in trio if n != apex]
-            if (has_edge(a, b, "Opposition") and
-                has_edge(apex, a, "Square") and has_edge(apex, b, "Square")):
+            if (
+                has_edge(a, b, "Opposition")
+                and has_edge(apex, a, "Square")
+                and has_edge(apex, b, "Square")
+            ):
                 candidate_edges = [
                     ((a, b), "Opposition"),
                     ((apex, a), "Square"),
@@ -293,7 +379,11 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
         tri = [p for p in pairs if has_edge(p[0], p[1], "Trine")]
         sex = [p for p in pairs if has_edge(p[0], p[1], "Sextile")]
         if len(opp) == 1 and len(tri) == 1 and len(sex) == 1:
-            candidate_edges = [(opp[0], "Opposition"), (tri[0], "Trine"), (sex[0], "Sextile")]
+            candidate_edges = [
+                (opp[0], "Opposition"),
+                (tri[0], "Trine"),
+                (sex[0], "Sextile"),
+            ]
             add_once("Wedge", trio, candidate_edges)
 
     # Sextile Wedge
@@ -303,14 +393,20 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
         sex = [p for p in pairs if has_edge(p[0], p[1], "Sextile")]
         opp = [p for p in pairs if has_edge(p[0], p[1], "Opposition")]
         if len(tri) == 1 and len(sex) == 2 and not opp:
-            candidate_edges = [(tri[0], "Trine"), (sex[0], "Sextile"), (sex[1], "Sextile")]
+            candidate_edges = [
+                (tri[0], "Trine"),
+                (sex[0], "Sextile"),
+                (sex[1], "Sextile"),
+            ]
             add_once("Sextile Wedge", trio, candidate_edges)
 
     return shapes, sid
 
+
 # -------------------------------
 # Detect shapes (public API)
 # -------------------------------
+
 
 def detect_shapes(pos, patterns, major_edges_all):
     shapes = []
@@ -326,9 +422,11 @@ def detect_shapes(pos, patterns, major_edges_all):
     shapes = apply_suppression(shapes)
     return shapes
 
+
 # -------------------------------
 # Suppression
 # -------------------------------
+
 
 def apply_suppression(shapes):
     suppressed = set()
@@ -347,10 +445,15 @@ def apply_suppression(shapes):
                         continue
                     if frozenset(s_small["members"]) == sub_members:
                         keep_hit = False
-                        for env in [sh for sh in shapes if "keep" in sh.get("suppresses", {})]:
+                        for env in [
+                            sh for sh in shapes if "keep" in sh.get("suppresses", {})
+                        ]:
                             keep_map = env["suppresses"]["keep"]
-                            if (s_small["type"] in keep_map and
-                                frozenset(s_small["members"]) in keep_map[s_small["type"]]):
+                            if (
+                                s_small["type"] in keep_map
+                                and frozenset(s_small["members"])
+                                in keep_map[s_small["type"]]
+                            ):
                                 keep_hit = True
                                 break
                         if keep_hit:
@@ -360,9 +463,11 @@ def apply_suppression(shapes):
     # Filter out suppressed shapes
     return [s for i, s in enumerate(shapes) if i not in suppressed]
 
+
 # -------------------------------
 # Minors (unchanged)
 # -------------------------------
+
 
 def detect_minor_links_with_singletons(pos, patterns):
     minor_aspects = ["Quincunx", "Sesquisquare"]
@@ -375,7 +480,9 @@ def detect_minor_links_with_singletons(pos, patterns):
     all_placements = set(pos.keys())
     singletons = all_placements - all_patterned
     singleton_index_offset = len(patterns)
-    singleton_map = {planet: singleton_index_offset + i for i, planet in enumerate(singletons)}
+    singleton_map = {
+        planet: singleton_index_offset + i for i, planet in enumerate(singletons)
+    }
     pattern_map.update(singleton_map)
     for p1, p2 in combinations(pos.keys(), 2):
         angle = abs(pos[p1] - pos[p2]) % 360
@@ -391,12 +498,14 @@ def detect_minor_links_with_singletons(pos, patterns):
                 break
     return connections, singleton_map
 
+
 def generate_combo_groups(filaments):
     G = nx.Graph()
     for _, _, _, pat1, pat2 in filaments:
         if pat1 != pat2:
             G.add_edge(pat1, pat2)
     return [sorted(list(g)) for g in nx.connected_components(G) if len(g) > 1]
+
 
 def internal_minor_edges_for_pattern(pos, members):
     minors = []
@@ -414,12 +523,23 @@ def internal_minor_edges_for_pattern(pos, members):
                     break
     return minors
 
+
 # -------------------------------
 # Shape construction helper
 # -------------------------------
 
-def _add_shape(shapes, sh_type, parent_idx, sid, node_list, edge_specs,
-               rep_map=None, rep_anchor=None, suppresses=None):
+
+def _add_shape(
+    shapes,
+    sh_type,
+    parent_idx,
+    sid,
+    node_list,
+    edge_specs,
+    rep_map=None,
+    rep_anchor=None,
+    suppresses=None,
+):
     shape = {
         "id": sid,
         "type": sh_type,
