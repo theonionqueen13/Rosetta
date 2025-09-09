@@ -9,9 +9,23 @@ import os, sqlite3, json, bcrypt
 import streamlit_authenticator as stauth
 import datetime as dt
 
-import streamlit_authenticator as stauth
-import streamlit as st
-st.sidebar.write("auth version:", getattr(stauth, "__version__", "unknown"))
+# put near the top of your script for a quick check
+import sys, platform
+
+# robust package version lookup
+try:
+    from importlib.metadata import version, PackageNotFoundError
+except Exception:
+    from importlib_metadata import version, PackageNotFoundError  # backfill if needed
+
+st.sidebar.write("Python:", sys.version.split()[0])
+st.sidebar.write("Platform:", platform.platform())
+st.sidebar.write("Auth file:", getattr(stauth, "__file__", "?"))
+
+try:
+    st.sidebar.write("streamlit-authenticator version:", version("streamlit-authenticator"))
+except PackageNotFoundError:
+    st.sidebar.write("streamlit-authenticator version: not found")
 
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
