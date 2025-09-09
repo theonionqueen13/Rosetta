@@ -1263,7 +1263,7 @@ with col_right:
     if "active_profile_tab" not in st.session_state:
         st.session_state["active_profile_tab"] = "Load Profile"
 
-    st.subheader("👤 Birth Chart Profile Manager")
+    st.subheader("👤 Chart Profile Manager")
 
     # Admin gating
     admin_flag = is_admin(current_user_id)
