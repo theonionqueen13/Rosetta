@@ -55,6 +55,51 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "profiles.db")
 
+def _db():
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+
+    # users table (with role)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            name     TEXT NOT NULL,
+            email    TEXT NOT NULL,
+            pw_hash  TEXT NOT NULL,
+            role     TEXT NOT NULL DEFAULT 'user'
+        )
+    """)
+
+    # migrate 'role' if missing (for older DBs)
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(users)")]
+    if "role" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+        conn.commit()
+
+    # private, per-user profiles
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS profiles (
+            user_id      TEXT NOT NULL,
+            profile_name TEXT NOT NULL,
+            payload      TEXT NOT NULL,
+            PRIMARY KEY (user_id, profile_name),
+            FOREIGN KEY (user_id) REFERENCES users(username)
+        )
+    """)
+
+    # community profiles table (opt-in, shared)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS community_profiles (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_name TEXT NOT NULL,
+            payload      TEXT NOT NULL,
+            submitted_by TEXT NOT NULL,
+            created_at   TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
+        )
+    """)
+
+    return conn
+
 # =========================
 # ONE-TIME ADMIN BOOTSTRAP
 # (Remove this whole block after you create the first admin)
