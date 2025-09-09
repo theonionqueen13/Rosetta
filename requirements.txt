@@ -1,9 +1,11 @@
+dictionary
 geopy
 matplotlib
 networkx
 numpy
 openpyxl
 pandas
+profiles
 pyswisseph
 streamlit
 timezonefinder
