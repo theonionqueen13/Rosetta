@@ -1,5 +1,7 @@
 # Rosetta: Astrology Chart Pattern Analyzer
 
+[![CI](https://github.com/theonionqueen13/Rosetta/workflows/CI/badge.svg)](https://github.com/theonionqueen13/Rosetta/actions)
+
 A modern Streamlit-based astrology chart visualization and pattern analysis tool using Swiss Ephemeris calculations.
 
 ## Quick Start
