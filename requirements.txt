@@ -1,10 +1,10 @@
-streamlit
-pandas
-matplotlib
-numpy
 geopy
-timezonefinder
+matplotlib
 networkx
-pyswisseph
+numpy
 openpyxl
+pandas
+pyswisseph
+streamlit
+timezonefinder
 watchdog
