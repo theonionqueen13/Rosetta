@@ -1,2 +1,27 @@
+# Repo-specific
 rosetta/config.toml
+
+# Streamlit secrets
 .streamlit/secrets.toml
+
+# Virtualenvs
+.venv/
+
+# Testing & development artifacts
+*.log
+*.pyc
+.coverage
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+__pycache__/
+
+# IDE / editor
+*.swo
+*.swp
+.idea/
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
