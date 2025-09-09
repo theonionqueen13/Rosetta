@@ -1248,6 +1248,8 @@ with col_mid:
         
         # user calculated a new chart manually
         st.session_state["active_profile_tab"] = "Add / Update Profile"
+
+st.caption("(Synastry and Transit readings coming soon-ish)")
         
 # -------------------------
 # Right column: Profile Manager
@@ -2070,6 +2072,7 @@ if st.session_state.get("chart_ready", False):
     # --- Aspect Interpretation Prompt ---
     with st.expander("Aspect Interpretation Prompt"):
         st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
+        st.caption("Curently, all interpretation prompts are for natal charts. Event interpretation prompts coming soon.")
 
         aspect_blocks = []
         aspect_definitions = set()
