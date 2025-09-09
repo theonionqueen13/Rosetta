@@ -286,6 +286,10 @@ def format_planet_profile(row):
             val_str = format_dms(fval, is_latlon=True)
         elif label == "Declination" and fval is not None:
             val_str = format_dms(fval, is_decl=True)
+        elif label == "Conjunct Fixed Star":
+            # Convert internal multi-star delimiter to commas
+            parts = [p.strip() for p in val_str.split("|||") if p.strip()]
+            val_str = ", ".join(parts)
 
         html_parts.append(f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
 
