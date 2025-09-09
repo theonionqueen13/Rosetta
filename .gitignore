@@ -1,2 +1,5 @@
 rosetta/config.toml
 .streamlit/secrets.toml
+*.pyc
+.venv/
+__pycache__/
