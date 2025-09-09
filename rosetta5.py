@@ -1066,15 +1066,35 @@ if st.session_state.get("chart_ready", False):
 
     st.pyplot(fig, use_container_width=False)
 
-    
     # --- Sidebar planet profiles ---
     st.sidebar.subheader("🪐 Planet Profiles in View")
 
     cusps_list = cusps
 
-    objs_iter = sorted(visible_objects)
+    # Apply conjunction clustering to determine display order
+    rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
 
-    for obj in objs_iter:
+    # Create ordered list: cluster representatives first (sorted), then their members, then singletons
+    ordered_objects = []
+    processed = set()
+
+    # First, add cluster representatives and their members in cluster order
+    for rep in sorted(rep_pos.keys(), key=lambda r: rep_pos[r]):
+        cluster = rep_map[rep]
+        # Add all cluster members in position order
+        cluster_sorted = sorted(cluster, key=lambda m: pos[m])
+        for obj in cluster_sorted:
+            if obj in visible_objects and obj not in processed:
+                ordered_objects.append(obj)
+                processed.add(obj)
+
+    # Add any remaining objects that weren't part of clusters (shouldn't happen, but safety)
+    for obj in sorted(visible_objects):
+        if obj not in processed:
+            ordered_objects.append(obj)
+
+    # Display profiles in the new clustered order
+    for obj in ordered_objects:
         matched_rows = df[df["Object"] == obj]
         if matched_rows.empty:
             continue
