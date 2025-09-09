@@ -55,50 +55,39 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "profiles.db")
 
-def _db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+# =========================
+# ONE-TIME ADMIN BOOTSTRAP
+# (Remove this whole block after you create the first admin)
+# =========================
+try:
+    conn = _db()
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+except Exception as _e:
+    user_count = None
 
-    # users table (with role)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            name     TEXT NOT NULL,
-            email    TEXT NOT NULL,
-            pw_hash  TEXT NOT NULL,
-            role     TEXT NOT NULL DEFAULT 'user'
-        )
-    """)
+if user_count == 0:
+    st.sidebar.warning("No users found. Create the first ADMIN account.")
+    with st.sidebar.form("bootstrap_admin_form", clear_on_submit=False):
+        u  = st.text_input("Username", key="seed_user")
+        n  = st.text_input("Full name", key="seed_name")
+        e  = st.text_input("Email", key="seed_email")
+        p1 = st.text_input("Temp password", type="password", key="seed_pw1")
+        p2 = st.text_input("Repeat password", type="password", key="seed_pw2")
+        submitted = st.form_submit_button("Create admin")
 
-    # migrate 'role' if missing (for older DBs)
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(users)")]
-    if "role" not in cols:
-        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
-        conn.commit()
-
-    # private, per-user profiles
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS profiles (
-            user_id      TEXT NOT NULL,
-            profile_name TEXT NOT NULL,
-            payload      TEXT NOT NULL,
-            PRIMARY KEY (user_id, profile_name),
-            FOREIGN KEY (user_id) REFERENCES users(username)
-        )
-    """)
-
-    # community profiles table (opt-in, shared)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS community_profiles (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_name TEXT NOT NULL,
-            payload      TEXT NOT NULL,
-            submitted_by TEXT NOT NULL,
-            created_at   TEXT NOT NULL,
-            updated_at   TEXT NOT NULL
-        )
-    """)
-
-    return conn
+    if submitted:
+        if not (u and n and e and p1 and p2):
+            st.sidebar.error("All fields are required.")
+        elif p1 != p2:
+            st.sidebar.error("Passwords must match.")
+        elif user_exists(u):
+            st.sidebar.error("That username already exists.")
+        else:
+            # your existing helper -> hashes with bcrypt + stores role
+            create_user(u, n, e, p1, role="admin")
+            st.sidebar.success(f"Admin '{u}' created. Now log in from the sidebar.")
+            # stop this run so the login UI shows cleanly next reload
+            st.stop()
 
 def _credentials_from_db():
     conn = _db()
