@@ -1,9 +1,10 @@
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-import networkx as nx
 from itertools import combinations
+
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
+import streamlit as st
 
 # Glyph constants for glyph mode
 
@@ -565,7 +566,6 @@ OBJECT_MEANINGS = {
     "Uranus": "Your uniqueness, rebellion, and breakthroughs.",
     "Neptune": "Your dreams, illusions, and spiritual longing.",
     "Pluto": "Your power, transformations, and shadow work.",
-    "Eris": "Victimhood to advocacy for the underdog, through learning and speaking truth.",
     "Ceres": "The nurturing instinct and cycles of giving and receiving.",
     "Pallas": "Pattern recognition, creative intelligence, and tactics.",
     "Juno": "What you need in committed partnerships.",
@@ -597,6 +597,7 @@ OBJECT_MEANINGS = {
     "Coppernicus": "Revolutionary vision and paradigm-breaking insight.",
     "Dionysus": "Ecstatic transformation, divine madness, and emotional release.",
     "Echo": "Unmet longing, repetition, and the search for your own voice.",
+    "Eris": "Victimhood to advocady for the underdog, through learning and speaking truth.",
     "Eros": "Your passionate, magnetic drive and creative spark.",
     "Eurydike": "The longing for love lost or the cost of devotion.",
     "Euterpe": "Muse of music \u2014 inspires joy through melody and rhythm.",
