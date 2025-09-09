@@ -1,6 +1,7 @@
 # rosetta/drawing.py
-import swisseph as swe
 import matplotlib.pyplot as plt
+import swisseph as swe
+
 from rosetta.helpers import deg_to_rad
 from rosetta.lookup import ASPECTS, GLYPHS
 
@@ -18,7 +19,8 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
 
     if house_system == "placidus":
         # Placidus cusps come from Swiss Ephemeris, stored in df
-        cusp_rows = df[df["Object"].str.match(r"^\d{1,2}H Cusp$", na=False)].copy()
+        cusp_rows = df[df["Object"].str.match(
+            r"^\d{1,2}H Cusp$", na=False)].copy()
         if not cusp_rows.empty:
             cusp_rows["__H"] = (
                 cusp_rows["Object"].str.extract(r"^(\d{1,2})").astype(int)
@@ -52,7 +54,8 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
             deg = (asc_deg + i * 30.0) % 360.0
             cusps.append(deg)
             rad = deg_to_rad(deg, asc_deg)
-            ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
+            ax.plot([rad, rad], [0, 1.0], color="gray",
+                    linestyle="solid", linewidth=1)
             ax.text(
                 rad,
                 0.2,
@@ -70,7 +73,8 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode):
             deg = (asc_sign_start + i * 30.0) % 360.0
             cusps.append(deg)
             rad = deg_to_rad(deg, asc_deg)
-            ax.plot([rad, rad], [0, 1.0], color="gray", linestyle="solid", linewidth=1)
+            ax.plot([rad, rad], [0, 1.0], color="gray",
+                    linestyle="solid", linewidth=1)
             ax.text(
                 rad,
                 0.2,
@@ -104,17 +108,20 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
 
 def draw_zodiac_signs(ax, asc_deg):
     """Draw zodiac glyphs around the wheel."""
-    glyphs = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
+    glyphs = ["♈️", "♉️", "♊️", "♋️", "♌️",
+              "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
     for i, glyph in enumerate(glyphs):
         r = deg_to_rad(i * 30 + 15, asc_deg)
-        ax.text(r, 1.5, glyph, ha="center", va="center", fontsize=16, fontweight="bold")
+        ax.text(r, 1.5, glyph, ha="center", va="center",
+                fontsize=16, fontweight="bold")
 
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
     """Draw planet glyphs or names around the wheel."""
     for planet, deg in pos.items():
         r = deg_to_rad(deg, asc_deg)
-        label = GLYPHS.get(planet, planet) if label_style == "Glyph" else planet
+        label = GLYPHS.get(
+            planet, planet) if label_style == "Glyph" else planet
         ax.text(
             r,
             1.3,
@@ -129,7 +136,6 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
 # -------------------------------
 # Aspect lines (master truth)
 # -------------------------------
-
 
 def draw_aspect_lines(
     ax,
@@ -241,7 +247,8 @@ def draw_singleton_dots(
 
         if not has_edge:
             r = deg_to_rad(pos[obj], asc_deg)
-            ax.plot([r], [1], "o", color="red", markersize=6, linewidth=line_width)
+            ax.plot([r], [1], "o", color="red",
+                    markersize=6, linewidth=line_width)
 
 
 # -------------------------------
