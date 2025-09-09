@@ -681,7 +681,7 @@ with col_mid:
                         0.0, lat, lon,
                         input_is_ut=False,
                         tz_name=tz_name,
-                        house_system=house_system, 
+                        house_system="Equal",
                     )
                     df["abs_deg"] = df["Longitude"].astype(float)
                     df = annotate_fixed_stars(df)
@@ -712,7 +712,7 @@ with col_mid:
         if lat is None or lon is None or tz_name is None:
             st.error("Please enter a valid city and make sure lookup succeeds.")
         else:
-            run_chart(lat, lon, tz_name, house_system)
+            run_chart(lat, lon, tz_name, "Equal")
 
         # Location info BELOW buttons
         location_info = st.container()
@@ -842,7 +842,7 @@ with col_right:
                                 data["lat"],
                                 data["lon"],
                                 data["tz_name"],
-                                st.session_state.get("house_system", "placidus").lower().replace(" sign", "")
+                                "Equal"
                             )
                             st.success(f"Profile '{name}' loaded and chart calculated!")
                             st.rerun()
