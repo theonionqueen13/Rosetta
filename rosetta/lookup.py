@@ -228,6 +228,33 @@ DIGNITIES = {
   }
 }
 
+HOUSE_SYSTEM_INTERPRETATIONS = {
+    "equal": "Interpret Equal House as the Structural Schematic Layer—the body’s architectural blueprint and energetic grid.",
+    "placidus": "Interpret Placidus as the Narrative + Trauma Pattern Layer—the psychological time–body interface where memory scripts and emotional timelines run.",
+    "whole": "Interpret Whole Sign as the Archetypal + Mythic Layer—the symbolic field that immerses perception in prophecy, dream logic, and mythic meaning.",
+    "campanus": "Interpret Campanus as the Spatial Orientation + Visual Field Layer—the horizon-sphere translator that calibrates visual geometry and room-positioning.",
+    "koch": "Interpret Koch as the Causal Loop + Psychological Chronology Layer—the personalized clock of formative events and cause-effect echo loops.",
+    "regiomontanus": "Interpret Regiomontanus as the Ritual Orientation + Perceptual Direction Layer—the inner compass aligning perception to sacred vectors and cardinal points.",
+    "porphyry": "Interpret Porphyry as the Threshold Awareness + Gatekeeping Layer—the initiatory map of inner gates, liminal passages, and decision thresholds.",
+    "topocentric": "Interpret Topocentric as the Observer Body + Presence Field Layer—the live-feed interface of being seen/witnessed and arriving in the now-body.",
+    "alcabitius": "Interpret Alcabitius as the Status Identity + Role Projection Layer—the social scaffolding where external roles and masks are performed against mirrors."
+}
+
+HOUSE_INTERPRETATIONS = {
+    1: "Interpret the 1st House as the Identity Interface & body-OS bootloader.",
+    2: "Treat the 2nd House as the Resource Engine (value, stability, fuel routing).",
+    3: "View the 3rd House as the Local I/O Bus (nervous-system messaging, skill acquisition, neighborhood nodes), but use layperson friendly words.",
+    4: "Read the 4th House as the Root System & memory vault (home base, attachment roots, inner foundation).",
+    5: "Interpret the 5th House as the Creative Kernel & joy engine (self-expression, play, risk, generativity).",
+    6: "Treat the 6th House as the Service Lab & maintenance stack (craft, routines, soma-systems).",
+    7: "View the 7th House as the Mirror Port (one-to-one bonds, co-regulation, contracts).",
+    8: "Read the 8th House as the Deep-Merge Transformer (shared power, taboos, regeneration).",
+    9: "Interpret the 9th House as the Meaning-Making Array (exploration, worldview architecture, transmission).",
+    10: "Treat the 10th House as the Public Interface & executive panel (role, reputation, mission delivery).",
+    11: "View the 11th House as the Network Grid & future lab (alliances, movements, systems innovation).",
+    12: "Read the 12th House as the Subconscious Field & sanctuary (dreamwork, dissolution, hidden labs).",
+}
+
 ASPECT_INTERPRETATIONS = {
     "Trine": (
         "Complete, automatic connection and collaboration. "
@@ -248,10 +275,11 @@ ASPECT_INTERPRETATIONS = {
         "that complete the grand cross."
     ),
     "Conjunction": (
-        "Two or more planets that share the same perspective and location. "
-        "They work together as a singular node. If they are planets that naturally have a tense "
-        "relationship, such as Saturn and Uranus, then they can sometimes be tough roommates "
-        "together until the two archetypes are resolved into a working friendship."
+        "Planets that share the same perspective and location, approaching life from the same place. "
+        "They combine their powers to form one node in the circuit together. If they are planets that"
+        "naturally have a tense relationship, such as Saturn and Uranus, then they can sometimes be tough"
+        "roommates until the two archetypes are resolved into a working friendship."
+        "When creating Character Profiles, list the profiles for all planets within one conjunction cluster consecutively."
     ),
     "Opposition": (
         "The balance of opposites, like Yin and Yang. Each set of polarities is complementary, "

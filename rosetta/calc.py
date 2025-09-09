@@ -222,10 +222,29 @@ def calculate_chart(
             "Speed": 0.0,
         })
 
+        # --- Add IC (opposite MC) ---
+    if mc_val is not None:  
+        ic_val = (mc_val + 180.0) % 360.0
+        sign, dms, sabian_index = deg_to_sign(ic_val)
+        sabian_symbol = SABIAN_SYMBOLS.get((sign, int(ic_val % 30) + 1), "")
+        rows.append({
+            "Object": "IC",
+            "Longitude": round(ic_val, 6),
+            "Sign": sign,
+            "DMS": dms,
+            "Sabian Index": sabian_index,
+            "Sabian Symbol": sabian_symbol,
+            "Retrograde": "",
+            "OOB Status": "No",
+            "Dignity": "",
+            "Ruled by (sign)": "",
+            "Latitude": 0.0,
+            "Declination": 0.0,
+            "Distance": 0.0,
+            "Speed": 0.0,
+        })
+
     # ----------------------------
-    # House cusps
-    # ----------------------------
-        # ----------------------------
     # House cusps
     # ----------------------------
     cusp_rows = []

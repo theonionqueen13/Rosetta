@@ -10,7 +10,7 @@ import re
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
-    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES
+    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_SYSTEM_INTERPRETATIONS
 )
 from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
 from rosetta.drawing import (
@@ -1099,23 +1099,36 @@ if st.session_state.get("chart_ready", False):
         if matched_rows.empty:
             continue
 
-        row = matched_rows.iloc[0].to_dict()
+        # Calculate houses once for all visible objects (single source of truth)
+    enhanced_objects_data = {}
+    for obj in ordered_objects:
+        matched_rows = df[df["Object"] == obj]
+        if not matched_rows.empty:
+            row = matched_rows.iloc[0].to_dict()
+            
+            # Calculate house using the cusps from chart rendering
+            deg_val = None
+            for key in ("abs_deg", "Longitude"):
+                if key in row and row[key] not in (None, "", "nan"):
+                    try:
+                        deg_val = float(row[key])
+                        break
+                    except Exception:
+                        pass
 
-        # Assign House using the already-drawn cusp set (no recalculation)
-        deg_val = None
-        for key in ("abs_deg", "Longitude"):
-            if key in row and row[key] not in (None, "", "nan"):
-                try:
-                    deg_val = float(row[key])
-                    break
-                except Exception:
-                    pass
+            if deg_val is not None and cusps_list:
+                house_num = _house_of_degree(deg_val, cusps_list)
+                if house_num:
+                    row["House"] = int(house_num)
+            
+            enhanced_objects_data[obj] = row
 
-        if deg_val is not None and cusps_list:
-            house_num = _house_of_degree(deg_val, cusps_list)
-            if house_num:
-                row["House"] = int(house_num)
-
+    # Display profiles using enhanced data
+    for obj in ordered_objects:
+        if obj not in enhanced_objects_data:
+            continue
+        
+        row = enhanced_objects_data[obj]
         profile = format_planet_profile(row)
         st.sidebar.markdown(profile, unsafe_allow_html=True)
         st.sidebar.markdown("---")
@@ -1127,6 +1140,22 @@ if st.session_state.get("chart_ready", False):
         aspect_blocks = []
         aspect_definitions = set()
 
+                # Add conjunction aspects from clusters first
+        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
+        
+        for rep, cluster in rep_map.items():
+            if len(cluster) >= 2:  # Only clusters with 2+ members have conjunctions
+                # Generate all pairwise conjunctions within the cluster
+                cluster_lines = []
+                for i in range(len(cluster)):
+                    for j in range(i + 1, len(cluster)):
+                        p1, p2 = cluster[i], cluster[j]
+                        cluster_lines.append(f"{p1} Conjunction {p2}")
+                        aspect_definitions.add("Conjunction: " + ASPECT_INTERPRETATIONS.get("Conjunction", "Conjunction"))
+                
+                if cluster_lines:
+                    aspect_blocks.append(" + ".join(cluster_lines))
+
         for s in active_shapes:
             lines = []
             for (p1, p2), asp in s["edges"]:
@@ -1137,8 +1166,6 @@ if st.session_state.get("chart_ready", False):
             if lines:
                 aspect_blocks.append(" + ".join(lines))
 
-        # Keep your existing “include aspect definitions …” loop as-is, then:
-
         # --- Conjunction clusters using the SAME logic as patterns.py (no re-implementation) ---
         # Feed it the current positions and exactly the set of objects that are currently visible.
         rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
@@ -1146,12 +1173,8 @@ if st.session_state.get("chart_ready", False):
         # rep_map is {representative: [cluster_members...]}
         _conj_clusters = list(rep_map.values())
 
-        # Per your spec: ONLY clusters with more than 2 planets (i.e., size >= 2) trigger the special note.
+        # Conjunction clusters trigger the special note.
         num_conj_clusters = sum(1 for c in _conj_clusters if len(c) >= 2)
-
-        # Optional debug to see exactly what it counted (shows above the HTML prompt)
-        # st.warning(f"(debug) 3+ conjunction clusters: {num_conj_clusters} | clusters: " +
-        #            ", ".join("{" + ", ".join(c) + "}" for c in _conj_clusters))
 
         import re
         def strip_html_tags(text):
@@ -1169,12 +1192,25 @@ if st.session_state.get("chart_ready", False):
             interpretation_flags = set()
             fixed_star_meanings = {}
 
-            for obj in sorted(visible_objects):
-                matched_rows = df[df["Object"] == obj]
-                if not matched_rows.empty:
-                    row = matched_rows.iloc[0].to_dict()
+            for obj in ordered_objects:  # Use the same ordering as sidebar
+                if obj in enhanced_objects_data:
+                    row = enhanced_objects_data[obj]  # Use pre-calculated data
                     profile_html = format_planet_profile(row)
                     profile_text = strip_html_tags(profile_html)
+        
+                    # Add additional prompt-only details here
+                    additional_details = []
+        
+                    # Future: Add rulership details when ready
+                    # if row.get("Rulership by House"):
+                    #     additional_details.append(f"Rulership by House: {row['Rulership by House']}")
+                    # if row.get("Rulership by Sign"):
+                    #     additional_details.append(f"Rulership by Sign: {row['Rulership by Sign']}")
+        
+                    # Combine profile text with additional details
+                    if additional_details:
+                        profile_text += " | " + " | ".join(additional_details)
+
                     planet_profiles_texts.append(profile_text)
 
                     # ---- Out of Bounds check (separate) ----
@@ -1198,27 +1234,27 @@ if st.session_state.get("chart_ready", False):
                                 fixed_star_meanings[star] = meaning
 
             planet_profiles_block = (
-                "Character Profiles\n" + "\n\n".join(planet_profiles_texts)
+                "Character Profiles:\n" + "\n\n".join(planet_profiles_texts)
                 if planet_profiles_texts else ""
             )
 
             # --- Build interpretation notes ---
-            from rosetta.lookup import INTERPRETATION_FLAGS
+            from rosetta.lookup import INTERPRETATION_FLAGS, HOUSE_INTERPRETATIONS
 
             # --- Build interpretation notes ---
             interpretation_notes = []
             if interpretation_flags or fixed_star_meanings or num_conj_clusters > 0:
-                interpretation_notes.append("Interpretation Notes\n")
+                interpretation_notes.append("Interpretation Notes:")
 
             # Conjunction cluster rule (singular vs plural)
             if num_conj_clusters >= 1:
                 if num_conj_clusters == 1:
                     interpretation_notes.append(
-                        '- When more than 2 planets are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                        '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
                     )
                 elif num_conj_clusters >= 2:
                     interpretation_notes.append(
-                        '- When more than 2 planets are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profiles."'
+                        '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profiles."'
                     )
 
             # General flags (each only once)
@@ -1234,9 +1270,28 @@ if st.session_state.get("chart_ready", False):
                     interpretation_notes.append(f"- {general_star_note}")
                 for star, meaning in fixed_star_meanings.items():
                     interpretation_notes.append(f"- {star}: {meaning}")
+                    
+            # House system interpretation
+            house_system_meaning = HOUSE_SYSTEM_INTERPRETATIONS.get(house_system)
+            if house_system_meaning:
+                interpretation_notes.append(f"- House System ({house_system.title()}): {house_system_meaning}")
+
+            # House interpretations (collect unique houses from enhanced_objects_data)
+            present_houses = set()
+            for obj in ordered_objects:
+                if obj in enhanced_objects_data:
+                    row = enhanced_objects_data[obj]
+                    if row.get("House"):
+                        present_houses.add(int(row["House"]))
+            
+            # Add house interpretation notes for each present house (sorted order)
+            for house_num in sorted(present_houses):
+                house_meaning = HOUSE_INTERPRETATIONS.get(house_num)
+                if house_meaning:
+                    interpretation_notes.append(f"- House {house_num}: {house_meaning}")
 
             # Collapse into single block for prompt
-            interpretation_notes_block = "\n".join(interpretation_notes) if interpretation_notes else ""
+            interpretation_notes_block = "\n\n".join(interpretation_notes) if interpretation_notes else ""
 
             # --- Final prompt assembly ---
             import textwrap
@@ -1251,9 +1306,9 @@ if st.session_state.get("chart_ready", False):
 
             sections = [
                 instructions,
-                planet_profiles_block.strip() if planet_profiles_block else "",
                 interpretation_notes_block.strip() if interpretation_notes_block else "",
-                "\n\n".join(aspect_blocks).strip() if aspect_blocks else "",
+                planet_profiles_block.strip() if planet_profiles_block else "",
+                ("Aspects\n\n" + "\n\n".join(aspect_blocks)).strip() if aspect_blocks else "",
                 "\n\n".join(sorted(aspect_definitions)).strip() if aspect_definitions else "",
             ]
 
