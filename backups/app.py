@@ -1,6 +1,6 @@
 import streamlit as st
-from profiles import format_planet_profile
 from dictionary import OBJECT_MEANINGS
+from profiles import format_planet_profile
 
 st.title("🌌 Astro Profile Generator")
 
