@@ -549,24 +549,52 @@ if uploaded_file:
     filaments, singleton_map = detect_minor_links_with_singletons(pos, patterns)
     combos = generate_combo_groups(filaments)
 
-    # Create pattern toggles in two columns
-    toggles = []
-    pattern_labels = []
-    left_col, right_col = st.columns(2)
-    half = (len(patterns) + 1) // 2
+    # ----------------------------
+    # Main layout: two columns
+    # ----------------------------
+    left_col, right_col = st.columns(
+        [2, 1]
+    )  # wider for patterns, narrower for expansions
 
-    for i in range(len(patterns)):
-        target_col = left_col if i < half else right_col
-        key_prefix = "left" if i < half else "right"
+    # ----------------------------------
+    # Left column: Patterns & Shapes
+    # ----------------------------------
+    with left_col:
+        st.subheader("Patterns")
 
-        with target_col:
-            row = st.columns([0.5, 2.5])
+        toggles = []
+        pattern_labels = []
+        half = (len(patterns) + 1) // 2
+
+        # Split into two parent columns
+        left_patterns, right_patterns = st.columns(2)
+
+        for i, component in enumerate(patterns):
+            target_col = left_patterns if i < half else right_patterns
+            key_prefix = f"pattern{i}"
             checkbox_key = f"toggle_{key_prefix}_{i}"
-            textinput_key = f"label_{key_prefix}_{i}"
-            toggles.append(row[0].checkbox("", value=True, key=checkbox_key))
-            pattern_labels.append(
-                row[1].text_input("", f"Pattern {i+1}", key=textinput_key)
-            )
+            label = f"Pattern {i+1}: {', '.join(component)}"
+
+            with target_col:
+                # Checkbox and expander side by side (no nested columns!)
+                cbox = st.checkbox("", value=True, key=checkbox_key)
+                toggles.append(cbox)
+                pattern_labels.append(label)
+
+                with st.expander(label, expanded=False):
+                    st.markdown("_(sub-shapes will appear here later)_")
+
+    # ----------------------------------
+    # Right column: Expansion Options
+    # ----------------------------------
+    with right_col:
+        st.subheader("Expansion Options")
+        st.checkbox("Show Minor Asteroids", value=False)
+
+        st.markdown("#### Harmonics")
+        cols = st.columns(6)
+        for j, label in enumerate(["5", "7", "9", "10", "11", "12"]):
+            cols[j].checkbox(label, value=False, key=f"harmonic_{label}")
 
     # Chart options
     use_placidus = st.checkbox("Use Placidus House Cusps", value=False)
@@ -589,14 +617,13 @@ if uploaded_file:
 
     st.pyplot(fig, use_container_width=False)
 
-    # Show planet profiles in sidebar
+    # Sidebar: Planet profiles
     st.sidebar.subheader("🪐 Planet Profiles in View")
     for obj in sorted(visible_objects):
         matched_rows = df[df["Object"] == obj]
         if not matched_rows.empty:
             row = matched_rows.iloc[0].to_dict()
             profile = format_planet_profile(row)
-            # Handle encoding issues
             safe_profile = profile.encode("utf-16", "surrogatepass").decode("utf-16")
             st.sidebar.markdown(safe_profile, unsafe_allow_html=True)
             st.sidebar.markdown("---")
