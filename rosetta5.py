@@ -2069,76 +2069,92 @@ if st.session_state.get("chart_ready", False):
         rulership_html = _build_rulership_html(obj, row, enhanced_objects_data, ordered_objects, cusp_signs)
         st.sidebar.markdown(profile + rulership_html, unsafe_allow_html=True)
         st.sidebar.markdown("---")
+
     # --- Aspect Interpretation Prompt ---
     with st.expander("Aspect Interpretation Prompt"):
         st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
         st.caption("Curently, all interpretation prompts are for natal charts. Event interpretation prompts coming soon.")
 
         aspect_blocks = []
-        present_aspects = set()   # track which aspect TYPES appear
-        # --- Conjunction clusters first (pairwise inside each cluster) ---
-        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
-        for rep, cluster in rep_map.items():
-            if len(cluster) >= 2:
-                lines = []
-                cluster_sorted = list(cluster)  # keep cluster order
-                for i in range(len(cluster_sorted)):
-                    for j in range(i + 1, len(cluster_sorted)):
-                        p1, p2 = cluster_sorted[i], cluster_sorted[j]
-                        lines.append(f"{p1} Conjunction {p2}")
-                if lines:
-                    aspect_blocks.append(" + ".join(lines))
-                    present_aspects.add("Conjunction")
+        aspect_definitions = set()
 
-        # --- Active shape edges ---
+                # Add conjunction aspects from clusters first
+        rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
+        
+        for rep, cluster in rep_map.items():
+            if len(cluster) >= 2:  # Only clusters with 2+ members have conjunctions
+                # Generate all pairwise conjunctions within the cluster
+                cluster_lines = []
+                for i in range(len(cluster)):
+                    for j in range(i + 1, len(cluster)):
+                        p1, p2 = cluster[i], cluster[j]
+                        cluster_lines.append(f"{p1} Conjunction {p2}")
+                        aspect_definitions.add("Conjunction: " + ASPECT_INTERPRETATIONS.get("Conjunction", "Conjunction"))
+                
+                if cluster_lines:
+                    aspect_blocks.append(" + ".join(cluster_lines))
+
         for s in active_shapes:
             lines = []
             for (p1, p2), asp in s["edges"]:
                 asp_clean = asp.replace("_approx", "")
+                asp_text = ASPECT_INTERPRETATIONS.get(asp_clean, asp_clean)
                 lines.append(f"{p1} {asp_clean} {p2}")
-                present_aspects.add(asp_clean)
+                aspect_definitions.add(f"{asp_clean}: {asp_text}")
             if lines:
                 aspect_blocks.append(" + ".join(lines))
 
         def strip_html_tags(text):
+            # Replace divs and <br> with spaces
             text = re.sub(r'</div>|<br\s*/?>', ' ', text)
             text = re.sub(r'<div[^>]*>', '', text)
+            # Remove any other HTML tags
             text = re.sub(r'<[^>]+>', '', text)
+            # Collapse multiple spaces
             text = re.sub(r'\s+', ' ', text)
             return text.strip()
 
         if aspect_blocks:
-            # ---------- Character Profiles (same ordering as sidebar) ----------
             planet_profiles_texts = []
             interpretation_flags = set()
             fixed_star_meanings = {}
 
-            for obj in ordered_objects:
+            for obj in ordered_objects:  # Use the same ordering as sidebar
                 if obj in enhanced_objects_data:
-                    row = enhanced_objects_data[obj]
+                    row = enhanced_objects_data[obj]  # Use pre-calculated data
                     profile_html = format_planet_profile(row)
                     profile_text = strip_html_tags(profile_html)
+        
+                    # Add additional prompt-only details here
+                    additional_details = []
+        
+                    # Future: Add rulership details when ready
+                    # if row.get("Rulership by House"):
+                    #     additional_details.append(f"Rulership by House: {row['Rulership by House']}")
+                    # if row.get("Rulership by Sign"):
+                    #     additional_details.append(f"Rulership by Sign: {row['Rulership by Sign']}")
+        
+                    # Combine profile text with additional details
+                    if additional_details:
+                        profile_text += " | " + " | ".join(additional_details)
 
-                    # (Optional future extra prompt details could append here.)
                     planet_profiles_texts.append(profile_text)
 
-                    # ---- Out of Bounds flag
+                    # ---- Out of Bounds check (separate) ----
                     if str(row.get("OOB Status", "")).lower() == "yes":
                         interpretation_flags.add("Out of Bounds")
 
-                    # ---- Retrograde / Station flags
+                    # ---- Retrograde / Station checks ----
                     retro_val = str(row.get("Retrograde", "")).lower()
                     if "station" in retro_val:
                         interpretation_flags.add("Station Point")
                     if "rx" in retro_val:
                         interpretation_flags.add("Retrograde")
 
-                    # ---- Fixed Stars
-                    fs_meaning = row.get("Fixed Star Meaning")
-                    fs_conj = row.get("Fixed Star Conjunction")
-                    if fs_meaning and fs_conj:
-                        stars = fs_conj.split("|||")
-                        meanings = fs_meaning.split("|||")
+                    # ---- Fixed Stars check (independent) ----
+                    if row.get("Fixed Star Meaning"):
+                        stars = row["Fixed Star Conjunction"].split("|||")
+                        meanings = row["Fixed Star Meaning"].split("|||")
                         for star, meaning in zip(stars, meanings):
                             star, meaning = star.strip(), meaning.strip()
                             if meaning:
@@ -2149,27 +2165,37 @@ if st.session_state.get("chart_ready", False):
                 if planet_profiles_texts else ""
             )
 
-            # ---------- Interpretation Notes ----------
+            rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
+
+            # rep_map is {representative: [cluster_members...]}
+            _conj_clusters = list(rep_map.values())
+
+            # Conjunction clusters trigger the special note.
+            num_conj_clusters = sum(1 for c in _conj_clusters if len(c) >= 2)
+
+            # --- Build interpretation notes ---
             interpretation_notes = []
-            # Conjunction cluster guidance (singular/plural)
-            num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
             if interpretation_flags or fixed_star_meanings or num_conj_clusters > 0:
                 interpretation_notes.append("Interpretation Notes:")
 
-            if num_conj_clusters == 1:
-                interpretation_notes.append(
-                    '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
-                )
-            elif num_conj_clusters >= 2:
-                interpretation_notes.append(
-                    '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
-                )
+            # Conjunction cluster rule (singular vs plural)
+            if num_conj_clusters >= 1:
+                if num_conj_clusters == 1:
+                    interpretation_notes.append(
+                        '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                    )
+                elif num_conj_clusters >= 2:
+                    interpretation_notes.append(
+                        '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profiles."'
+                    )
 
+            # General flags (each only once)
             for flag in sorted(interpretation_flags):
                 meaning = INTERPRETATION_FLAGS.get(flag)
                 if meaning:
                     interpretation_notes.append(f"- {meaning}")
 
+            # Fixed Star note (general rule once, then list specifics)
             if fixed_star_meanings:
                 general_star_note = INTERPRETATION_FLAGS.get("Fixed Star")
                 if general_star_note:
@@ -2177,39 +2203,33 @@ if st.session_state.get("chart_ready", False):
                 for star, meaning in fixed_star_meanings.items():
                     interpretation_notes.append(f"- {star}: {meaning}")
 
-            # House system + house notes
+            # House system interpretation
             house_system_meaning = HOUSE_SYSTEM_INTERPRETATIONS.get(house_system)
             if house_system_meaning:
                 interpretation_notes.append(
                     f"- House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
                 )
 
+            # House interpretations (collect unique houses from enhanced_objects_data)
             present_houses = set()
             for obj in ordered_objects:
-                row = enhanced_objects_data.get(obj, {})
-                h = row.get("House")
-                if h:
-                    present_houses.add(int(h))
-            for h in sorted(present_houses):
-                hm = HOUSE_INTERPRETATIONS.get(h)
-                if hm:
-                    interpretation_notes.append(f"- House {h}: {hm}")
+                if obj in enhanced_objects_data:
+                    row = enhanced_objects_data[obj]
+                    if row.get("House"):
+                        present_houses.add(int(row["House"]))
+            
+            # Add house interpretation notes for each present house (sorted order)
+            for house_num in sorted(present_houses):
+                house_meaning = HOUSE_INTERPRETATIONS.get(house_num)
+                if house_meaning:
+                    interpretation_notes.append(f"- House {house_num}: {house_meaning}")
 
+            # Collapse into single block for prompt
             interpretation_notes_block = "\n\n".join(interpretation_notes) if interpretation_notes else ""
 
-            # ---------- Aspect Interpretations (the blurbs) ----------
-            # Build exactly the blurbs for ONLY the aspects in view.
-            aspect_def_lines = []
-            for a in sorted(present_aspects):
-                blurb = ASPECT_INTERPRETATIONS.get(a)
-                if blurb:
-                    aspect_def_lines.append(f"{a}: {blurb}")
-            aspect_defs_block = (
-                "Aspect Interpretations\n\n" + "\n\n".join(aspect_def_lines)
-            ).strip() if aspect_def_lines else ""
-
-            # ---------- Final prompt ----------
+            # --- Final prompt assembly ---
             import textwrap
+
             instructions = textwrap.dedent("""
             Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. For each planet or placement profile or conjunction cluster provided, use all information provided to synthesize a personified planet "character" profile in one paragraph. Use only the interpretation instructions provided for each item. List these one-paragraph character profiles first in your output, under a heading called "Character Profiles."
 
@@ -2222,44 +2242,35 @@ if st.session_state.get("chart_ready", False):
                 instructions,
                 interpretation_notes_block.strip() if interpretation_notes_block else "",
                 planet_profiles_block.strip() if planet_profiles_block else "",
-                ("Aspects\n\n" + "\n\n".join(aspect_blocks)).strip(),
-                aspect_defs_block,  # <-- labeled, deduped blurbs for present aspects
+                ("Aspects\n\n" + "\n\n".join(aspect_blocks)).strip() if aspect_blocks else "",
+                "\n\n".join(sorted(aspect_definitions)).strip() if aspect_definitions else "",
             ]
+
+            # filter out empties and join with two line breaks
             prompt = "\n\n".join([s for s in sections if s]).strip()
 
-            def nl2br(s: str) -> str:
-                return s.replace("\n", "<br>")
+            copy_button = f"""
+                <div style="display:flex; flex-direction:column; align-items:stretch;">
+                    <div style="display:flex; justify-content:flex-end; margin-bottom:5px;">
+                        <button id="copy-btn"
+                                onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {{
+                                    var btn = document.getElementById('copy-btn');
+                                    var oldText = btn.innerHTML;
+                                    btn.innerHTML = '✅ Copied!';
+                                    setTimeout(() => btn.innerHTML = oldText, 2000);
+                                }})"
+                                style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
+                            📋 Copy
+                        </button>
+                    </div>
+                    <div id="prompt-box"
+                        style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
+                                color:white; background:black; border:1px solid #555;
+                                padding:8px; border-radius:4px; max-height:600px; overflow:auto;">{prompt.strip().replace("\n", "<br>")}
+                    </div>
+                </div>
+            """
 
-            prompt_html = nl2br(prompt.strip())
-
-            from string import Template
-
-            prompt_html = prompt.strip().replace("\n", "<br>")
-
-            copy_tpl = Template("""
-            <div style="display:flex; flex-direction:column; align-items:stretch;">
-            <div style="display:flex; justify-content:flex-end; margin-bottom:5px;">
-                <button id="copy-btn"
-                        onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {
-                            var btn = document.getElementById('copy-btn');
-                            var oldText = btn.innerHTML;
-                            btn.innerHTML = '✅ Copied!';
-                            setTimeout(() => btn.innerHTML = oldText, 2000);
-                        })"
-                        style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
-                📋 Copy
-                </button>
-            </div>
-            <div id="prompt-box"
-                style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
-                        color:white; background:black; border:1px solid #555;
-                        padding:8px; border-radius:4px; max-height:600px; overflow:auto;">${prompt_html}
-            </div>
-            </div>
-            """)
-
-            copy_button = copy_tpl.substitute(prompt_html=prompt_html)
             components.html(copy_button, height=700, scrolling=True)
-
         else:
             st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
