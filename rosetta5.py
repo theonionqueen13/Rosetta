@@ -2069,7 +2069,7 @@ if st.session_state.get("chart_ready", False):
         rulership_html = _build_rulership_html(obj, row, enhanced_objects_data, ordered_objects, cusp_signs)
         st.sidebar.markdown(profile + rulership_html, unsafe_allow_html=True)
         st.sidebar.markdown("---")
-        
+
     # --- Aspect Interpretation Prompt ---
     with st.expander("Aspect Interpretation Prompt"):
         st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
@@ -2164,11 +2164,11 @@ if st.session_state.get("chart_ready", False):
             # Conjunction cluster guidance (singular/plural)
             if num_conj_clusters == 1:
                 interpretation_notes.append(
-                    '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                    '- When 2 or more placements are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
                 )
             elif num_conj_clusters >= 2:
                 interpretation_notes.append(
-                    '- When more than 1 planet are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
+                    '- When 2 or more placements are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
                 )
 
             # General flags (each only once)
@@ -2219,7 +2219,7 @@ if st.session_state.get("chart_ready", False):
             # ---------- Final prompt ----------
             import textwrap
             instructions = textwrap.dedent("""
-            Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. For each planet or placement profile or conjunction cluster provided, use all information provided to synthesize a personified planet "character" profile in one paragraph. Use only the interpretation instructions provided for each item. List these one-paragraph character profiles first in your output, under a heading called "Character Profiles."
+            Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. Use layperson friendly language even if prompt includes nerd-speak. For each planet or placement profile or conjunction cluster provided, use all information provided to synthesize a personified planet "character" profile in one paragraph. Use only the interpretation instructions provided for each item. List these one-paragraph character profiles first in your output, under a heading called "Character Profiles."
 
             Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to personify the "relationship dynamics" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the Character Profiles, under a header called "Aspects."
 

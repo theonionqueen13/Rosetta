@@ -243,7 +243,7 @@ HOUSE_SYSTEM_INTERPRETATIONS = {
 HOUSE_INTERPRETATIONS = {
     1: "Interpret the 1st House as the Identity Interface & body-OS bootloader.",
     2: "Treat the 2nd House as the Resource Engine (value, stability, fuel routing).",
-    3: "View the 3rd House as the Local I/O Bus (nervous-system messaging, skill acquisition, neighborhood nodes), but use layperson friendly words.",
+    3: "View the 3rd House as the Local I/O Bus (nervous-system messaging, skill acquisition, neighborhood nodes).",
     4: "Read the 4th House as the Root System & memory vault (home base, attachment roots, inner foundation).",
     5: "Interpret the 5th House as the Creative Kernel & joy engine (self-expression, play, risk, generativity).",
     6: "Treat the 6th House as the Service Lab & maintenance stack (craft, routines, soma-systems).",
