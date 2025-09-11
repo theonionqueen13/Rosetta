@@ -2079,10 +2079,6 @@ if st.session_state.get("chart_ready", False):
         if key not in st.session_state:
             st.session_state[key] = False  # set True if you want them on by default
 
-    # --- safe callback for turning on a parent circuit from a sub-shape checkbox ---
-    def _activate_parent_toggle(parent_idx: int):
-        st.session_state[f"toggle_pattern_{parent_idx}"] = True
-
     # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
@@ -2170,8 +2166,6 @@ if st.session_state.get("chart_ready", False):
                                 label_text,
                                 key=unique_key,
                                 value=st.session_state.get(unique_key, False),
-                                on_change=_activate_parent_toggle,
-                                args=(i,),  # turn on the parent circuit safely
                             )
                             shape_entries.append({"id": sh["id"], "on": on})
                     else:
