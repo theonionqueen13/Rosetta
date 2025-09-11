@@ -8,6 +8,8 @@ import re
 import os, sqlite3, json, bcrypt, time, random
 import streamlit_authenticator as stauth
 import datetime as dt
+from openai import OpenAI
+client = OpenAI()  # reads OPENAI_API_KEY from env
 
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
@@ -40,6 +42,17 @@ from rosetta.patterns import (
     detect_shapes, internal_minor_edges_for_pattern,
     connected_components_from_edges, _cluster_conjunctions_for_detection, 
 )
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+
+if not OPENAI_API_KEY:
+    st.error(
+        "Missing OPENAI_API_KEY. Set it as an environment variable **or** add it to "
+        ".streamlit/secrets.toml as OPENAI_API_KEY = \"sk-...\""
+    )
+    st.stop()
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 OBJECT_INTERPRETATIONS = {
     # Axes & Points
@@ -2040,13 +2053,58 @@ def _resolve_dignity(obj: str, sign_name: str):
             return label
     return None
 
-def _join_list(items):
-    xs = [str(x).strip() for x in (items or []) if str(x).strip()]
-    if not xs:
-        return ""
-    if len(xs) == 1:
-        return xs[0]
-    return ", ".join(xs[:-1]) + ", " + xs[-1]
+def _one_full_parent_selected(aspect_blocks):
+    """
+    Returns True only when a single *parent* circuit is selected.
+    Sub-shapes within that same parent are fine.
+    """
+    try:
+        import streamlit as st
+        # Prefer explicit state if your UI exposes it
+        for key in ("active_circuit_ids", "selected_circuits", "active_parents"):
+            ids = st.session_state.get(key)
+            if isinstance(ids, (list, tuple, set)):
+                ids = [i for i in ids if i]
+                if len(ids) == 1:
+                    return True  # parent-only selection (assumes these are parent ids)
+
+        # Fallback: infer from aspect_blocks structure
+        parents = set()
+        parent_markers = 0
+        for b in (aspect_blocks or []):
+            # Try common keys for parent/circuit id
+            pid = b.get("parent_id") or b.get("circuit_id") or b.get("parent")
+            # Try to infer from a path/label like "Parent > Subshape"
+            if not pid:
+                path = (b.get("path") or b.get("label") or "").strip()
+                if ">" in path:
+                    pid = path.split(">")[0].strip()
+            if pid:
+                parents.add(pid)
+
+            # Heuristics to detect a parent-level block
+            kind = str(b.get("kind") or b.get("type") or "").lower()
+            if b.get("is_parent") is True or kind in {"parent", "circuit"} or b.get("level") == 0:
+                parent_markers += 1
+
+        return len(parents) == 1 and parent_markers >= 1
+    except Exception:
+        return False
+
+def ask_gpt(prompt_text: str, model: str = "gpt-4o-mini", temperature: float = 0.2) -> str:
+    """Send your already-built Astroneurology prompt as-is. No extra magic."""
+    r = client.chat.completions.create(
+        model=model,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": (
+                "You are an Astroneurology interpreter. Use ONLY the data provided by the app. "
+                "Do NOT import traditional astrology or outside meanings. If data is missing, say so."
+            )},
+            {"role": "user", "content": prompt_text},
+        ],
+    )
+    return r.choices[0].message.content.strip()
 
 # ------------------------
 # If chart data exists, render the chart UI
@@ -2091,15 +2149,20 @@ if st.session_state.get("chart_ready", False):
             st.caption(
                 "If you're new to studying your chart, begin with the sub-shape that contains "
                 "your North Node. Toggle that shape on, then scroll down. Below the chart, "
-                "copy the prompt into your GPT for an aspect interpretation."
+                'press "Send to GPT" to see the interpretation.'
             )
             st.caption(
-                "After studying the first interpretation, choose another shape to study, "
+                "After studying the first shape, choose another one to study, "
                 "such as the one with your Sun or Moon."
             )
             st.caption(
                 "Once you're familiar with multiple shapes, you can turn them on at the same time "
                 "to learn about how they connect and interact with each other."
+            )
+            st.caption(
+                "Then, once you are familiar with a whole circuit, you can give it a name. If you "
+                "turn on exactly one whole circuit plus any of its sub-shapes, the GPT will suggest "
+                "a circuit name for you."
             )
 
         # Pattern checkboxes + expanders
@@ -2489,7 +2552,7 @@ if st.session_state.get("chart_ready", False):
         st.sidebar.markdown("---")
 
     # --- Aspect Interpretation Prompt ---
-    with st.expander("Aspect Interpretation Prompt"):
+    with st.expander("Interpretation Prompt"):
         st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
         st.caption("Curently, all interpretation prompts are for natal charts. Event interpretation prompts coming soon.")
 
@@ -2665,9 +2728,11 @@ if st.session_state.get("chart_ready", False):
             # Count conjunction clusters (for guidance note)
             num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
 
+            should_name_circuit = _one_full_parent_selected(aspect_blocks)
+
             # ---------- Interpretation Notes ----------
             interpretation_notes = []
-            if interpretation_flags or fixed_star_meanings or num_conj_clusters > 0:
+            if interpretation_flags or fixed_star_meanings or num_conj_clusters > 0 or should_name_circuit:
                 interpretation_notes.append("Interpretation Notes:")
 
             # Conjunction cluster guidance (singular/plural)
@@ -2713,7 +2778,13 @@ if st.session_state.get("chart_ready", False):
                 if house_meaning:
                     interpretation_notes.append(f"- House {house_num}: {house_meaning}")
 
+            if should_name_circuit:
+                interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
+
             interpretation_notes_block = "\n\n".join(interpretation_notes) if interpretation_notes else ""
+
+            if should_name_circuit:
+                interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
 
             # ---------- Aspect Interpretations (the blurbs) ----------
             aspect_def_lines = []
@@ -2792,3 +2863,32 @@ if st.session_state.get("chart_ready", False):
 
         else:
             st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+
+    # --- Send to GPT controls (show ONLY when a prompt exists) ---
+    colA, colB, colC = st.columns([1, 1, 2])
+    with colA:
+        run_it = st.button("Send to GPT", type="primary", key="send_to_gpt")
+    with colB:
+        creative = st.toggle("Creative mode", value=False)
+        temp = 0.60 if creative else 0.20
+
+    with colC:
+        model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"], index=0, key="gpt_model")
+
+    if run_it:
+        with st.spinner("Calling model..."):
+            try:
+                out = ask_gpt(prompt, model=model, temperature=temp)
+                st.session_state["latest_interpretation"] = out
+            except Exception as e:
+                st.session_state["latest_interpretation"] = f"LLM error: {e}"
+
+    with st.expander("Interpretation"):
+        st.markdown(
+            st.session_state.get("latest_interpretation",
+                                 "_(Click **Send to GPT** above to generate.)_")
+        )
+
+else:
+    # No prompt yet (no chart or no shapes selected)
+    st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
