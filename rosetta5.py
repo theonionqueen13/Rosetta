@@ -2749,25 +2749,70 @@ if st.session_state.get("chart_ready", False):
         rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
         for rep, cluster in rep_map.items():
             if len(cluster) >= 2:
-                cluster_sorted = list(cluster)
-                lines = []
-                for i in range(len(cluster_sorted)):
-                    for j in range(i + 1, len(cluster_sorted)):
-                        p1, p2 = cluster_sorted[i], cluster_sorted[j]
-                        lines.append(f"{p1} Conjunction {p2}")
-                if lines:
-                    aspect_blocks.append(" + ".join(lines))
-                    present_aspects.add("Conjunction")
+                present_aspects.add("Conjunction")
 
-        # --- Active shape edges (add other aspects) ---
+        # Build lookup: obj -> "Cluster Label" (e.g., "Sun, IC, South Node")
+        cluster_lookup = {}
+        for rep, cluster in rep_map.items():
+            if len(cluster) >= 2:
+                label = ", ".join(sorted(
+                    cluster,
+                    key=lambda x: ordered_objects.index(x) if x in ordered_objects else 999
+                ))
+                for m in cluster:
+                    cluster_lookup[m] = label
+
+        # Collect non-conjunction edges across all active shapes
+        raw_edges = []
+        # Build lookup: obj -> "Cluster Label" (e.g., "Sun, IC, South Node")
+        cluster_lookup = {}
+        for rep, cluster in rep_map.items():
+            if len(cluster) >= 2:
+                label = ", ".join(sorted(
+                    cluster,
+                    key=lambda x: ordered_objects.index(x) if x in ordered_objects else 999
+                ))
+                for m in cluster:
+                    cluster_lookup[m] = label
+
+        # Collect non-conjunction edges across all active shapes
+        raw_edges = []
         for s in active_shapes:
-            lines = []
             for (p1, p2), asp in s["edges"]:
                 asp_clean = asp.replace("_approx", "")
-                lines.append(f"{p1} {asp_clean} {p2}")
+                if asp_clean == "Conjunction":
+                    continue  # conjunctions already handled
+                raw_edges.append((p1, asp_clean, p2))
                 present_aspects.add(asp_clean)
-            if lines:
-                aspect_blocks.append(" + ".join(lines))
+
+        from collections import OrderedDict, defaultdict
+
+        def label_of(obj):
+            return cluster_lookup.get(obj, obj)
+
+        # Group by (left_label, aspect) => list of right labels (dedup, preserve order)
+        appearance = OrderedDict()
+        group_right = defaultdict(list)
+
+        for p1, asp, p2 in raw_edges:
+            L = label_of(p1)
+            R = label_of(p2)
+            if L == R:
+                continue  # skip self-aspects created by cluster substitution
+            key = (L, asp)
+            if key not in appearance:
+                appearance[key] = None
+            if R not in group_right[key]:
+                group_right[key].append(R)
+
+        # Emit a single "+"-joined block for all non-conjunction aspects
+        grouped_parts = []
+        for (L, asp) in appearance.keys():
+            targets = ", ".join(group_right[(L, asp)])
+            grouped_parts.append(f"{L} {asp} {targets}")
+
+        if grouped_parts:
+            aspect_blocks.append(" + ".join(grouped_parts))
 
         def strip_html_tags(text):
             # Replace divs and <br> with spaces
