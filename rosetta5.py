@@ -2731,7 +2731,7 @@ if st.session_state.get("chart_ready", False):
             Assume that the natal astrology chart is the chart native's precise energetic schematic. Your job is to convey the inter-connected circuit board functions of all of the moving parts in this astrological circuit, precisely as they are mapped for you here. These are all dynamic parts of the native's Self.
                                            
             Sources: Use only the data and dictionaries included in this prompt. Do not invent or import outside meanings. 
-            Metadata: When present, incorporate sign + exact degree (Sabian), fixed stars (±1°), house (Equal), dignity/condition, and OOB/retro/station flags. If something is missing, ignore it—no guessing.
+            Metadata: Incorporate sign + exact degree (Sabian Symbol), house, and all other details provided such as dignity/condition, rulership relationships, fixed star conjunctions, and OOB/retro/station flags. If something is missing, ignore it—no guessing.
             Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
 
             Output format — exactly these sections, in this order:
@@ -2747,7 +2747,6 @@ if st.session_state.get("chart_ready", False):
 
             Circuit
             • Zoom out to the whole shape/circuit. In 5–8 sentences, explain what the system does when all aspects run together: its purpose, throughput, strengths, bottlenecks, and smart operating directives.
-            • Propose a concise circuit name (2–5 words) that captures the function.
 
             Style & constraints
             • Layperson-first language with just enough precision to be useful; avoid cookbook clichés and astro-babble.
