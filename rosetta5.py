@@ -5,7 +5,7 @@ import numpy as np
 import streamlit.components.v1 as components
 import swisseph as swe
 import re
-import os, sqlite3, json, bcrypt
+import os, sqlite3, json, bcrypt, time, random
 import streamlit_authenticator as stauth
 import datetime as dt
 
@@ -103,7 +103,58 @@ def _db():
         )
     """)
 
+    _ensure_reset_table(conn)
+
     return conn
+
+def _ensure_reset_table(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS password_resets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            code_hash TEXT NOT NULL,
+            sent_to TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,   -- epoch seconds
+            used INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL    -- epoch seconds
+        )
+    """)
+    conn.commit()
+
+import time, secrets, hashlib, smtplib, ssl, email.utils
+from email.message import EmailMessage
+
+def _hash_code(code: str, pepper: str) -> str:
+    return hashlib.sha256((pepper + code).encode("utf-8")).hexdigest()
+
+def _smtp_send(to_email: str, subject: str, body: str) -> bool:
+    try:
+        smtp_conf = st.secrets.get("smtp", {})
+        host = smtp_conf.get("host")
+        user = smtp_conf.get("user")
+        pwd  = smtp_conf.get("password")
+        port = int(smtp_conf.get("port", 587))
+        from_addr = smtp_conf.get("from", user)
+
+        if not (host and user and pwd and from_addr):
+            return False  # not configured
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = to_email
+        msg["Date"] = email.utils.formatdate(localtime=True)
+        msg.set_content(body)
+
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP(host, port) as s:
+            s.starttls(context=ctx)
+            s.login(user, pwd)
+            s.send_message(msg)
+        return True
+    except Exception as e:
+        st.warning(f"Email send failed: {e}")
+        return False
 
 def _credentials_from_db():
     conn = _db()
@@ -161,6 +212,86 @@ def delete_user_profile_db(user_id: str, profile_name: str) -> None:
     conn = _db()
     conn.execute("DELETE FROM profiles WHERE user_id = ? AND profile_name = ?", (user_id, profile_name))
     conn.commit()
+
+def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15):
+    conn = _db()
+    now = int(time.time())
+    exp = now + ttl_minutes * 60
+    # optional: clear old/used rows
+    conn.execute("DELETE FROM password_resets WHERE (used=1 OR expires_at < ?) AND username = ?", (now, username))
+    conn.execute(
+        "INSERT INTO password_resets (username, code_hash, sent_to, expires_at, used, created_at) VALUES (?,?,?,?,0,?)",
+        (username, code_hash, email_addr, exp, now)
+    )
+    conn.commit()
+
+def _find_user_by_identifier(identifier: str):
+    """identifier can be username or email; returns (username, email) or None."""
+    conn = _db()
+    # case-insensitive match on username OR email
+    row = conn.execute("""
+        SELECT username, email FROM users
+        WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE
+        LIMIT 1
+    """, (identifier.strip(), identifier.strip())).fetchone()
+    return (row[0], row[1]) if row else None
+
+def request_password_reset(identifier: str) -> tuple[bool, str, str]:
+    """
+    Returns (ok, username, code_display_or_msg).
+    Sends email if SMTP configured; otherwise returns code for admin/dev display.
+    """
+    user = _find_user_by_identifier(identifier)
+    if not user:
+        return (False, "", "No account found for that username/email.")
+    username, email_addr = user
+
+    # Create a 6-digit code, hash+pepper it
+    code = f"{random.randint(0, 999999):06d}"
+    pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
+    code_hash = _hash_code(code, pepper)
+
+    _store_reset_code(username, email_addr, code_hash, ttl_minutes=15)
+
+    subject = "Your Rosetta password reset code"
+    body = f"Hi {username},\n\nYour password reset code is: {code}\nIt expires in 15 minutes.\n\nIf you didn’t request this, ignore this email."
+    sent = _smtp_send(email_addr, subject, body)
+
+    # For dev/test, show code if email isn’t configured
+    if not sent:
+        return (True, username, code)  # show to admin on-screen
+    return (True, username, "sent")
+
+def verify_reset_code_and_set_password(username: str, code: str, new_password: str) -> bool:
+    conn = _db()
+    now = int(time.time())
+    pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
+    code_hash = _hash_code(code, pepper)
+
+    row = conn.execute("""
+        SELECT id, expires_at, used FROM password_resets
+        WHERE username = ? COLLATE NOCASE AND code_hash = ?
+        ORDER BY created_at DESC LIMIT 1
+    """, (username, code_hash)).fetchone()
+
+    if not row:
+        return False
+    rid, exp, used = row
+    if used or now > exp:
+        return False
+
+    # mark used first (to prevent reuse/race)
+    conn.execute("UPDATE password_resets SET used=1 WHERE id=?", (rid,))
+    conn.commit()
+
+    # set new password via your existing helper
+    set_password(username, new_password)
+    # refresh in-memory authenticator creds for future logins
+    try:
+        authenticator.credentials = _credentials_from_db()
+    except Exception:
+        pass
+    return True
 
 # --- Community helpers ---
 def community_list(limit: int = 200) -> list[dict]:
@@ -229,14 +360,79 @@ authenticator = stauth.Authenticate(
     cookie_expiry_days=cookie_days
 )
 
-# Version-agnostic login shim
-try:
-    out = authenticator.login(location="sidebar", form_name="Login")
-except TypeError:
+# ---- SIDEBAR LOGIN (your shim) ----
+with st.sidebar:
+    # Version-agnostic login shim (as you have it)
     try:
-        out = authenticator.login("sidebar", "Login")
+        out = authenticator.login(location="sidebar", form_name="Login")
     except TypeError:
-        out = authenticator.login("sidebar", fields={"Form name": "Login"})
+        try:
+            out = authenticator.login("sidebar", "Login")
+        except TypeError:
+            out = authenticator.login("sidebar", fields={"Form name": "Login"})
+
+    # Normalize return value from streamlit_authenticator (tuple vs dict)
+    auth_name = None
+    auth_status = None
+    auth_user = None
+    try:
+        # tuple style: (name, auth_status, username)
+        auth_name, auth_status, auth_user = out
+    except Exception:
+        # dict style
+        if isinstance(out, dict):
+            auth_name = out.get("name")
+            auth_status = out.get("authentication_status")
+            auth_user = out.get("username")
+
+    st.write("")  # small spacer
+
+    # ------- Forgot Password flow (visible when NOT authenticated) -------
+    if auth_status is not True:
+        st.markdown("**Forgot password?**")
+
+        # Step toggles in session_state (sidebar-specific keys)
+        show_reset = st.session_state.get("sb_show_reset_flow", False)
+        if st.button("Start reset"):
+            st.session_state["sb_show_reset_flow"] = True
+            show_reset = True
+
+        if show_reset:
+            st.divider()
+            st.subheader("Reset your password")
+
+            ident = st.text_input("Username or email", key="sb_reset_ident")
+            if st.button("Email me a reset code", key="sb_btn_sendcode"):
+                ok, uname, msg = request_password_reset(ident)
+                if not ok:
+                    st.error(msg)
+                else:
+                    st.session_state["sb_reset_username"] = uname
+                    st.session_state["sb_show_reset_step2"] = True
+                    if msg == "sent":
+                        st.success("If that account exists, a code was sent. Check your email.")
+                    else:
+                        # DEV mode: SMTP not configured; show code so the user can proceed
+                        st.info(f"DEV CODE for **{uname}** (15 min): **{msg}**")
+
+        if st.session_state.get("sb_show_reset_step2"):
+            code = st.text_input("6-digit code", key="sb_reset_code")
+            npw1 = st.text_input("New password", type="password", key="sb_reset_np1")
+            npw2 = st.text_input("Confirm new password", type="password", key="sb_reset_np2")
+
+            if st.button("Set new password", key="sb_btn_setpw"):
+                if not npw1 or npw1 != npw2:
+                    st.error("Passwords don’t match.")
+                else:
+                    uname = st.session_state.get("sb_reset_username", "")
+                    if verify_reset_code_and_set_password(uname, code, npw1):
+                        st.success("Password reset. Log in with your new password.")
+                        # clean up sidebar state
+                        for k in ["sb_show_reset_flow", "sb_show_reset_step2", "sb_reset_username",
+                                  "sb_reset_ident", "sb_reset_code", "sb_reset_np1", "sb_reset_np2"]:
+                            st.session_state.pop(k, None)
+                    else:
+                        st.error("Invalid or expired code.")
 
 if isinstance(out, tuple) and len(out) == 3:
     name, auth_status, username = out
@@ -272,8 +468,10 @@ if auth_status is True:
                     ok_mem = False
                     if auth_hash:
                         import bcrypt
-                        ok_mem = bcrypt.checkpw(cur.encode("utf-8"),
-                                                auth_hash.encode("utf-8") if isinstance(auth_hash, str) else auth_hash)
+                        ok_mem = bcrypt.checkpw(
+                            cur.encode("utf-8"),
+                            auth_hash.encode("utf-8") if isinstance(auth_hash, str) else auth_hash
+                        )
 
                     if not (ok_db or ok_mem):
                         st.error("Current password is incorrect.")
@@ -281,8 +479,6 @@ if auth_status is True:
                         set_password(current_user_id, new1)
                         authenticator.credentials = _credentials_from_db()  # keep things in sync
                         st.success("Password updated.")
-
-                    st.error("Current password is incorrect.")
 
         # Admin-only: user management (create users / reset passwords)
         if admin_flag:
@@ -315,8 +511,6 @@ if auth_status is True:
                     elif not user_exists(target):
                         st.error("No such username.")
                     else:
-                        set_password(target, npw1)
-                        st.success(f"Password reset for '{target}'.")
                         set_password(target, npw1)
                         authenticator.credentials = _credentials_from_db()
                         st.success(f"Password reset for '{target}'.")
@@ -399,21 +593,6 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
             ax.text(rad, offset, label,
                     ha="center", va="center", fontsize=9,
                     color="white" if dark_mode else "black")
-
-def draw_aspect_lines(ax, pos, patterns, active_patterns, asc_deg,
-                      group_colors=None, edges=None):
-    single_pattern_mode = len(active_patterns) == 1
-    if edges:
-        # only draw edges where both nodes sit inside one active pattern
-        active_sets = [set(patterns[i]) for i in active_patterns]
-        for (p1, p2), asp in edges:
-            if any((p1 in s and p2 in s) for s in active_sets):
-                r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
-                color = (ASPECTS[asp]["color"] if single_pattern_mode
-                         else GROUP_COLORS[list(active_patterns)[0] % len(GROUP_COLORS)])
-                ax.plot([r1, r2], [1, 1], linestyle=ASPECTS[asp]["style"], color=color, linewidth=2)
-        return
-    # fallback: current recompute path ...
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
     """Draw dotted lines for minor aspects between active patterns."""
