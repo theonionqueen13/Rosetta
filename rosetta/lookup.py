@@ -35,6 +35,19 @@ GROUP_COLORS = [
     "hotpink", "gold", "deepskyblue", "orchid"
 ]
 
+# Approximate emoji chips for GROUP_COLORS (works in widget labels)
+COLOR_EMOJI = {
+    "crimson": "🟥",
+    "teal": "🟦",
+    "darkorange": "🟧",
+    "slateblue": "🟪",
+    "seagreen": "🟩",
+    "hotpink": "🩷",
+    "gold": "🟨",
+    "deepskyblue": "🟦",
+    "orchid": "🟪",
+}
+
 OBJECT_MEANINGS = {
     "AC": "The mask you wear and how others first see you.",
     "Desc": "What you seek in relationships and partners.",

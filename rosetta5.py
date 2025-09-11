@@ -13,7 +13,7 @@ from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
-    ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
+    ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, COLOR_EMOJI
 )
 from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
 from rosetta.drawing import (
@@ -1883,6 +1883,28 @@ if st.session_state.get("chart_ready", False):
     singleton_map = st.session_state.singleton_map
     combos = st.session_state.combos
 
+    # --- PRE-SEED circuit toggle keys (must happen before creating checkboxes) ---
+    num_patterns = len(patterns)
+
+    # wipe stale toggles from previous charts if indexes no longer exist
+    for k in list(st.session_state.keys()):
+        if k.startswith("toggle_pattern_"):
+            try:
+                idx = int(k.rsplit("_", 1)[1])
+            except Exception:
+                continue
+            if idx >= num_patterns:
+                del st.session_state[k]
+
+    for i in range(num_patterns):
+        key = f"toggle_pattern_{i}"
+        if key not in st.session_state:
+            st.session_state[key] = False  # set True if you want them on by default
+
+    # --- safe callback for turning on a parent circuit from a sub-shape checkbox ---
+    def _activate_parent_toggle(parent_idx: int):
+        st.session_state[f"toggle_pattern_{parent_idx}"] = True
+
     # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
@@ -1900,38 +1922,38 @@ if st.session_state.get("chart_ready", False):
             target_col = left_patterns if i < half else right_patterns
             checkbox_key = f"toggle_pattern_{i}"
 
-            # Session key for circuit name
+            # circuit name session key
             circuit_name_key = f"circuit_name_{i}"
             default_label = f"Circuit {i+1}"
             if circuit_name_key not in st.session_state:
                 st.session_state[circuit_name_key] = default_label
 
-            # Ensure circuit name exists in session
-            if circuit_name_key not in st.session_state:
-                st.session_state[circuit_name_key] = default_label
+            # what shows where
+            circuit_title  = st.session_state[circuit_name_key]   # shown on checkbox row
+            members_label  = ", ".join(component)                  # shown in expander header
 
-            expander_label = f"{st.session_state[circuit_name_key]}: {', '.join(component)}"
+            # color chip for layered mode
+            group_color = GROUP_COLORS[i % len(GROUP_COLORS)]
+            chip = COLOR_EMOJI.get(group_color, "⬛")
 
             with target_col:
-                cbox = st.checkbox("", key=checkbox_key)
+                # checkbox row: [chip] Circuit N
+                cbox = st.checkbox(f"{chip} {circuit_title}", key=checkbox_key)
                 toggles.append(cbox)
-                pattern_labels.append(expander_label)
+                pattern_labels.append(circuit_title)
 
-                with st.expander(expander_label, expanded=False):
-                    # Editable name inside expander
-                    st.text_input(
-                        f"Rename {default_label}",
-                        key=circuit_name_key
-                    )
+                # expander shows only the member list on its header
+                with st.expander(members_label, expanded=False):
+                    # rename field
+                    st.text_input("Circuit name", key=circuit_name_key)
 
-                    # --- Auto-save when circuit name changes ---
+                    # --- Auto-save when circuit name changes (your same logic) ---
                     if st.session_state.get("current_profile"):
                         saved = st.session_state.get("saved_circuit_names", {})
                         current_name = st.session_state[circuit_name_key]
                         last_saved = saved.get(circuit_name_key, default_label)
 
                         if current_name != last_saved:
-                            # Build updated set of circuit names
                             current = {
                                 f"circuit_name_{j}": st.session_state.get(f"circuit_name_{j}", f"Circuit {j+1}")
                                 for j in range(len(patterns))
@@ -1940,11 +1962,10 @@ if st.session_state.get("chart_ready", False):
                             payload = saved_profiles.get(profile_name, {}).copy()
                             payload["circuit_names"] = current
                             save_user_profile_db(current_user_id, profile_name, payload)
-                            # refresh cache
                             saved_profiles = load_user_profiles_db(current_user_id)
                             st.session_state["saved_circuit_names"] = current.copy()
 
-                    # Sub-shapes
+                    # --- Sub-shapes (uses callback to safely toggle parent circuit) ---
                     parent_shapes = [sh for sh in shapes if sh["parent"] == i]
                     shape_entries = []
                     if parent_shapes:
@@ -1955,7 +1976,9 @@ if st.session_state.get("chart_ready", False):
                             on = st.checkbox(
                                 label_text,
                                 key=unique_key,
-                                value=st.session_state.get(unique_key, False)
+                                value=st.session_state.get(unique_key, False),
+                                on_change=_activate_parent_toggle,
+                                args=(i,),  # turn on the parent circuit safely
                             )
                             shape_entries.append({"id": sh["id"], "on": on})
                     else:
