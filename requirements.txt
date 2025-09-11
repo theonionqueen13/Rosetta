@@ -10,3 +10,5 @@ openpyxl
 watchdog
 bcrypt
 streamlit_authenticator
+streamlit>=1.33
+openai>=1.40,<2
