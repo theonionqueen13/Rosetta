@@ -1754,8 +1754,6 @@ with col_mid:
         
         # user calculated a new chart manually
         st.session_state["active_profile_tab"] = "Add / Update Profile"
-
-st.caption("(Synastry and Transit readings coming soon-ish)")
         
 # -------------------------
 # Right column: Profile Manager
@@ -3106,7 +3104,7 @@ if st.session_state.get("chart_ready", False):
                 st.session_state["latest_interpretation"] = f"LLM error: {e}"
 
     st.subheader("Think of each of your planets (or clusters of planets, when conjunct), as a personified part of yourself. When you feel like you have parts of yourself either working together or in conflict, you do -- and this is the working map of those parts.")
-    st.caption("Keep checking back for more and more awesome interpretations as the app is developed! In the meantime, these ones are a great starting point for familiarizing yourself with your inner cast of characters.")
+    st.caption("Keep checking back for more and more awesome interpretations as the app is developed! In the meantime, these ones are a great starting point for familiarizing yourself with your inner cast of characters. Synastry and transit readings coming soon, too!")
 
     with st.expander("Interpretation"):
         st.markdown(
