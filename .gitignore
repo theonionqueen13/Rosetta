@@ -1,2 +1,5 @@
 rosetta/config.toml
 .streamlit/secrets.toml
+rosetta/__pycache__/
+*.pyc
+
