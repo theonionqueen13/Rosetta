@@ -14,7 +14,8 @@ from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
     ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, 
-    HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS
+    HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, OBJECT_INTERPRETATIONS,
+    DIGNITIES, PLANETARY_RULERS,  
 )
 try:
     from rosetta.lookup import COLOR_EMOJI
@@ -26,7 +27,8 @@ except Exception:
     }
 from rosetta.helpers import (
     get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
-    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
+    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
+    SIGN_NAMES
 )
 from rosetta.drawing import (
     draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
@@ -710,6 +712,11 @@ def format_planet_profile(row):
     # --- Header (glyph + bold name) ---
     header = f"<div style='font-weight:bold; font-size:1.1em;'>{glyph} {name}</div>"
     html_parts.append(header)
+
+    # --- Object Meaning (right after the header) ---
+    meaning = OBJECT_MEANINGS.get(name, "")
+    if meaning:
+        html_parts.append(f"<div style='font-size:0.9em; margin-bottom:4px;'>{meaning}</div>")
 
     # --- Sabian Symbol (italic, if present) ---
     if sabian and sabian.lower() not in ["none", "nan"]:
@@ -1882,6 +1889,64 @@ def _current_chart_title():
         unsafe_allow_html=True,
     )
 
+_GLYPH_TO_SIGN = {
+    "♈":"Aries","♉":"Taurus","♊":"Gemini","♋":"Cancer",
+    "♌":"Leo","♍":"Virgo","♎":"Libra","♏":"Scorpio",
+    "♐":"Sagittarius","♑":"Capricorn","♒":"Aquarius","♓":"Pisces",
+}
+_SIGN_PAT = re.compile(r"(Aries|Taurus|Gemini|Cancer|Leo|Virgo|Libra|Scorpio|Sagittarius|Capricorn|Aquarius|Pisces)", re.IGNORECASE)
+
+def _sign_for_lookup(row: dict) -> str:
+    # Try any field you actually have; adjust the list if needed.
+    candidates = [
+        row.get("Sign"),
+        row.get("Zodiac Sign"),
+        row.get("Sign Name"),
+        row.get("Longitude"),        # e.g. "Capricorn 20°58′"
+        row.get("Sign Glyph"),       # e.g. "♑"
+    ]
+    for s in candidates:
+        if not s:
+            continue
+        s = str(s).strip()
+        # 1) Glyph
+        for g, name in _GLYPH_TO_SIGN.items():
+            if g in s:
+                return name
+        # 2) Word match
+        m = _SIGN_PAT.search(s)
+        if m:
+            return m.group(1).title()
+    return ""  # nothing matched; dignity will be omitted
+
+def _resolve_dignity(obj: str, sign_name: str):
+    """
+    Your DIGNITIES is keyed by sign name:
+        DIGNITIES["Capricorn"]["domicile"] == ["Saturn"]
+    Return one of: 'domicile', 'exaltation', 'detriment', 'fall' or None.
+    """
+    m = DIGNITIES.get(sign_name)
+    if not isinstance(m, dict):
+        return None
+
+    # If your row/object includes “(Mean)”, strip those suffixes for matching
+    import re
+    base_obj = re.sub(r"\s*\(.*?\)\s*$", "", obj).strip()
+
+    for label in ("domicile", "exaltation", "detriment", "fall"):
+        lst = m.get(label) or []
+        if isinstance(lst, (list, tuple, set)) and base_obj in lst:
+            return label
+    return None
+
+def _join_list(items):
+    xs = [str(x).strip() for x in (items or []) if str(x).strip()]
+    if not xs:
+        return ""
+    if len(xs) == 1:
+        return xs[0]
+    return ", ".join(xs[:-1]) + ", " + xs[-1]
+
 # ------------------------
 # If chart data exists, render the chart UI
 # ------------------------
@@ -2153,7 +2218,7 @@ if st.session_state.get("chart_ready", False):
     def _sign_from_degree(deg):
         # 0=Aries ... 11=Pisces
         idx = int((deg % 360) // 30)
-        return ZODIAC_SIGNS[idx]
+        return SIGN_NAMES[idx]
 
     def _invert_rulerships(planetary_rulers):
         """Return {Ruler: set(SignsItRules)}"""
@@ -2230,18 +2295,16 @@ if st.session_state.get("chart_ready", False):
 
     # Ensure Sign is set for each visible object
     for obj, row in enhanced_objects_data.items():
-        # Prefer existing 'Sign' if present; otherwise derive from degree
-        if "Sign" not in row or not row["Sign"]:
-            deg_val = None
-            for key in ("abs_deg", "Longitude"):
-                if key in row and row[key] not in (None, "", "nan"):
-                    try:
-                        deg_val = float(row[key])
-                        break
-                    except Exception:
-                        pass
-            if deg_val is not None:
-                row["Sign"] = _sign_from_degree(deg_val)
+        deg_val = None
+        for key in ("abs_deg", "Longitude"):
+            if key in row and row[key] not in (None, "", "nan"):
+                try:
+                    deg_val = float(row[key])
+                    break
+                except Exception:
+                    pass
+        if deg_val is not None:
+            row["Sign"] = _sign_from_degree(deg_val)
 
     # Precompute: cusp signs for each house in the CURRENT system,
     # and a reverse map of signs ruled by each ruler
@@ -2383,6 +2446,97 @@ if st.session_state.get("chart_ready", False):
                     row = enhanced_objects_data[obj]
                     profile_html = format_planet_profile(row)
                     profile_text = strip_html_tags(profile_html)
+                    
+                    # --- Prepend interpretation before the object name, with a trailing colon
+                    interp = (OBJECT_INTERPRETATIONS.get(obj, "") or "").strip()  # <-- ONLY interpretations here
+                    if interp:
+                        lines = profile_text.splitlines()
+                        if lines:
+                            lines[0] = f"{interp}: {lines[0]}"
+                            profile_text = "\n".join(lines)
+
+                    # --- Add (Rx, dignity) after the object name, then a period
+                    import re
+                    name_for_edit = (row.get("Display Name") or obj).strip()
+                    sign = (row.get("Sign") or "").strip()
+
+                    # dignity from lookup (e.g., 'domicile', 'exaltation', etc.)
+                    dignity = _resolve_dignity(obj, sign)
+
+                    # simple Rx flag from your row
+                    retro_val = str(row.get("Retrograde", "")).lower()
+                    rx_flag = "Rx" if "rx" in retro_val else None
+
+                    paren_bits = [x for x in (rx_flag, dignity) if x]
+                    paren_suffix = f" ({', '.join(paren_bits)})" if paren_bits else ""
+
+                    lines = profile_text.splitlines()
+                    if lines and name_for_edit:
+                        first = lines[0]
+                        m = re.match(r"^(.*?:\s*)(.+)$", first)   # keep your "Interpretation:" prefix intact
+                        prefix, rest = m.groups() if m else ("", first)
+
+                        pos = rest.find(name_for_edit)
+                        if pos != -1:
+                            end = pos + len(name_for_edit)
+                            # Insert our (Rx, dignity) immediately after the object name (but not if a paren already starts there)
+                            if paren_suffix and (end >= len(rest) or not rest[end:].lstrip().startswith("(")):
+                                rest = rest[:end] + paren_suffix + rest[end:]
+
+                            # Ensure a period right after the name + optional parens (not if already '.' or ':')
+                            insert_end = end + (len(paren_suffix) if paren_suffix else 0)
+                            if not (insert_end < len(rest) and rest[insert_end] in ".:"):
+                                rest = rest[:insert_end] + "." + rest[insert_end:]
+
+                        lines[0] = prefix + rest
+                        profile_text = "\n".join(lines)
+
+                    # --- Prefix the Sabian line with a label
+                    sab = (row.get("Sabian Symbol") or row.get("Sabian") or "").strip()
+                    if sab and "Sabian Symbol:" not in profile_text:
+                        profile_text = profile_text.replace(sab, f"Sabian Symbol: {sab}", 1)
+
+                    # --- Append rulership info (dedup House/Sign if identical)
+                    try:
+                        rhtml = _build_rulership_html(
+                            obj, row, enhanced_objects_data, ordered_objects, cusp_signs
+                        )
+                        # Normalize line breaks, strip tags -> we expect:
+                        # Rulership by House:\n<house_line>\nRulership by Sign:\n<sign_line>
+                        plain = strip_html_tags(
+                            rhtml.replace("<br />", "\n").replace("<br/>", "\n").replace("<br>", "\n")
+                        ).strip()
+
+                        lines = [ln.strip() for ln in plain.splitlines() if ln.strip()]
+                        # Pull the two payload lines safely
+                        house_hdr_idx = next((i for i, t in enumerate(lines) if t.lower() == "rulership by house:"), None)
+                        sign_hdr_idx  = next((i for i, t in enumerate(lines) if t.lower() == "rulership by sign:"), None)
+
+                        house_line = lines[house_hdr_idx + 1] if house_hdr_idx is not None and house_hdr_idx + 1 < len(lines) else ""
+                        sign_line  = lines[sign_hdr_idx + 1]  if sign_hdr_idx  is not None and sign_hdr_idx  + 1 < len(lines) else ""
+
+                        rtext_final = ""
+                        if house_line and sign_line:
+                            # If identical (case-insensitive), collapse to single "Rulership:" block
+                            if house_line.lower() == sign_line.lower():
+                                rtext_final = f"Rulership:\n{house_line}"
+                            else:
+                                # Different -> keep both with a blank line between sections
+                                rtext_final = (
+                                    "Rulership by House:\n" + house_line + "\n\n" +
+                                    "Rulership by Sign:\n"  + sign_line
+                                )
+                        elif house_line:
+                            rtext_final = "Rulership by House:\n" + house_line
+                        elif sign_line:
+                            rtext_final = "Rulership by Sign:\n" + sign_line
+
+                        if rtext_final:
+                            profile_text = profile_text.rstrip() + "\n\n" + rtext_final
+
+                    except Exception:
+                        # fail-safe: never break the prompt if the sidebar helper changes
+                        pass
 
                     # (Optional future extras for prompt-only can be appended here)
                     planet_profiles_texts.append(profile_text)
@@ -2479,11 +2633,31 @@ if st.session_state.get("chart_ready", False):
             # ---------- Final prompt ----------
             import textwrap
             instructions = textwrap.dedent("""
-            Synthesize accurate poetic interpretations for each of these astrological aspects, using only the precise method outlined. Do not default to traditional astrology. Use layperson friendly language even if prompt includes nerd-speak. For each planet or placement profile or conjunction cluster provided, use all information provided to synthesize a personified planet "character" profile in one paragraph. Use only the interpretation instructions provided for each item. List these one-paragraph character profiles first in your output, under a heading called "Character Profiles."
+            Assume that the natal astrology chart is the chart native's precise energetic schematic. Your job is to convey the inter-connected circuit board functions of all of the moving parts in this astrological circuit, precisely as they are mapped for you here. These are all dynamic parts of the native's Self.
+                                           
+            Sources: Use only the data and dictionaries included in this prompt. Do not invent or import outside meanings. 
+            Metadata: When present, incorporate sign + exact degree (Sabian), fixed stars (±1°), house (Equal), dignity/condition, and OOB/retro/station flags. If something is missing, ignore it—no guessing.
+            Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
 
-            Then, synthesize each aspect, using the two character profiles of the endpoints and the aspect interpretation provided below (not traditional astrology definitions) to personify the "relationship dynamics" between each combination (aspect) of two characters. Each aspect synthesis should be a paragraph. List those paragraphs below the Character Profiles, under a header called "Aspects."
+            Output format — exactly these sections, in this order:
 
-            Lastly, synthesize all of the aspects together: Zoom out and use your thinking brain to see how these interplanetary relationship dynamics become a functioning system with a function when combined into the whole shape provided, and ask yourself "what does the whole thing do when you put it together?" Describe the function, and suggest a name for the circuit. Output this synthesis under a header called "Circuit."
+            Character Profiles
+            • For each object or conjunction cluster, write one paragraph (3–6 sentences) that personifies the placement using all information provided for each planet or placement.
+            • Weave in relevant house context, Sabian symbol note, fixed-star ties, and notable conditions (OOB/retro/station/dignity) only if supplied.
+
+            Aspects
+            • For each aspect provided, write one paragraph describing the relationship dynamics between the two endpoints.
+            • Use the provided aspect definition. Do not substitute traditional meanings.
+            • Build from the profiles; don’t repeat them. Show signal flow, friction/effort, activation choices, and functional outcomes.
+
+            Circuit
+            • Zoom out to the whole shape/circuit. In 5–8 sentences, explain what the system does when all aspects run together: its purpose, throughput, strengths, bottlenecks, and smart operating directives.
+            • Propose a concise circuit name (2–5 words) that captures the function.
+
+            Style & constraints
+            • Layperson-first language with just enough precision to be useful; avoid cookbook clichés and astro-babble.
+            • No disclaimers about the method; don’t mention these instructions in your output.
+            • No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only in the three sections above.
             """).strip()
 
             sections = [
