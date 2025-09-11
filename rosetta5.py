@@ -1921,9 +1921,24 @@ if st.session_state.get("chart_ready", False):
     left_col, right_col = st.columns([2, 1])
     with left_col:
         st.subheader("Circuits")
-        st.caption("One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
-                   "Expand circuits for sub-shapes. View planet profiles on the left sidebar (» on mobile). "
-                   "Below the chart, copy the prompt into your GPT for an aspect interpretation.")
+        with st.expander("Instructions"):
+            st.caption(
+                "One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
+                "Expand circuits for sub-shapes. View planet profiles on the left sidebar (» on mobile). "
+            )
+            st.caption(
+                "If you're new to studying your chart, begin with the sub-shape that contains "
+                "your North Node. Toggle that shape on, then scroll down. Below the chart, "
+                "copy the prompt into your GPT for an aspect interpretation."
+            )
+            st.caption(
+                "After studying the first interpretation, choose another shape to study, "
+                "such as the one with your Sun or Moon."
+            )
+            st.caption(
+                "Once you're familiar with multiple shapes, you can turn them on at the same time "
+                "to learn about how they connect and interact with each other."
+            )
 
         # Pattern checkboxes + expanders
         toggles, pattern_labels = [], []
