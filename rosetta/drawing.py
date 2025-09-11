@@ -2,7 +2,7 @@
 import swisseph as swe
 import matplotlib.pyplot as plt
 from rosetta.helpers import deg_to_rad
-from rosetta.lookup import ASPECTS, GLYPHS
+from rosetta.lookup import ASPECTS, GLYPHS, GROUP_COLORS
 
 # -------------------------------
 # Chart element drawing
@@ -146,7 +146,7 @@ def draw_aspect_lines(
     patterns,
     active_patterns,
     asc_deg,
-    group_colors,
+    group_colors=None,
     return_edges=False,
     edges=None,
 ):
@@ -159,6 +159,8 @@ def draw_aspect_lines(
     - If return_edges: return the edge list.
     """
     single_pattern_mode = len(active_patterns) == 1
+    if group_colors is None:
+        group_colors = GROUP_COLORS
 
     if edges is None:
         edges = []
