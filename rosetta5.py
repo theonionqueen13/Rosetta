@@ -17,7 +17,7 @@ from rosetta.lookup import (
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
     ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, 
     HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
-    DIGNITIES, PLANETARY_RULERS, SHAPE_INSTRUCTIONS 
+    DIGNITIES, PLANETARY_RULERS,  
 )
 try:
     from rosetta.lookup import COLOR_EMOJI
@@ -28,13 +28,97 @@ except Exception:
         "seagreen": "🟩", "hotpink": "🩷", "gold": "🟨", "deepskyblue": "🟦", "orchid": "🟪",
     }
 
-    from rosetta.lookup import SHAPE_INSTRUCTIONS as _SHAPE_INSTRUCTIONS
-except Exception:
-    _SHAPE_INSTRUCTIONS = None
+SHAPE_INSTRUCTIONS = {
 
-import re
+    "Wedge": (
+        "Three planets in a trine–sextile–opposition triangle. The opposition is the headline polarity; the third planet is the bridge. "
+        "It stabilizes one side via the trine (built-in ease) and integrates the other via the sextile (choose-in behaviors). "
+        "Lean on the trined planet first, then deliberately engage the sextiled planet to include the opposite pole. "
+        "Strengths: fast stabilization, clear routing for major life themes. Failure: comfort bias—overusing the trine and skipping the sextile. "
+        "Fix: name and practice the sextile behaviors until they’re native; send the output back across the axis to close the loop."
+    ),
 
-import re
+    "T-Square": (
+        "An opposition with a third planet squaring both ends as the apex. The axis supplies tension; the apex becomes the vector nozzle. "
+        "Drive it by balancing both sides of the axis, routing the charge through the apex as a craft (skills, protocols, roles) rather than reactivity. "
+        "Use the opposite point (phantom leg) as a pressure release. "
+        "Strengths: relentless focus, crisis competence, friction into results. "
+        "Failures: ping-ponging between poles, scapegoating/burning the apex. "
+        "Fixes: balance axis first, split apex workload into repeatable tasks, and touch the phantom leg often. "
+        "Transits: apex hits spike urgency; axis hits tempt polarization; phantom leg hits offer intense, chaotic upgrade portals—stay grounded."
+    ),
+
+    "Grand Cross": (
+        "Two oppositions locked in four squares—like guy lines pulling in all directions. Feels stabilizing when managed, but spins and launches when mismanaged. "
+        "Name both axes; rotate the four jobs in sequence; use center protocols to stop spin. "
+        "Strengths: unmatched endurance, load-sharing, sustained momentum. "
+        "Failures: burnout, paralysis, whiplash between corners. "
+        "Fixes: simple rotation rhythm, floor/ceiling limits, regular center resets. "
+        "Transits: any corner pulls the whole grid; axis hits amplify polarization; quadrant hits can open intense, chaotic upgrade portals—stay grounded."
+    ),
+
+    "Cradle": (
+        "An opposition held by two planets that each trine one outer and sextile the other. Functions like a support sling: tension contained by skillful braces. "
+        "Ease first (trines), then deliberate engagement (sextiles). Alternate braces to move charge safely across the axis. "
+        "Strengths: elegant mediation, continuous throughput, conflict into growth. "
+        "Failures: comfort-looping in the trines, rocking without delivery. "
+        "Fixes: name sextile actions, set steady cadence, keep direct axis check-ins. "
+        "Transits: outer hits intensify polarity, inner hits open intense, chaotic upgrade portals—stay grounded; trine hits add ease—convert to action."
+    ),
+
+    "Mystic Rectangle": (
+        "Two oppositions stitched by two parallel trines (rails) and two parallel sextiles (crossovers). Functions like a resonance membrane. "
+        "Trines carry tone, sextiles phase-match it, oppositions anchor the tension. Circulate in figure-eights: trine → sextile → opposition → sextile → trine. "
+        "Strengths: harmonic entrainment, conflict translation, constant motion without stall. "
+        "Failures: over-resonating with noise, dodging opposition work, spinning. "
+        "Fixes: install gain controls (time/dose/volume), name a reference tone, ground between passes. "
+        "Transits: opposition hits spike amplitude, trines boost flow, sextiles open intense, chaotic upgrade portals—stay grounded."
+    ),
+
+    "Grand Trine": (
+        "Three trines in a closed loop. Pure ease, low-friction throughput—gift and trap. Needs an external vector or it drifts into pretty motion with no delivery. "
+        "Set a clear aim, rotate leadership, and add edges on purpose (deadlines, constraints) to convert flow into results. "
+        "Strengths: efficiency, endurance, fast recovery. "
+        "Failures: autopilot, insularity, no follow-through. "
+        "Fixes: attach to a mission, calendar checkpoints, inject grounded tasks. "
+        "Transits: corner hits amplify flow; oppositions give temporary spine; squares can open intense, chaotic upgrade portals—stay grounded."
+    ),
+
+    "Kite": (
+        "A grand trine with a fourth planet opposing one corner and sextiling the other two. The trine is the airframe; the fourth planet is the spine. "
+        "Use the sextile wings to steer the trine’s lift toward the spine’s aim. "
+        "Strengths: high efficiency plus direction. "
+        "Failures: autopilot drift, chasing spine drama without sextile steering. "
+        "Fixes: set a flight plan, schedule sextile reps, alternate the wings. "
+        "Transits: spine hits demand aim, sextile hits open intense, chaotic upgrade portals—stay grounded, trine hits boost flow—revector through the spine."
+    ),
+
+    "Sextile Wedge": (
+        "One trine with a third planet sextiling both ends. Channels a native talent lane through a choice-activated apex. "
+        "Strengths: graceful productivity, fast learning, clean delivery. "
+        "Failures: coasting on trine with no outcomes, overusing one sextile. "
+        "Fixes: name apex tasks, schedule tiny reps, rotate both sextiles. "
+        "Transits: apex hits open intense, chaotic upgrade portals—stay grounded; trine hits boost flow—aim it; sextile hits highlight levers to balance."
+    ),
+
+    "Unnamed": (
+        "One trine, one square, one quincunx. A talent lane, a workbench, and a hazard. Function: convert the trine’s ease through the square into results—never cross the quincunx. "
+        "Always detour: trine → square → endpoint or reverse. "
+        "Strengths: precision, safe integration. "
+        "Failures: hotwiring the quincunx, scapegoating the square, whipsawing endpoints. "
+        "Fixes: publish square checklists, lock out the quincunx, pace work in short cycles. "
+        "Transits: quincunx hits = red alarm; square hits demand discipline; trine hits boost ease—route through the square."
+    ),
+
+    "Lightning Bolt": (
+        "Four planets in a square–trine–square–trine zig-zag with the endpoints quincunx. Two Unnamed triangles overlapped. "
+        "Use alternating switchback routes to go around the hazard. "
+        "Strengths: rapid rerouting, elegant conversion, built-in redundancy. "
+        "Failures: hotwiring the quincunx, overworking one adapter, drifting on trines. "
+        "Fixes: publish square checklists, alternate the switchbacks, ground between runs. "
+        "Transits: quincunx endpoints = red alarm, square hits spike workload, trine hits boost flow—aim it through an adapter. Dual adapter hits can open intense, chaotic upgrade portals—stay grounded."
+    ),
+}
 
 _CANON_SHAPES = {k.lower(): k for k in SHAPE_INSTRUCTIONS}
 _SHAPE_SYNONYMS = {
