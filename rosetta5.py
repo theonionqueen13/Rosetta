@@ -17,7 +17,7 @@ from rosetta.lookup import (
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
     ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, 
     HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
-    DIGNITIES, PLANETARY_RULERS,  
+    DIGNITIES, PLANETARY_RULERS, SHAPE_INSTRUCTIONS 
 )
 try:
     from rosetta.lookup import COLOR_EMOJI
@@ -27,6 +27,70 @@ except Exception:
         "crimson": "🟥", "teal": "🟦", "darkorange": "🟧", "slateblue": "🟪",
         "seagreen": "🟩", "hotpink": "🩷", "gold": "🟨", "deepskyblue": "🟦", "orchid": "🟪",
     }
+
+    from rosetta.lookup import SHAPE_INSTRUCTIONS as _SHAPE_INSTRUCTIONS
+except Exception:
+    _SHAPE_INSTRUCTIONS = None
+
+import re
+
+import re
+
+_CANON_SHAPES = {k.lower(): k for k in SHAPE_INSTRUCTIONS}
+_SHAPE_SYNONYMS = {
+    "grand_trine": "Grand Trine", "grand-trine": "Grand Trine",
+    "tsquare": "T-Square", "t-square": "T-Square",
+    "mystic_rectangle": "Mystic Rectangle", "mystic-rectangle": "Mystic Rectangle",
+    "yod": "Yod", "kite": "Kite", "wedge": "Wedge",
+    "conjunction cluster": "Conjunction Cluster",
+    "rhythm wedge": "Rhythm Wedge",
+    "ease circuit": "Ease Circuit",
+}
+
+def _canonical_shape_name(shape_dict: dict) -> str:
+    """
+    Return a canonical SHAPE_INSTRUCTIONS key for this shape, or "".
+    Scans many common fields AND all string values, so we don't depend on a single key.
+    """
+    if not isinstance(shape_dict, dict):
+        return ""
+
+    # 1) Candidate fields you might be using
+    candidates = [
+        shape_dict.get("type"), shape_dict.get("kind"),
+        shape_dict.get("shape"), shape_dict.get("shape_type"),
+        shape_dict.get("label"), shape_dict.get("name"),
+        shape_dict.get("parent"), shape_dict.get("parent_name"),
+        shape_dict.get("title"), shape_dict.get("display"), shape_dict.get("display_name"),
+    ]
+
+    # 2) Also scan ALL string values (field-agnostic)
+    for v in shape_dict.values():
+        if isinstance(v, str):
+            candidates.append(v)
+
+    def _norm(s: str) -> str:
+        s = re.sub(r"\(parent\)", "", s, flags=re.IGNORECASE)
+        s = re.split(r"[—:-]", s, maxsplit=1)[0]   # strip adorners
+        s = re.sub(r"[_\s]+", " ", s).strip().lower()
+        return s
+
+    # Try exact, synonyms, then contains
+    for c in candidates:
+        if not c or not isinstance(c, str):
+            continue
+        t = _norm(c)
+        if not t:
+            continue
+        if t in _CANON_SHAPES:
+            return _CANON_SHAPES[t]
+        if t in _SHAPE_SYNONYMS:
+            return _SHAPE_SYNONYMS[t]
+        for lk, canon in _CANON_SHAPES.items():
+            if lk in t:  # contains
+                return canon
+    return ""
+
 from rosetta.helpers import (
     get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
     get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
@@ -43,7 +107,21 @@ from rosetta.patterns import (
     connected_components_from_edges, _cluster_conjunctions_for_detection, 
 )
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
+def _get_openai_key():
+    k = os.getenv("OPENAI_API_KEY")
+    if not k:
+        try:
+            k = st.secrets["OPENAI_API_KEY"]
+        except Exception:
+            k = None
+    return k
+
+OPENAI_API_KEY = _get_openai_key()
+if not OPENAI_API_KEY:
+    st.error("Missing OPENAI_API_KEY. Set it in your deploy environment or in Streamlit **Secrets**.")
+    st.stop()
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 if not OPENAI_API_KEY:
     st.error(
@@ -2106,6 +2184,31 @@ def ask_gpt(prompt_text: str, model: str = "gpt-4o-mini", temperature: float = 0
     )
     return r.choices[0].message.content.strip()
 
+
+_CANON_SHAPES = {s.lower(): s for s in SHAPE_INSTRUCTIONS.keys()}
+
+def _canonical_shape_name(shape_dict):
+    """Map whatever your shape carries to one of SHAPE_INSTRUCTIONS keys."""
+    raw = (
+        shape_dict.get("type") or shape_dict.get("kind") or
+        shape_dict.get("shape") or shape_dict.get("label") or
+        shape_dict.get("name") or ""
+    )
+    txt = str(raw).strip().lower()
+    if not txt:
+        return ""
+
+    # direct match
+    if txt in _CANON_SHAPES:
+        return _CANON_SHAPES[txt]
+
+    # fuzzy contains (e.g., "grand_trine", "Grand Trine (parent)")
+    for k in _CANON_SHAPES:
+        if k.replace(" ", "_") in txt or k in txt:
+            return _CANON_SHAPES[k]
+
+    return ""
+
 # ------------------------
 # If chart data exists, render the chart UI
 # ------------------------
@@ -2727,12 +2830,35 @@ if st.session_state.get("chart_ready", False):
 
             # Count conjunction clusters (for guidance note)
             num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
+            should_name_circuit = _one_full_parent_selected(active_shapes)
 
-            should_name_circuit = _one_full_parent_selected(aspect_blocks)
+            # Collect active shape types (dedup)
+            shape_types_present = []
+            _seen = set()
+            for s in (active_shapes or []):
+                cname = _canonical_shape_name(s)
+                if cname and cname not in _seen and cname in SHAPE_INSTRUCTIONS:
+                    _seen.add(cname)
+                    shape_types_present.append(cname)
+
+            # Which shape types are currently active (dedup to canonical keys)
+            shape_types_present = []
+            seen = set()            
+            for s in (active_shapes or []):
+                cname = _canonical_shape_name(s)
+                if cname and cname not in seen and cname in SHAPE_INSTRUCTIONS:
+                    seen.add(cname)
+                    shape_types_present.append(cname)
 
             # ---------- Interpretation Notes ----------
             interpretation_notes = []
-            if interpretation_flags or fixed_star_meanings or num_conj_clusters > 0 or should_name_circuit:
+            if (
+                interpretation_flags
+                or fixed_star_meanings
+                or num_conj_clusters > 0
+                or should_name_circuit
+                or shape_types_present
+            ):
                 interpretation_notes.append("Interpretation Notes:")
 
             # Conjunction cluster guidance (singular/plural)
@@ -2786,6 +2912,15 @@ if st.session_state.get("chart_ready", False):
             if should_name_circuit:
                 interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
 
+            # --- Shape-type interpretation instructions
+            for stype in shape_types_present:
+                # avoid duplicating the cluster guidance you already add when clusters exist
+                if stype == "Conjunction Cluster" and num_conj_clusters > 0:
+                    continue
+                instr = SHAPE_INSTRUCTIONS.get(stype)
+                if instr:
+                    interpretation_notes.append(f"- [{stype}] {instr}")
+
             # ---------- Aspect Interpretations (the blurbs) ----------
             aspect_def_lines = []
             for a in sorted(present_aspects):
@@ -2795,6 +2930,8 @@ if st.session_state.get("chart_ready", False):
             aspect_defs_block = (
                 "Aspect Interpretations\n\n" + "\n\n".join(aspect_def_lines)
             ) if aspect_def_lines else ""
+
+            interpretation_notes_block = "\n\n".join(interpretation_notes) if interpretation_notes else ""
 
             # ---------- Final prompt ----------
             import textwrap
