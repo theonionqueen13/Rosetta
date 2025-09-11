@@ -3038,7 +3038,7 @@ if st.session_state.get("chart_ready", False):
             • Build from the profiles; don’t repeat them. Show signal flow, friction/effort, activation choices, and functional outcomes.
 
             Circuit
-            • Zoom out to the whole shape/circuit. In 5–8 sentences, explain what the system does when all aspects run together: its purpose, throughput, strengths, bottlenecks, and smart operating directives.
+            • Zoom out to the whole shape/circuit. Explain what the system does when all aspects run together: its purpose, throughput, strengths, bottlenecks, and smart operating directives.
 
             Style & constraints
             • Layperson-first language with just enough precision to be useful; avoid cookbook clichés and astro-babble.
