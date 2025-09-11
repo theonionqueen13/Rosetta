@@ -3031,6 +3031,9 @@ if st.session_state.get("chart_ready", False):
             • For each object or conjunction cluster, write one paragraph (3–6 sentences) that personifies the placement using all information provided for each planet or placement.
             • Weave in relevant house context, Sabian symbol note, fixed-star ties, and notable conditions (OOB/retro/station/dignity) only if supplied.
 
+            Conjunction Clusters (only if present)
+            • For each if any planets are conjunct, add a profile for the combined node of each entire cluster after the individual profiles. 
+                                           
             Aspects
             • For each aspect provided, write one paragraph describing the relationship dynamics between the two endpoints.
             • Use the provided aspect definition. Do not substitute traditional meanings.
