@@ -52,6 +52,7 @@ st.markdown(
 )
 
 st.title("🧭 Rosetta Flight Deck")
+st.caption("Mobile users: click » at the top left to login, and to view planet profiles")
 
 # ---- DB bootstrap & helpers (put this ONCE, above auth) ----
 BASE_DIR = os.path.dirname(__file__)
