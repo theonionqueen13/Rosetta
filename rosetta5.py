@@ -13,9 +13,21 @@ from rosetta.calc import calculate_chart
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
-    ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, COLOR_EMOJI
+    ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, 
+    HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS
 )
-from rosetta.helpers import get_ascendant_degree, deg_to_rad, annotate_fixed_stars, get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
+try:
+    from rosetta.lookup import COLOR_EMOJI
+except Exception:
+    # Fallback so the UI doesn’t die if the name isn’t present in Cloud’s build
+    COLOR_EMOJI = {
+        "crimson": "🟥", "teal": "🟦", "darkorange": "🟧", "slateblue": "🟪",
+        "seagreen": "🟩", "hotpink": "🩷", "gold": "🟨", "deepskyblue": "🟦", "orchid": "🟪",
+    }
+from rosetta.helpers import (
+    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
+    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude
+)
 from rosetta.drawing import (
     draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
     draw_planet_labels, draw_aspect_lines, draw_filament_lines,
