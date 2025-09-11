@@ -235,7 +235,7 @@ OBJECT_INTERPRETATIONS = {
     "Venus": "The Attractor Engine & coherence field",
     "Mars": "The Drive Actuator & ignition vector",
     "Jupiter": "The Meaning Amplifier & growth protocol",
-    "Saturn": "The Constraint Architect & form-governor",
+    "Saturn": "The Constraint Architect, time-keeper, & form-governor",
     "Uranus": "The Update Daemon & liberation current",
     "Neptune": "The Dream Renderer & dissolution cloud",
     "Pluto": "The Underworld Compiler & power transmuter",
