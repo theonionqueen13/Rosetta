@@ -1197,10 +1197,12 @@ if "_loaded_profile" in st.session_state:
     # Restore circuit names if present
     if prof.get("circuit_names"):
         for key, val in prof["circuit_names"].items():
-            st.session_state[key] = val
+            st.session_state.setdefault(key, val)
         st.session_state["saved_circuit_names"] = prof["circuit_names"].copy()
     else:
         st.session_state["saved_circuit_names"] = {}
+
+    st.session_state.pop("_loaded_profile", None)
 
 # --- safe no-op debug hook (prevents NameError if debug calls remain) ---
 def _debug_cusps(*args, **kwargs):
