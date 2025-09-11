@@ -2327,7 +2327,6 @@ if st.session_state.get("chart_ready", False):
     # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
-        st.subheader("Circuits")
         with st.expander("Instructions"):
             st.caption(
                 "One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
@@ -2351,6 +2350,8 @@ if st.session_state.get("chart_ready", False):
                 "turn on exactly one whole circuit plus any of its sub-shapes, the GPT will suggest "
                 "a circuit name for you."
             )
+
+        st.subheader("Circuits")
 
         # Pattern checkboxes + expanders
         toggles, pattern_labels = [], []
