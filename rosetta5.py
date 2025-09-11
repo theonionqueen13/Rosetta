@@ -263,11 +263,26 @@ if auth_status is True:
                     st.error("All fields are required.")
                 elif new1 != new2:
                     st.error("New passwords must match.")
-                elif not verify_password(current_user_id, cur):
-                    st.error("Current password is incorrect.")
                 else:
-                    set_password(current_user_id, new1)
-                    st.success("Password updated.")
+                    # Check against DB hash
+                    ok_db = verify_password(current_user_id, cur)
+
+                    # Also check against the authenticator's in-memory hash (in case of stale cookie)
+                    auth_hash = authenticator.credentials["usernames"].get(current_user_id, {}).get("password")
+                    ok_mem = False
+                    if auth_hash:
+                        import bcrypt
+                        ok_mem = bcrypt.checkpw(cur.encode("utf-8"),
+                                                auth_hash.encode("utf-8") if isinstance(auth_hash, str) else auth_hash)
+
+                    if not (ok_db or ok_mem):
+                        st.error("Current password is incorrect.")
+                    else:
+                        set_password(current_user_id, new1)
+                        authenticator.credentials = _credentials_from_db()  # keep things in sync
+                        st.success("Password updated.")
+
+                    st.error("Current password is incorrect.")
 
         # Admin-only: user management (create users / reset passwords)
         if admin_flag:
@@ -302,6 +317,15 @@ if auth_status is True:
                     else:
                         set_password(target, npw1)
                         st.success(f"Password reset for '{target}'.")
+                        set_password(target, npw1)
+                        authenticator.credentials = _credentials_from_db()
+                        st.success(f"Password reset for '{target}'.")
+
+        with st.sidebar.expander("Admin: login debug"):
+            u = st.text_input("Exact username to test")
+            p = st.text_input("Password to test", type="password")
+            if st.button("Check creds"):
+                st.write("verify_password ->", verify_password(u, p))
 
 elif auth_status is False:
     st.error("Incorrect username or password.")
@@ -1238,6 +1262,10 @@ with col_mid:
             st.session_state["current_lon"] = lon
             st.session_state["current_tz_name"] = tz_name
             run_chart(lat, lon, tz_name, "Equal")
+
+
+        st.caption("Instructions:")
+        st.caption("Instructions: Open the Circuit expanders to reveal their sub-shapes. Choose one to toggle on, scroll down to the Aspect Interpretation Prompt, and paste that into your ChatGPT. Joylin recommends beginning with whichever sub-shape includes your North Node.")
 
         # Location info BELOW buttons
         location_info = st.container()
