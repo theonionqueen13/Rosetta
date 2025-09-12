@@ -2,3 +2,4 @@ rosetta/config.toml
 .streamlit/*
 rosetta/__pycache__/
 *.pyc
+data/profiles.db
