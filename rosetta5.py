@@ -3060,7 +3060,7 @@ if st.session_state.get("chart_ready", False):
             • Weave in relevant house context, Sabian symbol note, fixed-star ties, and notable conditions (OOB/retro/station/dignity) only if supplied.
 
             Other Profiles
-            • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit.
+            • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit. Put these profiles each under a header of its category name, e.g. "Mythic Journeys," Instruments," et. al.
             
             Conjunction Clusters (only if present)
             • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles. 
