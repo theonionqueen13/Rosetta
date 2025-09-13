@@ -228,7 +228,7 @@ OBJECT_INTERPRETATIONS = {
     "South Node": "The Ancestral Cache—purge/compost valve for over-learned patterns",
     "Vertex": "The Fate Dock—improbable convergence node",
     "Part of Fortune": "The Ease Circuit—low-friction throughput and natural gains",
-    "Black Moon Lilith": "The Primal Sovereignty Field—boundary breaker & untamed voltage",
+    "Black Moon Lilith (Mean)": "The Primal Sovereignty Field—boundary breaker & untamed voltage",
 
     # Luminaries & Planets
     "Sun": "The Core Reactor & mission kernel",
@@ -2125,7 +2125,7 @@ CATEGORY_MAP = {
     "Mythic Journeys": {"Pluto","Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Eris","Makemake"},
     "Compass Coordinates": {"Ascendant","Descendant","MC","IC"},
     "Compass Needle": {"True Node","North Node","South Node"},
-    "Switches": {"Black Moon Lilith","Part of Fortune","Vertex","Anti-Vertex","East Point"},
+    "Switches": {"Black Moon Lilith (Mean)","Part of Fortune","Vertex","Anti-Vertex","East Point"},
     "Imprints": {"Fixed Stars"}
 }
 
