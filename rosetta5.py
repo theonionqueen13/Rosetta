@@ -5,7 +5,7 @@ import numpy as np
 import streamlit.components.v1 as components
 import swisseph as swe
 import re
-import os, sqlite3, json, bcrypt, time, random
+import os, sqlite3, json, bcrypt, time, random, psycopg2
 import streamlit_authenticator as stauth
 import datetime as dt
 from openai import OpenAI
@@ -343,76 +343,37 @@ st.markdown(
 
 st.title("🧭 Rosetta Flight Deck")
 st.caption("Mobile users: click » at the top left to login, and to view planet profiles")
-
-# ---- DB bootstrap & helpers (put this ONCE, above auth) ----
-BASE_DIR = os.path.dirname(__file__)
-DATA_DIR = os.path.join(BASE_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.path.join(DATA_DIR, "profiles.db")
+import psycopg2
+import streamlit as st
+import json, bcrypt, time, secrets, hashlib, smtplib, ssl, email.utils
+from email.message import EmailMessage
 
 def _db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-
-    # users table (with role)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            name     TEXT NOT NULL,
-            email    TEXT NOT NULL,
-            pw_hash  TEXT NOT NULL,
-            role     TEXT NOT NULL DEFAULT 'user'
-        )
-    """)
-
-    # migrate 'role' if missing (for older DBs)
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(users)")]
-    if "role" not in cols:
-        conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
-        conn.commit()
-
-    # private, per-user profiles
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS profiles (
-            user_id      TEXT NOT NULL,
-            profile_name TEXT NOT NULL,
-            payload      TEXT NOT NULL,
-            PRIMARY KEY (user_id, profile_name),
-            FOREIGN KEY (user_id) REFERENCES users(username)
-        )
-    """)
-
-    # community profiles table (opt-in, shared)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS community_profiles (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_name TEXT NOT NULL,
-            payload      TEXT NOT NULL,
-            submitted_by TEXT NOT NULL,
-            created_at   TEXT NOT NULL,
-            updated_at   TEXT NOT NULL
-        )
-    """)
-
-    _ensure_reset_table(conn)
-
-    return conn
+    cfg = st.secrets["postgres"]
+    return psycopg2.connect(
+        host=cfg["host"],
+        port=cfg["port"],
+        database=cfg["database"],
+        user=cfg["user"],
+        password=cfg["password"],
+        sslmode=cfg.get("sslmode", "require"),
+    )
 
 def _ensure_reset_table(conn):
-    conn.execute("""
+    cur = conn.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS password_resets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id BIGSERIAL PRIMARY KEY,
             username TEXT NOT NULL,
             code_hash TEXT NOT NULL,
             sent_to TEXT NOT NULL,
-            expires_at INTEGER NOT NULL,   -- epoch seconds
-            used INTEGER NOT NULL DEFAULT 0,
-            created_at INTEGER NOT NULL    -- epoch seconds
+            expires_at BIGINT NOT NULL,
+            used BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at BIGINT NOT NULL
         )
     """)
     conn.commit()
-
-import time, secrets, hashlib, smtplib, ssl, email.utils
-from email.message import EmailMessage
+    cur.close()
 
 def _hash_code(code: str, pepper: str) -> str:
     return hashlib.sha256((pepper + code).encode("utf-8")).hexdigest()
@@ -427,7 +388,7 @@ def _smtp_send(to_email: str, subject: str, body: str) -> bool:
         from_addr = smtp_conf.get("from", user)
 
         if not (host and user and pwd and from_addr):
-            return False  # not configured
+            return False
 
         msg = EmailMessage()
         msg["Subject"] = subject
@@ -448,25 +409,38 @@ def _smtp_send(to_email: str, subject: str, body: str) -> bool:
 
 def _credentials_from_db():
     conn = _db()
-    rows = conn.execute("SELECT username, name, email, pw_hash FROM users").fetchall()
+    cur = conn.cursor()
+    cur.execute("SELECT username, name, email, pw_hash FROM users")
+    rows = cur.fetchall()
+    conn.close()
     return {"usernames": {u: {"name": n, "email": e, "password": h} for (u, n, e, h) in rows}}
 
 def user_exists(username: str) -> bool:
     conn = _db()
-    return conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is not None
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
+    exists = cur.fetchone() is not None
+    conn.close()
+    return exists
 
 def create_user(username: str, name: str, email: str, plain_password: str, role: str = "user") -> None:
     conn = _db()
+    cur = conn.cursor()
     pw_hash = bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    conn.execute(
-        "INSERT OR REPLACE INTO users (username, name, email, pw_hash, role) VALUES (?, ?, ?, ?, ?)",
-        (username, name, email, pw_hash, role)
-    )
+    cur.execute("""
+        INSERT INTO users (username, name, email, pw_hash, role)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (username) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, pw_hash=EXCLUDED.pw_hash, role=EXCLUDED.role
+    """, (username, name, email, pw_hash, role))
     conn.commit()
+    conn.close()
 
 def get_user_role(username: str) -> str:
     conn = _db()
-    row = conn.execute("SELECT role FROM users WHERE username = ?", (username,)).fetchone()
+    cur = conn.cursor()
+    cur.execute("SELECT role FROM users WHERE username = %s", (username,))
+    row = cur.fetchone()
+    conn.close()
     return row[0] if row else "user"
 
 def is_admin(username: str) -> bool:
@@ -474,167 +448,186 @@ def is_admin(username: str) -> bool:
 
 def verify_password(username: str, candidate_password: str) -> bool:
     conn = _db()
-    row = conn.execute("SELECT pw_hash FROM users WHERE username = ?", (username,)).fetchone()
+    cur = conn.cursor()
+    cur.execute("SELECT pw_hash FROM users WHERE username = %s", (username,))
+    row = cur.fetchone()
+    conn.close()
     if not row:
         return False
     return bcrypt.checkpw(candidate_password.encode("utf-8"), row[0].encode() if isinstance(row[0], str) else row[0])
 
 def set_password(username: str, new_plain_password: str) -> None:
     conn = _db()
+    cur = conn.cursor()
     pw_hash = bcrypt.hashpw(new_plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    conn.execute("UPDATE users SET pw_hash = ? WHERE username = ?", (pw_hash, username))
+    cur.execute("UPDATE users SET pw_hash = %s WHERE username = %s", (pw_hash, username))
     conn.commit()
+    conn.close()
 
 def load_user_profiles_db(user_id: str) -> dict:
     conn = _db()
-    rows = conn.execute("SELECT profile_name, payload FROM profiles WHERE user_id = ?", (user_id,)).fetchall()
-    return {name: json.loads(payload) for (name, payload) in rows}
+    cur = conn.cursor()
+    cur.execute("SELECT profile_name, payload FROM profiles WHERE user_id = %s", (user_id,))
+    rows = cur.fetchall()
+    conn.close()
+
+    result = {}
+    for name, payload in rows:
+        if isinstance(payload, dict):
+            result[name] = payload
+        else:
+            result[name] = json.loads(payload)
+    return result
 
 def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None:
     conn = _db()
-    conn.execute(
-        "INSERT OR REPLACE INTO profiles (user_id, profile_name, payload) VALUES (?, ?, ?)",
-        (user_id, profile_name, json.dumps(payload))
-    )
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO profiles (user_id, profile_name, payload)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id, profile_name) DO UPDATE SET payload = EXCLUDED.payload
+    """, (user_id, profile_name, json.dumps(payload)))
     conn.commit()
+    conn.close()
 
 def delete_user_profile_db(user_id: str, profile_name: str) -> None:
     conn = _db()
-    conn.execute("DELETE FROM profiles WHERE user_id = ? AND profile_name = ?", (user_id, profile_name))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM profiles WHERE user_id = %s AND profile_name = %s", (user_id, profile_name))
     conn.commit()
+    conn.close()
 
 def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15):
     conn = _db()
+    cur = conn.cursor()
     now = int(time.time())
     exp = now + ttl_minutes * 60
-    # optional: clear old/used rows
-    conn.execute("DELETE FROM password_resets WHERE (used=1 OR expires_at < ?) AND username = ?", (now, username))
-    conn.execute(
-        "INSERT INTO password_resets (username, code_hash, sent_to, expires_at, used, created_at) VALUES (?,?,?,?,0,?)",
-        (username, code_hash, email_addr, exp, now)
-    )
+    cur.execute("DELETE FROM password_resets WHERE (used=true OR expires_at < %s) AND username = %s", (now, username))
+    cur.execute("""
+        INSERT INTO password_resets (username, code_hash, sent_to, expires_at, used, created_at)
+        VALUES (%s, %s, %s, %s, false, %s)
+    """, (username, code_hash, email_addr, exp, now))
     conn.commit()
+    conn.close()
 
 def _find_user_by_identifier(identifier: str):
-    """identifier can be username or email; returns (username, email) or None."""
     conn = _db()
-    # case-insensitive match on username OR email
-    row = conn.execute("""
+    cur = conn.cursor()
+    cur.execute("""
         SELECT username, email FROM users
-        WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE
+        WHERE LOWER(username) = LOWER(%s) OR LOWER(email) = LOWER(%s)
         LIMIT 1
-    """, (identifier.strip(), identifier.strip())).fetchone()
+    """, (identifier.strip(), identifier.strip()))
+    row = cur.fetchone()
+    conn.close()
     return (row[0], row[1]) if row else None
-
-def request_password_reset(identifier: str) -> tuple[bool, str, str]:
-    """
-    Returns (ok, username, code_display_or_msg).
-    Sends email if SMTP configured; otherwise returns code for admin/dev display.
-    """
-    user = _find_user_by_identifier(identifier)
-    if not user:
-        return (False, "", "No account found for that username/email.")
-    username, email_addr = user
-
-    # Create a 6-digit code, hash+pepper it
-    code = f"{random.randint(0, 999999):06d}"
-    pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
-    code_hash = _hash_code(code, pepper)
-
-    _store_reset_code(username, email_addr, code_hash, ttl_minutes=15)
-
-    subject = "Your Rosetta password reset code"
-    body = f"Hi {username},\n\nYour password reset code is: {code}\nIt expires in 15 minutes.\n\nIf you didn’t request this, ignore this email."
-    sent = _smtp_send(email_addr, subject, body)
-
-    # For dev/test, show code if email isn’t configured
-    if not sent:
-        return (True, username, code)  # show to admin on-screen
-    return (True, username, "sent")
 
 def verify_reset_code_and_set_password(username: str, code: str, new_password: str) -> bool:
     conn = _db()
+    cur = conn.cursor()
     now = int(time.time())
     pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
     code_hash = _hash_code(code, pepper)
 
-    row = conn.execute("""
+    cur.execute("""
         SELECT id, expires_at, used FROM password_resets
-        WHERE username = ? COLLATE NOCASE AND code_hash = ?
+        WHERE LOWER(username) = LOWER(%s) AND code_hash = %s
         ORDER BY created_at DESC LIMIT 1
-    """, (username, code_hash)).fetchone()
+    """, (username, code_hash))
+    row = cur.fetchone()
 
     if not row:
+        conn.close()
         return False
     rid, exp, used = row
     if used or now > exp:
+        conn.close()
         return False
 
-    # mark used first (to prevent reuse/race)
-    conn.execute("UPDATE password_resets SET used=1 WHERE id=?", (rid,))
+    cur.execute("UPDATE password_resets SET used=true WHERE id=%s", (rid,))
     conn.commit()
+    conn.close()
 
-    # set new password via your existing helper
     set_password(username, new_password)
-    # refresh in-memory authenticator creds for future logins
     try:
         authenticator.credentials = _credentials_from_db()
     except Exception:
         pass
     return True
 
-# --- Community helpers ---
 def community_list(limit: int = 200) -> list[dict]:
     conn = _db()
-    rows = conn.execute(
-        "SELECT id, profile_name, payload, submitted_by, created_at, updated_at "
-        "FROM community_profiles ORDER BY created_at DESC LIMIT ?", (limit,)
-    ).fetchall()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, profile_name, payload, submitted_by, created_at, updated_at
+        FROM community_profiles
+        ORDER BY created_at DESC
+        LIMIT %s
+    """, (limit,))
+    rows = cur.fetchall()
+    conn.close()
+
     out = []
     for id_, name, payload, by, c_at, u_at in rows:
         out.append({
             "id": id_,
             "profile_name": name,
-            "payload": json.loads(payload),
+            "payload": payload if isinstance(payload, dict) else json.loads(payload),
             "submitted_by": by,
             "created_at": c_at,
             "updated_at": u_at,
         })
     return out
 
+
 def community_get(pid: int) -> dict | None:
     conn = _db()
-    row = conn.execute(
-        "SELECT id, profile_name, payload, submitted_by, created_at, updated_at "
-        "FROM community_profiles WHERE id = ?", (pid,)
-    ).fetchone()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, profile_name, payload, submitted_by, created_at, updated_at
+        FROM community_profiles
+        WHERE id = %s
+    """, (pid,))
+    row = cur.fetchone()
+    conn.close()
+
     if not row:
         return None
+
     id_, name, payload, by, c_at, u_at = row
     return {
         "id": id_,
         "profile_name": name,
-        "payload": json.loads(payload),
+        "payload": payload if isinstance(payload, dict) else json.loads(payload),
         "submitted_by": by,
         "created_at": c_at,
         "updated_at": u_at,
     }
 
+
 def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
     conn = _db()
+    cur = conn.cursor()
     ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
-    cur = conn.execute(
-        "INSERT INTO community_profiles (profile_name, payload, submitted_by, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (profile_name, json.dumps(payload), submitted_by, ts, ts)
-    )
+    cur.execute("""
+        INSERT INTO community_profiles (profile_name, payload, submitted_by, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id
+    """, (profile_name, json.dumps(payload), submitted_by, ts, ts))
+    new_id = cur.fetchone()[0]
     conn.commit()
-    return cur.lastrowid
+    conn.close()
+    return new_id
+
 
 def community_delete(pid: int) -> None:
     conn = _db()
-    conn.execute("DELETE FROM community_profiles WHERE id = ?", (pid,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM community_profiles WHERE id = %s", (pid,))
     conn.commit()
+    conn.close()
+
+with _db() as conn: _ensure_reset_table(conn)
 
 # --- Authentication (admin-gated user management; no public registration) ---
 creds = _credentials_from_db()
