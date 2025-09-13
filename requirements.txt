@@ -12,5 +12,8 @@ bcrypt
 streamlit_authenticator
 streamlit>=1.33
 openai>=1.40,<2
-supabase-py
+supabase
 python-dateutil
+psycopg2-binary
+email-validator
+pytz
