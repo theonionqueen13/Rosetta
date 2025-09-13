@@ -425,6 +425,16 @@ def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None
 def delete_user_profile_db(user_id: str, profile_name: str) -> None:
     sb = supa()
     sb.table("profiles").delete().eq("user_id", user_id).eq("profile_name", profile_name).execute()
+
+def delete_user_account(username: str) -> None:
+    sb = supa()
+    # Delete any profiles they created (optional, but keeps DB clean)
+    sb.table("profiles").delete().eq("user_id", username).execute()
+    # Delete any community donations they made (optional too)
+    sb.table("community_profiles").delete().eq("submitted_by", username).execute()
+    # Delete the user record itself
+    sb.table("users").delete().eq("username", username).execute()
+    
 def community_list(limit: int = 200) -> list[dict]:
     sb = supa()
     res = sb.table("community_profiles").select("*").order("created_at", desc=True).limit(limit).execute()
@@ -1712,6 +1722,17 @@ with col_right:
                 st.success(f"Profile '{profile_name}' saved!")
                 # refresh cache
                 saved_profiles = load_user_profiles_db(current_user_id)
+        
+        with st.expander("Admin: Delete a user"):
+            target = st.text_input("Username to delete", key="admin_del_user")
+            if st.button("Delete user", key="admin_del_btn"):
+                if not target:
+                    st.error("Enter a username.")
+                elif not user_exists(target):
+                    st.error("No such username.")
+                else:
+                    delete_user_account(target)
+                    st.success(f"User '{target}' has been deleted.")
 
     # --- Load ---
     elif active_tab == "Load Profile":
