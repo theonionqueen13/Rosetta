@@ -2113,7 +2113,14 @@ def _current_chart_title():
 
 CATEGORY_MAP = {
     "Character Profiles": {"Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune"},
-    "Instruments": {...},
+    "Instruments": {
+        "Ceres","Pallas","Juno","Vesta","Iris","Hygiea","Psyche","Thalia","Euterpe","Pomona","Polyhymnia",
+        "Harmonia","Isis","Ariadne","Mnemosyne","Echo","Niobe","Eurydike","Freia","Terpsichore","Minerva",
+        "Hekate","Zephyr","Kassandra","Lachesis","Nemesis","Medusa","Aletheia","Magdalena","Arachne","Fama",
+        "Eros","Veritas","Sirene","Siva","Lilith (Asteroid 1181)","Copernicus","Icarus","Toro","Apollo",
+        "Koussevitzky","Osiris","Lucifer","Anteros","Tezcatlipoca","West","Bacchus","Hephaistos","Panacea",
+        "Orpheus","Kafka","Pamela","Dionysus","Kaali","Asclepius","Singer","Angel"
+    },
     "Personal Initiations": {"Chiron","Nessus","Ixion"},
     "Mythic Journeys": {"Pluto","Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Eris","Makemake"},
     "Compass Coordinates": {"Ascendant","Descendant","MC","IC"},
