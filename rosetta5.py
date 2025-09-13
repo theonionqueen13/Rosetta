@@ -20,6 +20,23 @@ from rosetta.lookup import (
     HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
     DIGNITIES, PLANETARY_RULERS,  
 )
+
+from rosetta.helpers import (
+    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
+    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
+    SIGN_NAMES
+)
+from rosetta.drawing import (
+    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
+    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
+    draw_shape_edges, draw_minor_edges, draw_singleton_dots
+)
+from rosetta.patterns import (
+    detect_minor_links_with_singletons, generate_combo_groups,
+    detect_shapes, internal_minor_edges_for_pattern,
+    connected_components_from_edges, _cluster_conjunctions_for_detection, 
+)
+
 try:
     from rosetta.lookup import COLOR_EMOJI
 except Exception:
@@ -175,22 +192,6 @@ def _canonical_shape_name(shape_dict: dict) -> str:
             if lk in t:  # contains
                 return canon
     return ""
-
-from rosetta.helpers import (
-    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
-    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
-    SIGN_NAMES
-)
-from rosetta.drawing import (
-    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
-    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
-    draw_shape_edges, draw_minor_edges, draw_singleton_dots
-)
-from rosetta.patterns import (
-    detect_minor_links_with_singletons, generate_combo_groups,
-    detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges, _cluster_conjunctions_for_detection, 
-)
 
 def _get_openai_key():
     k = os.getenv("OPENAI_API_KEY")
@@ -507,10 +508,32 @@ def verify_reset_code_and_set_password(username: str, code: str, new_password: s
     sb.table("password_resets").update({"used": True}).eq("id", row["id"]).execute()
     set_password(username, new_password)
     try:
-        authenticator.credentials = _credentials_from_db()
+        st.rerun()  # ✅ causes top-level creds = _credentials_from_db() to refresh
     except Exception:
         pass
     return True
+
+@st.cache_resource
+def supa():
+    return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
+
+@st.cache_data(ttl=60)
+def _credentials_from_db_cached():
+    return _credentials_from_db()
+
+@st.cache_data(ttl=600)
+def user_exists_in_db(username: str) -> bool:
+    sb = supa()
+    return bool(sb.table("users").select("username").eq("username", username).limit(1).execute().data)
+
+@st.cache_data(ttl=60)
+def get_user_role_cached(username: str) -> str:
+    return get_user_role(username)  # your existing helper
+
+@st.cache_data(ttl=60)
+def load_user_profiles_db_cached(user_id: str) -> dict:
+    return load_user_profiles_db(user_id)  # your existing helper
+
 
 # --- Authentication (admin-gated user management; no public registration) ---
 creds = _credentials_from_db()
@@ -609,11 +632,36 @@ else:
 
 if auth_status is True:
     current_user_id = username
-    admin_flag = is_admin(current_user_id)  # <- role check
-
+        
     with st.sidebar:
         st.caption(f"Logged in as **{name}** ({username}) — role: **{get_user_role(current_user_id)}**")
         authenticator.logout("Logout", location="sidebar")
+
+    # Ensure a users row exists for THIS login, using the existing password hash from creds
+    sb = supa()
+    exists = sb.table("users").select("username").eq("username", current_user_id).limit(1).execute()
+    if not exists.data:
+        rec = (creds or {}).get("usernames", {}).get(current_user_id, {})  # creds came from _credentials_from_db()
+        pw_hash = rec.get("password")  # already-hashed (bcrypt)
+        if pw_hash:
+            sb.table("users").insert({
+                "username": current_user_id,
+                "name": rec.get("name") or (auth_name or current_user_id),
+                "email": rec.get("email") or f"{current_user_id}@local",
+                "pw_hash": pw_hash,                     # <- use existing hash, NO password change
+                "role": rec.get("role") or "user",
+            }).execute()
+            st.success(f"Linked '{current_user_id}' to DB users (no password change). Reloading…")
+            st.rerun()
+        else:
+            st.error("This login exists in authenticator, but no password hash was found in creds. "
+                     "Add it via Admin → User Management once, or migrate your creds loader.")
+            st.stop()
+
+    admin_flag = is_admin(current_user_id)  # now safe
+
+    with st.sidebar:
+        st.caption(f"Logged in as **{name}** ({username}) — role: **{get_user_role(current_user_id)}**")
 
         # Self-serve: Change Password (available to everyone)
         with st.expander("Change Password"):
@@ -630,21 +678,13 @@ if auth_status is True:
                     ok_db = verify_password(current_user_id, cur)
 
                     # Also check against the authenticator's in-memory hash (in case of stale cookie)
-                    auth_hash = authenticator.credentials["usernames"].get(current_user_id, {}).get("password")
-                    ok_mem = False
-                    if auth_hash:
-                        import bcrypt
-                        ok_mem = bcrypt.checkpw(
-                            cur.encode("utf-8"),
-                            auth_hash.encode("utf-8") if isinstance(auth_hash, str) else auth_hash
-                        )
-
-                    if not (ok_db or ok_mem):
+                    ok_db = verify_password(current_user_id, cur)
+                    if not ok_db:
                         st.error("Current password is incorrect.")
                     else:
                         set_password(current_user_id, new1)
-                        authenticator.credentials = _credentials_from_db()  # keep things in sync
                         st.success("Password updated.")
+                        st.rerun()
 
         # Admin-only: user management (create users / reset passwords)
         if admin_flag:
@@ -678,7 +718,7 @@ if auth_status is True:
                         st.error("No such username.")
                     else:
                         set_password(target, npw1)
-                        authenticator.credentials = _credentials_from_db()
+                        st.rerun()  # ✅ causes top-level creds = _credentials_from_db() to refresh
                         st.success(f"Password reset for '{target}'.")
             
             with st.expander("Admin: Delete a user"):
@@ -1658,10 +1698,7 @@ with col_right:
     # Admin gating
     admin_flag = is_admin(current_user_id)
 
-    if admin_flag:
-        tab_labels = ["Add / Update Profile", "Load Profile", "Delete Profile"]
-    else:
-        tab_labels = ["Load Profile", "Delete Profile"]
+    tab_labels = ["Add / Update Profile", "Load Profile", "Delete Profile"]
 
     # Pick default index safely
     default_tab = st.session_state["active_profile_tab"]
@@ -1679,10 +1716,6 @@ with col_right:
 
     # --- Add / Update ---
     if active_tab == "Add / Update Profile":
-        if not admin_flag:
-            st.warning("Only admins can create or update profiles during beta.")
-            st.stop()
-
         profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
 
         if st.button("💾 Save / Update Profile"):
@@ -1728,8 +1761,13 @@ with col_right:
                     "circuit_names": circuit_names,
                 }
 
-                # Save to DB for this logged-in user
+            try:
                 save_user_profile_db(current_user_id, profile_name, profile_data)
+            except Exception as e:
+                # If you want finer control, catch postgrest.exceptions.APIError specifically.
+                st.error(f"Could not save profile: {e}")
+                st.stop()
+            else:
                 st.success(f"Profile '{profile_name}' saved!")
                 # refresh cache
                 saved_profiles = load_user_profiles_db(current_user_id)
@@ -1779,6 +1817,29 @@ with col_right:
                                 run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
                                 st.success(f"Profile '{name}' loaded and chart calculated!")
                                 st.rerun()
+
+            # === ADD HERE: quick-save circuit names (names only) ===
+            if st.session_state.get("current_profile") and "patterns" in st.session_state:
+                if st.button("💾 Save Circuit Names to Current Profile", key="save_names_only"):
+                    # Build latest names from UI/session (fallback to defaults)
+                    circuit_names = {
+                        f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+                        for i in range(len(st.session_state.patterns))
+                    }
+
+                    # Refresh, update only circuit_names, and save
+                    profiles = load_user_profiles_db(current_user_id)
+                    prof_name = st.session_state["current_profile"]
+                    profile_data = profiles.get(prof_name, {}).copy()
+
+                    if not profile_data:
+                        st.error("No profile data found. Load a profile first.")
+                    else:
+                        profile_data["circuit_names"] = circuit_names
+                        save_user_profile_db(current_user_id, prof_name, profile_data)
+                        st.session_state["saved_circuit_names"] = circuit_names.copy()
+                        st.success("Circuit names updated.")
+
         else:
             st.info("No saved profiles yet.")
 
