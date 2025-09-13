@@ -2127,7 +2127,7 @@ CATEGORY_MAP = {
     "Compass Needle": {"True Node","North Node","South Node"},
     "Switches": {"Black Moon Lilith (Mean)","Part of Fortune","Vertex","Anti-Vertex","East Point"},
     "Imprints": {"Fixed Stars"}
-}
+} 
 
 CATEGORY_INSTRUCTIONS = {
     "Character Profiles": "Treat these as the primary agents. They have will, drive, and personality. Write their profiles as if they are characters acting within the chart’s system. They initiate, choose, and embody functions.",

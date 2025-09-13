@@ -156,7 +156,7 @@ ALIASES_MEANINGS = {
     "MC": "Midheaven",
     "IC": "Imum Coeli",
     "True Node": "North Node",
-    "Black Moon Lilith": "Lilith","Black Moon Lilith (Mean)"
+    "Black Moon Lilith": "Lilith",
 }
 
 PLANETARY_RULERS = {
