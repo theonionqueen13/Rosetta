@@ -1105,7 +1105,7 @@ def render_chart_with_shapes(
     # --- auto-heal: ensure DF cusps match the selected house system ---
     def _df_house_system(df):
         obj = df["Object"].astype("string")
-        mask = obj.str.contains(r"\b(house\s*\d{1,2}|\d{1,2}\s*h)\s*cusp\b", case=False, regex=True, na=False)
+        mask = obj.str.contains(r"\b(?:house\s*\d{1,2}|\d{1,2}\s*h)\s*cusp\b", case=False, regex=True, na=False)
         mask |= obj.str.match(r"^\s*\d{1,2}\s*H\s*Cusp\s*$", case=False, na=False)
         c = df[mask].copy()
         if c.empty:
