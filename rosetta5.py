@@ -348,6 +348,13 @@ import streamlit as st
 import json, bcrypt, time, secrets, hashlib, smtplib, ssl, email.utils
 from email.message import EmailMessage
 
+from supabase import create_client
+import streamlit as st
+
+import psycopg2
+
+import psycopg2
+
 def _db():
     cfg = st.secrets["postgres"]
     return psycopg2.connect(
@@ -358,6 +365,28 @@ def _db():
         password=cfg["password"],
         sslmode=cfg.get("sslmode", "require"),
     )
+
+def _db():
+    cfg = st.secrets["postgres"]
+    return psycopg2.connect(
+        host=cfg["host"],
+        port=cfg["port"],
+        database=cfg["database"],
+        user=cfg["user"],
+        password=cfg["password"],
+        sslmode=cfg.get("sslmode", "require"),
+    )
+
+def supa():
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    return create_client(url, key)
+
+# Example: get all users
+def get_all_users():
+    sb = supa()
+    res = sb.table("users").select("*").execute()
+    return res.data
 
 def _ensure_reset_table(conn):
     cur = conn.cursor()
