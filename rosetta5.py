@@ -9,6 +9,7 @@ import os, sqlite3, json, bcrypt, time, random, psycopg2
 import streamlit_authenticator as stauth
 import datetime as dt
 from openai import OpenAI
+from supabase import create_client
 client = OpenAI()  # reads OPENAI_API_KEY from env
 
 from rosetta.calc import calculate_chart
@@ -351,312 +352,205 @@ from email.message import EmailMessage
 from supabase import create_client
 import streamlit as st
 
-import psycopg2
-
-import psycopg2
-
-def _db():
-    cfg = st.secrets["postgres"]
-    return psycopg2.connect(
-        host=cfg["host"],
-        port=cfg["port"],
-        database=cfg["database"],
-        user=cfg["user"],
-        password=cfg["password"],
-        sslmode=cfg.get("sslmode", "require"),
-    )
-
-def _db():
-    cfg = st.secrets["postgres"]
-    return psycopg2.connect(
-        host=cfg["host"],
-        port=cfg["port"],
-        database=cfg["database"],
-        user=cfg["user"],
-        password=cfg["password"],
-        sslmode=cfg.get("sslmode", "require"),
-    )
-
 def supa():
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
 
-# Example: get all users
-def get_all_users():
+
+def is_admin(username: str) -> bool:
     sb = supa()
-    res = sb.table("users").select("*").execute()
-    return res.data
-
-def _ensure_reset_table(conn):
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS password_resets (
-            id BIGSERIAL PRIMARY KEY,
-            username TEXT NOT NULL,
-            code_hash TEXT NOT NULL,
-            sent_to TEXT NOT NULL,
-            expires_at BIGINT NOT NULL,
-            used BOOLEAN NOT NULL DEFAULT FALSE,
-            created_at BIGINT NOT NULL
-        )
-    """)
-    conn.commit()
-    cur.close()
-
-def _hash_code(code: str, pepper: str) -> str:
-    return hashlib.sha256((pepper + code).encode("utf-8")).hexdigest()
-
-def _smtp_send(to_email: str, subject: str, body: str) -> bool:
-    try:
-        smtp_conf = st.secrets.get("smtp", {})
-        host = smtp_conf.get("host")
-        user = smtp_conf.get("user")
-        pwd  = smtp_conf.get("password")
-        port = int(smtp_conf.get("port", 587))
-        from_addr = smtp_conf.get("from", user)
-
-        if not (host and user and pwd and from_addr):
-            return False
-
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = from_addr
-        msg["To"] = to_email
-        msg["Date"] = email.utils.formatdate(localtime=True)
-        msg.set_content(body)
-
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP(host, port) as s:
-            s.starttls(context=ctx)
-            s.login(user, pwd)
-            s.send_message(msg)
-        return True
-    except Exception as e:
-        st.warning(f"Email send failed: {e}")
-        return False
-
-def _credentials_from_db():
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("SELECT username, name, email, pw_hash FROM users")
-    rows = cur.fetchall()
-    conn.close()
-    return {"usernames": {u: {"name": n, "email": e, "password": h} for (u, n, e, h) in rows}}
-
-def user_exists(username: str) -> bool:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
-    exists = cur.fetchone() is not None
-    conn.close()
-    return exists
-
-def create_user(username: str, name: str, email: str, plain_password: str, role: str = "user") -> None:
-    conn = _db()
-    cur = conn.cursor()
-    pw_hash = bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    cur.execute("""
-        INSERT INTO users (username, name, email, pw_hash, role)
-        VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT (username) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, pw_hash=EXCLUDED.pw_hash, role=EXCLUDED.role
-    """, (username, name, email, pw_hash, role))
-    conn.commit()
-    conn.close()
+    res = sb.table("users").select("role").eq("username", username).limit(1).execute()
+    if res.data and len(res.data) > 0:
+        return res.data[0].get("role") == "admin"
+    return False
 
 def get_user_role(username: str) -> str:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("SELECT role FROM users WHERE username = %s", (username,))
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else "user"
+    sb = supa()
+    res = sb.table("users").select("role").eq("username", username).limit(1).execute()
+    if res.data and len(res.data) > 0:
+        return res.data[0].get("role", "user")
+    return "user"
+
+# ---- Supabase client ----
+def supa():
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["service_role"]  # service_role key (required for writes)
+    return create_client(url, key)
+
+
+# -------------------------------
+# 🔐 USERS
+# -------------------------------
+def _credentials_from_db():
+    sb = supa()
+    res = sb.table("users").select("username,name,email,pw_hash").execute()
+    users = res.data or []
+    return {
+        "usernames": {
+            u["username"]: {
+                "name": u["name"],
+                "email": u["email"],
+                "password": u["pw_hash"]
+            } for u in users
+        }
+    }
+
+def user_exists(username: str) -> bool:
+    sb = supa()
+    res = sb.table("users").select("id").eq("username", username).execute()
+    return bool(res.data)
+
+def create_user(username: str, name: str, email: str, plain_password: str, role: str = "user") -> None:
+    sb = supa()
+    pw_hash = bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt()).decode()
+    sb.table("users").upsert({
+        "username": username,
+        "name": name,
+        "email": email,
+        "pw_hash": pw_hash,
+        "role": role
+    }).execute()
+
+def get_user_role(username: str) -> str:
+    sb = supa()
+    res = sb.table("users").select("role").eq("username", username).maybe_single().execute()
+    if not res.data:
+        return "user"
+    return res.data.get("role", "user")
 
 def is_admin(username: str) -> bool:
     return get_user_role(username) == "admin"
 
 def verify_password(username: str, candidate_password: str) -> bool:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("SELECT pw_hash FROM users WHERE username = %s", (username,))
-    row = cur.fetchone()
-    conn.close()
+    sb = supa()
+    res = sb.table("users").select("pw_hash").eq("username", username).maybe_single().execute()
+    row = res.data
     if not row:
         return False
-    return bcrypt.checkpw(candidate_password.encode("utf-8"), row[0].encode() if isinstance(row[0], str) else row[0])
+    return bcrypt.checkpw(candidate_password.encode(), row["pw_hash"].encode() if isinstance(row["pw_hash"], str) else row["pw_hash"])
 
 def set_password(username: str, new_plain_password: str) -> None:
-    conn = _db()
-    cur = conn.cursor()
-    pw_hash = bcrypt.hashpw(new_plain_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    cur.execute("UPDATE users SET pw_hash = %s WHERE username = %s", (pw_hash, username))
-    conn.commit()
-    conn.close()
+    sb = supa()
+    pw_hash = bcrypt.hashpw(new_plain_password.encode(), bcrypt.gensalt()).decode()
+    sb.table("users").update({"pw_hash": pw_hash}).eq("username", username).execute()
 
+
+# -------------------------------
+# 💾 PRIVATE PROFILES
+# -------------------------------
 def load_user_profiles_db(user_id: str) -> dict:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("SELECT profile_name, payload FROM profiles WHERE user_id = %s", (user_id,))
-    rows = cur.fetchall()
-    conn.close()
-
-    result = {}
-    for name, payload in rows:
-        if isinstance(payload, dict):
-            result[name] = payload
-        else:
-            result[name] = json.loads(payload)
-    return result
+    sb = supa()
+    res = sb.table("profiles").select("profile_name,payload").eq("user_id", user_id).execute()
+    rows = res.data or []
+    out = {}
+    for r in rows:
+        payload = r["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        out[r["profile_name"]] = payload
+    return out
 
 def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO profiles (user_id, profile_name, payload)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (user_id, profile_name) DO UPDATE SET payload = EXCLUDED.payload
-    """, (user_id, profile_name, json.dumps(payload)))
-    conn.commit()
-    conn.close()
+    sb = supa()
+    sb.table("profiles").upsert({
+        "user_id": user_id,
+        "profile_name": profile_name,
+        "payload": json.dumps(payload)
+    }).execute()
 
 def delete_user_profile_db(user_id: str, profile_name: str) -> None:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM profiles WHERE user_id = %s AND profile_name = %s", (user_id, profile_name))
-    conn.commit()
-    conn.close()
+    sb = supa()
+    sb.table("profiles").delete().eq("user_id", user_id).eq("profile_name", profile_name).execute()
+
+
+# -------------------------------
+# 🧪 COMMUNITY PROFILES
+# -------------------------------
+def community_list(limit: int = 200) -> list[dict]:
+    sb = supa()
+    res = sb.table("community_profiles").select("*").order("created_at", desc=True).limit(limit).execute()
+    rows = res.data or []
+    out = []
+    for r in rows:
+        payload = r["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        r["payload"] = payload
+        out.append(r)
+    return out
+
+def community_get(pid: int) -> dict | None:
+    sb = supa()
+    res = sb.table("community_profiles").select("*").eq("id", pid).maybe_single().execute()
+    row = res.data
+    if not row: return None
+    if isinstance(row["payload"], str):
+        row["payload"] = json.loads(row["payload"])
+    return row
+
+def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
+    sb = supa()
+    ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    res = sb.table("community_profiles").insert({
+        "profile_name": profile_name,
+        "payload": json.dumps(payload),
+        "submitted_by": submitted_by,
+        "created_at": ts,
+        "updated_at": ts
+    }).execute()
+    return res.data[0]["id"]
+
+def community_delete(pid: int) -> None:
+    sb = supa()
+    sb.table("community_profiles").delete().eq("id", pid).execute()
+
+
+# -------------------------------
+# 🔑 PASSWORD RESET
+# -------------------------------
+def _hash_code(code: str, pepper: str) -> str:
+    return hashlib.sha256((pepper + code).encode("utf-8")).hexdigest()
 
 def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15):
-    conn = _db()
-    cur = conn.cursor()
+    sb = supa()
     now = int(time.time())
     exp = now + ttl_minutes * 60
-    cur.execute("DELETE FROM password_resets WHERE (used=true OR expires_at < %s) AND username = %s", (now, username))
-    cur.execute("""
-        INSERT INTO password_resets (username, code_hash, sent_to, expires_at, used, created_at)
-        VALUES (%s, %s, %s, %s, false, %s)
-    """, (username, code_hash, email_addr, exp, now))
-    conn.commit()
-    conn.close()
+    sb.table("password_resets").insert({
+        "username": username,
+        "code_hash": code_hash,
+        "sent_to": email_addr,
+        "expires_at": exp,
+        "used": False,
+        "created_at": now
+    }).execute()
 
 def _find_user_by_identifier(identifier: str):
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT username, email FROM users
-        WHERE LOWER(username) = LOWER(%s) OR LOWER(email) = LOWER(%s)
-        LIMIT 1
-    """, (identifier.strip(), identifier.strip()))
-    row = cur.fetchone()
-    conn.close()
-    return (row[0], row[1]) if row else None
+    sb = supa()
+    ident = identifier.strip()
+    res = sb.table("users").select("username,email").or_(f"username.eq.{ident},email.eq.{ident}").maybe_single().execute()
+    if not res.data:
+        return None
+    return res.data["username"], res.data["email"]
 
 def verify_reset_code_and_set_password(username: str, code: str, new_password: str) -> bool:
-    conn = _db()
-    cur = conn.cursor()
+    sb = supa()
     now = int(time.time())
     pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
     code_hash = _hash_code(code, pepper)
 
-    cur.execute("""
-        SELECT id, expires_at, used FROM password_resets
-        WHERE LOWER(username) = LOWER(%s) AND code_hash = %s
-        ORDER BY created_at DESC LIMIT 1
-    """, (username, code_hash))
-    row = cur.fetchone()
+    res = sb.table("password_resets").select("id,expires_at,used").eq("username", username).eq("code_hash", code_hash).order("created_at", desc=True).limit(1).maybe_single().execute()
+    row = res.data
+    if not row: return False
+    if row["used"] or now > row["expires_at"]: return False
 
-    if not row:
-        conn.close()
-        return False
-    rid, exp, used = row
-    if used or now > exp:
-        conn.close()
-        return False
-
-    cur.execute("UPDATE password_resets SET used=true WHERE id=%s", (rid,))
-    conn.commit()
-    conn.close()
-
+    sb.table("password_resets").update({"used": True}).eq("id", row["id"]).execute()
     set_password(username, new_password)
     try:
         authenticator.credentials = _credentials_from_db()
     except Exception:
         pass
     return True
-
-def community_list(limit: int = 200) -> list[dict]:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, profile_name, payload, submitted_by, created_at, updated_at
-        FROM community_profiles
-        ORDER BY created_at DESC
-        LIMIT %s
-    """, (limit,))
-    rows = cur.fetchall()
-    conn.close()
-
-    out = []
-    for id_, name, payload, by, c_at, u_at in rows:
-        out.append({
-            "id": id_,
-            "profile_name": name,
-            "payload": payload if isinstance(payload, dict) else json.loads(payload),
-            "submitted_by": by,
-            "created_at": c_at,
-            "updated_at": u_at,
-        })
-    return out
-
-
-def community_get(pid: int) -> dict | None:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, profile_name, payload, submitted_by, created_at, updated_at
-        FROM community_profiles
-        WHERE id = %s
-    """, (pid,))
-    row = cur.fetchone()
-    conn.close()
-
-    if not row:
-        return None
-
-    id_, name, payload, by, c_at, u_at = row
-    return {
-        "id": id_,
-        "profile_name": name,
-        "payload": payload if isinstance(payload, dict) else json.loads(payload),
-        "submitted_by": by,
-        "created_at": c_at,
-        "updated_at": u_at,
-    }
-
-
-def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
-    conn = _db()
-    cur = conn.cursor()
-    ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
-    cur.execute("""
-        INSERT INTO community_profiles (profile_name, payload, submitted_by, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id
-    """, (profile_name, json.dumps(payload), submitted_by, ts, ts))
-    new_id = cur.fetchone()[0]
-    conn.commit()
-    conn.close()
-    return new_id
-
-
-def community_delete(pid: int) -> None:
-    conn = _db()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM community_profiles WHERE id = %s", (pid,))
-    conn.commit()
-    conn.close()
-
-with _db() as conn: _ensure_reset_table(conn)
 
 # --- Authentication (admin-gated user management; no public registration) ---
 creds = _credentials_from_db()
