@@ -5,7 +5,7 @@ import numpy as np
 import streamlit.components.v1 as components
 import swisseph as swe
 import re
-import os, sqlite3, json, bcrypt, time, random, psycopg2
+import os, json, bcrypt, time, hashlib
 import streamlit_authenticator as stauth
 import datetime as dt
 from openai import OpenAI
@@ -344,44 +344,12 @@ st.markdown(
 
 st.title("🧭 Rosetta Flight Deck")
 st.caption("Mobile users: click » at the top left to login, and to view planet profiles")
-import psycopg2
-import streamlit as st
-import json, bcrypt, time, secrets, hashlib, smtplib, ssl, email.utils
-from email.message import EmailMessage
 
 from supabase import create_client
-import streamlit as st
-
 def supa():
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
-
-
-def is_admin(username: str) -> bool:
-    sb = supa()
-    res = sb.table("users").select("role").eq("username", username).limit(1).execute()
-    if res.data and len(res.data) > 0:
-        return res.data[0].get("role") == "admin"
-    return False
-
-def get_user_role(username: str) -> str:
-    sb = supa()
-    res = sb.table("users").select("role").eq("username", username).limit(1).execute()
-    if res.data and len(res.data) > 0:
-        return res.data[0].get("role", "user")
-    return "user"
-
-# ---- Supabase client ----
-def supa():
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["service_role"]  # service_role key (required for writes)
-    return create_client(url, key)
-
-
-# -------------------------------
-# 🔐 USERS
-# -------------------------------
 def _credentials_from_db():
     sb = supa()
     res = sb.table("users").select("username,name,email,pw_hash").execute()
@@ -398,26 +366,25 @@ def _credentials_from_db():
 
 def user_exists(username: str) -> bool:
     sb = supa()
-    res = sb.table("users").select("id").eq("username", username).execute()
+    res = sb.table("users").select("username").eq("username", username).execute()
     return bool(res.data)
 
 def create_user(username: str, name: str, email: str, plain_password: str, role: str = "user") -> None:
     sb = supa()
     pw_hash = bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt()).decode()
-    sb.table("users").upsert({
+    sb.table("users").upsert([{
         "username": username,
         "name": name,
         "email": email,
         "pw_hash": pw_hash,
         "role": role
-    }).execute()
+    }]).execute()
 
 def get_user_role(username: str) -> str:
     sb = supa()
-    res = sb.table("users").select("role").eq("username", username).maybe_single().execute()
-    if not res.data:
-        return "user"
-    return res.data.get("role", "user")
+    res = sb.table("users").select("role").eq("username", username).limit(1).execute()
+    rows = res.data or []
+    return rows[0].get("role", "user") if rows else "user"
 
 def is_admin(username: str) -> bool:
     return get_user_role(username) == "admin"
@@ -425,20 +392,18 @@ def is_admin(username: str) -> bool:
 def verify_password(username: str, candidate_password: str) -> bool:
     sb = supa()
     res = sb.table("users").select("pw_hash").eq("username", username).maybe_single().execute()
-    row = res.data
-    if not row:
+    if not res.data:
         return False
-    return bcrypt.checkpw(candidate_password.encode(), row["pw_hash"].encode() if isinstance(row["pw_hash"], str) else row["pw_hash"])
+    stored_hash = res.data["pw_hash"]
+    return bcrypt.checkpw(
+        candidate_password.encode(),
+        stored_hash.encode() if isinstance(stored_hash, str) else stored_hash
+    )
 
 def set_password(username: str, new_plain_password: str) -> None:
     sb = supa()
     pw_hash = bcrypt.hashpw(new_plain_password.encode(), bcrypt.gensalt()).decode()
     sb.table("users").update({"pw_hash": pw_hash}).eq("username", username).execute()
-
-
-# -------------------------------
-# 💾 PRIVATE PROFILES
-# -------------------------------
 def load_user_profiles_db(user_id: str) -> dict:
     sb = supa()
     res = sb.table("profiles").select("profile_name,payload").eq("user_id", user_id).execute()
@@ -450,7 +415,6 @@ def load_user_profiles_db(user_id: str) -> dict:
             payload = json.loads(payload)
         out[r["profile_name"]] = payload
     return out
-
 def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None:
     sb = supa()
     sb.table("profiles").upsert({
@@ -458,15 +422,9 @@ def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None
         "profile_name": profile_name,
         "payload": json.dumps(payload)
     }).execute()
-
 def delete_user_profile_db(user_id: str, profile_name: str) -> None:
     sb = supa()
     sb.table("profiles").delete().eq("user_id", user_id).eq("profile_name", profile_name).execute()
-
-
-# -------------------------------
-# 🧪 COMMUNITY PROFILES
-# -------------------------------
 def community_list(limit: int = 200) -> list[dict]:
     sb = supa()
     res = sb.table("community_profiles").select("*").order("created_at", desc=True).limit(limit).execute()
@@ -479,16 +437,16 @@ def community_list(limit: int = 200) -> list[dict]:
         r["payload"] = payload
         out.append(r)
     return out
-
 def community_get(pid: int) -> dict | None:
     sb = supa()
-    res = sb.table("community_profiles").select("*").eq("id", pid).maybe_single().execute()
-    row = res.data
-    if not row: return None
+    res = sb.table("community_profiles").select("*").eq("id", pid).limit(1).execute()
+    rows = res.data or []
+    if not rows:
+        return None
+    row = rows[0]
     if isinstance(row["payload"], str):
         row["payload"] = json.loads(row["payload"])
     return row
-
 def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
     sb = supa()
     ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
@@ -500,18 +458,9 @@ def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
         "updated_at": ts
     }).execute()
     return res.data[0]["id"]
-
 def community_delete(pid: int) -> None:
     sb = supa()
     sb.table("community_profiles").delete().eq("id", pid).execute()
-
-
-# -------------------------------
-# 🔑 PASSWORD RESET
-# -------------------------------
-def _hash_code(code: str, pepper: str) -> str:
-    return hashlib.sha256((pepper + code).encode("utf-8")).hexdigest()
-
 def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15):
     sb = supa()
     now = int(time.time())
@@ -524,26 +473,27 @@ def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minute
         "used": False,
         "created_at": now
     }).execute()
-
 def _find_user_by_identifier(identifier: str):
     sb = supa()
     ident = identifier.strip()
-    res = sb.table("users").select("username,email").or_(f"username.eq.{ident},email.eq.{ident}").maybe_single().execute()
-    if not res.data:
+    res = sb.table("users").select("username,email").or_(f"username.eq.{ident},email.eq.{ident}").limit(1).execute()
+    rows = res.data or []
+    if not rows:
         return None
-    return res.data["username"], res.data["email"]
-
+    row = rows[0]
+    return row["username"], row["email"]
 def verify_reset_code_and_set_password(username: str, code: str, new_password: str) -> bool:
     sb = supa()
     now = int(time.time())
     pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
     code_hash = _hash_code(code, pepper)
-
-    res = sb.table("password_resets").select("id,expires_at,used").eq("username", username).eq("code_hash", code_hash).order("created_at", desc=True).limit(1).maybe_single().execute()
-    row = res.data
-    if not row: return False
-    if row["used"] or now > row["expires_at"]: return False
-
+    res = sb.table("password_resets").select("id,expires_at,used").eq("username", username).eq("code_hash", code_hash).order("created_at", desc=True).limit(1).execute()
+    rows = res.data or []
+    if not rows:
+        return False
+    row = rows[0]
+    if row["used"] or now > row["expires_at"]:
+        return False
     sb.table("password_resets").update({"used": True}).eq("id", row["id"]).execute()
     set_password(username, new_password)
     try:
