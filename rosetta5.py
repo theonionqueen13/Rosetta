@@ -680,12 +680,23 @@ if auth_status is True:
                         set_password(target, npw1)
                         authenticator.credentials = _credentials_from_db()
                         st.success(f"Password reset for '{target}'.")
+            
+            with st.expander("Admin: Delete a user"):
+                target = st.text_input("Username to delete", key="admin_del_user")
+                if st.button("Delete user", key="admin_del_btn"):
+                    if not target:
+                        st.error("Enter a username.")
+                    elif not user_exists(target):
+                        st.error("No such username.")
+                    else:
+                        delete_user_account(target)
+                        st.success(f"User '{target}' has been deleted.")
 
-        with st.sidebar.expander("Admin: login debug"):
-            u = st.text_input("Exact username to test")
-            p = st.text_input("Password to test", type="password")
-            if st.button("Check creds"):
-                st.write("verify_password ->", verify_password(u, p))
+            with st.sidebar.expander("Admin: login debug"):
+                u = st.text_input("Exact username to test")
+                p = st.text_input("Password to test", type="password")
+                if st.button("Check creds"):
+                    st.write("verify_password ->", verify_password(u, p))
 
 elif auth_status is False:
     st.error("Incorrect username or password.")
@@ -1722,17 +1733,6 @@ with col_right:
                 st.success(f"Profile '{profile_name}' saved!")
                 # refresh cache
                 saved_profiles = load_user_profiles_db(current_user_id)
-        
-        with st.expander("Admin: Delete a user"):
-            target = st.text_input("Username to delete", key="admin_del_user")
-            if st.button("Delete user", key="admin_del_btn"):
-                if not target:
-                    st.error("Enter a username.")
-                elif not user_exists(target):
-                    st.error("No such username.")
-                else:
-                    delete_user_account(target)
-                    st.success(f"User '{target}' has been deleted.")
 
     # --- Load ---
     elif active_tab == "Load Profile":
