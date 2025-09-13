@@ -2111,6 +2111,28 @@ def _current_chart_title():
         unsafe_allow_html=True,
     )
 
+CATEGORY_MAP = {
+    "Character Profiles": {"Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune"},
+    "Instruments": {...},
+    "Personal Initiations": {"Chiron","Nessus","Ixion"},
+    "Mythic Journeys": {"Pluto","Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Eris","Makemake"},
+    "Compass Coordinates": {"Ascendant","Descendant","MC","IC"},
+    "Compass Needle": {"True Node","North Node","South Node"},
+    "Switches": {"Black Moon Lilith","Part of Fortune","Vertex","Anti-Vertex","East Point"},
+    "Imprints": {"Fixed Stars"}
+}
+
+CATEGORY_INSTRUCTIONS = {
+    "Character Profiles": "Treat these as the primary agents. They have will, drive, and personality. Write their profiles as if they are characters acting within the chart’s system. They initiate, choose, and embody functions.",
+    "Instruments": "Treat these as auxiliary tools or implements. They do not act on their own but modify, equip, or flavor the Characters they are attached to. Interpret them as specialized add-ons that enhance or qualify expression.",
+    "Personal Initiations": "Treat these as threshold trials and initiatory guides. They mark points of personal wounding, apprenticeship, or rites of passage. Interpret them as initiations the native must undergo, often in embodied or psychological crisis form.",
+    "Mythic Journeys": "Treat these as terrains or landscapes. They are collective-scale mythic journeys that reshape the native’s environment. Interpret them as deep fields of transformation that one must endure or traverse, not agents that act.",
+    "Compass Coordinates": "Treat these as orienting coordinate markers for the whole chart. They provide direction, aim, and framing. Interpret them as the chart’s compass points, describing location, presentation, public face, and roots.",
+    "Compass Needle": "Treat these as the chart’s directional polarity. They mark the karmic vector between where the native has come from and where they are growing toward. Interpret them as the navigational axis of soul trajectory.",
+    "Switches": "Treat these as sensitive toggles or thresholds. They activate, invert, or flip circuits. Interpret them as switches that trigger growth arcs, release conditions, or polarity shifts.",
+    "Imprints": "Treat these as permanent marks from the heavens. They stamp the chart with mythic inheritance, often conferring unusual talents or fated qualities. Interpret them as imprints that ‘hard-code’ certain powers or vulnerabilities into the native’s system.",
+}
+
 _GLYPH_TO_SIGN = {
     "♈":"Aries","♉":"Taurus","♊":"Gemini","♋":"Cancer",
     "♌":"Leo","♍":"Virgo","♎":"Libra","♏":"Scorpio",
@@ -2774,7 +2796,12 @@ if st.session_state.get("chart_ready", False):
 
         if aspect_blocks:
             # ---------- Character Profiles (same ordering as sidebar) ----------
-            planet_profiles_texts = []
+            OBJ_TO_CATEGORY = {}
+            for cat, objs in CATEGORY_MAP.items():
+                for o in objs:
+                    OBJ_TO_CATEGORY[o] = cat
+
+            profiles_by_category = defaultdict(list)
             interpretation_flags = set()
             fixed_star_meanings = {}
 
@@ -2783,48 +2810,39 @@ if st.session_state.get("chart_ready", False):
                     row = enhanced_objects_data[obj]
                     profile_html = format_planet_profile(row)
                     profile_text = strip_html_tags(profile_html)
-                    
+
                     # --- Prepend interpretation before the object name, with a trailing colon
-                    interp = (OBJECT_INTERPRETATIONS.get(obj, "") or "").strip()  # <-- ONLY interpretations here
+                    interp = (OBJECT_INTERPRETATIONS.get(obj, "") or "").strip()
                     if interp:
                         lines = profile_text.splitlines()
                         if lines:
                             lines[0] = f"{interp}: {lines[0]}"
-                            profile_text = "\n".join(lines)
+                        profile_text = "\n".join(lines)
 
                     # --- Add (Rx, dignity) after the object name, then a period
                     import re
                     name_for_edit = (row.get("Display Name") or obj).strip()
                     sign = (row.get("Sign") or "").strip()
-
-                    # dignity from lookup (e.g., 'domicile', 'exaltation', etc.)
                     dignity = _resolve_dignity(obj, sign)
-
-                    # simple Rx flag from your row
                     retro_val = str(row.get("Retrograde", "")).lower()
                     rx_flag = "Rx" if "rx" in retro_val else None
-
                     paren_bits = [x for x in (rx_flag, dignity) if x]
                     paren_suffix = f" ({', '.join(paren_bits)})" if paren_bits else ""
 
                     lines = profile_text.splitlines()
                     if lines and name_for_edit:
                         first = lines[0]
-                        m = re.match(r"^(.*?:\s*)(.+)$", first)   # keep your "Interpretation:" prefix intact
+                        m = re.match(r"^(.*?:\s*)(.+)$", first)
                         prefix, rest = m.groups() if m else ("", first)
 
                         pos = rest.find(name_for_edit)
                         if pos != -1:
                             end = pos + len(name_for_edit)
-                            # Insert our (Rx, dignity) immediately after the object name (but not if a paren already starts there)
                             if paren_suffix and (end >= len(rest) or not rest[end:].lstrip().startswith("(")):
                                 rest = rest[:end] + paren_suffix + rest[end:]
-
-                            # Ensure a period right after the name + optional parens (not if already '.' or ':')
                             insert_end = end + (len(paren_suffix) if paren_suffix else 0)
                             if not (insert_end < len(rest) and rest[insert_end] in ".:"):
                                 rest = rest[:insert_end] + "." + rest[insert_end:]
-
                         lines[0] = prefix + rest
                         profile_text = "\n".join(lines)
 
@@ -2833,19 +2851,16 @@ if st.session_state.get("chart_ready", False):
                     if sab and "Sabian Symbol:" not in profile_text:
                         profile_text = profile_text.replace(sab, f"Sabian Symbol: {sab}", 1)
 
-                    # --- Append rulership info (dedup House/Sign if identical)
+                    # --- Append rulership info
                     try:
                         rhtml = _build_rulership_html(
                             obj, row, enhanced_objects_data, ordered_objects, cusp_signs
                         )
-                        # Normalize line breaks, strip tags -> we expect:
-                        # Rulership by House:\n<house_line>\nRulership by Sign:\n<sign_line>
                         plain = strip_html_tags(
-                            rhtml.replace("<br />", "\n").replace("<br/>", "\n").replace("<br>", "\n")
+                            rhtml.replace("<br />","\n").replace("<br/>","\n").replace("<br>","\n")
                         ).strip()
 
                         lines = [ln.strip() for ln in plain.splitlines() if ln.strip()]
-                        # Pull the two payload lines safely
                         house_hdr_idx = next((i for i, t in enumerate(lines) if t.lower() == "rulership by house:"), None)
                         sign_hdr_idx  = next((i for i, t in enumerate(lines) if t.lower() == "rulership by sign:"), None)
 
@@ -2854,11 +2869,9 @@ if st.session_state.get("chart_ready", False):
 
                         rtext_final = ""
                         if house_line and sign_line:
-                            # If identical (case-insensitive), collapse to single "Rulership:" block
                             if house_line.lower() == sign_line.lower():
                                 rtext_final = f"Rulership:\n{house_line}"
                             else:
-                                # Different -> keep both with a blank line between sections
                                 rtext_final = (
                                     "Rulership by House:\n" + house_line + "\n\n" +
                                     "Rulership by Sign:\n"  + sign_line
@@ -2870,20 +2883,16 @@ if st.session_state.get("chart_ready", False):
 
                         if rtext_final:
                             profile_text = profile_text.rstrip() + "\n\n" + rtext_final
-
                     except Exception:
-                        # fail-safe: never break the prompt if the sidebar helper changes
                         pass
 
-                    # (Optional future extras for prompt-only can be appended here)
-                    planet_profiles_texts.append(profile_text)
+                    # --- Add to category bucket
+                    cat = OBJ_TO_CATEGORY.get(obj, "Character Profiles")
+                    profiles_by_category[cat].append(profile_text)
 
-                    # ---- Out of Bounds flag
+                    # ---- Flags
                     if str(row.get("OOB Status", "")).lower() == "yes":
                         interpretation_flags.add("Out of Bounds")
-
-                    # ---- Retrograde / Station flags
-                    retro_val = str(row.get("Retrograde", "")).lower()
                     if "station" in retro_val:
                         interpretation_flags.add("Station Point")
                     if "rx" in retro_val:
@@ -2900,9 +2909,19 @@ if st.session_state.get("chart_ready", False):
                             if meaning:
                                 fixed_star_meanings[star] = meaning
 
-            planet_profiles_block = (
-                "Character Profiles:\n" + "\n\n".join(planet_profiles_texts)
-            ) if planet_profiles_texts else ""
+                # --- Build the multi-category profiles block
+                ordered_cats = [
+                    "Character Profiles","Instruments","Personal Initiations","Mythic Journeys",
+                    "Compass Coordinates","Compass Needle","Switches"
+                ]
+
+                category_blocks = []
+                for cat in ordered_cats:
+                    if profiles_by_category[cat]:
+                        block = cat + ":\n" + "\n\n".join(profiles_by_category[cat])
+                        category_blocks.append(block)
+
+                planet_profiles_block = "\n\n".join(category_blocks)
 
             # Count conjunction clusters (for guidance note)
             num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
@@ -2936,6 +2955,15 @@ if st.session_state.get("chart_ready", False):
                 or shape_types_present
             ):
                 interpretation_notes.append("Interpretation Notes:")
+
+            present_categories = [cat for cat in ordered_cats if profiles_by_category[cat]]
+
+            if present_categories:
+                interpretation_notes.append("Category Interpretation Guides:")
+                for cat in present_categories:
+                    blurb = CATEGORY_INSTRUCTIONS.get(cat)
+                    if blurb:
+                        interpretation_notes.append(f"- [{cat}] {blurb}")
 
             # Conjunction cluster guidance (singular/plural)
             if num_conj_clusters == 1:
@@ -3020,10 +3048,13 @@ if st.session_state.get("chart_ready", False):
 
             Output format — exactly these sections, in this order:
 
-            Character Profiles
-            • For each object or conjunction cluster, write one paragraph (3–6 sentences) that personifies the placement using all information provided for each planet or placement.
+            Character Profiles (if Sun, Moon, or any planet(s) (besides pluto) are present)
+            • For each planet or luminary, write one paragraph (3–6 sentences) that personifies the planet using all information provided for each planet or luminary.
             • Weave in relevant house context, Sabian symbol note, fixed-star ties, and notable conditions (OOB/retro/station/dignity) only if supplied.
 
+            Other Profiles
+            • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit.
+            
             Conjunction Clusters (only if present)
             • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles. 
                                            
