@@ -2894,7 +2894,9 @@ if st.session_state.get("chart_ready", False):
                         pass
 
                     # --- Add to category bucket
-                    cat = OBJ_TO_CATEGORY.get(obj, "Character Profiles")
+                    cat = OBJ_TO_CATEGORY.get(obj)
+                    if not cat:
+                        raise KeyError(f"Uncategorized object found: {obj!r}")
                     profiles_by_category[cat].append(profile_text)
 
                     # ---- Flags

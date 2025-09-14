@@ -50,35 +50,35 @@ COLOR_EMOJI = {
 
 OBJECT_MEANINGS = {
     # Axes & Points
-    "Ascendant": "How you show up at first glance—your vibe, posture, and approach to life.",
-    "Descendant": "Your one-to-one style—what you seek and mirror in close partnerships.",
+    "Ascendant": "How you show up at first glance—your identity, appearance, vibe, posture, and approach to life.",
+    "Descendant": 'What you seek and mirror in close partnerships, and how you relate to others or the archetypal "other"',
     "MC": "Public role and trajectory—how your work, calling, and reputation take visible shape.",
     "IC": "Roots and inner base—home, memory, ancestry, and what truly feels like ‘safe.’",
-    "North Node": "Growth direction—the stretch path that opens your future and matures your gifts.",
-    "South Node": "Old strengths and overused habits—the familiar well you draw from and outgrow.",
+    "North Node": "Growth direction—the stretch path that opens your future and matures your gifts. The highest and best version of you is in this direction.",
+    "South Node": "The natural strengths you bring into this life, your comfort zone, which you must draw from to achieve your North Node goals. It is also where you go to purge, reset, and be re-born.",
     "Vertex": "Fated crossroads—encounters and plot twists that re-route your story.",
-    "Part of Fortune": "Where life flows with ease—natural talents, windfalls, and simple wins.",
-    "Black Moon Lilith": "Sacred no and sovereign yes—your untamed edge, boundaries, and primal honesty.",
+    "Part of Fortune": "Your own personal rules for good fortune/luck. During Part of Fortune activations, your personal rules for magic (the Sabian Symbol for your PoF) are in charge of your life.",
+    "Black Moon Lilith": 'Sacred no and sovereign yes—your untamed edge, boundaries, and primal honesty. Lilith activations bring out the "AW HELL NAW" response, or deeply powerful feminine magnetism.',
 
     # Luminaries & Planets
-    "Sun": "Core vitality and purpose—what lights you up and fuels your mission.",
-    "Moon": "Emotional climate and instincts—how you self-soothe and stay nourished.",
+    "Sun": "Core vitality and purpose/primary soul expression—what lights you up and fuels your mission.",
+    "Moon": "Emotional climate and instincts—how you self-soothe and stay nourished. The deeper emotional needs and feelings underlying soul expression.",
     "Mercury": "Thinking and communication—how you learn, connect, and make meaning.",
-    "Venus": "Attraction and harmony—how you bond, value beauty, and build trust.",
-    "Mars": "Drive and courage—how you pursue, protect, and take decisive action.",
-    "Jupiter": "Faith and growth—where you expand, teach, and say a confident yes.",
-    "Saturn": "Time, structure and mastery—your boundaries, responsibilities, and earned authority.",
-    "Uranus": "Liberation and originality—your need for freedom, updates, and breakthroughs.",
-    "Neptune": "Imagination and devotion—your dreamlife, compassion, and spiritual longing.",
-    "Pluto": "Depth and regeneration—power, shadow work, and transformational truth.",
+    "Venus": "Value, attraction, sensuality and harmony—what you value, what makes you comfortable and secure (both emotionally and physically), how you bond, value beauty, and build trust. Venus rules matters of money and posessions; all things value-related.",
+    "Mars": "Drive and courage—how you pursue, protect, and take decisive action. Mars is the get-up-and-go engine.",
+    "Jupiter": "Expansion/growth, philosophy and faith—where you expand, teach, and say a confident yes. Jupiter expands/amplifies everything he touches (via aspect, rulership, transit, etc.)",
+    "Saturn": "Time, structure and mastery—your boundaries, responsibilities, and earned authority. Saturn is the timekeeper of your life, and the authority who enforces your discipline.",
+    "Uranus": "Liberation, originality, rebellion, innovation and technology—your need for freedom, updates, and breakthroughs. Uranus brings major surprise disruptions to the status quo.",
+    "Neptune": "Imagination, dreams, spirituality, fantasies, and illusions—your dreamlife, compassion, and spiritual longing. Neptune rules both true and untrue spiritual visions and dreams, as well as the use of mind-altering substances.",
+    "Pluto": "The Underworld Journey: depth and regeneration, power, shadow work, soul retrieval, ancestral memory, and transformational truth. Pluto embodies the energy of intense constriction from all sides, forcing the skeletons out of the closet by turning life inside-out.",
 
     # Healing, devotion, sovereignty
-    "Ceres": "Care cycles—feeding, tending, and the seasonal rhythm of give and receive.",
-    "Pallas": "Pattern intelligence—strategy, creative problem-solving, and elegant design.",
-    "Juno": "Commitment style—loyalty, agreements, and what keeps bonds equitable.",
-    "Vesta": "Focused devotion—sacred attention, hearth fire, and purpose as practice.",
+    "Ceres": "Care cycles—feeding, tending, and the seasonal rhythm of give and receive. Ceres shows our relationship to nurturing ourselves and others; what kind of nurture we need as well as how we nurture the world.",
+    "Pallas": "X-Ray vision for seeing the inner workings of whatever it is connected to in the natal chart. Pattern intelligence—strategy, creative problem-solving, and elegant design. Pallas conjunct a natal planet brings high level tactical intelligence to that planet.",
+    "Juno": "Commitment style—loyalty, agreements, and what keeps bonds equitable. Juno indicates all things commitment, both in relationships and life pursuits. Keyword: Contracts.",
+    "Vesta": "Focused devotion—sacred attention, hearth fire, and purpose as practice. Vesta shows what you tend to day in and day out, as your most sacred flame.",
     "Lilith": "Unfiltered self—refusing shame, reclaiming desire, and standing unowned.",
-    "Chiron": "Medicine through experience—your tender spot that becomes a gift to others.",
+    "Chiron": "Medicine through experience—your tender spot that becomes a gift to others. Chiron is often called the Wounded Healer. Your Chiron placement indicates your deepest wound, and as you go through that healing journey you become equipped to help others heal similar wounds.",
 
     # Muses, arts, memory
     "Iris": "Bridge-builder—translating between worlds, people, and color bands of meaning.",
@@ -145,7 +145,7 @@ OBJECT_MEANINGS = {
     "Sedna": "Oceanic depth—betrayal to sovereignty and slow, tidal healing.",
     "Orcus": "Oath keeper—promises, consequences, and the weight of one’s word.",
     "Haumea": "Fertile renewal—rapid regrowth, lineage blessings, and fresh starts.",
-    "Eris": "Necessary disruption—naming the unspoken and re-sorting what’s true.",
+    "Eris": "The journey through victimhood and empowerment: being oppressed, learning the truth of that oppression, learning to stand up for yourself, and eventually learning to stand up for others. The key is learning the truth behind the oppression and advocating out loud.",
     "Makemake": "Provision and play—resourceful creativity and community feast codes."
 }
 
