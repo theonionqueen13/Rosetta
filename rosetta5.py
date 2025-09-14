@@ -13,39 +13,35 @@ from supabase import create_client
 client = OpenAI()  # reads OPENAI_API_KEY from env
 
 from rosetta.calc import calculate_chart
+import importlib
+_L = importlib.import_module("rosetta.lookup")
 
-# ----- START DEBUG PROBE (place BEFORE any `from rosetta.lookup import ...`) -----
-import importlib.util, pathlib, hashlib, sys
+GLYPHS                  = _L.GLYPHS
+ASPECTS                 = _L.ASPECTS
+MAJOR_OBJECTS           = _L.MAJOR_OBJECTS
+OBJECT_MEANINGS         = _L.OBJECT_MEANINGS
+GROUP_COLORS            = _L.GROUP_COLORS
+ASPECT_INTERPRETATIONS  = _L.ASPECT_INTERPRETATIONS
+INTERPRETATION_FLAGS    = _L.INTERPRETATION_FLAGS
+ZODIAC_SIGNS            = _L.ZODIAC_SIGNS
+ZODIAC_COLORS           = _L.ZODIAC_COLORS
+MODALITIES              = _L.MODALITIES
+HOUSE_INTERPRETATIONS   = _L.HOUSE_INTERPRETATIONS
+HOUSE_SYSTEM_INTERPRETATIONS = _L.HOUSE_SYSTEM_INTERPRETATIONS
+PLANETARY_RULERS        = _L.PLANETARY_RULERS
+DIGNITIES               = _L.DIGNITIES
+COLOR_EMOJI             = _L.COLOR_EMOJI
+SHAPE_INSTRUCTIONS      = _L.SHAPE_INSTRUCTIONS
+OBJECT_INTERPRETATIONS  = _L.OBJECT_INTERPRETATIONS
 
-spec = importlib.util.find_spec("rosetta.lookup")
-print("[probe] spec:", spec)
-origin = getattr(spec, "origin", None)
-print("[probe] origin:", origin)
+import streamlit as st, importlib
 
-sha = None
-has_literal = None
-try:
-    p = pathlib.Path(origin)
-    b = p.read_bytes()
-    sha = hashlib.sha256(b).hexdigest()[:12]
-    txt = b.decode("utf-8", errors="ignore")
-    has_literal = ("SHAPE_INSTRUCTIONS" in txt)
-except Exception as e:
-    print("[probe] read error:", e)
+@st.cache_resource
+def get_lookup():
+    return importlib.import_module("rosetta.lookup")
 
-print(f"[probe] sha256[:12]: {sha}")
-print(f"[probe] source_has_'SHAPE_INSTRUCTIONS': {has_literal}")
-print("[probe] sys.path[0..3]:", sys.path[:3])
-# ----- END DEBUG PROBE -----
-
-from rosetta.lookup import (
-    GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS, 
-    GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
-    ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, 
-    HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
-    DIGNITIES, COLOR_EMOJI, SHAPE_INSTRUCTIONS,
-    OBJECT_INTERPRETATIONS, ALIASES_MEANINGS, 
-)
+_L = get_lookup()
+# same attribute assignments as above...
 
 from rosetta.helpers import (
     get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
