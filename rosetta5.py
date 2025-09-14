@@ -1939,9 +1939,12 @@ if st.session_state.get("chart_ready", False):
                 "Expand circuits for sub-shapes. View planet profiles on the left sidebar (» on mobile). "
             )
             st.caption(
-                "If you're new to studying your chart, begin with the sub-shape that contains "
-                "your North Node. Toggle that shape on, then scroll down. Below the chart, "
+                "Begin with the Compass Rose. Scroll down. Below the chart, "
                 'press "Send to GPT" to see the interpretation.'
+            )
+                        st.caption(
+                "After studying your Compass Rose, choose one sub-shape from a circuit to study next. "
+                "It is recommended to start with the shape or circuit that includes your North and South Node."
             )
             st.caption(
                 "After studying the first shape, choose another one to study, "
