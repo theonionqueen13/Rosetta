@@ -1940,7 +1940,7 @@ if st.session_state.get("chart_ready", False):
             )
             st.caption(
                 "Begin with the Compass Rose. Scroll down. Below the chart, "
-                'press "Send to GPT" to see the interpretation.'
+                'press "Send to GPT" to see (or listen to) the interpretation.'
             )
             st.caption(
                 "After studying your Compass Rose, choose one sub-shape from a circuit to study next. "
