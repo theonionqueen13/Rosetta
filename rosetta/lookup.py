@@ -364,16 +364,6 @@ OBJECT_MEANINGS = {
     "Makemake": "Provision and play—resourceful creativity and community feast codes."
 }
 
-ALIASES_MEANINGS = {
-    "ASC": "Ascendant",
-    "AC": "Ascendant",
-    "DSC": "Descendant",
-    "MC": "Midheaven",
-    "IC": "Imum Coeli",
-    "True Node": "North Node",
-    "Black Moon Lilith": "Lilith",
-}
-
 PLANETARY_RULERS = {
     "Aries": ["Mars"],
     "Taurus": ["Venus"],
