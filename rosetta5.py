@@ -1942,7 +1942,7 @@ if st.session_state.get("chart_ready", False):
                 "Begin with the Compass Rose. Scroll down. Below the chart, "
                 'press "Send to GPT" to see the interpretation.'
             )
-                        st.caption(
+            st.caption(
                 "After studying your Compass Rose, choose one sub-shape from a circuit to study next. "
                 "It is recommended to start with the shape or circuit that includes your North and South Node."
             )
