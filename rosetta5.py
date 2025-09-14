@@ -2615,21 +2615,21 @@ if st.session_state.get("chart_ready", False):
             for flag in sorted(interpretation_flags):
                 meaning = INTERPRETATION_FLAGS.get(flag)
                 if meaning:
-                    interpretation_notes.append(f"- {meaning}")
+                    interpretation_notes.append(f"• {meaning}")
 
             # Fixed Star note (general rule once, then list specifics)
             if fixed_star_meanings:
                 general_star_note = INTERPRETATION_FLAGS.get("Fixed Star")
                 if general_star_note:
-                    interpretation_notes.append(f"- {general_star_note}")
+                    interpretation_notes.append(f"• {general_star_note}")
                 for star, meaning in fixed_star_meanings.items():
-                    interpretation_notes.append(f"- {star}: {meaning}")
+                    interpretation_notes.append(f"• {star}: {meaning}")
 
             # House system interpretation
             house_system_meaning = HOUSE_SYSTEM_INTERPRETATIONS.get(house_system)
             if house_system_meaning:
                 interpretation_notes.append(
-                    f"- House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
+                    f"• House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
                 )
 
             # House interpretations present in view
@@ -2642,15 +2642,15 @@ if st.session_state.get("chart_ready", False):
             for house_num in sorted(present_houses):
                 house_meaning = HOUSE_INTERPRETATIONS.get(house_num)
                 if house_meaning:
-                    interpretation_notes.append(f"- House {house_num}: {house_meaning}")
+                    interpretation_notes.append(f"• House {house_num}: {house_meaning}")
 
             if should_name_circuit:
-                interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
+                interpretation_notes.append("• Suggest a concise name (2-3 words) for the whole circuit.")
 
             interpretation_notes_block = "\n\n".join(interpretation_notes) if interpretation_notes else ""
 
             if should_name_circuit:
-                interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
+                interpretation_notes.append("• Suggest a concise name (2-3 words) for the whole circuit.")
 
             # --- Shape-type interpretation instructions
             for stype in shape_types_present:
@@ -2659,7 +2659,7 @@ if st.session_state.get("chart_ready", False):
                     continue
                 instr = SHAPE_INSTRUCTIONS.get(stype)
                 if instr:
-                    interpretation_notes.append(f"- [{stype}] {instr}")
+                    interpretation_notes.append(f"• [{stype}] {instr}")
 
                         # --- Deferred: append Category Interpretation Guides at the end ---
             if _category_guides_todo:
@@ -2667,7 +2667,7 @@ if st.session_state.get("chart_ready", False):
                 for cat in _category_guides_todo:
                     blurb = CATEGORY_INSTRUCTIONS.get(cat)
                     if blurb:
-                        interpretation_notes.append(f"- [{cat}] {blurb}")
+                        interpretation_notes.append(f"• [{cat}] {blurb}")
 
             # ---------- Aspect Interpretations (the blurbs) ----------
             aspect_def_lines = []
