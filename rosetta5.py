@@ -13,6 +13,31 @@ from supabase import create_client
 client = OpenAI()  # reads OPENAI_API_KEY from env
 
 from rosetta.calc import calculate_chart
+
+# ----- START DEBUG PROBE (place BEFORE any `from rosetta.lookup import ...`) -----
+import importlib.util, pathlib, hashlib, sys
+
+spec = importlib.util.find_spec("rosetta.lookup")
+print("[probe] spec:", spec)
+origin = getattr(spec, "origin", None)
+print("[probe] origin:", origin)
+
+sha = None
+has_literal = None
+try:
+    p = pathlib.Path(origin)
+    b = p.read_bytes()
+    sha = hashlib.sha256(b).hexdigest()[:12]
+    txt = b.decode("utf-8", errors="ignore")
+    has_literal = ("SHAPE_INSTRUCTIONS" in txt)
+except Exception as e:
+    print("[probe] read error:", e)
+
+print(f"[probe] sha256[:12]: {sha}")
+print(f"[probe] source_has_'SHAPE_INSTRUCTIONS': {has_literal}")
+print("[probe] sys.path[0..3]:", sys.path[:3])
+# ----- END DEBUG PROBE -----
+
 from rosetta.lookup import (
     GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS, 
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
