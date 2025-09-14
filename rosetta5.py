@@ -14,11 +14,12 @@ client = OpenAI()  # reads OPENAI_API_KEY from env
 
 from rosetta.calc import calculate_chart
 from rosetta.lookup import (
-    GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS,
+    GLYPHS, ASPECTS, MAJOR_OBJECTS, OBJECT_MEANINGS, 
     GROUP_COLORS, ASPECT_INTERPRETATIONS, INTERPRETATION_FLAGS, 
     ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, HOUSE_INTERPRETATIONS, 
     HOUSE_SYSTEM_INTERPRETATIONS, PLANETARY_RULERS, 
-    DIGNITIES, PLANETARY_RULERS,  
+    DIGNITIES, COLOR_EMOJI, SHAPE_INSTRUCTIONS,
+    OBJECT_INTERPRETATIONS, ALIASES_MEANINGS, 
 )
 
 from rosetta.helpers import (
@@ -36,107 +37,6 @@ from rosetta.patterns import (
     detect_shapes, internal_minor_edges_for_pattern,
     connected_components_from_edges, _cluster_conjunctions_for_detection, 
 )
-
-try:
-    from rosetta.lookup import COLOR_EMOJI
-except Exception:
-    # Fallback so the UI doesn’t die if the name isn’t present in Cloud’s build
-    COLOR_EMOJI = {
-        "crimson": "🟥", "teal": "🟦", "darkorange": "🟧", "slateblue": "🟪",
-        "seagreen": "🟩", "hotpink": "🩷", "gold": "🟨", "deepskyblue": "🟦", "orchid": "🟪",
-    }
-
-SHAPE_INSTRUCTIONS = {
-
-    "Wedge": (
-        "Three planets in a trine–sextile–opposition triangle. The opposition is the headline polarity; the third planet is the bridge. "
-        "It stabilizes one side via the trine (built-in ease) and integrates the other via the sextile (choose-in behaviors). "
-        "Lean on the trined planet first, then deliberately engage the sextiled planet to include the opposite pole. "
-        "Strengths: fast stabilization, clear routing for major life themes. Failure: comfort bias—overusing the trine and skipping the sextile. "
-        "Fix: name and practice the sextile behaviors until they’re native; send the output back across the axis to close the loop."
-    ),
-
-    "T-Square": (
-        "An opposition with a third planet squaring both ends as the apex. The axis supplies tension; the apex becomes the vector nozzle. "
-        "Drive it by balancing both sides of the axis, routing the charge through the apex as a craft (skills, protocols, roles) rather than reactivity. "
-        "Use the opposite point (phantom leg) as a pressure release. "
-        "Strengths: relentless focus, crisis competence, friction into results. "
-        "Failures: ping-ponging between poles, scapegoating/burning the apex. "
-        "Fixes: balance axis first, split apex workload into repeatable tasks, and touch the phantom leg often. "
-        "Transits: apex hits spike urgency; axis hits tempt polarization; phantom leg hits offer intense, chaotic upgrade portals—stay grounded."
-    ),
-
-    "Grand Cross": (
-        "Two oppositions locked in four squares—like guy lines pulling in all directions. Feels stabilizing when managed, but spins and launches when mismanaged. "
-        "Name both axes; rotate the four jobs in sequence; use center protocols to stop spin. "
-        "Strengths: unmatched endurance, load-sharing, sustained momentum. "
-        "Failures: burnout, paralysis, whiplash between corners. "
-        "Fixes: simple rotation rhythm, floor/ceiling limits, regular center resets. "
-        "Transits: any corner pulls the whole grid; axis hits amplify polarization; quadrant hits can open intense, chaotic upgrade portals—stay grounded."
-    ),
-
-    "Cradle": (
-        "An opposition held by two planets that each trine one outer and sextile the other. Functions like a support sling: tension contained by skillful braces. "
-        "Ease first (trines), then deliberate engagement (sextiles). Alternate braces to move charge safely across the axis. "
-        "Strengths: elegant mediation, continuous throughput, conflict into growth. "
-        "Failures: comfort-looping in the trines, rocking without delivery. "
-        "Fixes: name sextile actions, set steady cadence, keep direct axis check-ins. "
-        "Transits: outer hits intensify polarity, inner hits open intense, chaotic upgrade portals—stay grounded; trine hits add ease—convert to action."
-    ),
-
-    "Mystic Rectangle": (
-        "Two oppositions stitched by two parallel trines (rails) and two parallel sextiles (crossovers). Functions like a resonance membrane. "
-        "Trines carry tone, sextiles phase-match it, oppositions anchor the tension. Circulate in figure-eights: trine → sextile → opposition → sextile → trine. "
-        "Strengths: harmonic entrainment, conflict translation, constant motion without stall. "
-        "Failures: over-resonating with noise, dodging opposition work, spinning. "
-        "Fixes: install gain controls (time/dose/volume), name a reference tone, ground between passes. "
-        "Transits: opposition hits spike amplitude, trines boost flow, sextiles open intense, chaotic upgrade portals—stay grounded."
-    ),
-
-    "Grand Trine": (
-        "Three trines in a closed loop. Pure ease, low-friction throughput—gift and trap. Needs an external vector or it drifts into pretty motion with no delivery. "
-        "Set a clear aim, rotate leadership, and add edges on purpose (deadlines, constraints) to convert flow into results. "
-        "Strengths: efficiency, endurance, fast recovery. "
-        "Failures: autopilot, insularity, no follow-through. "
-        "Fixes: attach to a mission, calendar checkpoints, inject grounded tasks. "
-        "Transits: corner hits amplify flow; oppositions give temporary spine; squares can open intense, chaotic upgrade portals—stay grounded."
-    ),
-
-    "Kite": (
-        "A grand trine with a fourth planet opposing one corner and sextiling the other two. The trine is the airframe; the fourth planet is the spine. "
-        "Use the sextile wings to steer the trine’s lift toward the spine’s aim. "
-        "Strengths: high efficiency plus direction. "
-        "Failures: autopilot drift, chasing spine drama without sextile steering. "
-        "Fixes: set a flight plan, schedule sextile reps, alternate the wings. "
-        "Transits: spine hits demand aim, sextile hits open intense, chaotic upgrade portals—stay grounded, trine hits boost flow—revector through the spine."
-    ),
-
-    "Sextile Wedge": (
-        "One trine with a third planet sextiling both ends. Channels a native talent lane through a choice-activated apex. "
-        "Strengths: graceful productivity, fast learning, clean delivery. "
-        "Failures: coasting on trine with no outcomes, overusing one sextile. "
-        "Fixes: name apex tasks, schedule tiny reps, rotate both sextiles. "
-        "Transits: apex hits open intense, chaotic upgrade portals—stay grounded; trine hits boost flow—aim it; sextile hits highlight levers to balance."
-    ),
-
-    "Unnamed": (
-        "One trine, one square, one quincunx. A talent lane, a workbench, and a hazard. Function: convert the trine’s ease through the square into results—never cross the quincunx. "
-        "Always detour: trine → square → endpoint or reverse. "
-        "Strengths: precision, safe integration. "
-        "Failures: hotwiring the quincunx, scapegoating the square, whipsawing endpoints. "
-        "Fixes: publish square checklists, lock out the quincunx, pace work in short cycles. "
-        "Transits: quincunx hits = red alarm; square hits demand discipline; trine hits boost ease—route through the square."
-    ),
-
-    "Lightning Bolt": (
-        "Four planets in a square–trine–square–trine zig-zag with the endpoints quincunx. Two Unnamed triangles overlapped. "
-        "Use alternating switchback routes to go around the hazard. "
-        "Strengths: rapid rerouting, elegant conversion, built-in redundancy. "
-        "Failures: hotwiring the quincunx, overworking one adapter, drifting on trines. "
-        "Fixes: publish square checklists, alternate the switchbacks, ground between runs. "
-        "Transits: quincunx endpoints = red alarm, square hits spike workload, trine hits boost flow—aim it through an adapter. Dual adapter hits can open intense, chaotic upgrade portals—stay grounded."
-    ),
-}
 
 _CANON_SHAPES = {k.lower(): k for k in SHAPE_INSTRUCTIONS}
 _SHAPE_SYNONYMS = {
@@ -218,107 +118,6 @@ if not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-OBJECT_INTERPRETATIONS = {
-    # Axes & Points
-    "Ascendant": "The Identity Interface & body-OS bootloader",
-    "Descendant": "The Mirror Port for one-to-one contracts & co-regulation",
-    "MC": "The Public Interface & executive mission panel",
-    "IC": "The Root System & ancestral memory vault",
-    "True Node": "The Northbound Vector—evolutionary growth protocol",
-    "South Node": "The Ancestral Cache—purge/compost valve for over-learned patterns",
-    "Vertex": "The Fate Dock—improbable convergence node",
-    "Part of Fortune": "The Ease Circuit—low-friction throughput and natural gains",
-    "Black Moon Lilith (Mean)": "The Primal Sovereignty Field—boundary breaker & untamed voltage",
-
-    # Luminaries & Planets
-    "Sun": "The Core Reactor & mission kernel",
-    "Moon": "The Autonomic Regulator & memory tide",
-    "Mercury": "The Signal Router & cognitive codec",
-    "Venus": "The Attractor Engine & coherence field",
-    "Mars": "The Drive Actuator & ignition vector",
-    "Jupiter": "The Meaning Amplifier & growth protocol",
-    "Saturn": "The Constraint Architect, time-keeper, & form-governor",
-    "Uranus": "The Update Daemon & liberation current",
-    "Neptune": "The Dream Renderer & dissolution cloud",
-    "Pluto": "The Underworld Compiler & power transmuter",
-
-    # Healing, devotion, sovereignty
-    "Ceres": "The Nurture Protocol—cyclical provisioning & metabolic care",
-    "Pallas": "The Pattern-Recognition Engine—tactical design & creative strategy",
-    "Juno": "The Bond-Contract Manager—commitment format & loyalty spec",
-    "Vesta": "The Sacred Focus Kernel—devotional flame & consecrated attention",
-    "Lilith": "The Raw Sovereign Impulse—taboo breaker & reclamation surge",
-    "Chiron": "The Wound-into-Medicine Bridge—remediation key & apprenticeship path",
-
-    # Muses, arts, memory
-    "Iris": "The Spectrum Messenger—bridge-and-translate across bands",
-    "Hygiea": "The Sanitation Routine—detox scheduler & systems hygiene",
-    "Psyche": "The Deep-Sensing Kernel—bonding depth & intimacy decoder",
-    "Thalia": "The Levity Driver—resilience via wit & comedic reframing",
-    "Euterpe": "The Melodic Intake—breath-of-inspiration & lyrical flow",
-    "Pomona": "The Harvest Module—cultivation, ripeness, and stewardship",
-    "Polyhymnia": "The Devotional Channel—sacred rhetoric & potent silence",
-    "Harmonia": "The Coherence Balancer—conflict resolver & tonal tuning",
-    "Isis": "The Reassembly Protocol—sacred naming & wholeness restoration",
-    "Ariadne": "The Labyrinth Navigator—thread management & escape design",
-    "Mnemosyne": "The Ancestral Memory Vault—recall indexer & storykeeper",
-    "Echo": "The Reflection Loop—call-and-response mapper & resonance check",
-    "Niobe": "The Pride-Collapse Lesson—grief calculus & softening cue",
-    "Eurydike": "The Underworld Trust Test—retrieval boundary & consent line",
-    "Freia": "The Magnetic Allure Field—sovereignty barter & desire economy",
-    "Terpsichore": "The Kinetic Rhythm Driver—body-poetry and motion grammar",
-    "Minerva": "The Strategic Wisdom Stack—invention schematic & clear seeing",
-    "Hekate": "The Threshold Keyring—gate choice, liminal craft, and crossings",
-    "Zephyr": "The Gentle Tailwind—signal aeration & effortless drift",
-    "Kassandra": "The Unheeded Warning Flag—truth persistence amid noise",
-    "Lachesis": "The Timeline Allocator—scope limiter & lifespan apportioner",
-    "Nemesis": "The Overreach Corrector—consequences returning to balance",
-    "Medusa": "The Gorgon Shield—petrify-to-protect and gaze discipline",
-    "Aletheia": "The Disclosure Engine—truth-reveal toggle & clarity lock",
-    "Magdalena": "The Redemptive Devotion—eros-as-medicine & lineage healing",
-    "Arachne": "The Network Weaver—craft mastery & web-logic (hubris check)",
-    "Fama": "The Signal Amplifier—reputation wave & rumor dynamics",
-    "Eros": "The Desire Vector—life-force aim & attractive precision",
-    "Veritas": "The Integrity Seal—verification checksum & honesty clamp",
-
-    # Makers, rebels, risk
-    "Hidalgo": "The Outlaw Ethic—boundary testing & frontier justice",
-    "Sirene": "The Siren Call—magnetic lure & navigation of allure tests",
-    "Siva": "The Destruction-Creation Pulse—ascetic focus & renewal cycle",
-    "Lilith (Asteroid)": "The Embodied Rebel Muse—raw feminine actuator in form",
-    "Copernicus": "The Paradigm Pivot Engine—heliocentric reframe & model swap",
-    "Icarus": "The Risk-Altitude Gauge—ambition burn limit & heat handling",
-    "Toro": "The Raw Torque Channel—stamina, potency, and applied force",
-    "Apollo": "The Solar Artistry Beam—precision targeting & performance craft",
-    "Koussevitzky": "The Orchestration Lead—ensemble coordination & baton logic",
-    "Anteros": "The Reciprocity Circuit—love returned & mutuality check",
-    "Tezcatlipoca": "The Obsidian Mirror—shadow tracking & trickster resets",
-
-    # Transpersonal & mythic tech
-    "Varuna": "The Cosmic Lawwave—oath-keeping and fluid jurisdiction",
-    "West": "The Occidental Vector—dusk-phase transitions & endings craft",
-    "Bacchus": "The Ecstatic Release—fermentation, intoxication, and rite",
-    "Hephaistos": "The Forge Lab—smithing, prosthetics, and repair invention",
-    "Panacea": "The Universal Remedy Hypothesis—integrative fix attempts",
-    "Orpheus": "The Music-as-Spell—underworld diplomacy via song",
-    "Kafka": "The Metamorphosis Trigger—bureaucracy maze & surreal insight",
-    "Pamela": "The Image-Magic Conduit—tarot language & symbolic art channel",
-    "Dionysus": "The Ritual Intoxication—boundary dissolution & holy madness",
-    "Kaali": "The Serpent Current Monitor—kundalini surge & power handling",
-    "Asclepius": "The Clinical Healer Code—crisis medicine & precise repair",
-    "Nessus": "The Boundary-Violation Pattern—accountability switch & cycle break",
-    "Singer": "The Vocal Node—signature timbre antenna & songcraft focus",
-    "Angel": "The Messenger Light Node—protection ping & benevolent signal",
-    "Ixion": "The Second-Chance Engine—taboo breaker audit & redemption test",
-    "Typhon": "The Primordial Storm Generator—chaos fields & reset weather",
-    "Quaoar": "The Creation-Dance Coder—joyful order from primal noise",
-    "Sedna": "The Exile Wound Archive—slow-time sovereignty & oceanic depth",
-    "Orcus": "The Oath Ledger—underworld contracts & promise enforcement",
-    "Haumea": "The Crystalline Birth Matrix—rapid regeneration & lineage splitting",
-    "Eris": "The Disruption Catalyst—naming-rights challenger & schism maker",
-    "Makemake": "The Ritual Provisioner—island-ecology creativity & feast codes"
-}
-            
 # -------------------------
 # Init / session management
 # -------------------------
@@ -634,8 +433,35 @@ if auth_status is True:
     current_user_id = username
         
     with st.sidebar:
-        st.caption(f"Logged in as **{name}** ({username}) — role: **{get_user_role(current_user_id)}**")
+        def _load_role_once(username: str) -> str:
+            # Try cached first
+            if st.session_state.get("role_for") == username and "role" in st.session_state:
+                return st.session_state["role"]
+
+            # One fetch with tiny retry, then cache
+            import time
+            for i in range(3):
+                try:
+                    role = get_user_role_cached(username)  # <- you already defined this cache wrapper
+                    st.session_state["role"] = role
+                    st.session_state["role_for"] = username
+                    return role
+                except Exception as e:
+                    time.sleep(0.2 * (2 ** i))
+            # Graceful fallback
+            st.warning("Role lookup failed; defaulting to 'user' for now.")
+            st.session_state["role"] = "user"
+            st.session_state["role_for"] = username
+            return "user"
+
+        role = _load_role_once(current_user_id)
+        st.caption(f"Logged in as **{name}** ({username}) — role: **{role}**")
+
         authenticator.logout("Logout", location="sidebar")
+        
+        def is_admin(username: str) -> bool:
+            role = _load_role_once(username)
+            return role == "admin"
 
     # Ensure a users row exists for THIS login, using the existing password hash from creds
     sb = supa()
@@ -2954,7 +2780,7 @@ if st.session_state.get("chart_ready", False):
                     only_shape = shape_types_present[0]
                     interpretation_notes.append(
                         f"Synthesize the whole {only_shape} interpretation according to the interpretation instructions provided, "
-                        f"and present it to the user as being one small functional piece in their greater circuitry."
+                        f"and present it to the user as being one functional piece in their greater circuitry."
                     )
                 else:
                     shape_list = ", ".join(shape_types_present[:-1]) + " and " + shape_types_present[-1] if len(shape_types_present) > 2 else " and ".join(shape_types_present)
