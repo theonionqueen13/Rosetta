@@ -21,20 +21,21 @@ from rosetta.users import (
     community_list, community_get, community_save, community_delete,
 )
 from rosetta.helpers import (
-    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
+    get_ascendant_degree, deg_to_rad, annotate_fixed_stars,
     get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
-    SIGN_NAMES, 
+    SIGN_NAMES,
 )
 import rosetta.tts as T
 from rosetta.drawing import (
     draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
     draw_planet_labels, draw_aspect_lines, draw_filament_lines,
-    draw_shape_edges, draw_minor_edges, draw_singleton_dots
+    draw_shape_edges, draw_minor_edges, draw_singleton_dots,
+    draw_compass_rose
 )
 from rosetta.patterns import (
     detect_minor_links_with_singletons, generate_combo_groups,
     detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges, _cluster_conjunctions_for_detection, 
+    connected_components_from_edges, _cluster_conjunctions_for_detection,
 )
 import importlib
 _L = importlib.import_module("rosetta.lookup")
@@ -58,6 +59,7 @@ SHAPE_INSTRUCTIONS      = _L.SHAPE_INSTRUCTIONS
 OBJECT_INTERPRETATIONS  = _L.OBJECT_INTERPRETATIONS
 CATEGORY_MAP            = _L.CATEGORY_MAP
 CATEGORY_INSTRUCTIONS   = _L.CATEGORY_INSTRUCTIONS
+ALIASES_MEANINGS        = _L.ALIASES_MEANINGS
 
 import streamlit as st, importlib
 
@@ -280,7 +282,7 @@ else:
 
 if auth_status is True:
     current_user_id = username
-        
+
     with st.sidebar:
         role = get_user_role_cached(current_user_id)
         st.caption(f"Logged in as **{name}** ({username}) — role: **{role}**")
@@ -360,7 +362,7 @@ if auth_status is True:
                         set_password(target, npw1)
                         st.rerun()  # ✅ causes top-level creds = get_auth_credentials() to refresh
                         st.success(f"Password reset for '{target}'.")
-            
+
             with st.expander("Admin: Delete a user"):
                 target = st.text_input("Username to delete", key="admin_del_user")
                 if st.button("Delete user", key="admin_del_btn"):
@@ -462,7 +464,7 @@ def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
             r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
-            
+
 def reset_chart_state():
     """Clear transient UI keys so each chart loads cleanly."""
     for key in list(st.session_state.keys()):
@@ -856,6 +858,12 @@ def render_chart_with_shapes(
     # singletons (always mark them visible if toggled)
     visible_objects.update(active_singletons)
 
+    if st.session_state.get("toggle_compass_rose"):
+        visible_objects.update([
+            "Ascendant", "Descendant", "MC", "IC",
+            "North Node", "South Node",
+        ])
+
     # draw singleton dots (twice as wide as aspect lines)
     if active_singletons:
         draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0)
@@ -874,6 +882,18 @@ def render_chart_with_shapes(
             r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
+
+    # --- Compass Rose overlay (always independent of circuits/shapes) ---
+    if st.session_state.get("toggle_compass_rose", True):
+        draw_compass_rose(
+            ax, pos, asc_deg,
+            colors={"nodal": "purple", "acdc": "green", "mcic": "orange"},
+            linewidth_base=2.0,
+            zorder=100,
+            arrow_mutation_scale=22.0,   # bigger arrowhead
+            nodal_width_multiplier=2.0,
+            sn_dot_markersize=12.0
+        )
 
     return fig, visible_objects, active_shapes, cusps
 
@@ -896,7 +916,7 @@ def _coerce_int(v, default=None):
 def _month_to_index(m):
     # Accept int 1-12, or month name like "July"
     if m is None: return None
-    if isinstance(m, int): 
+    if isinstance(m, int):
         return m if 1 <= m <= 12 else None
     s = str(m).strip()
     # maybe it's a number string
@@ -1318,10 +1338,10 @@ with col_mid:
                 location_info.write(f"Timezone: {st.session_state['last_timezone']}")
         elif st.session_state.get("last_timezone"):
             location_info.error(st.session_state["last_timezone"])
-        
+
         # user calculated a new chart manually
         st.session_state["active_profile_tab"] = "Add / Update Profile"
-        
+
 # -------------------------
 # Right column: Profile Manager
 # -------------------------
@@ -1939,6 +1959,11 @@ if st.session_state.get("chart_ready", False):
 
         st.subheader("Circuits")
 
+        # --- Compass Rose (independent overlay, ON by default) ---
+        if "toggle_compass_rose" not in st.session_state:
+            st.session_state["toggle_compass_rose"] = True
+        st.checkbox("Compass Rose", key="toggle_compass_rose")
+
         # Pattern checkboxes + expanders
         toggles, pattern_labels = [], []
         half = (len(patterns) + 1) // 2
@@ -2058,10 +2083,10 @@ if st.session_state.get("chart_ready", False):
             cols = st.columns(6)
             for j, label in enumerate(["5", "7", "9", "10", "11", "12"]):
                 cols[j].checkbox(label, value=False, key=f"harmonic_{label}")
-        
-        
+
+
         c1, c2 = st.columns([2, 2])
-    
+
         with c1:
             # ✅ real, functional control
             house_choice = st.radio(
@@ -2071,15 +2096,15 @@ if st.session_state.get("chart_ready", False):
                 key="house_system_main",
             )
             house_system = house_choice.lower().replace(" sign", "")
-            
+
             # Recompute chart if the house system changed
             prev = st.session_state.get("last_house_system")
             if st.session_state.get("chart_ready") and house_system != prev:
                 # Get stored location data from session state
                 stored_lat = st.session_state.get("current_lat")
-                stored_lon = st.session_state.get("current_lon") 
+                stored_lon = st.session_state.get("current_lon")
                 stored_tz = st.session_state.get("current_tz_name")
-    
+
                 if stored_lat and stored_lon and stored_tz:
                     run_chart(stored_lat, stored_lon, stored_tz, house_system)
                     st.session_state["last_house_system"] = house_system
@@ -2111,7 +2136,7 @@ if st.session_state.get("chart_ready", False):
             )
 
             dark_mode = st.checkbox("🌙 Dark Mode", value=False)
-            
+
             # 🚧 placeholder group 1 (does nothing)
             st.radio(
                 "(Coming soon)",
@@ -2120,7 +2145,7 @@ if st.session_state.get("chart_ready", False):
                 key="house_system_placeholder_b",
                 disabled=True,
             )
-            
+
             if st.button("Hide All"):
                 for i in range(len(patterns)):
                     st.session_state[f"toggle_pattern_{i}"] = False
@@ -2132,14 +2157,14 @@ if st.session_state.get("chart_ready", False):
     shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
     if not singleton_toggles:
         singleton_toggles = {p: st.session_state.get(f"singleton_{p}", False) for p in singleton_map}
-    
+
     # --- Render the chart ---
     fig, visible_objects, active_shapes, cusps = render_chart_with_shapes(
         pos, patterns, pattern_labels=[],
         toggles=[st.session_state.get(f"toggle_pattern_{i}", False) for i in range(len(patterns))],
         filaments=filaments, combo_toggles=combos,
         label_style=label_style, singleton_map=singleton_map, df=df,
-        house_system=house_system, 
+        house_system=house_system,
         dark_mode=dark_mode,
         shapes=shapes, shape_toggles_by_parent=shape_toggles_by_parent,
         singleton_toggles=singleton_toggles, major_edges_all=major_edges_all
@@ -2197,9 +2222,34 @@ if st.session_state.get("chart_ready", False):
 
     # Display profiles in the new clustered order
     for obj in ordered_objects:
-        matched_rows = df[df["Object"] == obj]
+        lookup_names = [obj]
+        for alias, display in ALIASES_MEANINGS.items():
+            if obj in (alias, display):
+                lookup_names.extend({alias, display})
+        matched_rows = df[df["Object"].isin(lookup_names)]
         if matched_rows.empty:
             continue
+
+    # --- Compass-only fallback: seed ordered_objects so profiles can build ---
+    if not ordered_objects and st.session_state.get("toggle_compass_rose", False):
+        # Prefer whatever naming exists in the DF for each compass endpoint
+        df_names = set(df["Object"].astype("string").str.strip())
+
+        def pick(*names):
+            for n in names:
+                if n in df_names:
+                    return n
+            return None
+
+        compass_seed = [
+            pick("Ascendant", "ASC", "AC"),
+            pick("Descendant", "DSC", "DC"),
+            pick("Midheaven", "MC"),
+            pick("Imum Coeli", "IC"),
+            pick("North Node", "True Node"),
+            pick("South Node"),  # South Node usually appears as itself
+        ]
+        ordered_objects = [n for n in compass_seed if n]
 
         # Calculate houses once for all visible objects (single source of truth)
     enhanced_objects_data = {}
@@ -2207,7 +2257,7 @@ if st.session_state.get("chart_ready", False):
         matched_rows = df[df["Object"] == obj]
         if not matched_rows.empty:
             row = matched_rows.iloc[0].to_dict()
-            
+
             # Calculate house using the cusps from chart rendering
             deg_val = None
             for key in ("abs_deg", "Longitude"):
@@ -2222,7 +2272,7 @@ if st.session_state.get("chart_ready", False):
                 house_num = _house_of_degree(deg_val, cusps_list)
                 if house_num:
                     row["House"] = int(house_num)
-            
+
             enhanced_objects_data[obj] = row
 
     # Ensure Sign is set for each visible object
@@ -2332,6 +2382,8 @@ if st.session_state.get("chart_ready", False):
 
         aspect_blocks = []
         present_aspects = set()  # which aspect TYPES are present
+        prompt = ""
+        compass_on = st.session_state.get("toggle_compass_rose", False)
 
         # --- Conjunction clusters first (pairwise inside each cluster) ---
         rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
@@ -2411,6 +2463,27 @@ if st.session_state.get("chart_ready", False):
                 right = _fmt_side(R)
                 _bullets.append(f"• {left} {asp} {right}")
 
+        # If Compass Rose is on, append its three axes to the Aspects bullets.
+        # This does NOT touch circuits/subshape detection — prompt-only overlay.
+        if compass_on:
+            def _label(obj):
+                return _fmt_side(label_of(obj))
+
+            # Ensure Opposition definition is included
+            present_aspects.add("Opposition")
+
+            # Nodal axis
+            if "South Node" in pos and "North Node" in pos:
+                _bullets.append(f"• {_label('South Node')} Opposition {_label('North Node')}")
+
+            # AC–DC axis
+            if "Ascendant" in pos and "Descendant" in pos:
+                _bullets.append(f"• {_label('Ascendant')} Opposition {_label('Descendant')}")
+
+            # MC–IC axis
+            if "MC" in pos and "IC" in pos:
+                _bullets.append(f"• {_label('MC')} Opposition {_label('IC')}")
+
         aspects_bulleted_block = ("Aspects\n\n" + "\n".join(_bullets)).strip() if _bullets else ""
         if _bullets:
             # Keep this truthy so downstream gates that check `if aspect_blocks:` still run.
@@ -2427,136 +2500,231 @@ if st.session_state.get("chart_ready", False):
             text = re.sub(r'\s+', ' ', text)
             return text.strip()
 
-        if aspect_blocks:
+        # --- Prompt gating flags ---
+        has_shapes = bool(active_shapes)
+        compass_on = st.session_state.get("toggle_compass_rose", False)
+
+        # Robust circuit detection: any toggle key containing "circuit"
+        has_circuit_toggle = any(
+            isinstance(v, bool) and v and ("circuit" in str(k).lower())
+            for k, v in st.session_state.items()
+        )
+
+        # Also consider your helper (if it returns True for parent/circuit selection)
+        has_circuits = has_circuit_toggle or _one_full_parent_selected(active_shapes)
+
+        # Full prompt should render for shapes OR circuits OR compass
+        has_shapes_or_circuits = has_shapes or has_circuits or compass_on
+
+        if has_shapes_or_circuits:
+
             # ---------- Character Profiles (same ordering as sidebar) ----------
             OBJ_TO_CATEGORY = {}
             for cat, objs in CATEGORY_MAP.items():
                 for o in objs:
                     OBJ_TO_CATEGORY[o] = cat
 
+            # Extend category map so data keys like "Midheaven"/"Imum Coeli"/"North Node" are recognized
+            for alias, display in ALIASES_MEANINGS.items():
+                if alias in OBJ_TO_CATEGORY and display not in OBJ_TO_CATEGORY:
+                    OBJ_TO_CATEGORY[display] = OBJ_TO_CATEGORY[alias]
+
             profiles_by_category = defaultdict(list)
             interpretation_flags = set()
             fixed_star_meanings = {}
+            # Use the normal ordering if present; otherwise fall back to all available objects.
+            # Use sidebar order first, then append anything not shown there
+            _all_objs = list(enhanced_objects_data.keys())
 
-            for obj in ordered_objects:
-                if obj in enhanced_objects_data:
-                    row = enhanced_objects_data[obj]
-                    profile_html = format_planet_profile(row)
-                    profile_text = strip_html_tags(profile_html)
+            # Local ordering for the prompt (don’t mutate global ordered_objects)
+            _compass_objs = ["Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"]
+            ordered_objects_prompt = list(ordered_objects) + [o for o in _compass_objs if o not in ordered_objects]
 
-                    # --- Prepend interpretation before the object name, with a trailing colon
-                    interp = (OBJECT_INTERPRETATIONS.get(obj, "") or "").strip()
-                    if interp:
-                        lines = profile_text.splitlines()
-                        if lines:
-                            lines[0] = f"{interp}: {lines[0]}"
-                        profile_text = "\n".join(lines)
+            # Always include everything we have data for; order by the prompt order above
+            _order_index = {o: i for i, o in enumerate(ordered_objects_prompt)}
+            objs_for_profiles = sorted(enhanced_objects_data.keys(), key=lambda o: _order_index.get(o, 10_000))
 
-                    # --- Add (Rx, dignity) after the object name, then a period
-                    import re
-                    name_for_edit = (row.get("Display Name") or obj).strip()
-                    sign = (row.get("Sign") or "").strip()
-                    dignity = _resolve_dignity(obj, sign)
-                    retro_val = str(row.get("Retrograde", "")).lower()
-                    rx_flag = "Rx" if "rx" in retro_val else None
-                    paren_bits = [x for x in (rx_flag, dignity) if x]
-                    paren_suffix = f" ({', '.join(paren_bits)})" if paren_bits else ""
+            # Define the category order once (used in two places below)
+            ordered_cats = [
+                "Character Profiles", "Instruments", "Personal Initiations", "Mythic Journeys",
+                "Compass Coordinates", "Compass Needle", "Switches"
+            ]
 
+            # Always build from enhanced_objects_data (works even when Compass-only).
+            # Order by your sidebar order when available; otherwise push to the end.
+            _order_index = {o: i for i, o in enumerate(ordered_objects)}
+            objs_for_profiles = sorted(enhanced_objects_data.keys(), key=lambda o: _order_index.get(o, 10_000))
+
+            # Resolve a data row for an object from enhanced_objects_data, alias forms, or df (fallback).
+            _REV_ALIASES = {v: k for k, v in ALIASES_MEANINGS.items()}
+
+            def _get_row_for(obj):
+                # Try direct
+                r = enhanced_objects_data.get(obj)
+                if r:
+                    return r
+
+                # Try alias -> display (e.g., "MC" -> "Midheaven")
+                a = ALIASES_MEANINGS.get(obj)
+                if a:
+                    r = enhanced_objects_data.get(a)
+                    if r:
+                        return r
+
+                # Try display -> alias (e.g., "North Node" -> "True Node")
+                b = _REV_ALIASES.get(obj)
+                if b:
+                    r = enhanced_objects_data.get(b)
+                    if r:
+                        return r
+
+                # Fallback to df by any known name variant
+                candidates = [obj]
+                if a: candidates.append(a)
+                if b: candidates.append(b)
+                for nm in candidates:
+                    if not nm:
+                        continue
+                    hit = df[df["Object"].astype(str).str.strip() == nm]
+                    if not hit.empty:
+                        return hit.iloc[0].to_dict()
+
+                return None
+            
+            # ---- Force Compass order inside their categories (stable over existing order)
+            
+            _compass_priority = {
+                "Ascendant": 0, "AC": 0, "ASC": 0,
+                "Descendant": 1, "DC": 1, "DSC": 1,
+                "IC": 2, "Imum Coeli": 2,
+                "MC": 3, "Midheaven": 3,
+                "North Node": 4, "True Node": 4,
+                "South Node": 5,
+            }
+            # Stable sort: compass order first, then your sidebar/order index, then name
+            objs_for_profiles = sorted(
+                objs_for_profiles,
+                key=lambda o: (_compass_priority.get(o, 100), _order_index.get(o, 10_000), str(o))
+            )
+
+            for obj in objs_for_profiles:
+                row = enhanced_objects_data.get(obj)
+                if not row:
+                    continue
+                if row:
+                    no = ALIASES_MEANINGS.get(obj, obj)  # normalized name (e.g., "True Node" -> "North Node")
+
+                profile_html = format_planet_profile(row)
+                profile_text = strip_html_tags(profile_html)
+
+                # --- Prepend interpretation before the object name, with a trailing colon
+                interp = (OBJECT_INTERPRETATIONS.get(no) or OBJECT_INTERPRETATIONS.get(obj) or "").strip()
+
+                if interp:
                     lines = profile_text.splitlines()
-                    if lines and name_for_edit:
-                        first = lines[0]
-                        m = re.match(r"^(.*?:\s*)(.+)$", first)
-                        prefix, rest = m.groups() if m else ("", first)
+                    if lines:
+                        lines[0] = f"{interp}: {lines[0]}"
+                    profile_text = "\n".join(lines)
 
-                        pos = rest.find(name_for_edit)
-                        if pos != -1:
-                            end = pos + len(name_for_edit)
-                            if paren_suffix and (end >= len(rest) or not rest[end:].lstrip().startswith("(")):
-                                rest = rest[:end] + paren_suffix + rest[end:]
-                            insert_end = end + (len(paren_suffix) if paren_suffix else 0)
-                            if not (insert_end < len(rest) and rest[insert_end] in ".:"):
-                                rest = rest[:insert_end] + "." + rest[insert_end:]
-                        lines[0] = prefix + rest
-                        profile_text = "\n".join(lines)
+                # --- Add (Rx, dignity) after the object name, then a period
+                import re
+                name_for_edit = (row.get("Display Name") or no).strip()
+                sign = (row.get("Sign") or "").strip()
+                dignity = _resolve_dignity(obj, sign)
+                retro_val = str(row.get("Retrograde", "")).lower()
+                rx_flag = "Rx" if "rx" in retro_val else None
+                paren_bits = [x for x in (rx_flag, dignity) if x]
+                paren_suffix = f" ({', '.join(paren_bits)})" if paren_bits else ""
 
-                    # --- Prefix the Sabian line with a label
-                    sab = (row.get("Sabian Symbol") or row.get("Sabian") or "").strip()
-                    if sab and "Sabian Symbol:" not in profile_text:
-                        profile_text = profile_text.replace(sab, f"Sabian Symbol: {sab}", 1)
+                lines = profile_text.splitlines()
+                if lines and name_for_edit:
+                    first = lines[0]
+                    m = re.match(r"^(.*?:\s*)(.+)$", first)
+                    prefix, rest = m.groups() if m else ("", first)
 
-                    # --- Append rulership info
-                    try:
-                        rhtml = _build_rulership_html(
-                            obj, row, enhanced_objects_data, ordered_objects, cusp_signs
-                        )
-                        plain = strip_html_tags(
-                            rhtml.replace("<br />","\n").replace("<br/>","\n").replace("<br>","\n")
-                        ).strip()
+                    pos2 = rest.find(name_for_edit)
+                    if pos2 != -1:
+                        end = pos2 + len(name_for_edit)
+                        if paren_suffix and (end >= len(rest) or not rest[end:].lstrip().startswith("(")):
+                            rest = rest[:end] + paren_suffix + rest[end:]
+                        insert_end = end + (len(paren_suffix) if paren_suffix else 0)
+                        if not (insert_end < len(rest) and rest[insert_end] in ".:"):
+                            rest = rest[:insert_end] + "." + rest[insert_end:]
+                    lines[0] = prefix + rest
+                    profile_text = "\n".join(lines)
 
-                        lines = [ln.strip() for ln in plain.splitlines() if ln.strip()]
-                        house_hdr_idx = next((i for i, t in enumerate(lines) if t.lower() == "rulership by house:"), None)
-                        sign_hdr_idx  = next((i for i, t in enumerate(lines) if t.lower() == "rulership by sign:"), None)
+                # --- Prefix the Sabian line with a label
+                sab = (row.get("Sabian Symbol") or row.get("Sabian") or "").strip()
+                if sab and "Sabian Symbol:" not in profile_text:
+                    profile_text = profile_text.replace(sab, f"Sabian Symbol: {sab}", 1)
 
-                        house_line = lines[house_hdr_idx + 1] if house_hdr_idx is not None and house_hdr_idx + 1 < len(lines) else ""
-                        sign_line  = lines[sign_hdr_idx + 1]  if sign_hdr_idx  is not None and sign_hdr_idx  + 1 < len(lines) else ""
+                # --- Append rulership info
+                try:
+                    rhtml = _build_rulership_html(
+                        obj, row, enhanced_objects_data, ordered_objects, cusp_signs
+                    )
+                    plain = strip_html_tags(
+                        rhtml.replace("<br />","\n").replace("<br/>","\n").replace("<br>","\n")
+                    ).strip()
 
-                        rtext_final = ""
-                        if house_line and sign_line:
-                            if house_line.lower() == sign_line.lower():
-                                rtext_final = f"Rulership:\n{house_line}"
-                            else:
-                                rtext_final = (
-                                    "Rulership by House:\n" + house_line + "\n\n" +
-                                    "Rulership by Sign:\n"  + sign_line
-                                )
-                        elif house_line:
-                            rtext_final = "Rulership by House:\n" + house_line
-                        elif sign_line:
-                            rtext_final = "Rulership by Sign:\n" + sign_line
+                    lines = [ln.strip() for ln in plain.splitlines() if ln.strip()]
+                    house_hdr_idx = next((i for i, t in enumerate(lines) if t.lower() == "rulership by house:"), None)
+                    sign_hdr_idx  = next((i for i, t in enumerate(lines) if t.lower() == "rulership by sign:"), None)
 
-                        if rtext_final:
-                            profile_text = profile_text.rstrip() + "\n\n" + rtext_final
-                    except Exception:
-                        pass
+                    house_line = lines[house_hdr_idx + 1] if house_hdr_idx is not None and house_hdr_idx + 1 < len(lines) else ""
+                    sign_line  = lines[sign_hdr_idx + 1]  if sign_hdr_idx  is not None and sign_hdr_idx  + 1 < len(lines) else ""
 
-                    # --- Add to category bucket
-                    cat = OBJ_TO_CATEGORY.get(obj)
-                    if not cat:
-                        raise KeyError(f"Uncategorized object found: {obj!r}")
-                    profiles_by_category[cat].append(profile_text)
+                    rtext_final = ""
+                    if house_line and sign_line:
+                        if house_line.lower() == sign_line.lower():
+                            rtext_final = f"Rulership:\n{house_line}"
+                        else:
+                            rtext_final = (
+                                "Rulership by House:\n" + house_line + "\n\n" +
+                                "Rulership by Sign:\n"  + sign_line
+                            )
+                    elif house_line:
+                        rtext_final = "Rulership by House:\n" + house_line
+                    elif sign_line:
+                        rtext_final = "Rulership by Sign:\n" + sign_line
 
-                    # ---- Flags
-                    if str(row.get("OOB Status", "")).lower() == "yes":
-                        interpretation_flags.add("Out of Bounds")
-                    if "station" in retro_val:
-                        interpretation_flags.add("Station Point")
-                    if "rx" in retro_val:
-                        interpretation_flags.add("Retrograde")
+                    if rtext_final:
+                        profile_text = profile_text.rstrip() + "\n\n" + rtext_final
+                except Exception:
+                    pass
 
-                    # ---- Fixed Stars
-                    fs_meaning = row.get("Fixed Star Meaning")
-                    fs_conj = row.get("Fixed Star Conjunction")
-                    if fs_meaning and fs_conj:
-                        stars = fs_conj.split("|||")
-                        meanings = fs_meaning.split("|||")
-                        for star, meaning in zip(stars, meanings):
-                            star, meaning = star.strip(), meaning.strip()
-                            if meaning:
-                                fixed_star_meanings[star] = meaning
+                # --- Add to category bucket
+                cat = OBJ_TO_CATEGORY.get(obj) or OBJ_TO_CATEGORY.get(no)
+                if not cat:
+                    raise KeyError(f"Uncategorized object found: {obj!r}")
+                profiles_by_category[cat].append(profile_text)
 
-                # --- Build the multi-category profiles block
-                ordered_cats = [
-                    "Character Profiles","Instruments","Personal Initiations","Mythic Journeys",
-                    "Compass Coordinates","Compass Needle","Switches"
-                ]
+                # ---- Flags
+                if str(row.get("OOB Status", "")).lower() == "yes":
+                    interpretation_flags.add("Out of Bounds")
+                if "station" in retro_val:
+                    interpretation_flags.add("Station Point")
+                if "rx" in retro_val:
+                    interpretation_flags.add("Retrograde")
 
-                category_blocks = []
-                for cat in ordered_cats:
-                    if profiles_by_category[cat]:
-                        block = cat + ":\n" + "\n\n".join(profiles_by_category[cat])
-                        category_blocks.append(block)
+                # ---- Fixed Stars
+                fs_meaning = row.get("Fixed Star Meaning")
+                fs_conj = row.get("Fixed Star Conjunction")
+                if fs_meaning and fs_conj:
+                    stars = fs_conj.split("|||")
+                    meanings = fs_meaning.split("|||")
+                    for star, meaning in zip(stars, meanings):
+                        star, meaning = star.strip(), meaning.strip()
+                        if meaning:
+                            fixed_star_meanings[star] = meaning
 
-                planet_profiles_block = "\n\n".join(category_blocks)
+            category_blocks = []
+            for cat in ordered_cats:
+                if profiles_by_category[cat]:
+                    block = cat + ":\n" + "\n\n".join(profiles_by_category[cat])
+                    category_blocks.append(block)
+
+            planet_profiles_block = "\n\n".join(category_blocks)
 
             # Count conjunction clusters (for guidance note)
             num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
@@ -2564,7 +2732,7 @@ if st.session_state.get("chart_ready", False):
 
             # Which shape types are currently active (dedup to canonical keys)
             shape_types_present = []
-            seen = set()            
+            seen = set()
             for s in (active_shapes or []):
                 cname = _canonical_shape_name(s)
                 if cname and cname not in seen and cname in SHAPE_INSTRUCTIONS:
@@ -2574,7 +2742,7 @@ if st.session_state.get("chart_ready", False):
             # ---------- Interpretation Notes ----------
             interpretation_notes = []
 
-                        # --- Add shape synthesis instruction ---
+            # --- Add shape synthesis instruction ---
             if shape_types_present:
                 if len(shape_types_present) == 1:
                     only_shape = shape_types_present[0]
@@ -2632,13 +2800,17 @@ if st.session_state.get("chart_ready", False):
                     f"• House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
                 )
 
-            # House interpretations present in view
+            # House interpretations present in view (use the same robust list)
             present_houses = set()
-            for obj in ordered_objects:
-                row = enhanced_objects_data.get(obj, {})
+            for obj in objs_for_profiles:
+                row = _get_row_for(obj) or {}
                 h = row.get("House")
                 if h:
-                    present_houses.add(int(h))
+                    try:
+                        present_houses.add(int(h))
+                    except Exception:
+                        pass
+
             for house_num in sorted(present_houses):
                 house_meaning = HOUSE_INTERPRETATIONS.get(house_num)
                 if house_meaning:
@@ -2683,31 +2855,35 @@ if st.session_state.get("chart_ready", False):
 
             # ---------- Final prompt ----------
             import textwrap
-            instructions = textwrap.dedent("""
+            # --- Base intro (always ends at "Give usable insight and agency.") ---
+            base_intro = textwrap.dedent("""
             Assume that the natal astrology chart is the chart native's precise energetic schematic. Your job is to convey the inter-connected circuit board functions of all of the moving parts in this astrological circuit, precisely as they are mapped for you here. These are all dynamic parts of the native's Self.
-                                           
-            Sources: Use only the data and dictionaries included in this prompt. Do not invent or import outside meanings. 
+
+            Sources: Use only the data and dictionaries included in this prompt. Do not invent or import outside meanings.
             Metadata: Incorporate sign + exact degree (Sabian Symbol), house, and all other details provided such as dignity/condition, rulership relationships, fixed star conjunctions, and OOB/retro/station flags. If something is missing, ignore it—no guessing.
             Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
+            """).strip()
 
+            # --- Expanded block (ONLY when at least one circuit/sub-shape is active) ---
+            expanded_instructions = textwrap.dedent("""
             Output format — exactly these sections, in this order:
 
             Character Profiles (if Sun, Moon, or any planet(s) besides Pluto are present)
             • For each planet or luminary, write one paragraph (3–6 sentences) that personifies the planet using all information provided for each planet or luminary.
             • Begin each profile paragraph with the name of the planet/luminary (e.g. Sun, Moon, Saturn), followed by a colon (:)
             • Weave in relevant house context, Sabian symbol note, rulership-based power dynamics, and when supplied, fixed-star ties, and notable conditions (OOB/retro/station/dignity).
-                                           
+
             Rulers/Dispositors
             • Always include and explain dispositor dynamics. When planet A is ruled by planet B, the conditions of planet B determine how well planet A is functioning. To aid a struggling planet, seek to empower its ruler. If a planet included is a ruler to other planets or placements, list what all it rules.
-                                           
+
             Other Profiles
             • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit. Put these profiles each under a header of its category name, e.g. "Mythic Journeys," Instruments," et. al.
             • Begin each profile paragraph with the name of the body or point (e.g. Part of Fortune, MC, Psyche), followed by a colon (:)
-                                           
+
             Conjunction Clusters (only if present)
-            • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles. 
+            • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles.
             • When a node is a conjunction cluster (e.g., “(Mars/Chiron)”), do not decompose it into individual pairwise sub-aspects; interpret the cluster as one endpoint.
-                                           
+
             Aspects
             • For each aspect provided, write one paragraph describing the relationship dynamics between the two endpoints.
             • Use the provided aspect definition. Do not substitute traditional meanings.
@@ -2722,14 +2898,42 @@ if st.session_state.get("chart_ready", False):
             • No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only.
             """).strip()
 
-            sections = [
-                instructions,
-                interpretation_notes_block.strip() if interpretation_notes_block else "",
-                planet_profiles_block.strip() if planet_profiles_block else "",
-                aspects_bulleted_block.strip() if aspects_bulleted_block else "",
+            # --- Compass Rose section (include here too when Compass is ON) ---
+            compass_only_msg = ""
+            if compass_on:
+                compass_only_msg = textwrap.dedent("""
+                Compass Rose Interpretation Instructions:
 
+                The Compass Rose is made of three axes—AC/DC, MC/IC, and the Nodal Axis. Together they set the chart’s orientation system: what’s “self vs other,” “public vs private,” and “past gifts vs northbound aims.” They orient what houses everything falls into, and what direction your life needs to take in order to evolve into your best self.
+
+                AC/DC Axis — Identity ↔ Partnership
+                AC (Ascendant) = Identity Interface & first impression; DC (Descendant) = Mirror Port & one-to-one bonds. Planets near, connected to, or ruling the AC define core identity and approach; those near/connected/ruling the DC define your relating style and partnership needs.
+                Chart hemisphere cue: left/east (AC side) emphasizes self-definition; right/west (DC side) emphasizes others and co-regulation.
+
+                MC/IC Axis — Public ↔ Private
+                MC (Midheaven) = Public Interface—role, reputation, mission delivery, legacy. IC = Root System—home, ancestry, inner base.
+                Planets near/connected to the MC mark what’s visible and public- or career-facing, and its ruling planet defines its qualities as well as its condition; near/connected to the IC mark what’s private, foundational, and rarely on display, and the planet that rules the IC defines its qualities and condition.
+                The region around the MC reads as publicly exposed; around the IC as inward and protected.
+
+                Nodal Axis — Compass Needle
+                North Node = Northbound Vector (what growth requires); South Node = Ancestral Cache (native strengths/overlearned patterns).
+                Operating directive: carry the gifts of the South Node across the axis to fulfill the North Node.
+                As you interpret shapes and aspect circuits, route their functions to support that transfer—use talent (South Node) as fuel, aim it at the North Node objective, and let the rest of the chart show how to do it without drift.
+                """).strip()
+
+            # Show expanded "Output format..." only when a shape OR a circuit is active (not Compass-only)
+            show_expanded = (has_shapes or has_circuits)
+
+            sections = [
+                base_intro,
+                (expanded_instructions if show_expanded else ""),       # ← shows for shapes OR circuits
+                (compass_only_msg if compass_on else ""),               # ← appended whenever Compass is ON
+                interpretation_notes_block.strip() if interpretation_notes_block else "",
+                planet_profiles_block.strip() if planet_profiles_block else "",  # ← profiles included even Compass-only
+                aspects_bulleted_block.strip() if aspects_bulleted_block else "",
                 aspect_defs_block.strip(),
             ]
+
             prompt = "\n\n".join([s for s in sections if s]).strip()
 
             # Build HTML safely (no f-strings with backslashes)
@@ -2759,8 +2963,55 @@ if st.session_state.get("chart_ready", False):
             copy_button = copy_tpl.substitute(prompt_html=prompt_html)
             components.html(copy_button, height=700, scrolling=True)
 
+        elif compass_on:
+            # --- Compass-Rose-only prompt (no circuits/sub-shapes active) ---
+            import textwrap
+            from string import Template
+
+            compass_only_msg = textwrap.dedent("""
+            Interpret only the Compass Rose axes.
+
+            Scope: Use just the North Node–South Node, Ascendant–Descendant, and MC–IC axes. Do not create planet/asteroid profiles, do not analyze circuits or other aspects, and do not infer anything not provided.
+
+            Method:
+            • Nodal Axis (South Node → North Node): Describe the functional learning vector and how to move from old/default patterns toward deliberate growth. Use signs, exact degrees (Sabian), and houses for the Nodes only.
+            • AC–DC Axis: Describe how identity interface and one-to-one bonds co-define each other, focusing on choice points and healthy regulation. Use signs/house context for AC and DC only.
+            • MC–IC Axis: Describe public interface vs private roots and how to balance visibility with resourcing. Use signs/house context for MC and IC only.
+
+            Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
+            """).strip()
+
+            # IMPORTANT: define prompt so Send-to-GPT works in this branch
+            prompt = compass_only_msg
+
+            prompt_html = compass_only_msg.replace("\n", "<br>")
+            copy_tpl = Template("""
+            <div style="display:flex; flex-direction:column; align-items:stretch;">
+              <div style="display:flex; justify-content:flex-end; margin-bottom:5px;">
+                <button id="copy-btn"
+                        onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {
+                            var btn = document.getElementById('copy-btn');
+                            var oldText = btn.innerHTML;
+                            btn.innerHTML = '✅ Copied!';
+                            setTimeout(() => btn.innerHTML = oldText, 2000);
+                        })"
+                        style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
+                  📋 Copy
+                </button>
+              </div>
+              <div id="prompt-box"
+                   style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
+                          color:white; background:black; border:1px solid #555;
+                          padding:8px; border-radius:4px; max-height:600px; overflow:auto;">${prompt_html}
+              </div>
+            </div>
+            """)
+            copy_button = copy_tpl.substitute(prompt_html=prompt_html)
+            components.html(copy_button, height=700, scrolling=True)
+
+
         else:
-            st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+            st.markdown("_(Select at least 1 sub-shape **or** a circuit from the left to view a full circuit prompt, or toggle Compass Rose to view the Compass-only prompt.)_")
 
     # --- Send to GPT controls (show ONLY when a prompt exists) ---
     colA, colB, colC = st.columns([1, 1, 2])
@@ -2797,4 +3048,4 @@ if st.session_state.get("chart_ready", False):
 
 else:
     # No prompt yet (no chart or no shapes selected)
-    st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+    st.markdown("_(Select at least 1 sub-shape or circuit, or the Compass Rose to view interpretation.)_")
