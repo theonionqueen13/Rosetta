@@ -135,6 +135,107 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
         ax.text(r, 1.3, label,
                 ha="center", va="center", fontsize=9,
                 color="white" if dark_mode else "black")
+        
+# -------------------------------
+# Compass Rose (independent overlay)
+# -------------------------------
+# -------------------------------
+# Compass Rose (independent overlay)
+# -------------------------------
+def draw_compass_rose(
+    ax, pos, asc_deg,
+    *,
+    colors=None,
+    linewidth_base=2.0,
+    zorder=100,
+    arrow_mutation_scale=20.0,   # bigger default head
+    nodal_width_multiplier=2.0,
+    sn_dot_markersize=8.0,
+):
+    """
+    Draw ONLY the three cardinal axes:
+      - South Node → North Node (arrow, thicker, dot at SN)
+      - Ascendant ↔ Descendant (line)
+      - IC ↔ MC (line)
+
+    Pure overlay: no dependency on circuits/shapes.
+    """
+    from rosetta.helpers import deg_to_rad
+
+    if colors is None:
+        colors = {"nodal": "purple", "acdc": "green", "mcic": "orange"}
+
+    def _get_deg(name):
+        return pos.get(name, None)
+
+    # Layering: put simple axes under the nodal arrow.
+    z_axes  = zorder + 1
+    z_nodal_line = zorder + 2
+    z_nodal_top  = zorder + 3  # arrowhead + SN dot
+
+    # --- AC - DC (line, under) ---
+    ac = _get_deg("Ascendant"); dc = _get_deg("Descendant")
+    if ac is not None and dc is not None:
+        r1 = deg_to_rad(ac, asc_deg); r2 = deg_to_rad(dc, asc_deg)
+        ax.plot([r1, r2], [1, 1],
+                color=colors["acdc"], linewidth=linewidth_base, zorder=z_axes)
+
+    # --- MC - IC (line, under) ---
+    mc = _get_deg("MC"); ic = _get_deg("IC")
+    if mc is not None and ic is not None:
+        r1 = deg_to_rad(mc, asc_deg); r2 = deg_to_rad(ic, asc_deg)
+        ax.plot([r1, r2], [1, 1],
+                color=colors["mcic"], linewidth=linewidth_base, zorder=z_axes)
+
+    # --- Nodal axis: SN -> NN (on top) ---
+    sn = _get_deg("South Node"); nn = _get_deg("North Node")
+    if sn is not None and nn is not None:
+        import numpy as np
+
+        r_sn = deg_to_rad(sn, asc_deg)
+        r_nn = deg_to_rad(nn, asc_deg)
+
+        # Convert to Cartesian so we can trim the base line near NN
+        x1, y1 = np.cos(r_sn) * 1.0, np.sin(r_sn) * 1.0
+        x2, y2 = np.cos(r_nn) * 1.0, np.sin(r_nn) * 1.0
+
+        vx, vy = (x2 - x1), (y2 - y1)
+        # >>> TUNE THIS: fraction of the SN→NN chord to trim from the NN end
+        head_trim_frac = 0.05  # try 0.03–0.10 to taste
+
+        x2_trim = x2 - head_trim_frac * vx
+        y2_trim = y2 - head_trim_frac * vy
+
+        # Back to polar for plotting the trimmed BASE line
+        r2_trim_theta = np.arctan2(y2_trim, x2_trim)
+        r2_trim_rad   = np.hypot(x2_trim, y2_trim)
+
+        # Thick base chord, trimmed so the arrow head can cover the end
+        ax.plot([r_sn, r2_trim_theta], [1.0, r2_trim_rad],
+                color=colors["nodal"],
+                linewidth=linewidth_base * nodal_width_multiplier,
+                zorder=z_nodal_line)
+
+        # Arrow from SN to NN (no shrink tricks—head naturally covers trimmed end)
+        ax.annotate(
+            "",
+            xy=(r_nn, 1.0), xytext=(r_sn, 1.0),
+            arrowprops=dict(
+                arrowstyle="-|>",
+                mutation_scale=arrow_mutation_scale,  # size knob
+                lw=linewidth_base * nodal_width_multiplier,
+                color=colors["nodal"],
+                shrinkA=0,  # tail flush at SN
+                shrinkB=0,  # let head land at NN; base line is already trimmed
+            ),
+            zorder=z_nodal_top
+        )
+
+        # Dot at SN end (above everything)
+        ax.plot([r_sn], [1.0], marker="o",
+                markersize=sn_dot_markersize,
+                color=colors["nodal"],
+                zorder=z_nodal_top)
 
 # -------------------------------
 # Aspect lines (master truth)
