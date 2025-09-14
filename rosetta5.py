@@ -2604,11 +2604,11 @@ if st.session_state.get("chart_ready", False):
             # Conjunction cluster guidance (singular/plural)
             if num_conj_clusters == 1:
                 interpretation_notes.append(
-                    '- When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                    '• When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
                 )
             elif num_conj_clusters >= 2:
                 interpretation_notes.append(
-                    '- When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
+                    '• When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
                 )
 
             # General flags (each only once)
