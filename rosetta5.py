@@ -2393,14 +2393,29 @@ if st.session_state.get("chart_ready", False):
             if R not in group_right[key]:
                 group_right[key].append(R)
 
-        # Emit a single "+"-joined block for all non-conjunction aspects
-        grouped_parts = []
-        for (L, asp) in appearance.keys():
-            targets = ", ".join(group_right[(L, asp)])
-            grouped_parts.append(f"{L} {asp} {targets}")
+        # Build bulleted "Aspects" (slash-joined conjunction clusters in parentheses)
+        import re
+        _aspect_rx = re.compile(r"^(.*?)\s+(Opposition|Trine|Sextile|Square|Quincunx)\s+(.*)$", re.IGNORECASE)
 
-        if grouped_parts:
-            aspect_blocks.append(" + ".join(grouped_parts))
+        def _fmt_side(label: str) -> str:
+            label = label.strip()
+            if ", " in label:
+                # turn "Sun, IC, South Node" -> "(Sun/IC/South Node)"
+                return "(" + label.replace(", ", "/") + ")"
+            return label
+
+        _bullets = []
+        for (L, asp) in appearance.keys():
+            for R in group_right[(L, asp)]:
+                left = _fmt_side(L)
+                right = _fmt_side(R)
+                _bullets.append(f"• {left} {asp} {right}")
+
+        aspects_bulleted_block = ("Aspects\n\n" + "\n".join(_bullets)).strip() if _bullets else ""
+        if _bullets:
+            # Keep this truthy so downstream gates that check `if aspect_blocks:` still run.
+            # (Content here is not used in the final prompt after step #2.)
+            aspect_blocks.append("_")
 
         def strip_html_tags(text):
             # Replace divs and <br> with spaces
@@ -2706,7 +2721,8 @@ if st.session_state.get("chart_ready", False):
                 instructions,
                 interpretation_notes_block.strip() if interpretation_notes_block else "",
                 planet_profiles_block.strip() if planet_profiles_block else "",
-                ("Aspects\n\n" + "\n\n".join(aspect_blocks)).strip(),
+                aspects_bulleted_block.strip() if aspects_bulleted_block else "",
+
                 aspect_defs_block.strip(),
             ]
             prompt = "\n\n".join([s for s in sections if s]).strip()
