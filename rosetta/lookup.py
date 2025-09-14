@@ -540,6 +540,36 @@ DIGNITIES = {
   }
 }
 
+
+CATEGORY_MAP = {
+    "Character Profiles": {"Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune"},
+    "Instruments": {
+        "Ceres","Pallas","Juno","Vesta","Iris","Hygiea","Psyche","Thalia","Euterpe","Pomona","Polyhymnia",
+        "Harmonia","Isis","Ariadne","Mnemosyne","Echo","Niobe","Eurydike","Freia","Terpsichore","Minerva",
+        "Hekate","Zephyr","Kassandra","Lachesis","Nemesis","Medusa","Aletheia","Magdalena","Arachne","Fama",
+        "Eros","Veritas","Sirene","Siva","Lilith (Asteroid 1181)","Copernicus","Icarus","Toro","Apollo",
+        "Koussevitzky","Osiris","Lucifer","Anteros","Tezcatlipoca","West","Bacchus","Hephaistos","Panacea",
+        "Orpheus","Kafka","Pamela","Dionysus","Kaali","Asclepius","Singer","Angel"
+    },
+    "Personal Initiations": {"Chiron","Nessus","Ixion"},
+    "Mythic Journeys": {"Pluto","Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Eris","Makemake"},
+    "Compass Coordinates": {"Ascendant","Descendant","MC","IC"},
+    "Compass Needle": {"True Node","North Node","South Node"},
+    "Switches": {"Black Moon Lilith (Mean)","Part of Fortune","Vertex","Anti-Vertex","East Point"},
+    "Imprints": {"Fixed Stars"}
+} 
+
+CATEGORY_INSTRUCTIONS = {
+    "Character Profiles": "Treat these as the primary agents. They have will, drive, and personality. Write their profiles as if they are characters acting within the chart’s system. They initiate, choose, and embody functions.",
+    "Instruments": "Treat these as auxiliary tools or implements. They do not act on their own but modify, equip, or flavor the Characters they are attached to. Interpret them as specialized add-ons that enhance or qualify expression.",
+    "Personal Initiations": "Treat these as threshold trials and initiatory guides. They mark points of personal wounding, apprenticeship, or rites of passage. Interpret them as initiations the native must undergo, often in embodied or psychological crisis form.",
+    "Mythic Journeys": "Treat these as terrains or landscapes. They are collective-scale mythic journeys that reshape the native’s environment. Interpret them as deep fields of transformation that one must endure or traverse, not agents that act.",
+    "Compass Coordinates": "Treat these as orienting coordinate markers for the whole chart. They provide direction, aim, and framing. Interpret them as the chart’s compass points, describing location, presentation, public face, and roots.",
+    "Compass Needle": "Treat these as the chart’s directional polarity. They mark the karmic vector between where the native has come from and where they are growing toward. Interpret them as the navigational axis of soul trajectory.",
+    "Switches": "Treat these as sensitive toggles or thresholds. They activate, invert, or flip circuits. Interpret them as switches that trigger growth arcs, release conditions, or polarity shifts.",
+    "Imprints": "Treat these as permanent marks from the heavens. They stamp the chart with mythic inheritance, often conferring unusual talents or fated qualities. Interpret them as imprints that ‘hard-code’ certain powers or vulnerabilities into the native’s system.",
+}
+
 HOUSE_SYSTEM_INTERPRETATIONS = {
     "equal": "Interpret Equal House as the Structural Schematic Layer—the body’s architectural blueprint and energetic grid.",
     "placidus": "Interpret Placidus as the Narrative + Trauma Pattern Layer—the psychological time–body interface where memory scripts and emotional timelines run.",
