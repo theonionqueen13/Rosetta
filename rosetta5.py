@@ -1,4 +1,5 @@
 import streamlit as st
+st.set_page_config(layout="wide")
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,11 +9,33 @@ import re
 import os, json, bcrypt, time, hashlib
 import streamlit_authenticator as stauth
 import datetime as dt
-from openai import OpenAI
-from supabase import create_client
-client = OpenAI()  # reads OPENAI_API_KEY from env
-
 from rosetta.calc import calculate_chart
+from rosetta.db import supa
+from rosetta.auth_reset import request_password_reset, verify_reset_code_and_set_password
+from rosetta.authn import get_auth_credentials, get_user_role_cached, ensure_user_row_linked
+from rosetta.config import get_openai_client, get_secret
+from rosetta.users import (
+    user_exists, create_user, get_user_role, is_admin,
+    verify_password, set_password, delete_user_account,
+    load_user_profiles_db, save_user_profile_db, delete_user_profile_db,
+    community_list, community_get, community_save, community_delete,
+)
+
+from rosetta.helpers import (
+    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
+    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
+    SIGN_NAMES
+)
+from rosetta.drawing import (
+    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
+    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
+    draw_shape_edges, draw_minor_edges, draw_singleton_dots
+)
+from rosetta.patterns import (
+    detect_minor_links_with_singletons, generate_combo_groups,
+    detect_shapes, internal_minor_edges_for_pattern,
+    connected_components_from_edges, _cluster_conjunctions_for_detection, 
+)
 import importlib
 _L = importlib.import_module("rosetta.lookup")
 
@@ -44,22 +67,6 @@ def get_lookup():
 
 _L = get_lookup()
 # same attribute assignments as above...
-
-from rosetta.helpers import (
-    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
-    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
-    SIGN_NAMES
-)
-from rosetta.drawing import (
-    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
-    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
-    draw_shape_edges, draw_minor_edges, draw_singleton_dots
-)
-from rosetta.patterns import (
-    detect_minor_links_with_singletons, generate_combo_groups,
-    detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges, _cluster_conjunctions_for_detection, 
-)
 
 _CANON_SHAPES = {k.lower(): k for k in SHAPE_INSTRUCTIONS}
 _SHAPE_SYNONYMS = {
@@ -116,21 +123,11 @@ def _canonical_shape_name(shape_dict: dict) -> str:
                 return canon
     return ""
 
-def _get_openai_key():
-    k = os.getenv("OPENAI_API_KEY")
-    if not k:
-        try:
-            k = st.secrets["OPENAI_API_KEY"]
-        except Exception:
-            k = None
-    return k
-
-OPENAI_API_KEY = _get_openai_key()
-if not OPENAI_API_KEY:
-    st.error("Missing OPENAI_API_KEY. Set it in your deploy environment or in Streamlit **Secrets**.")
+client = get_openai_client()
+if client is None:
+    import streamlit as st
+    st.error("Missing OPENAI_API_KEY. Set it as env var or in Streamlit Secrets.")
     st.stop()
-
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 # -------------------------
 # Init / session management
@@ -142,7 +139,6 @@ if "reset_done" not in st.session_state:
 if "last_house_system" not in st.session_state:
     st.session_state["last_house_system"] = "equal"
 
-st.set_page_config(layout="wide")
 st.markdown(
     """
     <style>
@@ -159,11 +155,6 @@ st.markdown(
 st.title("🧭 Rosetta Flight Deck")
 st.caption("Mobile users: click » at the top left to login, and to view planet profiles")
 
-from supabase import create_client
-def supa():
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
-    return create_client(url, key)
 def _credentials_from_db():
     sb = supa()
     res = sb.table("users").select("username,name,email,pw_hash").execute()
@@ -178,158 +169,6 @@ def _credentials_from_db():
         }
     }
 
-def user_exists(username: str) -> bool:
-    sb = supa()
-    res = sb.table("users").select("username").eq("username", username).execute()
-    return bool(res.data)
-
-def create_user(username: str, name: str, email: str, plain_password: str, role: str = "user") -> None:
-    sb = supa()
-    pw_hash = bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt()).decode()
-    sb.table("users").upsert([{
-        "username": username,
-        "name": name,
-        "email": email,
-        "pw_hash": pw_hash,
-        "role": role
-    }]).execute()
-
-def get_user_role(username: str) -> str:
-    sb = supa()
-    res = sb.table("users").select("role").eq("username", username).limit(1).execute()
-    rows = res.data or []
-    return rows[0].get("role", "user") if rows else "user"
-
-def is_admin(username: str) -> bool:
-    return get_user_role(username) == "admin"
-
-def verify_password(username: str, candidate_password: str) -> bool:
-    sb = supa()
-    res = sb.table("users").select("pw_hash").eq("username", username).maybe_single().execute()
-    if not res.data:
-        return False
-    stored_hash = res.data["pw_hash"]
-    return bcrypt.checkpw(
-        candidate_password.encode(),
-        stored_hash.encode() if isinstance(stored_hash, str) else stored_hash
-    )
-
-def set_password(username: str, new_plain_password: str) -> None:
-    sb = supa()
-    pw_hash = bcrypt.hashpw(new_plain_password.encode(), bcrypt.gensalt()).decode()
-    sb.table("users").update({"pw_hash": pw_hash}).eq("username", username).execute()
-def load_user_profiles_db(user_id: str) -> dict:
-    sb = supa()
-    res = sb.table("profiles").select("profile_name,payload").eq("user_id", user_id).execute()
-    rows = res.data or []
-    out = {}
-    for r in rows:
-        payload = r["payload"]
-        if isinstance(payload, str):
-            payload = json.loads(payload)
-        out[r["profile_name"]] = payload
-    return out
-def save_user_profile_db(user_id: str, profile_name: str, payload: dict) -> None:
-    sb = supa()
-    sb.table("profiles").upsert({
-        "user_id": user_id,
-        "profile_name": profile_name,
-        "payload": json.dumps(payload)
-    }).execute()
-def delete_user_profile_db(user_id: str, profile_name: str) -> None:
-    sb = supa()
-    sb.table("profiles").delete().eq("user_id", user_id).eq("profile_name", profile_name).execute()
-
-def delete_user_account(username: str) -> None:
-    sb = supa()
-    # Delete any profiles they created (optional, but keeps DB clean)
-    sb.table("profiles").delete().eq("user_id", username).execute()
-    # Delete any community donations they made (optional too)
-    sb.table("community_profiles").delete().eq("submitted_by", username).execute()
-    # Delete the user record itself
-    sb.table("users").delete().eq("username", username).execute()
-    
-def community_list(limit: int = 200) -> list[dict]:
-    sb = supa()
-    res = sb.table("community_profiles").select("*").order("created_at", desc=True).limit(limit).execute()
-    rows = res.data or []
-    out = []
-    for r in rows:
-        payload = r["payload"]
-        if isinstance(payload, str):
-            payload = json.loads(payload)
-        r["payload"] = payload
-        out.append(r)
-    return out
-def community_get(pid: int) -> dict | None:
-    sb = supa()
-    res = sb.table("community_profiles").select("*").eq("id", pid).limit(1).execute()
-    rows = res.data or []
-    if not rows:
-        return None
-    row = rows[0]
-    if isinstance(row["payload"], str):
-        row["payload"] = json.loads(row["payload"])
-    return row
-def community_save(profile_name: str, payload: dict, submitted_by: str) -> int:
-    sb = supa()
-    ts = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
-    res = sb.table("community_profiles").insert({
-        "profile_name": profile_name,
-        "payload": json.dumps(payload),
-        "submitted_by": submitted_by,
-        "created_at": ts,
-        "updated_at": ts
-    }).execute()
-    return res.data[0]["id"]
-def community_delete(pid: int) -> None:
-    sb = supa()
-    sb.table("community_profiles").delete().eq("id", pid).execute()
-def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15):
-    sb = supa()
-    now = int(time.time())
-    exp = now + ttl_minutes * 60
-    sb.table("password_resets").insert({
-        "username": username,
-        "code_hash": code_hash,
-        "sent_to": email_addr,
-        "expires_at": exp,
-        "used": False,
-        "created_at": now
-    }).execute()
-def _find_user_by_identifier(identifier: str):
-    sb = supa()
-    ident = identifier.strip()
-    res = sb.table("users").select("username,email").or_(f"username.eq.{ident},email.eq.{ident}").limit(1).execute()
-    rows = res.data or []
-    if not rows:
-        return None
-    row = rows[0]
-    return row["username"], row["email"]
-def verify_reset_code_and_set_password(username: str, code: str, new_password: str) -> bool:
-    sb = supa()
-    now = int(time.time())
-    pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")
-    code_hash = _hash_code(code, pepper)
-    res = sb.table("password_resets").select("id,expires_at,used").eq("username", username).eq("code_hash", code_hash).order("created_at", desc=True).limit(1).execute()
-    rows = res.data or []
-    if not rows:
-        return False
-    row = rows[0]
-    if row["used"] or now > row["expires_at"]:
-        return False
-    sb.table("password_resets").update({"used": True}).eq("id", row["id"]).execute()
-    set_password(username, new_password)
-    try:
-        st.rerun()  # ✅ causes top-level creds = _credentials_from_db() to refresh
-    except Exception:
-        pass
-    return True
-
-@st.cache_resource
-def supa():
-    return create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["key"])
-
 @st.cache_data(ttl=60)
 def _credentials_from_db_cached():
     return _credentials_from_db()
@@ -340,16 +179,12 @@ def user_exists_in_db(username: str) -> bool:
     return bool(sb.table("users").select("username").eq("username", username).limit(1).execute().data)
 
 @st.cache_data(ttl=60)
-def get_user_role_cached(username: str) -> str:
-    return get_user_role(username)  # your existing helper
-
-@st.cache_data(ttl=60)
 def load_user_profiles_db_cached(user_id: str) -> dict:
     return load_user_profiles_db(user_id)  # your existing helper
 
 
 # --- Authentication (admin-gated user management; no public registration) ---
-creds = _credentials_from_db()
+creds = get_auth_credentials()
 auth_cfg = st.secrets.get("auth", {})
 cookie_name  = auth_cfg.get("cookie_name", "rosetta_auth")
 cookie_key   = auth_cfg.get("cookie_key", "change_me")
@@ -447,61 +282,26 @@ if auth_status is True:
     current_user_id = username
         
     with st.sidebar:
-        def _load_role_once(username: str) -> str:
-            # Try cached first
-            if st.session_state.get("role_for") == username and "role" in st.session_state:
-                return st.session_state["role"]
-
-            # One fetch with tiny retry, then cache
-            import time
-            for i in range(3):
-                try:
-                    role = get_user_role_cached(username)  # <- you already defined this cache wrapper
-                    st.session_state["role"] = role
-                    st.session_state["role_for"] = username
-                    return role
-                except Exception as e:
-                    time.sleep(0.2 * (2 ** i))
-            # Graceful fallback
-            st.warning("Role lookup failed; defaulting to 'user' for now.")
-            st.session_state["role"] = "user"
-            st.session_state["role_for"] = username
-            return "user"
-
-        role = _load_role_once(current_user_id)
+        role = get_user_role_cached(current_user_id)
         st.caption(f"Logged in as **{name}** ({username}) — role: **{role}**")
-
         authenticator.logout("Logout", location="sidebar")
-        
-        def is_admin(username: str) -> bool:
-            role = _load_role_once(username)
-            return role == "admin"
 
     # Ensure a users row exists for THIS login, using the existing password hash from creds
-    sb = supa()
-    exists = sb.table("users").select("username").eq("username", current_user_id).limit(1).execute()
-    if not exists.data:
-        rec = (creds or {}).get("usernames", {}).get(current_user_id, {})  # creds came from _credentials_from_db()
-        pw_hash = rec.get("password")  # already-hashed (bcrypt)
-        if pw_hash:
-            sb.table("users").insert({
-                "username": current_user_id,
-                "name": rec.get("name") or (auth_name or current_user_id),
-                "email": rec.get("email") or f"{current_user_id}@local",
-                "pw_hash": pw_hash,                     # <- use existing hash, NO password change
-                "role": rec.get("role") or "user",
-            }).execute()
-            st.success(f"Linked '{current_user_id}' to DB users (no password change). Reloading…")
-            st.rerun()
-        else:
-            st.error("This login exists in authenticator, but no password hash was found in creds. "
-                     "Add it via Admin → User Management once, or migrate your creds loader.")
-            st.stop()
+    ok, msg = ensure_user_row_linked(
+        current_user_id,
+        creds,
+        display_name=(name or current_user_id)
+    )
+    if not ok:
+        st.error(msg)
+        st.stop()
+    elif msg:
+        st.success(msg)
+        st.rerun()
 
     admin_flag = is_admin(current_user_id)  # now safe
 
     with st.sidebar:
-        st.caption(f"Logged in as **{name}** ({username}) — role: **{get_user_role(current_user_id)}**")
 
         # Self-serve: Change Password (available to everyone)
         with st.expander("Change Password"):
@@ -558,7 +358,7 @@ if auth_status is True:
                         st.error("No such username.")
                     else:
                         set_password(target, npw1)
-                        st.rerun()  # ✅ causes top-level creds = _credentials_from_db() to refresh
+                        st.rerun()  # ✅ causes top-level creds = get_auth_credentials() to refresh
                         st.success(f"Password reset for '{target}'.")
             
             with st.expander("Admin: Delete a user"):
