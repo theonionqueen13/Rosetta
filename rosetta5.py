@@ -20,12 +20,12 @@ from rosetta.users import (
     load_user_profiles_db, save_user_profile_db, delete_user_profile_db,
     community_list, community_get, community_save, community_delete,
 )
-
 from rosetta.helpers import (
     get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
     get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
-    SIGN_NAMES
+    SIGN_NAMES, 
 )
+import rosetta.tts as T
 from rosetta.drawing import (
     draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
     draw_planet_labels, draw_aspect_lines, draw_filament_lines,
@@ -2694,6 +2694,7 @@ if st.session_state.get("chart_ready", False):
 
             Character Profiles (if Sun, Moon, or any planet(s) besides Pluto are present)
             • For each planet or luminary, write one paragraph (3–6 sentences) that personifies the planet using all information provided for each planet or luminary.
+            • Begin each profile paragraph with the name of the planet/luminary (e.g. Sun, Moon, Saturn), followed by a colon (:)
             • Weave in relevant house context, Sabian symbol note, rulership-based power dynamics, and when supplied, fixed-star ties, and notable conditions (OOB/retro/station/dignity).
                                            
             Rulers/Dispositors
@@ -2701,7 +2702,8 @@ if st.session_state.get("chart_ready", False):
                                            
             Other Profiles
             • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit. Put these profiles each under a header of its category name, e.g. "Mythic Journeys," Instruments," et. al.
-            
+            • Begin each profile paragraph with the name of the body or point (e.g. Part of Fortune, MC, Psyche), followed by a colon (:)
+                                           
             Conjunction Clusters (only if present)
             • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles. 
             • When a node is a conjunction cluster (e.g., “(Mars/Chiron)”), do not decompose it into individual pairwise sub-aspects; interpret the cluster as one endpoint.
@@ -2782,11 +2784,16 @@ if st.session_state.get("chart_ready", False):
     st.subheader("Think of each of your planets (or clusters of planets, when conjunct), as a personified part of yourself. When you feel like you have parts of yourself either working together or in conflict, you do -- and this is the working map of those parts.")
     st.caption("Keep checking back for more and more awesome interpretations as the app is developed! In the meantime, these ones are a great starting point for familiarizing yourself with your inner cast of characters. Synastry and transit readings coming soon, too!")
 
+    interp_text = st.session_state.get(
+        "latest_interpretation",
+        "_(Click **Send to GPT** above to generate.)_"
+    )
+
     with st.expander("Interpretation"):
-        st.markdown(
-            st.session_state.get("latest_interpretation",
-                                 "_(Click **Send to GPT** above to generate.)_")
-        )
+        # 🔊 controls FIRST (so users see them right away)
+        T.tts_controls(interp_text, key="interpretation")
+        # then the text
+        st.markdown(interp_text)
 
 else:
     # No prompt yet (no chart or no shapes selected)
