@@ -42,11 +42,7 @@ def _get_supabase_keys():
         )
     return url, key
 
-@st.cache_resource
+@_cache_resource
 def supa() -> Client:
-    cfg = st.secrets.get("supabase", {})
-    url = cfg.get("url")
-    key = cfg.get("key")
-    if not url or not key:
-        raise RuntimeError("Missing supabase.url/key in Streamlit secrets.")
+    url, key = _get_supabase_keys()  # checks env vars then st.secrets
     return create_client(url, key)
