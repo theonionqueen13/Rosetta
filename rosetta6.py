@@ -9,7 +9,7 @@ import re
 import os, json, bcrypt, time, hashlib
 import streamlit_authenticator as stauth
 import datetime as dt
-
+from rosetta.calc import calculate_chart
 from rosetta.db import supa
 from rosetta.auth_reset import request_password_reset, verify_reset_code_and_set_password
 from rosetta.authn import get_auth_credentials, get_user_role_cached, ensure_user_row_linked
@@ -19,6 +19,23 @@ from rosetta.users import (
     verify_password, set_password, delete_user_account,
     load_user_profiles_db, save_user_profile_db, delete_user_profile_db,
     community_list, community_get, community_save, community_delete,
+)
+from rosetta.helpers import (
+    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
+    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
+    SIGN_NAMES, 
+)
+import rosetta.tts as T
+from rosetta.drawing import (
+    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
+    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
+    draw_shape_edges, draw_minor_edges, draw_singleton_dots,
+    draw_compass_rose
+)
+from rosetta.patterns import (
+    detect_minor_links_with_singletons, generate_combo_groups,
+    detect_shapes, internal_minor_edges_for_pattern,
+    connected_components_from_edges, _cluster_conjunctions_for_detection, 
 )
 import importlib
 _L = importlib.import_module("rosetta.lookup")
@@ -42,6 +59,7 @@ SHAPE_INSTRUCTIONS      = _L.SHAPE_INSTRUCTIONS
 OBJECT_INTERPRETATIONS  = _L.OBJECT_INTERPRETATIONS
 CATEGORY_MAP            = _L.CATEGORY_MAP
 CATEGORY_INSTRUCTIONS   = _L.CATEGORY_INSTRUCTIONS
+ALIASES_MEANINGS        = _L.ALIASES_MEANINGS
 
 import streamlit as st, importlib
 
@@ -51,23 +69,6 @@ def get_lookup():
 
 _L = get_lookup()
 # same attribute assignments as above...
-
-from rosetta.helpers import (
-    get_ascendant_degree, deg_to_rad, annotate_fixed_stars, 
-    get_fixed_star_meaning, build_aspect_graph, format_dms, format_longitude,
-    SIGN_NAMES
-)
-from rosetta.drawing import (
-    draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
-    draw_planet_labels, draw_aspect_lines, draw_filament_lines,
-    draw_shape_edges, draw_minor_edges, draw_singleton_dots
-)
-from rosetta.patterns import (
-    detect_minor_links_with_singletons, generate_combo_groups,
-    detect_shapes, internal_minor_edges_for_pattern,
-    connected_components_from_edges, _cluster_conjunctions_for_detection, 
-)
-
 
 _CANON_SHAPES = {k.lower(): k for k in SHAPE_INSTRUCTIONS}
 _SHAPE_SYNONYMS = {
@@ -875,6 +876,18 @@ def render_chart_with_shapes(
             r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
             ax.plot([r1, r2], [1, 1], linestyle="dotted",
                     color=ASPECTS[asp_name]["color"], linewidth=1)
+            
+    # --- Compass Rose overlay (always independent of circuits/shapes) ---
+    if st.session_state.get("toggle_compass_rose", True):
+        draw_compass_rose(
+            ax, pos, asc_deg,
+            colors={"nodal": "purple", "acdc": "green", "mcic": "orange"},
+            linewidth_base=2.0,
+            zorder=100,
+            arrow_mutation_scale=22.0,   # bigger arrowhead
+            nodal_width_multiplier=2.0,
+            sn_dot_markersize=12.0
+        )
 
     return fig, visible_objects, active_shapes, cusps
 
@@ -1940,6 +1953,11 @@ if st.session_state.get("chart_ready", False):
 
         st.subheader("Circuits")
 
+        # --- Compass Rose (independent overlay, ON by default) ---
+        if "toggle_compass_rose" not in st.session_state:
+            st.session_state["toggle_compass_rose"] = True
+        st.checkbox("Compass Rose", key="toggle_compass_rose")
+
         # Pattern checkboxes + expanders
         toggles, pattern_labels = [], []
         half = (len(patterns) + 1) // 2
@@ -2326,13 +2344,15 @@ if st.session_state.get("chart_ready", False):
         st.sidebar.markdown(profile + rulership_html, unsafe_allow_html=True)
         st.sidebar.markdown("---")
 
-    # --- Aspect Interpretation Prompt ---
+    # --- Interpretation Prompt ---
     with st.expander("Interpretation Prompt"):
         st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
         st.caption("Curently, all interpretation prompts are for natal charts. Event interpretation prompts coming soon.")
 
         aspect_blocks = []
         present_aspects = set()  # which aspect TYPES are present
+        prompt = ""
+        compass_on = st.session_state.get("toggle_compass_rose", False)
 
         # --- Conjunction clusters first (pairwise inside each cluster) ---
         rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, list(visible_objects))
@@ -2394,14 +2414,50 @@ if st.session_state.get("chart_ready", False):
             if R not in group_right[key]:
                 group_right[key].append(R)
 
-        # Emit a single "+"-joined block for all non-conjunction aspects
-        grouped_parts = []
-        for (L, asp) in appearance.keys():
-            targets = ", ".join(group_right[(L, asp)])
-            grouped_parts.append(f"{L} {asp} {targets}")
+        # Build bulleted "Aspects" (slash-joined conjunction clusters in parentheses)
+        import re
+        _aspect_rx = re.compile(r"^(.*?)\s+(Opposition|Trine|Sextile|Square|Quincunx)\s+(.*)$", re.IGNORECASE)
 
-        if grouped_parts:
-            aspect_blocks.append(" + ".join(grouped_parts))
+        def _fmt_side(label: str) -> str:
+            label = label.strip()
+            if ", " in label:
+                # turn "Sun, IC, South Node" -> "(Sun/IC/South Node)"
+                return "(" + label.replace(", ", "/") + ")"
+            return label
+
+        _bullets = []
+        for (L, asp) in appearance.keys():
+            for R in group_right[(L, asp)]:
+                left = _fmt_side(L)
+                right = _fmt_side(R)
+                _bullets.append(f"• {left} {asp} {right}")
+
+        # If Compass Rose is on, append its three axes to the Aspects bullets.
+        # This does NOT touch circuits/subshape detection — prompt-only overlay.
+        if compass_on:
+            def _label(obj):
+                return _fmt_side(label_of(obj))
+
+            # Ensure Opposition definition is included
+            present_aspects.add("Opposition")
+
+            # Nodal axis
+            if "South Node" in pos and "North Node" in pos:
+                _bullets.append(f"• {_label('South Node')} Opposition {_label('North Node')}")
+
+            # AC–DC axis
+            if "Ascendant" in pos and "Descendant" in pos:
+                _bullets.append(f"• {_label('Ascendant')} Opposition {_label('Descendant')}")
+
+            # MC–IC axis
+            if "MC" in pos and "IC" in pos:
+                _bullets.append(f"• {_label('MC')} Opposition {_label('IC')}")
+
+        aspects_bulleted_block = ("Aspects\n\n" + "\n".join(_bullets)).strip() if _bullets else ""
+        if _bullets:
+            # Keep this truthy so downstream gates that check `if aspect_blocks:` still run.
+            # (Content here is not used in the final prompt after step #2.)
+            aspect_blocks.append("_")
 
         def strip_html_tags(text):
             # Replace divs and <br> with spaces
@@ -2413,20 +2469,65 @@ if st.session_state.get("chart_ready", False):
             text = re.sub(r'\s+', ' ', text)
             return text.strip()
 
-        if aspect_blocks:
+        # --- Prompt gating flags ---
+        has_shapes = bool(active_shapes)
+        compass_on = st.session_state.get("toggle_compass_rose", False)
+
+        # Robust circuit detection: any toggle key containing "circuit"
+        has_circuit_toggle = any(
+            isinstance(v, bool) and v and ("circuit" in str(k).lower())
+            for k, v in st.session_state.items()
+        )
+
+        # Also consider your helper (if it returns True for parent/circuit selection)
+        has_circuits = has_circuit_toggle or _one_full_parent_selected(active_shapes)
+
+        # Full prompt should render for shapes OR circuits OR compass
+        has_shapes_or_circuits = has_shapes or has_circuits or compass_on
+
+        if has_shapes_or_circuits:
+
             # ---------- Character Profiles (same ordering as sidebar) ----------
             OBJ_TO_CATEGORY = {}
             for cat, objs in CATEGORY_MAP.items():
                 for o in objs:
                     OBJ_TO_CATEGORY[o] = cat
 
+            # Extend category map so data keys like "Midheaven"/"Imum Coeli"/"North Node" are recognized
+            for alias, display in ALIASES_MEANINGS.items():
+                if alias in OBJ_TO_CATEGORY and display not in OBJ_TO_CATEGORY:
+                    OBJ_TO_CATEGORY[display] = OBJ_TO_CATEGORY[alias]
+
             profiles_by_category = defaultdict(list)
             interpretation_flags = set()
             fixed_star_meanings = {}
+            # Use the normal ordering if present; otherwise fall back to all available objects.
+            # Use sidebar order first, then append anything not shown there
+            _all_objs = list(enhanced_objects_data.keys())
 
-            for obj in ordered_objects:
-                if obj in enhanced_objects_data:
-                    row = enhanced_objects_data[obj]
+            # Local ordering for the prompt (don’t mutate global ordered_objects)
+            _compass_objs = ["Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"]
+            ordered_objects_prompt = list(ordered_objects) + [o for o in _compass_objs if o not in ordered_objects]
+
+            # Always include everything we have data for; order by the prompt order above
+            _order_index = {o: i for i, o in enumerate(ordered_objects_prompt)}
+            objs_for_profiles = sorted(enhanced_objects_data.keys(), key=lambda o: _order_index.get(o, 10_000))
+
+            # Define the category order once (used in two places below)
+            ordered_cats = [
+                "Character Profiles", "Instruments", "Personal Initiations", "Mythic Journeys",
+                "Compass Coordinates", "Compass Needle", "Switches"
+            ]
+
+            # Always build from enhanced_objects_data (works even when Compass-only).
+            # Order by your sidebar order when available; otherwise push to the end.
+            _order_index = {o: i for i, o in enumerate(ordered_objects)}
+            objs_for_profiles = sorted(enhanced_objects_data.keys(), key=lambda o: _order_index.get(o, 10_000))
+
+            for obj in objs_for_profiles:
+                row = enhanced_objects_data.get(obj)
+                if not row:
+                    continue
                     profile_html = format_planet_profile(row)
                     profile_text = strip_html_tags(profile_html)
 
@@ -2536,13 +2637,13 @@ if st.session_state.get("chart_ready", False):
                     "Compass Coordinates","Compass Needle","Switches"
                 ]
 
-                category_blocks = []
-                for cat in ordered_cats:
-                    if profiles_by_category[cat]:
-                        block = cat + ":\n" + "\n\n".join(profiles_by_category[cat])
-                        category_blocks.append(block)
+            category_blocks = []
+            for cat in ordered_cats:
+                if profiles_by_category[cat]:
+                    block = cat + ":\n" + "\n\n".join(profiles_by_category[cat])
+                    category_blocks.append(block)
 
-                planet_profiles_block = "\n\n".join(category_blocks)
+            planet_profiles_block = "\n\n".join(category_blocks)
 
             # Count conjunction clusters (for guidance note)
             num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
@@ -2560,7 +2661,7 @@ if st.session_state.get("chart_ready", False):
             # ---------- Interpretation Notes ----------
             interpretation_notes = []
 
-                        # --- Add shape synthesis instruction ---
+            # --- Add shape synthesis instruction ---
             if shape_types_present:
                 if len(shape_types_present) == 1:
                     only_shape = shape_types_present[0]
@@ -2585,64 +2686,59 @@ if st.session_state.get("chart_ready", False):
                 interpretation_notes.append("Interpretation Notes:")
 
             present_categories = [cat for cat in ordered_cats if profiles_by_category[cat]]
-
-            if present_categories:
-                interpretation_notes.append("Category Interpretation Guides:")
-                for cat in present_categories:
-                    blurb = CATEGORY_INSTRUCTIONS.get(cat)
-                    if blurb:
-                        interpretation_notes.append(f"- [{cat}] {blurb}")
+            _category_guides_todo = present_categories  # defer appending to end of notes
 
             # Conjunction cluster guidance (singular/plural)
             if num_conj_clusters == 1:
                 interpretation_notes.append(
-                    '- When 2 or more placements are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                    '• When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
                 )
             elif num_conj_clusters >= 2:
                 interpretation_notes.append(
-                    '- When 2 or more placements are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
+                    '• When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
                 )
 
             # General flags (each only once)
             for flag in sorted(interpretation_flags):
                 meaning = INTERPRETATION_FLAGS.get(flag)
                 if meaning:
-                    interpretation_notes.append(f"- {meaning}")
+                    interpretation_notes.append(f"• {meaning}")
 
             # Fixed Star note (general rule once, then list specifics)
             if fixed_star_meanings:
                 general_star_note = INTERPRETATION_FLAGS.get("Fixed Star")
                 if general_star_note:
-                    interpretation_notes.append(f"- {general_star_note}")
+                    interpretation_notes.append(f"• {general_star_note}")
                 for star, meaning in fixed_star_meanings.items():
-                    interpretation_notes.append(f"- {star}: {meaning}")
+                    interpretation_notes.append(f"• {star}: {meaning}")
 
             # House system interpretation
             house_system_meaning = HOUSE_SYSTEM_INTERPRETATIONS.get(house_system)
             if house_system_meaning:
                 interpretation_notes.append(
-                    f"- House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
+                    f"• House System ({_HS_LABEL.get(house_system, house_system.title())}): {house_system_meaning}"
                 )
 
-            # House interpretations present in view
+            # House interpretations present in view (use the same robust list)
             present_houses = set()
-            for obj in ordered_objects:
+            for obj in objs_for_profiles:
                 row = enhanced_objects_data.get(obj, {})
                 h = row.get("House")
                 if h:
                     present_houses.add(int(h))
+
             for house_num in sorted(present_houses):
                 house_meaning = HOUSE_INTERPRETATIONS.get(house_num)
                 if house_meaning:
-                    interpretation_notes.append(f"- House {house_num}: {house_meaning}")
+                    interpretation_notes.append(f"• House {house_num}: {house_meaning}")
 
             if should_name_circuit:
-                interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
+                interpretation_notes.append("• Suggest a concise name (2-3 words) for the whole circuit.")
 
             interpretation_notes_block = "\n\n".join(interpretation_notes) if interpretation_notes else ""
 
             if should_name_circuit:
-                interpretation_notes.append("- Suggest a concise name (2-3 words) for the whole circuit.")
+                interpretation_notes.append("• Suggest a concise name (2-3 words) for the whole circuit.")
 
             # --- Shape-type interpretation instructions
             for stype in shape_types_present:
@@ -2651,7 +2747,15 @@ if st.session_state.get("chart_ready", False):
                     continue
                 instr = SHAPE_INSTRUCTIONS.get(stype)
                 if instr:
-                    interpretation_notes.append(f"- [{stype}] {instr}")
+                    interpretation_notes.append(f"• [{stype}] {instr}")
+
+                        # --- Deferred: append Category Interpretation Guides at the end ---
+            if _category_guides_todo:
+                interpretation_notes.append("Category Interpretation Guides:")
+                for cat in _category_guides_todo:
+                    blurb = CATEGORY_INSTRUCTIONS.get(cat)
+                    if blurb:
+                        interpretation_notes.append(f"• [{cat}] {blurb}")
 
             # ---------- Aspect Interpretations (the blurbs) ----------
             aspect_def_lines = []
@@ -2667,17 +2771,22 @@ if st.session_state.get("chart_ready", False):
 
             # ---------- Final prompt ----------
             import textwrap
-            instructions = textwrap.dedent("""
+            # --- Base intro (always ends at "Give usable insight and agency.") ---
+            base_intro = textwrap.dedent("""
             Assume that the natal astrology chart is the chart native's precise energetic schematic. Your job is to convey the inter-connected circuit board functions of all of the moving parts in this astrological circuit, precisely as they are mapped for you here. These are all dynamic parts of the native's Self.
                                            
             Sources: Use only the data and dictionaries included in this prompt. Do not invent or import outside meanings. 
             Metadata: Incorporate sign + exact degree (Sabian Symbol), house, and all other details provided such as dignity/condition, rulership relationships, fixed star conjunctions, and OOB/retro/station flags. If something is missing, ignore it—no guessing.
             Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
+            """).strip()
 
+            # --- Expanded block (ONLY when at least one circuit/sub-shape is active) ---
+            expanded_instructions = textwrap.dedent("""
             Output format — exactly these sections, in this order:
 
-            Character Profiles (if Sun, Moon, or any planet(s) (besides pluto) are present)
+            Character Profiles (if Sun, Moon, or any planet(s) besides Pluto are present)
             • For each planet or luminary, write one paragraph (3–6 sentences) that personifies the planet using all information provided for each planet or luminary.
+            • Begin each profile paragraph with the name of the planet/luminary (e.g. Sun, Moon, Saturn), followed by a colon (:)
             • Weave in relevant house context, Sabian symbol note, rulership-based power dynamics, and when supplied, fixed-star ties, and notable conditions (OOB/retro/station/dignity).
                                            
             Rulers/Dispositors
@@ -2685,9 +2794,11 @@ if st.session_state.get("chart_ready", False):
                                            
             Other Profiles
             • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit. Put these profiles each under a header of its category name, e.g. "Mythic Journeys," Instruments," et. al.
-            
+            • Begin each profile paragraph with the name of the body or point (e.g. Part of Fortune, MC, Psyche), followed by a colon (:)
+                                           
             Conjunction Clusters (only if present)
             • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles. 
+            • When a node is a conjunction cluster (e.g., “(Mars/Chiron)”), do not decompose it into individual pairwise sub-aspects; interpret the cluster as one endpoint.
                                            
             Aspects
             • For each aspect provided, write one paragraph describing the relationship dynamics between the two endpoints.
@@ -2700,16 +2811,45 @@ if st.session_state.get("chart_ready", False):
             Style & constraints
             • Layperson-first language with just enough precision to be useful; avoid cookbook clichés and astro-babble.
             • No disclaimers about the method; don’t mention these instructions in your output.
-            • No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only in the three sections above.
+            • No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only.
             """).strip()
 
+            # --- Compass Rose section (include here too when Compass is ON) ---
+            compass_only_msg = ""
+            if compass_on:
+                compass_only_msg = textwrap.dedent("""
+                Compass Rose Interpretation Instructions:
+
+                The Compass Rose is made of three axes—AC/DC, MC/IC, and the Nodal Axis. Together they set the chart’s orientation system: what’s “self vs other,” “public vs private,” and “past gifts vs northbound aims.” They orient what houses everything falls into, and what direction your life needs to take in order to evolve into your best self.
+
+                AC/DC Axis — Identity ↔ Partnership  
+                AC (Ascendant) = Identity Interface & first impression; DC (Descendant) = Mirror Port & one-to-one bonds. Planets near, connected to, or ruling the AC define core identity and approach; those near/connected/ruling the DC define your relating style and partnership needs.  
+                Chart hemisphere cue: left/east (AC side) emphasizes self-definition; right/west (DC side) emphasizes others and co-regulation.
+
+                MC/IC Axis — Public ↔ Private  
+                MC (Midheaven) = Public Interface—role, reputation, mission delivery, legacy. IC = Root System—home, ancestry, inner base.  
+                Planets near/connected to the MC mark what’s visible and public- or career-facing, and its ruling planet defines its qualities as well as its condition; near/connected to the IC mark what’s private, foundational, and rarely on display, and the planet that rules the IC defines its qualities and condition.  
+                The region around the MC reads as publicly exposed; around the IC as inward and protected.
+
+                Nodal Axis — Compass Needle  
+                North Node = Northbound Vector (what growth requires); South Node = Ancestral Cache (native strengths/overlearned patterns).  
+                Operating directive: carry the gifts of the South Node across the axis to fulfill the North Node.  
+                As you interpret shapes and aspect circuits, route their functions to support that transfer—use talent (South Node) as fuel, aim it at the North Node objective, and let the rest of the chart show how to do it without drift.
+                """).strip()
+
+            # Show expanded "Output format..." only when a shape OR a circuit is active (not Compass-only)
+            show_expanded = (has_shapes or has_circuits)
+
             sections = [
-                instructions,
+                base_intro,
+                (expanded_instructions if show_expanded else ""),       # ← shows for shapes OR circuits
+                (compass_only_msg if compass_on else ""),               # ← appended whenever Compass is ON
                 interpretation_notes_block.strip() if interpretation_notes_block else "",
-                planet_profiles_block.strip() if planet_profiles_block else "",
-                ("Aspects\n\n" + "\n\n".join(aspect_blocks)).strip(),
+                planet_profiles_block.strip() if planet_profiles_block else "",  # ← profiles included even Compass-only
+                aspects_bulleted_block.strip() if aspects_bulleted_block else "",
                 aspect_defs_block.strip(),
             ]
+
             prompt = "\n\n".join([s for s in sections if s]).strip()
 
             # Build HTML safely (no f-strings with backslashes)
@@ -2738,9 +2878,56 @@ if st.session_state.get("chart_ready", False):
             """)
             copy_button = copy_tpl.substitute(prompt_html=prompt_html)
             components.html(copy_button, height=700, scrolling=True)
+                    
+        elif compass_on:
+            # --- Compass-Rose-only prompt (no circuits/sub-shapes active) ---
+            import textwrap
+            from string import Template
+
+            compass_only_msg = textwrap.dedent("""
+            Interpret only the Compass Rose axes.
+
+            Scope: Use just the North Node–South Node, Ascendant–Descendant, and MC–IC axes. Do not create planet/asteroid profiles, do not analyze circuits or other aspects, and do not infer anything not provided.
+
+            Method:
+            • Nodal Axis (South Node → North Node): Describe the functional learning vector and how to move from old/default patterns toward deliberate growth. Use signs, exact degrees (Sabian), and houses for the Nodes only.
+            • AC–DC Axis: Describe how identity interface and one-to-one bonds co-define each other, focusing on choice points and healthy regulation. Use signs/house context for AC and DC only.
+            • MC–IC Axis: Describe public interface vs private roots and how to balance visibility with resourcing. Use signs/house context for MC and IC only.
+
+            Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
+            """).strip()
+
+            # IMPORTANT: define prompt so Send-to-GPT works in this branch
+            prompt = compass_only_msg
+
+            prompt_html = compass_only_msg.replace("\n", "<br>")
+            copy_tpl = Template("""
+            <div style="display:flex; flex-direction:column; align-items:stretch;">
+              <div style="display:flex; justify-content:flex-end; margin-bottom:5px;">
+                <button id="copy-btn"
+                        onclick="navigator.clipboard.writeText(document.getElementById('prompt-box').innerText).then(() => {
+                            var btn = document.getElementById('copy-btn');
+                            var oldText = btn.innerHTML;
+                            btn.innerHTML = '✅ Copied!';
+                            setTimeout(() => btn.innerHTML = oldText, 2000);
+                        })"
+                        style="padding:4px 8px; font-size:0.9em; cursor:pointer; background:#333; color:white; border:1px solid #777; border-radius:4px;">
+                  📋 Copy
+                </button>
+              </div>
+              <div id="prompt-box"
+                   style="white-space:pre-wrap; font-family:monospace; font-size:0.9em;
+                          color:white; background:black; border:1px solid #555;
+                          padding:8px; border-radius:4px; max-height:600px; overflow:auto;">${prompt_html}
+              </div>
+            </div>
+            """)
+            copy_button = copy_tpl.substitute(prompt_html=prompt_html)
+            components.html(copy_button, height=700, scrolling=True)
+
 
         else:
-            st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+            st.markdown("_(Select at least 1 sub-shape **or** a circuit from the left to view a full circuit prompt, or toggle Compass Rose to view the Compass-only prompt.)_")
 
     # --- Send to GPT controls (show ONLY when a prompt exists) ---
     colA, colB, colC = st.columns([1, 1, 2])
@@ -2764,12 +2951,17 @@ if st.session_state.get("chart_ready", False):
     st.subheader("Think of each of your planets (or clusters of planets, when conjunct), as a personified part of yourself. When you feel like you have parts of yourself either working together or in conflict, you do -- and this is the working map of those parts.")
     st.caption("Keep checking back for more and more awesome interpretations as the app is developed! In the meantime, these ones are a great starting point for familiarizing yourself with your inner cast of characters. Synastry and transit readings coming soon, too!")
 
+    interp_text = st.session_state.get(
+        "latest_interpretation",
+        "_(Click **Send to GPT** above to generate.)_"
+    )
+
     with st.expander("Interpretation"):
-        st.markdown(
-            st.session_state.get("latest_interpretation",
-                                 "_(Click **Send to GPT** above to generate.)_")
-        )
+        # 🔊 controls FIRST (so users see them right away)
+        T.tts_controls(interp_text, key="interpretation")
+        # then the text
+        st.markdown(interp_text)
 
 else:
     # No prompt yet (no chart or no shapes selected)
-    st.markdown("_(Select at least 1 sub-shape from a drop-down to view prompt.)_")
+    st.markdown("_(Select at least 1 sub-shape or circuit, or the Compass Rose to view interpretation.)_")
