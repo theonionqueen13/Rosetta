@@ -279,7 +279,7 @@ OBJECT_MEANINGS = {
     "Sun": "Core vitality and purpose/primary soul expression—what lights you up and fuels your mission.",
     "Moon": "Emotional climate and instincts—how you self-soothe and stay nourished. The deeper emotional needs and feelings underlying soul expression.",
     "Mercury": "Thinking and communication—how you learn, connect, and make meaning.",
-    "Venus": "Value, attraction, sensuality and harmony—what you value, what makes you comfortable and secure (both emotionally and physically), how you bond, value beauty, and build trust. Venus rules matters of money and posessions; all things value-related.",
+    "Venus": "Value, attraction, sensuality and harmony—what you value, what makes you comfortable and secure (both emotionally and physically), how you bond, value beauty, and build trust. Venus rules matters of money and possessions; all things value-related.",
     "Mars": "Drive and courage—how you pursue, protect, and take decisive action. Mars is the get-up-and-go engine.",
     "Jupiter": "Expansion/growth, philosophy and faith—where you expand, teach, and say a confident yes. Jupiter expands/amplifies everything he touches (via aspect, rulership, transit, etc.)",
     "Saturn": "Time, structure and mastery—your boundaries, responsibilities, and earned authority. Saturn is the timekeeper of your life, and the authority who enforces your discipline.",

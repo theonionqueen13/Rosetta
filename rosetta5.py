@@ -2325,7 +2325,7 @@ if st.session_state.get("chart_ready", False):
         st.sidebar.markdown(profile + rulership_html, unsafe_allow_html=True)
         st.sidebar.markdown("---")
 
-    # --- Aspect Interpretation Prompt ---
+    # --- Interpretation Prompt ---
     with st.expander("Interpretation Prompt"):
         st.caption("Paste this prompt into an LLM (like ChatGPT). Start with studying one subshape at a time, then add connections as you learn them.")
         st.caption("Curently, all interpretation prompts are for natal charts. Event interpretation prompts coming soon.")
@@ -2599,22 +2599,16 @@ if st.session_state.get("chart_ready", False):
                 interpretation_notes.append("Interpretation Notes:")
 
             present_categories = [cat for cat in ordered_cats if profiles_by_category[cat]]
-
-            if present_categories:
-                interpretation_notes.append("Category Interpretation Guides:")
-                for cat in present_categories:
-                    blurb = CATEGORY_INSTRUCTIONS.get(cat)
-                    if blurb:
-                        interpretation_notes.append(f"- [{cat}] {blurb}")
+            _category_guides_todo = present_categories  # defer appending to end of notes
 
             # Conjunction cluster guidance (singular/plural)
             if num_conj_clusters == 1:
                 interpretation_notes.append(
-                    '- When 2 or more placements are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
+                    '- When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as a Combined Character Profile, listed under a separate header, "Combined Character Profile."'
                 )
             elif num_conj_clusters >= 2:
                 interpretation_notes.append(
-                    '- When 2 or more placements are clustered in conjunction together, do not synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
+                    '- When 2 or more placements are clustered in conjunction together, synthesize individual interpretations for each conjunction. Instead, synthesize one conjunction cluster interpretation as Combined Character Profiles, listed under a separate header, "Combined Character Profiles."'
                 )
 
             # General flags (each only once)
@@ -2667,6 +2661,14 @@ if st.session_state.get("chart_ready", False):
                 if instr:
                     interpretation_notes.append(f"- [{stype}] {instr}")
 
+                        # --- Deferred: append Category Interpretation Guides at the end ---
+            if _category_guides_todo:
+                interpretation_notes.append("Category Interpretation Guides:")
+                for cat in _category_guides_todo:
+                    blurb = CATEGORY_INSTRUCTIONS.get(cat)
+                    if blurb:
+                        interpretation_notes.append(f"- [{cat}] {blurb}")
+
             # ---------- Aspect Interpretations (the blurbs) ----------
             aspect_def_lines = []
             for a in sorted(present_aspects):
@@ -2690,7 +2692,7 @@ if st.session_state.get("chart_ready", False):
 
             Output format — exactly these sections, in this order:
 
-            Character Profiles (if Sun, Moon, or any planet(s) (besides pluto) are present)
+            Character Profiles (if Sun, Moon, or any planet(s) besides Pluto are present)
             • For each planet or luminary, write one paragraph (3–6 sentences) that personifies the planet using all information provided for each planet or luminary.
             • Weave in relevant house context, Sabian symbol note, rulership-based power dynamics, and when supplied, fixed-star ties, and notable conditions (OOB/retro/station/dignity).
                                            
@@ -2702,6 +2704,7 @@ if st.session_state.get("chart_ready", False):
             
             Conjunction Clusters (only if present)
             • If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles. 
+            • When a node is a conjunction cluster (e.g., “(Mars/Chiron)”), do not decompose it into individual pairwise sub-aspects; interpret the cluster as one endpoint.
                                            
             Aspects
             • For each aspect provided, write one paragraph describing the relationship dynamics between the two endpoints.
@@ -2714,7 +2717,7 @@ if st.session_state.get("chart_ready", False):
             Style & constraints
             • Layperson-first language with just enough precision to be useful; avoid cookbook clichés and astro-babble.
             • No disclaimers about the method; don’t mention these instructions in your output.
-            • No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only in the three sections above.
+            • No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only.
             """).strip()
 
             sections = [
