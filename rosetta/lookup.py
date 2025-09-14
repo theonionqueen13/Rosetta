@@ -372,11 +372,11 @@ ASPECT_INTERPRETATIONS = {
         "that complete the grand cross."
     ),
     "Conjunction": (
-        "Planets that share the same perspective and location, approaching life from the same place. "
+        "Planets/placements that share the same perspective and location, approaching life from the same place. "
         "They combine their powers to form one node in the circuit together. If they are planets that"
         "naturally have a tense relationship, such as Saturn and Uranus, then they can sometimes be tough"
         "roommates until the two archetypes are resolved into a working friendship."
-        "When creating Character Profiles, list the profiles for all planets within one conjunction cluster consecutively."
+        "When creating profile paragraphs, list the profiles for all placements within one conjunction cluster consecutively, even if that means repeating headers."
     ),
     "Opposition": (
         "The balance of opposites, like Yin and Yang. Each set of polarities is complementary, "
@@ -387,6 +387,7 @@ ASPECT_INTERPRETATIONS = {
         "or they compete, trying to dominate or control one another out of competition, superiority, or insecurity. "
         "All major oppositions in a natal chart represent the major over-arching themes of the native’s life. "
         "They are polarities that the native is always working to keep in balance, or their life goes out of balance."
+        "List them first when present with other aspects, and explain that the oppositions are the biggest life themes. "
     ),
     "Sesquisquare": (
         "Activation overflow. This is an aspect of momentum, compulsion, and often service. "
@@ -396,16 +397,20 @@ ASPECT_INTERPRETATIONS = {
         "and highly energetic. These are often 'helper circuits' or 'gift-wired compulsions,' "
         "where someone finds themselves acting or serving without even planning to, simply because "
         "the conditions are right for them to be 'in their element.' "
-        "They can be hijacked without good boundaries, but when integrated, "
-        "sesquisquares unlock multidimensional creativity and functional genius."
+        "They can be hijacked or manipulated without good boundaries, but when integrated, "
+        "sesquisquares unlock multidimensional creativity and functional genius. "
+        "Example: a teacher who cannot help but passionately teach when her area of expertise is mentioned. "
     ),
     "Quincunx": (
         "Hard misalignment—treat as a red-wire/black-wire hazard. Do NOT connect directly. "
+        "These are two points that feel extremely tempted to connect directly, like an itch that can't be directly scratched."
         "Forcing contact causes arc, blowouts, symptom cascades, heartbreak, betrayal, failure, and general regrets. "
         "Protocol: GO AROUND. Design an indirect route through non-quincunx links "
         "(trine/sextile/square/sesquisquare/semisextile or a conjunction chain) that converts A’s output into "
         "B’s input via adapters—clear skills, environments, or intermediaries. "
         "The urgency you feel is noise; slow down, build the adapter, then pass the signal. "
+        "If the current placements and aspects shown do not provide resolution to re-route the quincunx, "
+        "tell the user that other placements not included in this interpretation will be needed to bridge the disconnect."
         "Quincunxes mark injury loops and chronic misfires when hotwired; used correctly, they enforce sound system design."
     )
 

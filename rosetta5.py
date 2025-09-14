@@ -2936,15 +2936,6 @@ if st.session_state.get("chart_ready", False):
             num_conj_clusters = sum(1 for c in rep_map.values() if len(c) >= 2)
             should_name_circuit = _one_full_parent_selected(active_shapes)
 
-            # Collect active shape types (dedup)
-            shape_types_present = []
-            _seen = set()
-            for s in (active_shapes or []):
-                cname = _canonical_shape_name(s)
-                if cname and cname not in _seen and cname in SHAPE_INSTRUCTIONS:
-                    _seen.add(cname)
-                    shape_types_present.append(cname)
-
             # Which shape types are currently active (dedup to canonical keys)
             shape_types_present = []
             seen = set()            
@@ -2956,6 +2947,22 @@ if st.session_state.get("chart_ready", False):
 
             # ---------- Interpretation Notes ----------
             interpretation_notes = []
+
+                        # --- Add shape synthesis instruction ---
+            if shape_types_present:
+                if len(shape_types_present) == 1:
+                    only_shape = shape_types_present[0]
+                    interpretation_notes.append(
+                        f"Synthesize the whole {only_shape} interpretation according to the interpretation instructions provided, "
+                        f"and present it to the user as being one small functional piece in their greater circuitry."
+                    )
+                else:
+                    shape_list = ", ".join(shape_types_present[:-1]) + " and " + shape_types_present[-1] if len(shape_types_present) > 2 else " and ".join(shape_types_present)
+                    interpretation_notes.append(
+                        f"To synthesize the circuit: Interpret the {shape_list} as individual entities first, and write a paragraph on each of their functions. "
+                        f"Then, use all connections (aspects, shared placements, rulerships) among those shapes to interpret how they function in relation to each other as a greater circuit."
+                    )
+
             if (
                 interpretation_flags
                 or fixed_star_meanings
@@ -3059,8 +3066,11 @@ if st.session_state.get("chart_ready", False):
 
             Character Profiles (if Sun, Moon, or any planet(s) (besides pluto) are present)
             • For each planet or luminary, write one paragraph (3–6 sentences) that personifies the planet using all information provided for each planet or luminary.
-            • Weave in relevant house context, Sabian symbol note, fixed-star ties, and notable conditions (OOB/retro/station/dignity) only if supplied.
-
+            • Weave in relevant house context, Sabian symbol note, rulership-based power dynamics, and when supplied, fixed-star ties, and notable conditions (OOB/retro/station/dignity).
+                                           
+            Rulers/Dispositors
+            • Always include and explain dispositor dynamics. When planet A is ruled by planet B, the conditions of planet B determine how well planet A is functioning. To aid a struggling planet, seek to empower its ruler. If a planet included is a ruler to other planets or placements, list what all it rules.
+                                           
             Other Profiles
             • For each placement that is not a planet or luminary, do not personify but instead describe the function of the object as a component in the greater circuit. Put these profiles each under a header of its category name, e.g. "Mythic Journeys," Instruments," et. al.
             
