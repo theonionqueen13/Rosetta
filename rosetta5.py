@@ -548,14 +548,15 @@ _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 def format_planet_profile(row):
     """Styled planet profile with glyphs, line breaks, and conditional extras."""
     name = row["Object"]
-    glyph = GLYPHS.get(name, "")
+    canonical = ALIASES_MEANINGS.get(name, name)
+    glyph = GLYPHS.get(canonical, "")
     sabian = str(row.get("Sabian Symbol", "")).strip()
     lon = row.get("Longitude", "")
 
     html_parts = []
 
     # --- Header (glyph + bold name) ---
-    header = f"<div style='font-weight:bold; font-size:1.1em;'>{glyph} {name}</div>"
+    header = f"<div style='font-weight:bold; font-size:1.1em;'>{glyph} {canonical}</div>"
     html_parts.append(header)
 
     # --- Object Meaning (right after the header) ---
@@ -2902,28 +2903,58 @@ if st.session_state.get("chart_ready", False):
             """).strip()
 
             # --- Compass Rose section (include here too when Compass is ON) ---
-            compass_only_msg = ""
-            if compass_on:
-                compass_only_msg = textwrap.dedent("""
-                Compass Rose Interpretation Instructions:
+			compass_only_msg = ""
+			if compass_on:
+				compass_only_msg = textwrap.dedent("""
+				Compass Rose Interpretation Instructions:
+				
+				Orient the user in their Compass Rose and explain its role and function.
 
-                The Compass Rose is made of three axes—AC/DC, MC/IC, and the Nodal Axis. Together they set the chart’s orientation system: what’s “self vs other,” “public vs private,” and “past gifts vs northbound aims.” They orient what houses everything falls into, and what direction your life needs to take in order to evolve into your best self.
+				Output format — exactly these sections, in this order:
 
-                AC/DC Axis — Identity ↔ Partnership
-                AC (Ascendant) = Identity Interface & first impression; DC (Descendant) = Mirror Port & one-to-one bonds. Planets near, connected to, or ruling the AC define core identity and approach; those near/connected/ruling the DC define your relating style and partnership needs.
-                Chart hemisphere cue: left/east (AC side) emphasizes self-definition; right/west (DC side) emphasizes others and co-regulation.
+				Profiles for each point
+				• For each compass coordinate and compass needle point, write one paragraph that personifies the planet using all information provided for each planet or luminary.
+				• Begin each profile paragraph with the name of the point (e.g. Ascendant, Descendent, MC, IC, North Node, South Node)
+				• Weave in relevant house context, Sabian symbol note, rulership-based power dynamics, and when supplied, fixed-star ties, and notable conditions (OOB/retro/station/dignity).
 
-                MC/IC Axis — Public ↔ Private
-                MC (Midheaven) = Public Interface—role, reputation, mission delivery, legacy. IC = Root System—home, ancestry, inner base.
-                Planets near/connected to the MC mark what’s visible and public- or career-facing, and its ruling planet defines its qualities as well as its condition; near/connected to the IC mark what’s private, foundational, and rarely on display, and the planet that rules the IC defines its qualities and condition.
-                The region around the MC reads as publicly exposed; around the IC as inward and protected.
+				Rulers/Dispositors
+				• Always include and explain dispositor dynamics. When planet A is ruled by planet B, the conditions of planet B determine how well planet A is functioning. To aid a struggling planet, seek to empower its ruler. If a planet included is a ruler to other planets or placements, list what all it rules.
 
-                Nodal Axis — Compass Needle
-                North Node = Northbound Vector (what growth requires); South Node = Ancestral Cache (native strengths/overlearned patterns).
-                Operating directive: carry the gifts of the South Node across the axis to fulfill the North Node.
-                As you interpret shapes and aspect circuits, route their functions to support that transfer—use talent (South Node) as fuel, aim it at the North Node objective, and let the rest of the chart show how to do it without drift.
-                """).strip()
+				Conjunction Clusters (only if present)
+				• If any conjunctions are present, add a profile for the combined node of each entire cluster after the individual profiles.
+				• When a node is a conjunction cluster (e.g., “(Mars/Chiron)”), do not decompose it into individual pairwise sub-aspects; interpret the cluster as one endpoint.
 
+				Aspects
+				• For each oppositional axis, write one paragraph describing the relationship dynamics between the two endpoints, tailored to the placements involved.
+				• Use the provided aspect definition. Do not substitute traditional meanings.
+				• Build from the profiles; don’t repeat them.
+
+				Compass
+				• Zoom out to the whole Compass. Orient the user with the big picture of how the Compass defines their greater life story, and how the rest of their chart map will build upon this foundation.
+
+				Style & constraints
+				• Layperson-first language with just enough precision to be useful; avoid cookbook clichés and astro-babble.
+				• No disclaimers about the method; don’t mention these instructions in your output.
+				• No extra sections, tables, or bullet lists beyond what’s specified. Paragraphs only.
+
+				The Compass Rose is made of three axes—AC/DC, MC/IC, and the Nodal Axis. Together they set the chart’s orientation system: what’s “self vs other,” “public vs private,” and “past gifts vs northbound aims.” They orient what houses everything falls into, and what direction your life needs to take in order to evolve into your best self.
+
+				AC/DC Axis — Identity ↔ Partnership
+				AC (Ascendant) = Identity Interface & first impression; DC (Descendant) = Mirror Port & one-to-one bonds. Planets near, connected to, or ruling the AC define core identity and approach; those near/connected/ruling the DC define your relating style and partnership needs.
+				Chart hemisphere cue: left/east (AC side) emphasizes self-definition; right/west (DC side) emphasizes others and co-regulation.
+
+				MC/IC Axis — Public ↔ Private
+				MC (Midheaven) = Public Interface—role, reputation, mission delivery, legacy. IC = Root System—home, ancestry, inner base.
+				Planets near/connected to the MC mark what’s visible and public- or career-facing, and its ruling planet defines its qualities as well as its condition; near/connected to the IC mark what’s private, foundational, and rarely on display, and the planet that rules the IC defines its qualities and condition.
+				The region around the MC reads as publicly exposed; around the IC as inward and protected.
+
+				Nodal Axis — Compass Needle
+				North Node = Northbound Vector (what growth requires); South Node = Ancestral Cache (native strengths/overlearned patterns).
+				Operating directive: carry the gifts of the South Node across the axis to fulfill the North Node.
+				As you interpret shapes and aspect circuits, route their functions to support that transfer—use talent (South Node) as fuel, aim it at the North Node objective, and let the rest of the chart show how to do it without drift.
+									   
+				""").strip()
+                
             # Show expanded "Output format..." only when a shape OR a circuit is active (not Compass-only)
             show_expanded = (has_shapes or has_circuits)
 
