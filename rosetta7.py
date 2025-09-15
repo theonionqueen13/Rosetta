@@ -135,20 +135,6 @@ if client is None:
     st.error("Missing OPENAI_API_KEY. Set it as env var or in Streamlit Secrets.")
     st.stop()
 
-# --- WIZARD: imports & JSON loader ---
-WIZARD_JSON_PATH = pathlib.Path(__file__).with_name("wizard_map.json")
-with open(WIZARD_JSON_PATH, "r", encoding="utf-8") as f:
-    WIZARD_MAP = json.load(f)
-
-# If your app uses a different label for Black Moon Lilith, or AC/DC, normalize here.
-# Keep this tiny to avoid bloat; comment out if not needed.
-WIZARD_NAME_ALIASES = {
-    "Black Moon Lilith": "Black Moon Lilith (Mean)",
-    # "Ascendant": "AC",      # uncomment if your DF uses "AC"
-    # "Descendant": "DC",     # uncomment if your DF uses "DC"
-}
-
-
 # -------------------------
 # Init / session management
 # -------------------------
@@ -2066,22 +2052,45 @@ if st.session_state.get("chart_ready", False):
             )
 
         with st.expander("🧭 Guided Question Wizard (beta)", expanded=True):
+            domains = WIZARD_TARGETS.get("domains", [])
+            domain_names = [d.get("name", "") for d in domains]
+            domain_lookup = {d.get("name", ""): d for d in domains}
             cat = st.selectbox(
                 "What are you here to explore?",
-                options=sorted(WIZARD_TARGETS.keys()),
-                index=0,
+                options=domain_names,
+                index=0 if domain_names else None,
                 key="wizard_cat",
             )
 
-            subtopics = list(WIZARD_TARGETS.get(cat, {}).keys())
+            domain = domain_lookup.get(cat, {})
+            if domain.get("description"):
+                st.caption(domain["description"])
+
+            subtopics_list = domain.get("subtopics", [])
+            subtopic_names = [s.get("label", "") for s in subtopics_list]
+            subtopic_lookup = {s.get("label", ""): s for s in subtopics_list}
             sub = st.selectbox(
                 "Narrow it a bit…",
-                options=subtopics,
-                index=0 if subtopics else None,
+                options=subtopic_names,
+                index=0 if subtopic_names else None,
                 key="wizard_sub",
             )
 
-            targets = WIZARD_TARGETS.get(cat, {}).get(sub, [])
+            subtopic = subtopic_lookup.get(sub, {})
+            refinements = subtopic.get("refinements")
+            targets = []
+            if refinements:
+                ref_names = list(refinements.keys())
+                ref = st.selectbox(
+                    "Any particular angle?",
+                    options=ref_names,
+                    index=0 if ref_names else None,
+                    key="wizard_ref",
+                )
+                targets = refinements.get(ref, [])
+            else:
+                targets = subtopic.get("targets", [])
+
             if targets:
                 st.caption("We’ll highlight these in your chart:")
                 st.write(", ".join(targets))
