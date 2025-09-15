@@ -2495,13 +2495,14 @@ if st.session_state.get("chart_ready", False):
 			aspect_blocks.append("_")
 
 		def strip_html_tags(text):
-			# Replace divs and <br> with spaces
-			text = re.sub(r'</div>|<br\s*/?>', ' ', text)
+			# Preserve line breaks for header parsing
+			text = re.sub(r'</div>|<br\s*/?>', '\n', text)
 			text = re.sub(r'<div[^>]*>', '', text)
-			# Remove any other HTML tags
 			text = re.sub(r'<[^>]+>', '', text)
-			# Collapse multiple spaces
-			text = re.sub(r'\s+', ' ', text)
+			# Collapse spaces/tabs but keep newlines
+			text = re.sub(r'[ \t]+', ' ', text)
+			# Normalize multiple blank lines
+			text = re.sub(r'\n\s*\n+', '\n', text)
 			return text.strip()
 
 		# --- Prompt gating flags ---
@@ -2681,19 +2682,19 @@ if st.session_state.get("chart_ready", False):
 					rtext_final = ""
 					if house_line and sign_line:
 						if house_line.lower() == sign_line.lower():
-							rtext_final = f"Rulership:\n{house_line}"
+							rtext_final = f"Rulership: {house_line}"
 						else:
 							rtext_final = (
-								"Rulership by House:\n" + house_line + "\n\n" +
-								"Rulership by Sign:\n"  + sign_line
+    							"Rulership by House: " + house_line + "\n" +
+    							"Rulership by Sign: "  + sign_line
 							)
 					elif house_line:
-						rtext_final = "Rulership by House:\n" + house_line
+						rtext_final = "Rulership by House: " + house_line
 					elif sign_line:
-						rtext_final = "Rulership by Sign:\n" + sign_line
+						rtext_final = "Rulership by Sign: " + sign_line
 
 					if rtext_final:
-						profile_text = profile_text.rstrip() + "\n\n" + rtext_final
+						profile_text = profile_text.rstrip() + "\n" + rtext_final
 				except Exception:
 					pass
 
