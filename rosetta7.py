@@ -1991,6 +1991,70 @@ def _focus_core_from_df(df, focus_name: str):
     return sorted(cluster, key=lambda k: pos_all.get(k, 0.0))
 
 # ------------------------
+# Guided Question Wizard (shared renderer)
+# ------------------------
+def render_guided_wizard():
+    with st.expander("🧭 Guided Question Wizard (beta)", expanded=True):
+        domains = WIZARD_TARGETS.get("domains", [])
+        domain_names = [d.get("name", "") for d in domains]
+        domain_lookup = {d.get("name", ""): d for d in domains}
+        cat = st.selectbox(
+            "What are you here to explore?",
+            options=domain_names,
+            index=0 if domain_names else None,
+            key="wizard_cat",
+        )
+
+        domain = domain_lookup.get(cat, {})
+        if domain.get("description"):
+            st.caption(domain["description"])
+
+        subtopics_list = domain.get("subtopics", [])
+        subtopic_names = [s.get("label", "") for s in subtopics_list]
+        subtopic_lookup = {s.get("label", ""): s for s in subtopics_list}
+        sub = st.selectbox(
+            "Narrow it a bit…",
+            options=subtopic_names,
+            index=0 if subtopic_names else None,
+            key="wizard_sub",
+        )
+
+        subtopic = subtopic_lookup.get(sub, {})
+        refinements = subtopic.get("refinements")
+        targets = []
+        if refinements:
+            ref_names = list(refinements.keys())
+            ref = st.selectbox(
+                "Any particular angle?",
+                options=ref_names,
+                index=0 if ref_names else None,
+                key="wizard_ref",
+            )
+            targets = refinements.get(ref, [])
+        else:
+            targets = subtopic.get("targets", [])
+
+        if targets:
+            st.caption("We’ll highlight these in your chart:")
+            st.write(", ".join(targets))
+
+        if st.button("Highlight these now", key="wizard_apply"):
+            df_local = st.session_state.get("df")
+            if df_local is None:
+                st.warning("Load or calculate a chart first.")
+            else:
+                present, missing = apply_wizard_targets(df_local, targets)
+                if present:
+                    st.success(f"Highlighted: {', '.join(present)}")
+                if missing:
+                    st.info(f"Not found in this chart: {', '.join(missing)}")
+                st.rerun()
+
+# Display wizard even before a chart is loaded
+if not st.session_state.get("chart_ready", False):
+    render_guided_wizard()
+
+# ------------------------
 # If chart data exists, render the chart UI
 # ------------------------
 if st.session_state.get("chart_ready", False):
@@ -2051,62 +2115,7 @@ if st.session_state.get("chart_ready", False):
                 "a circuit name for you."
             )
 
-        with st.expander("🧭 Guided Question Wizard (beta)", expanded=True):
-            domains = WIZARD_TARGETS.get("domains", [])
-            domain_names = [d.get("name", "") for d in domains]
-            domain_lookup = {d.get("name", ""): d for d in domains}
-            cat = st.selectbox(
-                "What are you here to explore?",
-                options=domain_names,
-                index=0 if domain_names else None,
-                key="wizard_cat",
-            )
-
-            domain = domain_lookup.get(cat, {})
-            if domain.get("description"):
-                st.caption(domain["description"])
-
-            subtopics_list = domain.get("subtopics", [])
-            subtopic_names = [s.get("label", "") for s in subtopics_list]
-            subtopic_lookup = {s.get("label", ""): s for s in subtopics_list}
-            sub = st.selectbox(
-                "Narrow it a bit…",
-                options=subtopic_names,
-                index=0 if subtopic_names else None,
-                key="wizard_sub",
-            )
-
-            subtopic = subtopic_lookup.get(sub, {})
-            refinements = subtopic.get("refinements")
-            targets = []
-            if refinements:
-                ref_names = list(refinements.keys())
-                ref = st.selectbox(
-                    "Any particular angle?",
-                    options=ref_names,
-                    index=0 if ref_names else None,
-                    key="wizard_ref",
-                )
-                targets = refinements.get(ref, [])
-            else:
-                targets = subtopic.get("targets", [])
-
-            if targets:
-                st.caption("We’ll highlight these in your chart:")
-                st.write(", ".join(targets))
-
-            if st.button("Highlight these now", key="wizard_apply"):
-                df_local = st.session_state.get("df")
-                if df_local is None:
-                    st.warning("Load or calculate a chart first.")
-                else:
-                    present, missing = apply_wizard_targets(df_local, targets)
-                    if present:
-                        st.success(f"Highlighted: {', '.join(present)}")
-                    if missing:
-                        st.info(f"Not found in this chart: {', '.join(missing)}")
-                    st.rerun()
-
+        render_guided_wizard()
 
         # --- Compass Rose (independent overlay, ON by default) ---
         if "toggle_compass_rose" not in st.session_state:
