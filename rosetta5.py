@@ -421,12 +421,61 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
 		ax.plot([rad, rad], [1.02, 1.08],
 				color="white" if dark_mode else "black", linewidth=1)
 
+import numpy as np  # (already imported near top; keep once)
+import numpy as np  # already imported above; keep once
+
 def draw_zodiac_signs(ax, asc_deg):
-	"""Draw zodiac signs + modalities around the wheel."""
+	"""Draw zodiac signs + modalities around the wheel, with a pastel element ring behind them."""
+
+	# Remap requested:
+	# blue → green, green → red, orange → blue, red → orange
+	PASTEL_BLUE   = "#D9EAF7"  # blue
+	PASTEL_GREEN  = "#D9EAD3"  # green
+	PASTEL_ORANGE = "#FFD1B3"  # orange
+	PASTEL_RED    = "#EAD1DC"  # soft red/pink
+
+	# After-remap element → color
+	element_color = {
+		"fire":  PASTEL_BLUE,    # was orange → blue
+		"earth": PASTEL_RED,     # was green  → red
+		"air":   PASTEL_GREEN,   # was blue   → green
+		"water": PASTEL_ORANGE,  # was red    → orange
+	}
+
+	# Aries→Pisces elements
+	elements = ["fire","earth","air","water"] * 3
+
+	# Make the band sit where your glyphs are (glyphs at r=1.50)
+	inner_r, outer_r = 1.45, 1.58
+	sector_width = np.deg2rad(30)
+
+	# Background ring: 12 annular bars (polar-aware, so it's a true circle)
+	for i in range(12):
+		theta_left = deg_to_rad(i * 30, asc_deg)
+		ax.bar(
+			theta_left,
+			outer_r - inner_r,
+			width=sector_width,
+			bottom=inner_r,
+			align="edge",
+			color=element_color[elements[i]],
+			edgecolor=None,
+			linewidth=0,
+			alpha=0.85,
+			zorder=0,
+		)
+
+	# Your original glyphs (unchanged position/color)
 	for i, base_deg in enumerate(range(0, 360, 30)):
 		rad = deg_to_rad(base_deg + 15, asc_deg)
-		ax.text(rad, 1.50, ZODIAC_SIGNS[i], ha="center", va="center",
-				fontsize=16, fontweight="bold", color=ZODIAC_COLORS[i])
+		ax.text(
+			rad, 1.50, ZODIAC_SIGNS[i],
+			ha="center", va="center",
+			fontsize=16, fontweight="bold",
+			color=ZODIAC_COLORS[i],
+			zorder=1,
+		)
+
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
     """Draw planet glyphs/names with degree+sign, clustered in a radial fan to avoid overlap."""
@@ -767,11 +816,15 @@ def render_chart_with_shapes(
 
 	ax.set_theta_zero_location("N")
 	ax.set_theta_direction(-1)
-	ax.set_rlim(0, 1.25)
+	ax.set_rlim(0, 1.60)
 	ax.axis("off")
 
-	# carve a little headroom for the figure-level header
-	fig.subplots_adjust(top=0.86)  # tweak 0.82–0.90 to taste
+	# 🔑 force the polar axes to be centered and square
+	ax.set_anchor("C")  # center anchor
+	ax.set_aspect("equal", adjustable="box")
+
+	# Manually set the axes to fill the figure square
+	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
 
 	# Header above the wheel (figure-level, so it won't overlap the plot)
 	name, date_line, city = _current_chart_header_lines()
