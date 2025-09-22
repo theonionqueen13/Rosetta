@@ -17,3 +17,4 @@ python-dateutil
 psycopg2-binary
 email-validator
 pytz
+plotly>=5.0.0
