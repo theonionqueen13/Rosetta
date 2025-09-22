@@ -114,7 +114,6 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
                 ha="center", va="center", fontsize=7,
                 color="white" if dark_mode else "black")
 
-
 def draw_zodiac_signs(ax, asc_deg):
     """Draw zodiac glyphs around the wheel."""
     glyphs = [
@@ -126,19 +125,6 @@ def draw_zodiac_signs(ax, asc_deg):
         ax.text(r, 1.5, glyph,
                 ha="center", va="center", fontsize=16, fontweight="bold")
 
-
-def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
-    """Draw planet glyphs or names around the wheel."""
-    for planet, deg in pos.items():
-        r = deg_to_rad(deg, asc_deg)
-        label = GLYPHS.get(planet, planet) if label_style == "Glyph" else planet
-        ax.text(r, 1.3, label,
-                ha="center", va="center", fontsize=9,
-                color="white" if dark_mode else "black")
-        
-# -------------------------------
-# Compass Rose (independent overlay)
-# -------------------------------
 # -------------------------------
 # Compass Rose (independent overlay)
 # -------------------------------

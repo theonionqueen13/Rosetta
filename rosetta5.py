@@ -28,7 +28,7 @@ from rosetta.helpers import (
 import rosetta.tts as T
 from rosetta.drawing import (
 	draw_house_cusps, draw_degree_markers, draw_zodiac_signs,
-	draw_planet_labels, draw_aspect_lines, draw_filament_lines,
+	draw_aspect_lines, draw_filament_lines,
 	draw_shape_edges, draw_minor_edges, draw_singleton_dots,
 	draw_compass_rose
 )
@@ -420,9 +420,6 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
 		rad = deg_to_rad(deg, asc_deg)
 		ax.plot([rad, rad], [1.02, 1.08],
 				color="white" if dark_mode else "black", linewidth=1)
-		ax.text(rad, 1.12, f"{deg % 30}°",
-				ha="center", va="center", fontsize=7,
-				color="white" if dark_mode else "black")
 
 def draw_zodiac_signs(ax, asc_deg):
 	"""Draw zodiac signs + modalities around the wheel."""
@@ -430,31 +427,63 @@ def draw_zodiac_signs(ax, asc_deg):
 		rad = deg_to_rad(base_deg + 15, asc_deg)
 		ax.text(rad, 1.50, ZODIAC_SIGNS[i], ha="center", va="center",
 				fontsize=16, fontweight="bold", color=ZODIAC_COLORS[i])
-		ax.text(rad, 1.675, MODALITIES[i], ha="center", va="center",
-				fontsize=6, color="dimgray")
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
-	"""Label planets/points, clustered to avoid overlap."""
-	degree_threshold = 3
-	sorted_pos = sorted(pos.items(), key=lambda x: x[1])
-	clustered = []
-	for name, degree in sorted_pos:
-		placed = False
-		for cluster in clustered:
-			if abs(degree - cluster[0][1]) <= degree_threshold:
-				cluster.append((name, degree))
-				placed = True
-				break
-		if not placed:
-			clustered.append([(name, degree)])
-	for cluster in clustered:
-		for i, (name, degree) in enumerate(cluster):
-			rad = deg_to_rad(degree, asc_deg)
-			offset = 1.30 + i * 0.06
-			label = name if label_style == "Text" else GLYPHS.get(name, name)
-			ax.text(rad, offset, label,
-					ha="center", va="center", fontsize=9,
-					color="white" if dark_mode else "black")
+    """Draw planet glyphs/names with degree+sign, clustered in a radial fan to avoid overlap."""
+
+    degree_threshold = 3
+    sorted_pos = sorted(pos.items(), key=lambda x: x[1])
+    clustered = []
+
+    # Group nearby planets into clusters
+    for name, degree in sorted_pos:
+        placed = False
+        for cluster in clustered:
+            if abs(degree - cluster[0][1]) <= degree_threshold:
+                cluster.append((name, degree))
+                placed = True
+                break
+        if not placed:
+            clustered.append([(name, degree)])
+
+    color = "white" if dark_mode else "black"
+
+    # Render each cluster
+    for cluster in clustered:
+        n = len(cluster)
+        for i, (name, degree) in enumerate(cluster):
+            # Base angle for this planet
+            base_rad = deg_to_rad(degree, asc_deg)
+
+            # Angular spread (fan out around anchor point)
+            spread = 0.10  # radians (~6° visual spread)
+            angle_offset = (i - (n - 1) / 2) * spread
+            rad = base_rad + angle_offset
+
+            # Radius offset (optional tiny push outward to avoid glyph-text collisions)
+            base_offset = 1.30
+            radius = base_offset + (abs(i - (n - 1) / 2) * 0.05)
+
+            # Labels
+            base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
+
+            deg_int = int(degree % 30)
+            sign_index = int((degree % 360) // 30)
+            sign_glyph = GLYPHS.get(ZODIAC_SIGNS[sign_index], ZODIAC_SIGNS[sign_index])
+            deg_label = f"{deg_int}°"
+
+            # Draw planet
+            ax.text(
+                rad, radius, base_label,
+                ha="center", va="center", fontsize=9, color=color
+            )
+
+            # Draw degree + sign slightly below
+            ax.text(
+                rad, radius - 0.08, deg_label,
+                ha="center", va="center", fontsize=6, color=color
+            )
+
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
 	"""Draw dotted lines for minor aspects between active patterns."""
@@ -2356,7 +2385,7 @@ if st.session_state.get("chart_ready", False):
 		]
 		ordered_objects = [n for n in compass_seed if n]
 
-		# Calculate houses once for all visible objects (single source of truth)
+	# Calculate houses once for all visible objects (single source of truth)
 	enhanced_objects_data = {}
 	for obj in ordered_objects:
 		matched_rows = df[df["Object"] == obj]
