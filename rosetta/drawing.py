@@ -90,7 +90,9 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode,
     line_color = "lightgray"
     for deg in cusps:
         rad = deg_to_rad(deg, asc_deg)
-        ax.plot([rad, rad], [0, 1.45], color=line_color, linestyle="solid", linewidth=1)
+        ax.plot([rad, rad], [0, 1.45],
+                color=line_color, linestyle="solid", linewidth=1,
+                zorder=1)   # draw behind everything
 
     # --- place labels INSIDE each house (away from the line) ---
     lbl_color = "white" if dark_mode else "black"
@@ -100,7 +102,8 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode,
         label_deg = _forward_pos(a, b, label_frac)     # e.g., midpoint if 0.50
         label_rad = deg_to_rad(label_deg, asc_deg)
         ax.text(label_rad, label_r, str(i + 1),
-                ha="center", va="center", fontsize=8, color=lbl_color)
+                ha="center", va="center", fontsize=8, color=lbl_color,
+                zorder=100)  # always on top
 
     return cusps
 
@@ -112,28 +115,30 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
     # --- Outer circle outline at r=1.0
     circle_r = 1.0
     circle = plt.Circle((0, 0), circle_r, transform=ax.transData._b, 
-                        fill=False, color=base_color, linewidth=1)
+                        fill=False, color=base_color, linewidth=1,
+                        zorder=5)  # middle layer
     ax.add_artist(circle)
 
     # --- Ticks every 1°
     for deg in range(0, 360, 1):
         r = deg_to_rad(deg, asc_deg)
         ax.plot([r, r], [circle_r, circle_r + 0.015], 
-                color=base_color, linewidth=0.5)
+                color=base_color, linewidth=0.5, zorder=5)
 
     # --- Ticks every 5°
     for deg in range(0, 360, 5):
         r = deg_to_rad(deg, asc_deg)
         ax.plot([r, r], [circle_r, circle_r + 0.03], 
-                color=base_color, linewidth=0.8)
+                color=base_color, linewidth=0.8, zorder=5)
 
     # --- Ticks + labels every 10°
     for deg in range(0, 360, 10):
         r = deg_to_rad(deg, asc_deg)
         ax.plot([r, r], [circle_r, circle_r + 0.05], 
-                color=base_color, linewidth=1.2)
+                color=base_color, linewidth=1.2, zorder=5)
         ax.text(r, circle_r + 0.08, f"{deg % 30}°",
-                ha="center", va="center", fontsize=7, color=base_color)
+                ha="center", va="center", fontsize=7, color=base_color,
+                zorder=5)
 
 
 def draw_zodiac_signs(ax, asc_deg):
