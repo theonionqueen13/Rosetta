@@ -2346,11 +2346,11 @@ if st.session_state.get("chart_ready", False):
 
 		with c1:
 			# ✅ real, functional control
-			house_choice = st.radio(
-				"House System",
-				["Equal", "Whole Sign", "Placidus"],
-				index=0,
-				key="house_system_main",
+			house_choice = st.selectbox(
+    			"House System",
+    			["Equal", "Whole Sign", "Placidus"],
+    			index=0,
+    			key="house_system_main",
 			)
 			house_system = house_choice.lower().replace(" sign", "")
 
