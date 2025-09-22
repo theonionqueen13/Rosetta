@@ -42,10 +42,10 @@ import importlib
 _L = importlib.import_module("rosetta.lookup")
 
 def _Lget(name, default=None):
-    # default empty dict to avoid NameError when used for lookups
-    if default is None:
-        default = {}
-    return getattr(_L, name, default)
+	# default empty dict to avoid NameError when used for lookups
+	if default is None:
+		default = {}
+	return getattr(_L, name, default)
 
 GLYPHS                       = _Lget("GLYPHS")
 ASPECTS                      = _Lget("ASPECTS")
@@ -1876,99 +1876,99 @@ def ask_gpt(prompt_text: str, model: str = "gpt-4o-mini", temperature: float = 0
 _CANON_SHAPES = {s.lower(): s for s in SHAPE_INSTRUCTIONS.keys()}
 
 def _canonical_shape_name(shape_dict):
-        """Map whatever your shape carries to one of SHAPE_INSTRUCTIONS keys."""
-        raw = (
-                shape_dict.get("type") or shape_dict.get("kind") or
-                shape_dict.get("shape") or shape_dict.get("label") or
-                shape_dict.get("name") or ""
-        )
-        txt = str(raw).strip().lower()
-        if not txt:
-                return ""
+		"""Map whatever your shape carries to one of SHAPE_INSTRUCTIONS keys."""
+		raw = (
+				shape_dict.get("type") or shape_dict.get("kind") or
+				shape_dict.get("shape") or shape_dict.get("label") or
+				shape_dict.get("name") or ""
+		)
+		txt = str(raw).strip().lower()
+		if not txt:
+				return ""
 
-        # direct match
-        if txt in _CANON_SHAPES:
-                return _CANON_SHAPES[txt]
+		# direct match
+		if txt in _CANON_SHAPES:
+				return _CANON_SHAPES[txt]
 
-        # fuzzy contains (e.g., "grand_trine", "Grand Trine (parent)")
-        for k in _CANON_SHAPES:
-                if k.replace(" ", "_") in txt or k in txt:
-                        return _CANON_SHAPES[k]
+		# fuzzy contains (e.g., "grand_trine", "Grand Trine (parent)")
+		for k in _CANON_SHAPES:
+				if k.replace(" ", "_") in txt or k in txt:
+						return _CANON_SHAPES[k]
 
-        return ""
+		return ""
 
 # ------------------------
 # Guided Question Wizard (shared renderer)
 # ------------------------
 def render_guided_wizard():
-        with st.expander("🧙‍♂️ Guided Topics Wizard", expanded=False):
-                domains = WIZARD_TARGETS.get("domains", [])
-                domain_names = [d.get("name", "") for d in domains]
-                domain_lookup = {d.get("name", ""): d for d in domains}
-                cat = st.selectbox(
-                        "What are you here to explore?",
-                        options=domain_names,
-                        index=0 if domain_names else None,
-                        key="wizard_cat",
-                )
+		with st.expander("🧙‍♂️ Guided Topics Wizard", expanded=False):
+				domains = WIZARD_TARGETS.get("domains", [])
+				domain_names = [d.get("name", "") for d in domains]
+				domain_lookup = {d.get("name", ""): d for d in domains}
+				cat = st.selectbox(
+						"What are you here to explore?",
+						options=domain_names,
+						index=0 if domain_names else None,
+						key="wizard_cat",
+				)
 
-                domain = domain_lookup.get(cat, {})
-                if domain.get("description"):
-                        st.caption(domain["description"])
+				domain = domain_lookup.get(cat, {})
+				if domain.get("description"):
+						st.caption(domain["description"])
 
-                subtopics_list = domain.get("subtopics", [])
-                subtopic_names = [s.get("label", "") for s in subtopics_list]
-                subtopic_lookup = {s.get("label", ""): s for s in subtopics_list}
-                sub = st.selectbox(
-                        "Narrow it a bit…",
-                        options=subtopic_names,
-                        index=0 if subtopic_names else None,
-                        key="wizard_sub",
-                )
+				subtopics_list = domain.get("subtopics", [])
+				subtopic_names = [s.get("label", "") for s in subtopics_list]
+				subtopic_lookup = {s.get("label", ""): s for s in subtopics_list}
+				sub = st.selectbox(
+						"Narrow it a bit…",
+						options=subtopic_names,
+						index=0 if subtopic_names else None,
+						key="wizard_sub",
+				)
 
-                subtopic = subtopic_lookup.get(sub, {})
-                refinements = subtopic.get("refinements")
-                targets = []
-                if refinements:
-                        ref_names = list(refinements.keys())
-                        ref = st.selectbox(
-                                "Any particular angle?",
-                                options=ref_names,
-                                index=0 if ref_names else None,
-                                key="wizard_ref",
-                        )
-                        targets = refinements.get(ref, [])
-                else:
-                        targets = subtopic.get("targets", [])
+				subtopic = subtopic_lookup.get(sub, {})
+				refinements = subtopic.get("refinements")
+				targets = []
+				if refinements:
+						ref_names = list(refinements.keys())
+						ref = st.selectbox(
+								"Any particular angle?",
+								options=ref_names,
+								index=0 if ref_names else None,
+								key="wizard_ref",
+						)
+						targets = refinements.get(ref, [])
+				else:
+						targets = subtopic.get("targets", [])
 
-                if targets:
-                    st.caption("Where to look in your chart:")
+				if targets:
+					st.caption("Where to look in your chart:")
 
-                for t in targets:
-                    meaning = None
-                    display_name = t
+				for t in targets:
+					meaning = None
+					display_name = t
 
-                    # Add glyph if available
-                    glyph = GLYPHS.get(t)
-                    if glyph:
-                        display_name = f"{glyph} {t}"
+					# Add glyph if available
+					glyph = GLYPHS.get(t)
+					if glyph:
+						display_name = f"{glyph} {t}"
 
-                    # Check meaning sources
-                    if t in OBJECT_MEANINGS_SHORT:
-                        meaning = OBJECT_MEANINGS_SHORT[t]
-                    elif t in SIGN_MEANINGS:
-                        meaning = SIGN_MEANINGS[t]
-                    elif "House" in t:
-                        try:
-                            house_num = int(t.split()[0].replace("st","").replace("nd","").replace("rd","").replace("th",""))
-                            meaning = HOUSE_MEANINGS.get(house_num)
-                        except Exception:
-                            meaning = None
+					# Check meaning sources
+					if t in OBJECT_MEANINGS_SHORT:
+						meaning = OBJECT_MEANINGS_SHORT[t]
+					elif t in SIGN_MEANINGS:
+						meaning = SIGN_MEANINGS[t]
+					elif "House" in t:
+						try:
+							house_num = int(t.split()[0].replace("st","").replace("nd","").replace("rd","").replace("th",""))
+							meaning = HOUSE_MEANINGS.get(house_num)
+						except Exception:
+							meaning = None
 
-                    if meaning:
-                        st.write(f"{display_name}: {meaning}")
-                    else:
-                        st.write(f"{display_name}: [no meaning found]")
+					if meaning:
+						st.write(f"{display_name}: {meaning}")
+					else:
+						st.write(f"{display_name}: [no meaning found]")
 
 # ------------------------
 # If chart data exists, render the chart UI
@@ -2012,18 +2012,18 @@ if st.session_state.get("chart_ready", False):
 			st.caption(
 				"This app is a study tool to allow you to break down your complex astrology chart into "
 				"its connected circuits, to break the complex circuits down further into the shapes they " 
-                "are made of, and to interpret all of these dynamic parts as the functional energetic " 
-                "wiring schematic that they are. " 
-            )
+				"are made of, and to interpret all of these dynamic parts as the functional energetic " 
+				"wiring schematic that they are. " 
+			)
 			st.caption(
-			    "View planet profiles on the left sidebar (» on mobile). "
+				"View planet profiles on the left sidebar (» on mobile). "
 			)
 			st.caption(
 				"Turn on only one circuit = aspects color-coded "
-                "(Trines = Blue; Sextiles = Purple; Squares and Oppositions = Red)"
+				"(Trines = Blue; Sextiles = Purple; Squares and Oppositions = Red)"
 			)
 			st.caption(
-                "Turn on multiple circuits = each circuit color-coded. "
+				"Turn on multiple circuits = each circuit color-coded. "
 				"Expand circuits for sub-shapes. "
 			)
 			st.caption(
@@ -2031,14 +2031,14 @@ if st.session_state.get("chart_ready", False):
 				"planet(s) or placement(s) that you would like to focus on among your circuits and sub-shapes."
 			)
 			st.caption(
-			    "Or, to begin studying your chart from its foundation, begin with the Compass Rose."
-            )
-			st.caption(
-				"Select just one sub-shape or the Compass Rose to start. For best results, do not render very many "
-                "layers on the chart when you're generating an interpretation, in order to keep the prompts shorter."
+				"Or, to begin studying your chart from its foundation, begin with the Compass Rose."
 			)
 			st.caption(
-                "Scroll down. Below the chart, "
+				"Select just one sub-shape or the Compass Rose to start. For best results, do not render very many "
+				"layers on the chart when you're generating an interpretation, in order to keep the prompts shorter."
+			)
+			st.caption(
+				"Scroll down. Below the chart, "
 				'press "Send to GPT" to see (or listen to) the interpretation.'
 			)
 			st.caption(
@@ -2055,10 +2055,43 @@ if st.session_state.get("chart_ready", False):
 			)
 			st.caption(
 				"Then, once you are familiar with a whole circuit, you can give it a name, and save that name "
-                "to your birth chart profile. "
+				"to your birth chart profile. "
 			)
 
 		st.subheader("Circuits")
+
+		# ---------- PRE-INIT (so keys exist before any widgets render) ----------
+		# patterns & sub-shapes
+		for i in range(len(patterns)):
+			st.session_state.setdefault(f"toggle_pattern_{i}", False)
+			for sh in [sh for sh in shapes if sh["parent"] == i]:
+				st.session_state.setdefault(f"shape_{i}_{sh['id']}", False)
+
+		# singleton planets (guard if not present)
+		if singleton_map:
+			for planet in singleton_map.keys():
+				st.session_state.setdefault(f"singleton_{planet}", False)
+
+		# ---------- BULK ACTION HANDLERS (must run BEFORE widgets) ----------
+		b1, b2 = st.columns([1, 1])
+		with b1:
+			if st.button("Show All", key="btn_show_all_main"):
+				# flip ON only the circuits (not sub-shapes, not singletons)
+				for i in range(len(patterns)):
+					st.session_state[f"toggle_pattern_{i}"] = True
+				st.rerun()
+
+		with b2:
+			if st.button("Hide All", key="btn_hide_all_main"):
+				# flip everything OFF
+				for i in range(len(patterns)):
+					st.session_state[f"toggle_pattern_{i}"] = False
+					for sh in [sh for sh in shapes if sh["parent"] == i]:
+						st.session_state[f"shape_{i}_{sh['id']}"] = False
+				if singleton_map:
+					for planet in singleton_map.keys():
+						st.session_state[f"singleton_{planet}"] = False
+				st.rerun()
 
 		# --- Compass Rose (independent overlay, ON by default) ---
 		if "toggle_compass_rose" not in st.session_state:
@@ -2215,13 +2248,6 @@ if st.session_state.get("chart_ready", False):
 				else:
 					st.error("Location data not available. Please recalculate the chart first.")
 
-			if st.button("Show All"):
-				for i in range(len(patterns)):
-					st.session_state[f"toggle_pattern_{i}"] = True
-					for sh in [sh for sh in shapes if sh["parent"] == i]:
-						st.session_state[f"shape_{i}_{sh['id']}"] = True
-				for planet in singleton_map.keys():
-					st.session_state[f"singleton_{planet}"] = True
 		with c2:
 			# Choose how to show planet labels
 			label_style = st.radio(
@@ -2232,14 +2258,6 @@ if st.session_state.get("chart_ready", False):
 			)
 
 			dark_mode = st.checkbox("🌙 Dark Mode", value=False)
-
-			if st.button("Hide All"):
-				for i in range(len(patterns)):
-					st.session_state[f"toggle_pattern_{i}"] = False
-					for sh in [sh for sh in shapes if sh["parent"] == i]:
-						st.session_state[f"shape_{i}_{sh['id']}"] = False
-				for planet in singleton_map.keys():
-					st.session_state[f"singleton_{planet}"] = False
 
 	shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
 	if not singleton_toggles:
@@ -2768,8 +2786,8 @@ if st.session_state.get("chart_ready", False):
 							rtext_final = f"Rulership: {house_line}"
 						else:
 							rtext_final = (
-    							"Rulership by House: " + house_line + "\n" +
-    							"Rulership by Sign: "  + sign_line
+								"Rulership by House: " + house_line + "\n" +
+								"Rulership by Sign: "  + sign_line
 							)
 					elif house_line:
 						rtext_final = "Rulership by House: " + house_line
