@@ -364,6 +364,42 @@ OBJECT_MEANINGS = {
     "Makemake": "Provision and play—resourceful creativity and community feast codes."
 }
 
+OBJECT_MEANINGS_SHORT = {
+    # Axes & Points
+    "Ascendant": "House of Self — how you appear and begin things.",
+    "Descendant": "House of Others — partnerships and mirroring.",
+    "MC": "Public role, career, and reputation.",
+    "IC": "Home, roots, and inner foundation.",
+    "North Node": "Growth path and future direction.",
+    "South Node": "Comfort zone and past strengths.",
+    "Vertex": "Fated encounters and turning points.",
+    "Part of Fortune": "Your personal key to luck and flow.",
+    "Black Moon Lilith": "Raw boundaries and untamed power.",
+
+    # Luminaries & Planets
+    "Sun": "Core self and vitality.",
+    "Moon": "Emotions, instincts, and needs.",
+    "Mercury": "Mind, communication, and learning.",
+    "Venus": "Love, beauty, and values.",
+    "Mars": "Drive, action, and courage.",
+    "Jupiter": "Growth, luck, and expansion.",
+    "Saturn": "Discipline, limits, and mastery.",
+    "Uranus": "Change, freedom, and innovation.",
+    "Neptune": "Dreams, spirit, and illusions.",
+    "Pluto": "Power, shadow, and transformation.",
+
+    # Healing, devotion, sovereignty
+    "Ceres": "Nurturing and care cycles.",
+    "Pallas": "Wisdom, patterns, and strategy.",
+    "Juno": "Commitments and contracts.",
+    "Vesta": "Sacred focus and devotion.",
+    "Lilith": "Authenticity and defiance.",
+    "Chiron": "Wounding and healing gift.",
+    "Eros": "Desire and creative spark.",
+    "Psyche": "Soul, bonds, and intuition.",
+    "Eris": "Disruption, truth, and empowerment.",
+}
+
 PLANETARY_RULERS = {
     "Aries": ["Mars"],
     "Taurus": ["Venus"],
@@ -530,6 +566,31 @@ DIGNITIES = {
   }
 }
 
+ORDERED_OBJECTS_FOCUS = [
+    # Compass coordinates
+    "Ascendant","Descendant","MC","IC",
+    # Compass needle (use canonical node names; True Node is alias)
+    "North Node","South Node",
+    # Characters (+ Pluto, Eris)
+    "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","Eris",
+    # Moved up
+    "Ceres","Pallas","Juno","Vesta",
+    # Chiron before BML (Mean)
+    "Chiron","Black Moon Lilith (Mean)",
+    # Switches (before Personal Initiations)
+    "Part of Fortune","Vertex","Anti-Vertex","East Point",
+    # Personal Initiations (minus Chiron)
+    "Nessus","Ixion",
+    # Mythic Journeys (minus Pluto/Eris)
+    "Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Makemake",
+    # Instruments (remaining; “Lilith (Asteroid 1181)” → “Lilith (Asteroid)”)
+    "Iris","Hygiea","Psyche","Thalia","Euterpe","Pomona","Polyhymnia",
+    "Harmonia","Isis","Ariadne","Mnemosyne","Echo","Niobe","Eurydike","Freia","Terpsichore","Minerva",
+    "Hekate","Zephyr","Kassandra","Lachesis","Nemesis","Medusa","Aletheia","Magdalena","Arachne","Fama",
+    "Eros","Veritas","Sirene","Siva","Lilith (Asteroid)","Copernicus","Icarus","Toro","Apollo",
+    "Koussevitzky","Osiris","Lucifer","Anteros","Tezcatlipoca","West","Bacchus","Hephaistos","Panacea",
+    "Orpheus","Kafka","Pamela","Dionysus","Kaali","Asclepius","Singer","Angel",
+]
 
 CATEGORY_MAP = {
     "Character Profiles": {"Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune"},
@@ -585,6 +646,36 @@ HOUSE_INTERPRETATIONS = {
     10: "Treat the 10th House as the Public Interface & executive panel (role, reputation, mission delivery).",
     11: "View the 11th House as the Network Grid & future lab (alliances, movements, systems innovation).",
     12: "Read the 12th House as the Subconscious Field & sanctuary (dreamwork, dissolution, hidden labs).",
+}
+
+HOUSE_MEANINGS = {
+    1: "House of Self & Identity",
+    2: "House of Money, Values & Work Routines",
+    3: "House of Communication, Local Neighborhood & Peers",
+    4: "House of Home, Family & Ancestry",
+    5: "House of Creativity, Pleasure & Children",
+    6: "House of Health & Daily Routines",
+    7: "House of Partnerships & Relationships with Others",
+    8: "House of Transformation & Shared Resources",
+    9: "House of Philosophy, Travel & Higher Learning",
+    10: "House of Career, Legacy & Public Life",
+    11: "House of Community & Friends",
+    12: "House of Spirituality, Institutions, & the Subconscious",
+}
+
+SIGN_MEANINGS = {
+    "Aries": "Sign of Action & Initiation",
+    "Taurus": "Sign of Stability & Sensation",
+    "Gemini": "Sign of Communication & Curiosity",
+    "Cancer": "Sign of Nurturing & Home",
+    "Leo": "Sign of Creativity & Expression",
+    "Virgo": "Sign of Service & Refinement",
+    "Libra": "Sign of Balance & Relationships",
+    "Scorpio": "Sign of Transformation & Depth",
+    "Sagittarius": "Sign of Exploration & Belief",
+    "Capricorn": "Sign of Ambition & Structure",
+    "Aquarius": "Sign of Innovation & Community",
+    "Pisces": "Sign of Imagination & Compassion",
 }
 
 ASPECT_INTERPRETATIONS = {

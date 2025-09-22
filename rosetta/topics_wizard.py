@@ -1,3 +1,5 @@
+from typing import List, Tuple
+
 import streamlit as st
 from rosetta.lookup import ALIASES_MEANINGS
 # -------------------------
@@ -18,7 +20,7 @@ def _canon_label(name: str) -> str:
 def _objects_in_chart(df) -> set:
     return set(df["Object"].astype(str))
 
-def _resolve_present_targets(df, targets: list[str]) -> tuple[list[str], list[str]]:
+def _resolve_present_targets(df, targets: List[str]) -> Tuple[List[str], List[str]]:
     """
     Return (present, missing) after normalizing aliases (e.g., 'MC' -> 'Midheaven').
     We keep a max of 6 already by curation, but also dedupe.
@@ -41,7 +43,7 @@ def _resolve_present_targets(df, targets: list[str]) -> tuple[list[str], list[st
     present = [x for x in present if not (x in seen or seen.add(x))]
     return present, missing
 
-def apply_wizard_targets(df, targets: list[str]):
+def apply_wizard_targets(df, targets: List[str]):
     """
     Flip the per-object 'singleton_' checkboxes and set focus to the first present target.
     Also ensures the Compass Rose overlay is on for orientation.
@@ -65,7 +67,6 @@ def apply_wizard_targets(df, targets: list[str]):
 # Light MVP: a handful of first-tier categories with subtopics,
 # each resolving to up to 6 relevant placements/houses.
 # (You can extend this dict anytime — same shape.)
-
 WIZARD_TARGETS = {
   "schema_version": "1.0",
   "domains": [
@@ -75,34 +76,34 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Self-confidence & self-expression",
-          "targets": ["Sun", "1st House", "Part of Fortune"]
+          "targets": ["Sun", "Mars", "Mercury", "Venus", "Eris", "South Node", "Leo", "5th House"]
         },
         {
           "label": "Personal identity & style",
-          "targets": ["Ascendant", "1st House", "Sun"]
+          "targets": ["Sun", "Ascendant", "1st House", "Aries"]
         },
         {
           "label": "Life direction & soul purpose",
           "refinements": {
-            "General": ["North Node", "Sun", "1st House", "MC"],
-            "Travel / Philosophy / Higher Learning": ["Jupiter", "9th House", "North Node"]
+            "General": ["Sun", "North Node", "MC", "Saturn", "Capricorn"],
+            "Travel / Philosophy / Higher Learning": ["Jupiter", "Mercury", "North Node", "9th House", "Sagittarius"]
           }
         },
         {
           "label": "Overcoming self-doubt & past patterns",
           "refinements": {
-            "Ancestral / Home related": ["Chiron", "South Node", "IC", "4th House", "Nessus"],
-            "Trauma healing": ["Chiron", "Pluto", "Eris", "South Node", "12th House"],
-            "Feminine warrior energy": ["Eris", "Sedna", "Black Moon Lilith", "Pallas", "Minerva"]
+            "Ancestral / Home related": ["Moon", "Chiron", "South Node", "IC", "4th House", "Cancer"],
+            "Trauma healing": ["Pluto", "Chiron", "Eris", "South Node", "12th House", "Pisces", "Scorpio"],
+            "Feminine warrior energy": ["Eris", "Black Moon Lilith", "Pallas"]
           }
         },
         {
           "label": "Personal turning points & destiny events",
           "refinements": {
-            "Soul expression": ["Vertex", "Sun", "Part of Fortune"],
-            "Identity": ["Vertex", "Ascendant", "Sun", "1st House"],
-            "Career / Public image": ["MC", "10th House", "Sun"],
-            "Moments of conviction": ["Black Moon Lilith", "Saturn"]
+            "Soul expression": ["Sun", "Part of Fortune", "Vertex", "North Node"],
+            "Identity": ["Sun", "Ascendant", "Vertex", "1st House", "North Node"],
+            "Career / Public image": ["Sun", "MC", "10th House", "Capricorn"],
+            "Moments of conviction": ["Saturn", "Black Moon Lilith", "Scorpio"]
           }
         }
       ]
@@ -113,32 +114,32 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Emotional needs & self-care",
-          "targets": ["Moon", "Ceres", "4th House", "Hygiea"]
+          "targets": ["Moon", "Ceres", "4th House", "Cancer"]
         },
         {
           "label": "Family bonds & ancestry",
           "refinements": {
-            "General": ["Moon", "IC", "4th House", "Ceres", "Mnemosyne"],
-            "Generational Trauma": ["IC", "4th House", "Mnemosyne", "Nessus", "South Node"],
-            "Father Wounds": ["Saturn", "IC", "4th House", "Mnemosyne", "Nessus", "South Node"],
-            "Mother Wounds": ["Moon", "Ceres", "IC", "4th House", "Nessus", "South Node"]
+            "General": ["Moon", "Ceres", "IC", "4th House", "Cancer"],
+            "Generational Trauma": ["Pluto", "South Node", "IC", "4th House", "Cancer"],
+            "Father Wounds": ["Saturn", "Sun", "South Node", "IC", "4th House", "Cancer"],
+            "Mother Wounds": ["Moon", "Ceres", "South Node", "IC", "4th House", "Cancer"]
           }
         },
         {
           "label": "Childhood patterns & inner-child healing",
-          "targets": ["Moon", "Chiron", "4th House", "Psyche"],
+          "targets": ["Moon", "Pluto", "Psyche", "South Node", "IC", "4th House", "Cancer"],
           "refinements": {
-            "Creativity and Play": ["Moon", "Eros", "Uranus", "Zephyr", "Thalia", "5th House"],
-            "Childhood Wounds": ["Moon", "Chiron", "4th House", "Psyche", "Nessus", "IC"]
+            "Creativity and Play": ["Moon", "Uranus", "Eros", "5th House", "Leo"],
+            "Childhood Wounds": ["Moon", "Pluto", "Psyche", "South Node", "IC", "4th House", "Cancer"]
           }
         },
         {
           "label": "Processing grief & loss",
-          "targets": ["Ceres", "8th House", "Pluto", "Niobe", "South Node"]
+          "targets": ["Pluto", "Moon", "Ceres", "South Node", "8th House", "Scorpio"]
         },
         {
           "label": "Reconnecting to your private self",
-          "targets": ["12th House", "Psyche", "Neptune", "Vesta"]
+          "targets": ["Neptune", "Vesta", "Psyche", "12th House", "Pisces"]
         }
       ]
     },
@@ -148,27 +149,35 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Attracting love & romance",
-          "targets": ["Venus", "5th House", "Sun", "Eros", "Freia"]
+          "targets": ["Venus", "Sun", "Eros", "5th House", "Libra", "Leo"]
         },
         {
           "label": "Passion & sexual chemistry",
-          "targets": ["Mars", "Eros", "Lilith (Asteroid)", "Black Moon Lilith", "8th House", "Pluto"]
+          "targets": ["Mars", "Pluto", "Eros", "Black Moon Lilith", "8th House", "Scorpio"]
         },
         {
           "label": "Emotional intimacy & vulnerability",
-          "targets": ["Psyche", "Moon", "8th House", "Ceres"]
+          "targets": ["Moon", "Psyche", "Ceres", "8th House", "Cancer", "Scorpio"]
         },
         {
           "label": "Long-term commitment & loyalty",
-          "targets": ["Juno", "Saturn", "7th House", "Venus", "Descendant"]
+          "targets": ["Saturn", "Venus", "Juno", "7th House", "Descendant", "Capricorn", "Libra"]
         },
         {
           "label": "Navigating conflict in relationships",
-          "targets": ["Mars", "Eris", "7th House", "Pallas", "Mercury"]
+          "targets": ["Mars", "Mercury", "Eris", "Pallas", "7th House", "Aries", "Libra"]
         },
         {
           "label": "Fated or karmic connections",
-          "targets": ["Vertex", "South Node", "7th House", "North Node"]
+          "targets": ["Vertex", "North Node", "South Node", "7th House", "Libra", "Scorpio"]
+        },
+        {
+          "label": "Co-habiting with a romantic partner",
+          "targets": ["Venus", "Mercury", "Moon", "Ceres", "4th House", "IC", "Cancer", "Taurus"]
+        },
+        {
+          "label": "Shared ventures with a partner",
+          "targets": ["Venus", "Mercury", "Saturn", "Juno", "8th House", "10th House", "MC", "Libra", "Capricorn", "Taurus"]
         }
       ]
     },
@@ -178,23 +187,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Career path & life calling",
-          "targets": ["MC", "10th House", "Sun", "North Node", "Part of Fortune", "Saturn"]
+          "targets": ["Sun", "Saturn", "North Node", "Part of Fortune", "MC", "10th House", "Capricorn"]
         },
         {
           "label": "Building success & achievement",
-          "targets": ["Saturn", "Sun", "10th House", "MC", "Jupiter"]
+          "targets": ["Saturn", "Sun", "Jupiter", "MC", "10th House", "Capricorn"]
         },
         {
           "label": "Expanding opportunities",
-          "targets": ["Jupiter", "9th House", "10th House", "MC"]
+          "targets": ["Jupiter", "MC", "10th House", "9th House", "Sagittarius"]
         },
         {
           "label": "Strategic thinking & leadership",
-          "targets": ["Pallas", "Mercury", "Saturn", "Sun"]
+          "targets": ["Sun", "Saturn", "Mercury", "Pallas", "Aries", "Leo"]
         },
         {
           "label": "Public reputation & visibility",
-          "targets": ["Sun", "MC", "10th House", "Fama", "Apollo"]
+          "targets": ["Sun", "MC", "10th House", "Capricorn", "Leo"]
+        },
+        {
+          "label": "Work / Life Balance",
+          "targets": ["Sun", "Moon", "6th House", "10th House", "MC", "Virgo", "Pisces"]
         }
       ]
     },
@@ -204,23 +217,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Growing income & abundance",
-          "targets": ["Jupiter", "Venus", "2nd House", "Part of Fortune"]
+          "targets": ["Venus", "Jupiter", "Sun", "Part of Fortune", "2nd House", "Taurus"]
         },
         {
           "label": "Managing money & resources",
-          "targets": ["Saturn", "Vesta", "2nd House", "8th House"]
+          "targets": ["Saturn", "Mercury", "Vesta", "2nd House", "8th House", "Capricorn", "Taurus"]
         },
         {
           "label": "Self-worth & personal value",
-          "targets": ["Venus", "2nd House", "Sun", "Ceres"]
+          "targets": ["Venus", "Sun", "Ceres", "2nd House", "Taurus", "Leo"]
         },
         {
           "label": "Shared finances & debts",
-          "targets": ["8th House", "Saturn", "Pluto", "Juno"]
+          "targets": ["Pluto", "Saturn", "Juno", "8th House", "Scorpio", "North Node", "South Node"]
         },
         {
           "label": "Aligning money with purpose",
-          "targets": ["North Node", "MC", "Vesta", "10th House", "Part of Fortune", "Venus"]
+          "targets": ["North Node", "MC", "10th House", "Part of Fortune", "Venus", "Vesta", "Capricorn", "Taurus"]
+        },
+        {
+          "label": "Financial independence & sovereignty",
+          "targets": ["Uranus", "Eris", "Venus", "Saturn", "2nd House", "8th House", "Aquarius", "Taurus"]
         }
       ]
     },
@@ -230,23 +247,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Expressing your unique voice",
-          "targets": ["Sun", "5th House", "Mercury", "Singer", "Polyhymnia"]
+          "targets": ["Sun", "Mercury", "Moon", "5th House", "Leo"]
         },
         {
           "label": "Artistic or creative projects",
-          "targets": ["Venus", "Mercury", "5th House", "Pallas", "Hephaistos"]
+          "targets": ["Venus", "Mercury", "Pallas", "5th House", "Leo", "Libra"]
         },
         {
           "label": "Romantic/erotic creative muse energy",
-          "targets": ["Eros", "5th House", "Venus", "Mars", "Magdalena"]
+          "targets": ["Mars", "Venus", "Eros", "5th House", "Leo", "Scorpio"]
         },
         {
           "label": "Problem-solving through art & design",
-          "targets": ["Pallas", "Mercury", "Minerva", "Arachne", "5th House"]
+          "targets": ["Mercury", "Saturn", "Pallas", "5th House", "Virgo"]
         },
         {
           "label": "Reconnecting with fun / playfulness",
-          "targets": ["Sun", "5th House", "Thalia", "Euterpe", "Bacchus"]
+          "targets": ["Sun", "Moon", "Jupiter", "5th House", "Leo"]
+        },
+        {
+          "label": "Performance & stage presence",
+          "targets": ["Sun", "Venus", "Mars", "MC", "5th House", "Leo", "Libra"]
         }
       ]
     },
@@ -256,23 +277,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Exploring spirituality & mysticism",
-          "targets": ["Neptune", "12th House", "Moon", "Hekate", "9th House"]
+          "targets": ["Neptune", "Moon", "12th House", "9th House", "Pisces", "Sagittarius"]
         },
         {
           "label": "Trusting intuition",
-          "targets": ["Moon", "Psyche", "Neptune", "12th House", "Kassandra"]
+          "targets": ["Moon", "Neptune", "Psyche", "12th House", "Pisces"]
         },
         {
           "label": "Connecting with soul purpose",
-          "targets": ["North Node", "9th House", "MC", "Part of Fortune", "Jupiter"]
+          "targets": ["North Node", "Jupiter", "MC", "Part of Fortune", "9th House", "Sagittarius", "Capricorn"]
         },
         {
           "label": "Escaping overwhelm or confusion",
-          "targets": ["Neptune", "12th House", "Saturn", "Hygiea", "Vesta"]
+          "targets": ["Neptune", "Saturn", "Vesta", "12th House", "Pisces", "Virgo"]
         },
         {
           "label": "Expanding worldview & beliefs",
-          "targets": ["Jupiter", "9th House", "Mercury", "Neptune"]
+          "targets": ["Jupiter", "Mercury", "Neptune", "9th House", "Sagittarius"]
+        },
+        {
+          "label": "Dreams & symbolic imagination",
+          "targets": ["Moon", "Neptune", "Psyche", "12th House", "Pisces"]
         }
       ]
     },
@@ -282,23 +307,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Major life changes & rebirth",
-          "targets": ["Pluto", "8th House", "Uranus", "South Node", "12th House"]
+          "targets": ["Pluto", "Uranus", "South Node", "8th House", "12th House", "Scorpio", "Pisces"]
         },
         {
           "label": "Breaking free from stuck patterns",
-          "targets": ["Uranus", "12th House", "Eris", "Mars", "8th House"]
+          "targets": ["Uranus", "Eris", "Mars", "12th House", "8th House", "Aquarius", "Aries"]
         },
         {
           "label": "Shadow work & deep healing",
-          "targets": ["Pluto", "Chiron", "8th House", "Nessus", "Aletheia"]
+          "targets": ["Pluto", "Chiron", "8th House", "Scorpio", "Pisces"]
         },
         {
           "label": "Facing crises or endings",
-          "targets": ["Pluto", "12th House", "Saturn", "8th House", "West"]
+          "targets": ["Pluto", "Saturn", "12th House", "8th House", "Scorpio", "Capricorn"]
         },
         {
           "label": "Standing in your power",
-          "targets": ["Pluto", "Eris", "8th House", "Mars", "Orcus"]
+          "targets": ["Pluto", "Eris", "Mars", "8th House", "Scorpio", "Aries"]
+        },
+        {
+          "label": "Phoenix moments / regeneration",
+          "targets": ["Pluto", "Sun", "Part of Fortune", "8th House", "Scorpio"]
         }
       ]
     },
@@ -308,23 +337,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Improving communication",
-          "targets": ["Mercury", "3rd House", "Pallas", "Echo", "Veritas"]
+          "targets": ["Mercury", "Pallas", "3rd House", "Gemini", "Virgo"]
         },
         {
           "label": "Learning new skills",
-          "targets": ["Mercury", "Jupiter", "3rd House", "9th House", "Pallas"]
+          "targets": ["Mercury", "Jupiter", "Pallas", "3rd House", "9th House", "Gemini", "Sagittarius"]
         },
         {
           "label": "Expanding education & travel",
-          "targets": ["Jupiter", "9th House", "Mercury", "Sun"]
+          "targets": ["Jupiter", "Mercury", "Sun", "9th House", "Sagittarius", "Gemini"]
         },
         {
           "label": "Writing, teaching, or sharing ideas",
-          "targets": ["Mercury", "3rd House", "Pallas", "Fama", "Apollo"]
+          "targets": ["Mercury", "Pallas", "3rd House", "Gemini", "Virgo"]
         },
         {
           "label": "Mental clarity & focus",
-          "targets": ["Mercury", "Pallas", "Vesta", "Hygiea"]
+          "targets": ["Mercury", "Pallas", "Vesta", "Virgo"]
+        },
+        {
+          "label": "Critical thinking & discernment",
+          "targets": ["Mercury", "Saturn", "Pallas", "Virgo", "Aquarius"]
         }
       ]
     },
@@ -334,23 +367,31 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Health & wellness routines",
-          "targets": ["6th House", "Ceres", "Moon", "Hygiea", "Vesta", "Saturn"]
+          "targets": ["Moon", "Ceres", "Vesta", "Saturn", "6th House", "Virgo", "Pisces"]
         },
         {
           "label": "Building discipline & structure",
-          "targets": ["Saturn", "6th House", "Vesta", "Pallas", "Lachesis"]
+          "targets": ["Saturn", "Vesta", "Pallas", "6th House", "Capricorn", "Virgo"]
         },
         {
           "label": "Acts of service & helping others",
-          "targets": ["Vesta", "Ceres", "6th House", "Neptune", "Panacea"]
+          "targets": ["Vesta", "Ceres", "Neptune", "6th House", "Pisces"]
         },
         {
           "label": "Daily work & responsibilities",
-          "targets": ["6th House", "Saturn", "Mercury", "Pallas", "Hephaistos", "Vesta"]
+          "targets": ["Saturn", "Mercury", "Pallas", "Vesta", "6th House", "Virgo"]
         },
         {
           "label": "Dedication to a sacred craft",
-          "targets": ["Vesta", "Pallas", "Minerva", "Hephaistos", "6th House", "Arachne"]
+          "targets": ["Vesta", "Pallas", "6th House", "Virgo", "Capricorn"]
+        },
+        {
+          "label": "Healing through service",
+          "targets": ["Moon", "Neptune", "Ceres", "6th House", "Pisces", "Virgo"]
+        },
+        {
+          "label": "Boundaries in service",
+          "targets": ["Saturn", "Vesta", "Neptune", "6th House", "Virgo", "Pisces"]
         }
       ]
     },
@@ -360,27 +401,27 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Building friendships & community",
-          "targets": ["11th House", "Uranus", "Jupiter", "Venus"]
+          "targets": ["Uranus", "Jupiter", "Venus", "11th House", "Aquarius"]
         },
         {
           "label": "Networking & collaboration",
-          "targets": ["11th House", "Jupiter", "Pallas", "Koussevitzky", "Fama"]
+          "targets": ["Mercury", "Jupiter", "Pallas", "11th House", "Aquarius"]
         },
         {
           "label": "Working toward shared goals",
-          "targets": ["11th House", "Saturn", "Jupiter", "Pallas", "MC"]
+          "targets": ["Saturn", "Jupiter", "Pallas", "MC", "11th House", "Aquarius", "Capricorn"]
         },
         {
           "label": "Future dreams & hopes",
-          "targets": ["11th House", "Neptune", "North Node", "Part of Fortune", "Jupiter"]
+          "targets": ["Neptune", "Jupiter", "North Node", "Part of Fortune", "11th House", "Aquarius", "Sagittarius"]
         },
         {
           "label": "Social activism & innovation",
-          "targets": ["Uranus", "Eris", "11th House", "Mercury", "Kassandra", "Nemesis"]
+          "targets": ["Uranus", "Eris", "Mercury", "11th House", "Aquarius", "Aries"]
         },
         {
           "label": "Co-Parenting",
-          "targets": ["8th House", "Saturn", "Pluto", "Juno"]
+          "targets": ["Saturn", "Pluto", "Juno", "8th House", "4th House", "Cancer"]
         }
       ]
     },
@@ -390,47 +431,47 @@ WIZARD_TARGETS = {
       "subtopics": [
         {
           "label": "Boundary breaches & self-protection",
-          "targets": ["Mars", "Black Moon Lilith", "Lilith (Asteroid)", "Saturn", "7th House", "12th House"]
+          "targets": ["Mars", "Saturn", "Black Moon Lilith", "7th House", "12th House", "Aries", "Libra"]
         },
         {
           "label": "Open enemies & direct confrontations",
-          "targets": ["Mars", "Eris", "7th House", "Pallas", "3rd House", "Pluto"]
+          "targets": ["Mars", "Eris", "Pluto", "Pallas", "7th House", "3rd House", "Aries", "Libra"]
         },
         {
           "label": "Hidden enemies, sabotage & smear",
-          "targets": ["12th House", "Neptune", "Pluto", "Nemesis", "Fama", "Kassandra"]
+          "targets": ["Neptune", "Pluto", "12th House", "Pisces", "Scorpio"]
         },
         {
           "label": "Power struggles, coercion & manipulation",
-          "targets": ["Pluto", "8th House", "Mars", "Nessus", "Saturn", "Orcus"]
+          "targets": ["Pluto", "Mars", "Saturn", "8th House", "Scorpio", "Capricorn"]
         },
         {
           "label": "Legal conflicts, contracts & justice",
-          "targets": ["Juno", "Saturn", "Varuna", "9th House", "7th House", "Orcus"]
+          "targets": ["Saturn", "Juno", "9th House", "7th House", "Libra", "Sagittarius"]
         },
         {
           "label": "Workplace or team conflict",
-          "targets": ["6th House", "11th House", "Mars", "Pallas", "Mercury", "Saturn"]
+          "targets": ["Mars", "Mercury", "Saturn", "Pallas", "6th House", "11th House", "Virgo", "Aquarius"]
         },
         {
           "label": "Public call-outs, reputation attacks",
-          "targets": ["10th House", "MC", "Fama", "Mercury", "Eris", "Nemesis"]
+          "targets": ["Mercury", "Eris", "MC", "10th House", "Capricorn", "Leo"]
         },
         {
           "label": "Truth-telling & dispute clarity",
-          "targets": ["Aletheia", "Veritas", "Mercury", "Saturn", "3rd House", "9th House"]
+          "targets": ["Mercury", "Saturn", "Eris", "Libra", "Aquarius"]
         },
         {
           "label": "De-escalation & conflict strategy",
-          "targets": ["Pallas", "Minerva", "Mercury", "Venus", "3rd House", "7th House"]
+          "targets": ["Mercury", "Venus", "Ceres", "Pallas", "Libra", "Virgo"]
         },
         {
           "label": "Ending toxic dynamics / cut-offs",
-          "targets": ["Pluto", "West", "Saturn", "Orcus", "Black Moon Lilith", "12th House"]
+          "targets": ["Pluto", "Saturn", "Black Moon Lilith", "12th House", "Scorpio", "Capricorn"]
         },
         {
           "label": "Safety planning & red-flag detection",
-          "targets": ["Kassandra", "Nessus", "Medusa", "Saturn", "12th House", "Mars"]
+          "targets": ["Mars", "Saturn", "12th House", "Scorpio", "Pisces"]
         }
       ]
     }

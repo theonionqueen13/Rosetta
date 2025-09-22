@@ -37,6 +37,7 @@ from rosetta.patterns import (
 	detect_shapes, internal_minor_edges_for_pattern,
 	connected_components_from_edges, _cluster_conjunctions_for_detection,
 )
+from rosetta.topics_wizard import WIZARD_TARGETS, apply_wizard_targets
 import importlib
 _L = importlib.import_module("rosetta.lookup")
 
@@ -60,6 +61,9 @@ OBJECT_INTERPRETATIONS  = _L.OBJECT_INTERPRETATIONS
 CATEGORY_MAP            = _L.CATEGORY_MAP
 CATEGORY_INSTRUCTIONS   = _L.CATEGORY_INSTRUCTIONS
 ALIASES_MEANINGS        = _L.ALIASES_MEANINGS
+SIGN_MEANINGS           = _L.SIGN_MEANINGS
+HOUSE_MEANINGS          = _L.HOUSE_MEANINGS
+OBJECT_MEANINGS_SHORT   = _L.OBJECT_MEANINGS_SHORT
 
 import streamlit as st, importlib
 
@@ -363,7 +367,6 @@ if auth_status is True:
 						st.rerun()  # ✅ causes top-level creds = get_auth_credentials() to refresh
 						st.success(f"Password reset for '{target}'.")
 
-			with st.expander("Admin: Delete a user"):
 				target = st.text_input("Username to delete", key="admin_del_user")
 				if st.button("Delete user", key="admin_del_btn"):
 					if not target:
@@ -373,12 +376,6 @@ if auth_status is True:
 					else:
 						delete_user_account(target)
 						st.success(f"User '{target}' has been deleted.")
-
-			with st.sidebar.expander("Admin: login debug"):
-				u = st.text_input("Exact username to test")
-				p = st.text_input("Password to test", type="password")
-				if st.button("Check creds"):
-					st.write("verify_password ->", verify_password(u, p))
 
 elif auth_status is False:
 	st.error("Incorrect username or password.")
@@ -1327,10 +1324,6 @@ with col_mid:
 			st.session_state["current_tz_name"] = tz_name
 			run_chart(lat, lon, tz_name, "Equal")
 
-
-		st.caption("Instructions:")
-		st.caption("Instructions: Open the Circuit expanders to reveal their sub-shapes. Choose one to toggle on, scroll down to the Aspect Interpretation Prompt, and paste that into your ChatGPT. Joylin recommends beginning with whichever sub-shape includes your North Node.")
-
 		# Location info BELOW buttons
 		location_info = st.container()
 		if st.session_state.get("last_location"):
@@ -1341,7 +1334,7 @@ with col_mid:
 			location_info.error(st.session_state["last_timezone"])
 
 		# user calculated a new chart manually
-		st.session_state["active_profile_tab"] = "Add / Update Profile"
+		st.session_state["active_profile_tab"] = "Add Profile"
 
 # -------------------------
 # Right column: Profile Manager
@@ -1354,12 +1347,10 @@ with col_right:
 	if "active_profile_tab" not in st.session_state:
 		st.session_state["active_profile_tab"] = "Load Profile"
 
-	st.subheader("👤 Chart Profile Manager")
-
 	# Admin gating
 	admin_flag = is_admin(current_user_id)
 
-	tab_labels = ["Add / Update Profile", "Load Profile", "Delete Profile"]
+	tab_labels = ["Add Profile", "Load Profile", "Delete Profile"]
 
 	# Pick default index safely
 	default_tab = st.session_state["active_profile_tab"]
@@ -1367,7 +1358,7 @@ with col_right:
 		default_tab = tab_labels[0]
 
 	active_tab = st.radio(
-		"Profile Manager Tabs",
+		"👤 Chart Profile Manager",
 		tab_labels,
 		index=tab_labels.index(default_tab),
 		horizontal=True,
@@ -1375,8 +1366,8 @@ with col_right:
 	)
 	st.session_state["active_profile_tab"] = active_tab
 
-	# --- Add / Update ---
-	if active_tab == "Add / Update Profile":
+	# --- Add ---
+	if active_tab == "Add Profile":
 		profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
 
 		if st.button("💾 Save / Update Profile"):
@@ -1879,30 +1870,106 @@ def ask_gpt(prompt_text: str, model: str = "gpt-4o-mini", temperature: float = 0
 _CANON_SHAPES = {s.lower(): s for s in SHAPE_INSTRUCTIONS.keys()}
 
 def _canonical_shape_name(shape_dict):
-	"""Map whatever your shape carries to one of SHAPE_INSTRUCTIONS keys."""
-	raw = (
-		shape_dict.get("type") or shape_dict.get("kind") or
-		shape_dict.get("shape") or shape_dict.get("label") or
-		shape_dict.get("name") or ""
-	)
-	txt = str(raw).strip().lower()
-	if not txt:
-		return ""
+        """Map whatever your shape carries to one of SHAPE_INSTRUCTIONS keys."""
+        raw = (
+                shape_dict.get("type") or shape_dict.get("kind") or
+                shape_dict.get("shape") or shape_dict.get("label") or
+                shape_dict.get("name") or ""
+        )
+        txt = str(raw).strip().lower()
+        if not txt:
+                return ""
 
-	# direct match
-	if txt in _CANON_SHAPES:
-		return _CANON_SHAPES[txt]
+        # direct match
+        if txt in _CANON_SHAPES:
+                return _CANON_SHAPES[txt]
 
-	# fuzzy contains (e.g., "grand_trine", "Grand Trine (parent)")
-	for k in _CANON_SHAPES:
-		if k.replace(" ", "_") in txt or k in txt:
-			return _CANON_SHAPES[k]
+        # fuzzy contains (e.g., "grand_trine", "Grand Trine (parent)")
+        for k in _CANON_SHAPES:
+                if k.replace(" ", "_") in txt or k in txt:
+                        return _CANON_SHAPES[k]
 
-	return ""
+        return ""
+
+# ------------------------
+# Guided Question Wizard (shared renderer)
+# ------------------------
+def render_guided_wizard():
+        with st.expander("🧙‍♂️ Guided Topics Wizard", expanded=False):
+                domains = WIZARD_TARGETS.get("domains", [])
+                domain_names = [d.get("name", "") for d in domains]
+                domain_lookup = {d.get("name", ""): d for d in domains}
+                cat = st.selectbox(
+                        "What are you here to explore?",
+                        options=domain_names,
+                        index=0 if domain_names else None,
+                        key="wizard_cat",
+                )
+
+                domain = domain_lookup.get(cat, {})
+                if domain.get("description"):
+                        st.caption(domain["description"])
+
+                subtopics_list = domain.get("subtopics", [])
+                subtopic_names = [s.get("label", "") for s in subtopics_list]
+                subtopic_lookup = {s.get("label", ""): s for s in subtopics_list}
+                sub = st.selectbox(
+                        "Narrow it a bit…",
+                        options=subtopic_names,
+                        index=0 if subtopic_names else None,
+                        key="wizard_sub",
+                )
+
+                subtopic = subtopic_lookup.get(sub, {})
+                refinements = subtopic.get("refinements")
+                targets = []
+                if refinements:
+                        ref_names = list(refinements.keys())
+                        ref = st.selectbox(
+                                "Any particular angle?",
+                                options=ref_names,
+                                index=0 if ref_names else None,
+                                key="wizard_ref",
+                        )
+                        targets = refinements.get(ref, [])
+                else:
+                        targets = subtopic.get("targets", [])
+
+                if targets:
+                    st.caption("Where to look in your chart:")
+
+                for t in targets:
+                    meaning = None
+                    display_name = t
+
+                    # Add glyph if available
+                    glyph = GLYPHS.get(t)
+                    if glyph:
+                        display_name = f"{glyph} {t}"
+
+                    # Check meaning sources
+                    if t in OBJECT_MEANINGS_SHORT:
+                        meaning = OBJECT_MEANINGS_SHORT[t]
+                    elif t in SIGN_MEANINGS:
+                        meaning = SIGN_MEANINGS[t]
+                    elif "House" in t:
+                        try:
+                            house_num = int(t.split()[0].replace("st","").replace("nd","").replace("rd","").replace("th",""))
+                            meaning = HOUSE_MEANINGS.get(house_num)
+                        except Exception:
+                            meaning = None
+
+                    if meaning:
+                        st.write(f"{display_name}: {meaning}")
+                    else:
+                        st.write(f"{display_name}: [no meaning found]")
 
 # ------------------------
 # If chart data exists, render the chart UI
 # ------------------------
+if not st.session_state.get("chart_ready", True):
+	render_guided_wizard()
+
 if st.session_state.get("chart_ready", False):
 	df = st.session_state.df
 	pos = st.session_state.pos
@@ -1936,11 +2003,35 @@ if st.session_state.get("chart_ready", False):
 	with left_col:
 		with st.expander("Instructions"):
 			st.caption(
-				"One Circuit = aspects color-coded. Multiple Circuits = each circuit color-coded. "
-				"Expand circuits for sub-shapes. View planet profiles on the left sidebar (» on mobile). "
+				"This app is a study tool to allow you to break down your complex astrology chart into "
+				"its connected circuits, to break the complex circuits down further into the shapes they " 
+                "are made of, and to interpret all of these dynamic parts as the functional energetic " 
+                "wiring schematic that they are. " 
+            )
+			st.caption(
+			    "View planet profiles on the left sidebar (» on mobile). "
 			)
 			st.caption(
-				"Begin with the Compass Rose. Scroll down. Below the chart, "
+				"Turn on only one circuit = aspects color-coded "
+                "(Trines = Blue; Sextiles = Purple; Squares and Oppositions = Red)"
+			)
+			st.caption(
+                "Turn on multiple circuits = each circuit color-coded. "
+				"Expand circuits for sub-shapes. "
+			)
+			st.caption(
+				"Use the Guided Topics Wizard to select the topic you want to look at, then find the "
+				"planet(s) or placement(s) that you would like to focus on among your circuits and sub-shapes."
+			)
+			st.caption(
+			    "Or, to begin studying your chart from its foundation, begin with the Compass Rose."
+            )
+			st.caption(
+				"Select just one sub-shape or the Compass Rose to start. For best results, do not render very many "
+                "layers on the chart when you're generating an interpretation, in order to keep the prompts shorter."
+			)
+			st.caption(
+                "Scroll down. Below the chart, "
 				'press "Send to GPT" to see (or listen to) the interpretation.'
 			)
 			st.caption(
@@ -1956,9 +2047,8 @@ if st.session_state.get("chart_ready", False):
 				"to learn about how they connect and interact with each other."
 			)
 			st.caption(
-				"Then, once you are familiar with a whole circuit, you can give it a name. If you "
-				"turn on exactly one whole circuit plus any of its sub-shapes, the GPT will suggest "
-				"a circuit name for you."
+				"Then, once you are familiar with a whole circuit, you can give it a name, and save that name "
+                "to your birth chart profile. "
 			)
 
 		st.subheader("Circuits")
@@ -2063,6 +2153,8 @@ if st.session_state.get("chart_ready", False):
 				st.session_state["saved_circuit_names"] = current.copy()
 
 	with right_col:
+		render_guided_wizard()
+		st.divider()
 		st.subheader("Single Placements")
 		singleton_toggles = {}
 		if singleton_map:
@@ -2115,14 +2207,6 @@ if st.session_state.get("chart_ready", False):
 				else:
 					st.error("Location data not available. Please recalculate the chart first.")
 
-			# 🚧 placeholder group 1 (does nothing)
-			st.radio(
-				"(Coming soon)",
-				["Campanus", "Koch", "Regiomontanus"],
-				index=0,
-				key="house_system_placeholder_a",
-				disabled=True,
-			)
 			if st.button("Show All"):
 				for i in range(len(patterns)):
 					st.session_state[f"toggle_pattern_{i}"] = True
@@ -2140,15 +2224,6 @@ if st.session_state.get("chart_ready", False):
 			)
 
 			dark_mode = st.checkbox("🌙 Dark Mode", value=False)
-
-			# 🚧 placeholder group 1 (does nothing)
-			st.radio(
-				"(Coming soon)",
-				[ "Porphyry", "Topocentric", "Alcabitius"],
-				index=0,
-				key="house_system_placeholder_b",
-				disabled=True,
-			)
 
 			if st.button("Hide All"):
 				for i in range(len(patterns)):
@@ -3046,7 +3121,7 @@ if st.session_state.get("chart_ready", False):
 
 
 		else:
-			st.markdown("_(Select at least 1 sub-shape **or** a circuit from the left to view a full circuit prompt, or toggle Compass Rose to view the Compass-only prompt.)_")
+			st.markdown("_(Calculate or Load a birth chart)_")
 
 	# --- Send to GPT controls (show ONLY when a prompt exists) ---
 	colA, colB, colC = st.columns([1, 1, 2])
@@ -3083,4 +3158,4 @@ if st.session_state.get("chart_ready", False):
 
 else:
 	# No prompt yet (no chart or no shapes selected)
-	st.markdown("_(Select at least 1 sub-shape or circuit, or the Compass Rose to view interpretation.)_")
+	st.markdown("_(Calculate or Load a birth chart)_")
