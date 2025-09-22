@@ -9,6 +9,7 @@ import re
 import os, json, bcrypt, time, hashlib
 import streamlit_authenticator as stauth
 import datetime as dt
+import plotly.tools as tls
 from rosetta.calc import calculate_chart
 from rosetta.db import supa
 from rosetta.auth_reset import request_password_reset, verify_reset_code_and_set_password
@@ -2357,7 +2358,12 @@ if st.session_state.get("chart_ready", False):
 		singleton_toggles=singleton_toggles, major_edges_all=major_edges_all
 	)
 
-	st.pyplot(fig, use_container_width=False)
+	import io
+
+	buf = io.BytesIO()
+	fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+	st.image(buf, use_container_width=True)
+
 
 	def _sign_from_degree(deg):
 		# 0=Aries ... 11=Pisces
