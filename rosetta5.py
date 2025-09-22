@@ -2007,7 +2007,8 @@ if st.session_state.get("chart_ready", False):
 	# --- UI Layout ---
 	left_col, right_col = st.columns([2, 1])
 	with left_col:
-		with st.expander("Instructions"):
+		st.subheader("Instructions")
+		with st.expander("Click to Expand Instructions"):
 			st.caption(
 				"This app is a study tool to allow you to break down your complex astrology chart into "
 				"its connected circuits, to break the complex circuits down further into the shapes they " 
