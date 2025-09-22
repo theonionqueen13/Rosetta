@@ -138,20 +138,13 @@ if client is None:
 # -------------------------
 # Init / session management
 # -------------------------
-if "selected_placement" not in st.session_state:
-    st.session_state.selected_placement = None
-if "focus_select" not in st.session_state:
-    st.session_state.focus_select = None
-
 if "reset_done" not in st.session_state:
     st.session_state.clear()
     st.session_state["reset_done"] = True
 
-if "last_house_system" not in st.session_state:
-    st.session_state["last_house_system"] = "equal"
-if "singleton_map" not in st.session_state:
-    st.session_state.singleton_map = {}
 for key, default in [
+    ("selected_placement", None),
+    ("focus_select", None),
     ("df", None),
     ("pos", {}),
     ("patterns", []),
@@ -160,10 +153,13 @@ for key, default in [
     ("filaments", []),
     ("singleton_map", {}),
     ("combos", []),
+    ("chart_ready", False),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
+if "last_house_system" not in st.session_state:
+    st.session_state["last_house_system"] = "equal"
 
 st.markdown(
     """
@@ -1994,7 +1990,7 @@ def _focus_core_from_df(df, focus_name: str):
 # Guided Question Wizard (shared renderer)
 # ------------------------
 def render_guided_wizard():
-    with st.expander("🧭 Guided Question Wizard (beta)", expanded=True):
+    with st.expander("🧙‍♂️Guided Question Wizard (beta)", expanded=False):
         domains = WIZARD_TARGETS.get("domains", [])
         domain_names = [d.get("name", "") for d in domains]
         domain_lookup = {d.get("name", ""): d for d in domains}
@@ -2035,24 +2031,8 @@ def render_guided_wizard():
             targets = subtopic.get("targets", [])
 
         if targets:
-            st.caption("We’ll highlight these in your chart:")
+            st.caption("Where to look in your chart:")
             st.write(", ".join(targets))
-
-        if st.button("Highlight these now", key="wizard_apply"):
-            df_local = st.session_state.get("df")
-            if df_local is None:
-                st.warning("Load or calculate a chart first.")
-            else:
-                present, missing = apply_wizard_targets(df_local, targets)
-                if present:
-                    st.success(f"Highlighted: {', '.join(present)}")
-                if missing:
-                    st.info(f"Not found in this chart: {', '.join(missing)}")
-                st.rerun()
-
-# Display wizard even before a chart is loaded
-if not st.session_state.get("chart_ready", False):
-    render_guided_wizard()
 
 # ------------------------
 # If chart data exists, render the chart UI
@@ -2114,8 +2094,6 @@ if st.session_state.get("chart_ready", False):
                 "turn on exactly one whole circuit plus any of its sub-shapes, the GPT will suggest "
                 "a circuit name for you."
             )
-
-        render_guided_wizard()
 
         # --- Compass Rose (independent overlay, ON by default) ---
         if "toggle_compass_rose" not in st.session_state:
@@ -2217,6 +2195,8 @@ if st.session_state.get("chart_ready", False):
                 st.session_state["saved_circuit_names"] = current.copy()
 
     with right_col:
+        render_guided_wizard()
+        st.divider()
         st.subheader("Single Placements")
         singleton_toggles = {}
         if singleton_map:
@@ -2269,14 +2249,6 @@ if st.session_state.get("chart_ready", False):
                 else:
                     st.error("Location data not available. Please recalculate the chart first.")
 
-            # 🚧 placeholder group 1 (does nothing)
-            st.radio(
-                "(Coming soon)",
-                ["Campanus", "Koch", "Regiomontanus"],
-                index=0,
-                key="house_system_placeholder_a",
-                disabled=True,
-            )
             if st.button("Show All"):
                 for i in range(len(patterns)):
                     st.session_state[f"toggle_pattern_{i}"] = True
@@ -2294,15 +2266,6 @@ if st.session_state.get("chart_ready", False):
             )
 
             dark_mode = st.checkbox("🌙 Dark Mode", value=False)
-
-            # 🚧 placeholder group 1 (does nothing)
-            st.radio(
-                "(Coming soon)",
-                [ "Porphyry", "Topocentric", "Alcabitius"],
-                index=0,
-                key="house_system_placeholder_b",
-                disabled=True,
-            )
 
             if st.button("Hide All"):
                 for i in range(len(patterns)):
