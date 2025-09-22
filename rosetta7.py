@@ -61,7 +61,61 @@ OBJECT_INTERPRETATIONS  = _L.OBJECT_INTERPRETATIONS
 CATEGORY_MAP            = _L.CATEGORY_MAP
 CATEGORY_INSTRUCTIONS   = _L.CATEGORY_INSTRUCTIONS
 ALIASES_MEANINGS        = _L.ALIASES_MEANINGS
-ORDERED_OBJECTS_FOCUS	= _L.ORDERED_OBJECTS_FOCUS
+try:
+    ORDERED_OBJECTS_FOCUS = list(_L.ORDERED_OBJECTS_FOCUS)
+except AttributeError:
+    ORDERED_OBJECTS_FOCUS = []
+
+
+def _build_fallback_focus_list() -> list[str]:
+    """Construct a deterministic list if the lookup table is missing."""
+    seen = set()
+    ordered = []
+    for name in MAJOR_OBJECTS:
+        if name and name not in seen:
+            ordered.append(name)
+            seen.add(name)
+
+    for name in sorted(set(OBJECT_INTERPRETATIONS.keys()) - seen):
+        if name:
+            ordered.append(name)
+            seen.add(name)
+
+    return ["— Select a Placement —"] + ordered
+
+
+if not ORDERED_OBJECTS_FOCUS:
+    ORDERED_OBJECTS_FOCUS = _build_fallback_focus_list()
+else:
+    # Always work with a mutable copy downstream.
+    ORDERED_OBJECTS_FOCUS = list(ORDERED_OBJECTS_FOCUS)
+
+
+def _detect_focus_none_option(options: list[str]) -> str | None:
+    if not options:
+        return None
+    first = options[0]
+    if not isinstance(first, str):
+        return None
+    slug = re.sub(r"[^a-z]+", " ", first.lower()).strip()
+    if not slug:
+        return first
+    keywords = {"none", "all", "select", "choose", "focus", "off"}
+    if any(word in slug for word in keywords):
+        return first
+    return None
+
+
+FOCUS_NONE_OPTION = _detect_focus_none_option(ORDERED_OBJECTS_FOCUS)
+if FOCUS_NONE_OPTION is None and ORDERED_OBJECTS_FOCUS:
+    sentinel = "— Select a Placement —"
+    # Ensure the sentinel is first and unique.
+    remaining = [name for name in ORDERED_OBJECTS_FOCUS if name != sentinel]
+    ORDERED_OBJECTS_FOCUS = [sentinel] + remaining
+    FOCUS_NONE_OPTION = sentinel
+elif FOCUS_NONE_OPTION is not None:
+    # Normalize to exactly the detected sentinel for downstream comparisons.
+    ORDERED_OBJECTS_FOCUS[0] = FOCUS_NONE_OPTION
 
 import streamlit as st, importlib
 
@@ -157,6 +211,12 @@ for key, default in [
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
+
+if st.session_state.get("focus_select") is None and ORDERED_OBJECTS_FOCUS:
+    st.session_state["focus_select"] = FOCUS_NONE_OPTION or ORDERED_OBJECTS_FOCUS[0]
+
+if "_focus_last_source" not in st.session_state:
+    st.session_state["_focus_last_source"] = "init"
 
 if "last_house_system" not in st.session_state:
     st.session_state["last_house_system"] = "equal"
@@ -420,10 +480,49 @@ def clear_all_circuit_toggles():
     if "toggle_compass_rose" in st.session_state:
         del st.session_state["toggle_compass_rose"]
 
+def _set_focus_selection(value, *, source: str, toggle_if_same: bool = False):
+    """Centralized state updates for focus selection."""
+    sentinel = FOCUS_NONE_OPTION
+    options = ORDERED_OBJECTS_FOCUS or []
+
+    if isinstance(value, str):
+        normalized = value.strip()
+    else:
+        normalized = value
+
+    if not normalized or normalized == sentinel or normalized not in options:
+        normalized = None
+
+    current = st.session_state.get("selected_placement")
+    if toggle_if_same and normalized and normalized == current:
+        normalized = None
+
+    if normalized == current:
+        if normalized is None and sentinel and st.session_state.get("focus_select") != sentinel:
+            st.session_state["focus_select"] = sentinel
+        return
+    
+    if normalized is not None:
+        clear_all_circuit_toggles()
+        st.session_state["selected_placement"] = normalized
+        st.session_state["focus_select"] = normalized
+    else:
+        st.session_state["selected_placement"] = None
+        if sentinel:
+            st.session_state["focus_select"] = sentinel
+        elif options:
+            st.session_state["focus_select"] = options[0]
+
+    st.session_state["_focus_last_source"] = source
+
+
+def _on_focus_select_change():
+    choice = st.session_state.get("focus_select")
+    _set_focus_selection(choice, source="dropdown")
+
+
 def exit_focus_if_toggle_clicked():
     """If any toggle is changed while in focus mode, exit focus mode."""
-    if not st.session_state.get("selected_placement"):
-        return
 
     toggle_keys = [
         k for k in st.session_state.keys()
@@ -432,28 +531,33 @@ def exit_focus_if_toggle_clicked():
         or k.startswith("shape_")
         or k.startswith("singleton_")
     ]
+    
+    if not st.session_state.get("selected_placement"):
+        for k in toggle_keys:
+            st.session_state[f"_prev_{k}"] = st.session_state.get(k)
+        return
 
     for k in toggle_keys:
-        # Detect changes by comparing to a stored previous snapshot
         current_val = st.session_state.get(k)
         prev_val = st.session_state.get(f"_prev_{k}")
         st.session_state[f"_prev_{k}"] = current_val
         if current_val != prev_val:
-            st.session_state.selected_placement = None
+            _set_focus_selection(None, source="toggle")
             st.rerun()
 
-chosen = st.sidebar.selectbox(
+current_focus_value = st.session_state.get("focus_select")
+if current_focus_value not in ORDERED_OBJECTS_FOCUS and ORDERED_OBJECTS_FOCUS:
+    st.session_state["focus_select"] = FOCUS_NONE_OPTION or ORDERED_OBJECTS_FOCUS[0]
+
+if st.session_state.get("selected_placement") and st.session_state["focus_select"] != st.session_state["selected_placement"]:
+    st.session_state["focus_select"] = st.session_state["selected_placement"]
+
+st.sidebar.selectbox(
     "Focus a Placement",
     ORDERED_OBJECTS_FOCUS,
-    index=(ORDERED_OBJECTS_FOCUS.index(st.session_state.selected_placement)
-           if st.session_state.selected_placement in ORDERED_OBJECTS_FOCUS else 0),
-    key="focus_select"
+    key="focus_select",
+    on_change=_on_focus_select_change,
 )
-
-if chosen != st.session_state.selected_placement:
-    clear_all_circuit_toggles()
-    st.session_state.selected_placement = chosen
-    st.rerun()
 
 # -------------------------
 # Chart Drawing Functions
@@ -2065,6 +2169,8 @@ if st.session_state.get("chart_ready", False):
         if key not in st.session_state:
             st.session_state[key] = False  # set True if you want them on by default
 
+    exit_focus_if_toggle_clicked()
+
     # --- UI Layout ---
     left_col, right_col = st.columns([2, 1])
     with left_col:
@@ -2281,36 +2387,40 @@ if st.session_state.get("chart_ready", False):
 
     # --- Build focus core from selected placement ---
     focus_target = st.session_state.get("selected_placement")
-    focus_core = [focus_target] if focus_target else []
+    focus_core = _focus_core_from_df(df, focus_target) if df is not None else []
+
+    focus_active = bool(focus_core)
 
     # Show "Exit Focus Mode" if in focus mode
-    if focus_target:
+    if focus_active:
         if st.sidebar.button("Exit Focus Mode"):
-            st.session_state.selected_placement = None
+            _set_focus_selection(None, source="exit_button")
             st.rerun()
 
     # --- Focused or normal chart render ---
-    if focus_core and st.session_state.get("df") is not None:
+    if focus_active:
         df = st.session_state.df  # make sure we pull it from state
-        # Build a minimal positions dict using ALL objects (not just majors)
         pos_all = dict(zip(df["Object"].astype(str), df["abs_deg"].astype(float)))
         pos_focus = {k: pos_all[k] for k in focus_core if k in pos_all}
 
-        fig, _visible, active_shapes, cusps = render_chart_with_shapes(
-            pos_focus,
-            patterns=[], pattern_labels=[],
-            toggles=[], filaments=[], combo_toggles=[],
-            label_style=label_style, singleton_map={}, df=df,
-            house_system=house_system, dark_mode=dark_mode,
-            shapes=[], shape_toggles_by_parent={},
-            singleton_toggles={focus_target: True},
-            major_edges_all=[]
-        )
+        if pos_focus:
+            focus_singletons = {name: True for name in pos_focus.keys()}
+            fig, _visible, active_shapes, cusps = render_chart_with_shapes(
+                pos_focus,
+                patterns=[], pattern_labels=[],
+                toggles=[], filaments=[], combo_toggles=[],
+                label_style=label_style, singleton_map={}, df=df,
+                house_system=house_system, dark_mode=dark_mode,
+                shapes=[], shape_toggles_by_parent={},
+                singleton_toggles=focus_singletons,
+                major_edges_all=[]
+            )
 
-        visible_objects = set(pos_focus.keys())
+            visible_objects = set(pos_focus.keys())
+        else:
+            focus_active = False
 
-    else:
-        # Normal render
+    if not focus_active:
         fig, visible_objects, active_shapes, cusps = render_chart_with_shapes(
             pos, patterns, pattern_labels=[],
             toggles=[st.session_state.get(f"toggle_pattern_{i}", False) for i in range(len(patterns))],
@@ -2531,8 +2641,7 @@ if st.session_state.get("chart_ready", False):
             is_selected = (st.session_state.get("selected_placement") == obj)
             label = "●" if is_selected else "○"  # filled vs empty radio look
             if st.button(label, key=f"focus_{obj}"):
-                clear_all_circuit_toggles()
-                st.session_state.selected_placement = obj
+                _set_focus_selection(obj, source="focus_button", toggle_if_same=True)
                 st.rerun()
 
         with body_col:
