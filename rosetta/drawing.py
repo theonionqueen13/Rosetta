@@ -8,7 +8,7 @@ from rosetta.lookup import ASPECTS, GLYPHS, GROUP_COLORS
 # Chart element drawing
 # -------------------------------
 def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode,
-                     label_r=0.18, label_frac=0.50,  # ← knobs: radius & where along the house arc (0..1)
+                     label_r=0.32, label_frac=0.50,  # ← knobs: radius & where along the house arc (0..1)
                      ):
     """
     Draw house cusp lines and numbers. Numbers are placed inside each house,
@@ -87,10 +87,10 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode,
         cusps = [ (start + i*30.0) % 360.0 for i in range(12) ]
 
     # --- draw cusp lines ---
-    line_color = "gray"
+    line_color = "lightgray"
     for deg in cusps:
         rad = deg_to_rad(deg, asc_deg)
-        ax.plot([rad, rad], [0, 1.0], color=line_color, linestyle="solid", linewidth=1)
+        ax.plot([rad, rad], [0, 1.45], color=line_color, linestyle="solid", linewidth=1)
 
     # --- place labels INSIDE each house (away from the line) ---
     lbl_color = "white" if dark_mode else "black"
@@ -105,14 +105,36 @@ def draw_house_cusps(ax, df, asc_deg, house_system, dark_mode,
     return cusps
 
 def draw_degree_markers(ax, asc_deg, dark_mode):
-    """Draw tick marks every 10° around the chart."""
+    """Draw tick marks at 1°, 5°, and 10° intervals, plus a circular outline."""
+
+    base_color = "white" if dark_mode else "black"
+
+    # --- Outer circle outline at r=1.0
+    circle_r = 1.0
+    circle = plt.Circle((0, 0), circle_r, transform=ax.transData._b, 
+                        fill=False, color=base_color, linewidth=1)
+    ax.add_artist(circle)
+
+    # --- Ticks every 1°
+    for deg in range(0, 360, 1):
+        r = deg_to_rad(deg, asc_deg)
+        ax.plot([r, r], [circle_r, circle_r + 0.015], 
+                color=base_color, linewidth=0.5)
+
+    # --- Ticks every 5°
+    for deg in range(0, 360, 5):
+        r = deg_to_rad(deg, asc_deg)
+        ax.plot([r, r], [circle_r, circle_r + 0.03], 
+                color=base_color, linewidth=0.8)
+
+    # --- Ticks + labels every 10°
     for deg in range(0, 360, 10):
         r = deg_to_rad(deg, asc_deg)
-        ax.plot([r, r], [1.02, 1.08],
-                color="white" if dark_mode else "black", linewidth=1)
-        ax.text(r, 1.12, f"{deg % 30}°",
-                ha="center", va="center", fontsize=7,
-                color="white" if dark_mode else "black")
+        ax.plot([r, r], [circle_r, circle_r + 0.05], 
+                color=base_color, linewidth=1.2)
+        ax.text(r, circle_r + 0.08, f"{deg % 30}°",
+                ha="center", va="center", fontsize=7, color=base_color)
+
 
 def draw_zodiac_signs(ax, asc_deg):
     """Draw zodiac glyphs around the wheel."""
