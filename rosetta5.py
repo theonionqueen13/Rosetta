@@ -2160,6 +2160,7 @@ if st.session_state.get("chart_ready", False):
 				st.session_state["saved_circuit_names"] = current.copy()
 
 	with right_col:
+		st.subheader("Topics")
 		render_guided_wizard()
 		st.divider()
 		st.subheader("Single Placements")
