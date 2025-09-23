@@ -1021,7 +1021,7 @@ def render_chart_with_shapes(
 	if st.session_state.get("toggle_compass_rose", True):
 		draw_compass_rose(
 			ax, pos, asc_deg,
-			colors={"nodal": "purple", "acdc": "green", "mcic": "orange"},
+			colors={"nodal": "purple", "acdc": "#4E83AF", "mcic": "#4E83AF"},
 			linewidth_base=2.0,
 			zorder=100,
 			arrow_mutation_scale=22.0,   # bigger arrowhead
