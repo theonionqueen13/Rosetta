@@ -6,7 +6,7 @@ import numpy as np
 import streamlit.components.v1 as components
 import swisseph as swe
 import re
-import os, json, bcrypt, time, hashlib
+import os, json, bcrypt, time, hashlib, base64, textwrap
 import streamlit_authenticator as stauth
 import datetime as dt
 import plotly.tools as tls
@@ -72,6 +72,8 @@ HOUSE_MEANINGS               = _Lget("HOUSE_MEANINGS")
 OBJECT_MEANINGS_SHORT        = _Lget("OBJECT_MEANINGS_SHORT")
 
 import streamlit as st, importlib
+import importlib, rosetta.drawing
+importlib.reload(rosetta.drawing)
 
 @st.cache_resource
 def get_lookup():
@@ -515,61 +517,67 @@ def draw_zodiac_signs(ax, asc_deg):
 		)
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
-	"""Draw planet glyphs/names with degree (no sign), combining cluster fan-out with global spacing."""
+    """Draw planet glyphs/names with degree (no sign), combining cluster fan-out with global spacing."""
 
-	degree_threshold = 3  # how close in degrees to be considered a cluster
-	min_spacing = 7       # degrees of minimum separation between clusters
+    degree_threshold = 3  # how close in degrees to be considered a cluster
+    min_spacing = 7       # degrees of minimum separation between clusters
 
-	# ---- group planets into clusters ----
-	sorted_pos = sorted(pos.items(), key=lambda x: x[1])
-	clusters = []
-	for name, degree in sorted_pos:
-		placed = False
-		for cluster in clusters:
-			if abs(degree - cluster[0][1]) <= degree_threshold:
-				cluster.append((name, degree))
-				placed = True
-				break
-		if not placed:
-			clusters.append([(name, degree)])
+    # ---- group planets into clusters ----
+    sorted_pos = sorted(pos.items(), key=lambda x: x[1])
+    clusters = []
+    for name, degree in sorted_pos:
+        placed = False
+        for cluster in clusters:
+            if abs(degree - cluster[0][1]) <= degree_threshold:
+                cluster.append((name, degree))
+                placed = True
+                break
+        if not placed:
+            clusters.append([(name, degree)])
 
-	# ---- compute cluster anchor angles ----
-	cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
+    # ---- compute cluster anchor angles ----
+    cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
 
-	# ---- enforce global spacing between clusters ----
-	for i in range(1, len(cluster_degrees)):
-		if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
-			cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
+    # ---- enforce global spacing between clusters ----
+    for i in range(1, len(cluster_degrees)):
+        if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
+            cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
 
-	# wrap-around check (last vs first)
-	if (cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing:
-		cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
+    # wrap-around check (last vs first)
+    if (cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing:
+        cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
 
-	color = "white" if dark_mode else "black"
+    color = "white" if dark_mode else "black"
 
-	# ---- draw planets within each cluster ----
-	for cluster, base_degree in zip(clusters, cluster_degrees):
-		n = len(cluster)
-		if n == 1:
-			items = [(cluster[0][0], base_degree)]
-		else:
-			# Fan-out cluster members around base_degree
-			spread = 3  # degrees per step inside the cluster
-			start = base_degree - (spread * (n - 1) / 2)
-			items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
+    # ---- draw planets within each cluster ----
+    for cluster, base_degree in zip(clusters, cluster_degrees):
+        n = len(cluster)
+        if n == 1:
+            items = [(cluster[0][0], cluster[0][1])]  # keep the true degree
+        else:
+            # Fan-out cluster members around base_degree (for positioning only)
+            spread = 3  # degrees per step inside the cluster
+            start = base_degree - (spread * (n - 1) / 2)
+            items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
 
-		# Draw each item
-		for name, deg in items:
-			rad = deg_to_rad(deg % 360.0, asc_deg)
-			base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
-			deg_int = int(deg % 30)
-			deg_label = f"{deg_int}°"
+        # ---- draw each item ----
+        for (name, display_degree), (_, true_degree) in zip(items, cluster):
+            # True values (for labels)
+            deg_true = true_degree % 360.0
+            rad_true = deg_to_rad(display_degree % 360.0, asc_deg)
 
-			ax.text(rad, 1.35, base_label,
-					ha="center", va="center", fontsize=9, color=color)
-			ax.text(rad, 1.27, deg_label,
-					ha="center", va="center", fontsize=6, color=color)
+            # Labels (from true degree, never shifted)
+            base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
+            deg_int = int(deg_true % 30)
+            deg_label = f"{deg_int}°"
 
+            # Draw glyph
+            ax.text(rad_true, 1.35, base_label,
+                    ha="center", va="center", fontsize=9, color=color)
+
+            # Draw degree
+            ax.text(rad_true, 1.27, deg_label,
+                    ha="center", va="center", fontsize=6, color=color)
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
 	"""Draw dotted lines for minor aspects between active patterns."""
@@ -845,6 +853,7 @@ def render_chart_with_shapes(
 	house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
 	major_edges_all
 ):
+
 	asc_deg = get_ascendant_degree(df)
 	fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
 	if dark_mode:
@@ -926,37 +935,40 @@ def render_chart_with_shapes(
 		if idx < len(patterns):
 			visible_objects.update(patterns[idx])
 			if active_parents:
-				# draw only edges inside active patterns, using master edge list
-				if len(active_parents) > 1:
-					# filter out minors when layered (they'll be redrawn in parent color below)
-					edges = internal_edges_for_pattern(pos, pattern)
+				# filter edges: only majors where both points are inside this parent pattern
+				edges = [((p1, p2), asp_name)
+						 for ((p1, p2), asp_name) in major_edges_all
+						 if p1 in patterns[idx] and p2 in patterns[idx]]
 
-					# If layered mode (more than one circuit active), drop minor aspects
-					if len(active_parents) > 1:
-						edges = [
-							(pair, asp) for (pair, asp) in edges
-							if asp not in ("semi-sextile", "quincunx", "septile", "novile", "semi-square", "sesquiquadrate")
-						]
+				draw_aspect_lines(ax, pos, patterns, active_parents, asc_deg, edges=edges)
 
-					draw_aspect_lines(ax, pos, edges, asc_deg)
-
-				# optional: internal minors + filaments
+				# optional: internal minors (drawn in parent color when layered)
 				for p_idx in active_parents:
-					# draw internal minor edges for each active parent pattern
-					minor_edges = internal_minor_edges_for_pattern(pos, list(patterns[p_idx]))
-					for (p1, p2), asp in minor_edges:
-						r1 = deg_to_rad(pos[p1], asc_deg)
-						r2 = deg_to_rad(pos[p2], asc_deg)
-						use_color = (
-							GROUP_COLORS[p_idx % len(GROUP_COLORS)]
-							if len(active_parents) > 1
-							else (ASPECTS[asp]["color"] if asp in ASPECTS else "gray")
-						)
-						ax.plot([r1, r2], [1, 1], linestyle="dotted", color=use_color, linewidth=1)
+					if p_idx >= len(patterns):
+						continue
 
-				# existing filaments (keep aspect colors)
+					# extract just the internal minor edges from filaments
+					minor_edges = [((p1, p2), asp_name)
+								   for (p1, p2, asp_name, pat1, pat2) in filaments
+								   if pat1 == p_idx and pat2 == p_idx]
+
+					# draw them: use parent color in layered mode, aspect colors otherwise
+					if len(active_parents) > 1:
+						parent_color = GROUP_COLORS[p_idx % len(GROUP_COLORS)]
+						draw_minor_edges(ax, pos, minor_edges, asc_deg, group_color=parent_color)
+					else:
+						draw_minor_edges(ax, pos, minor_edges, asc_deg)
+
+				# connectors (filaments) not already claimed by shapes or internal-minor overrides
 				for (p1, p2, asp_name, pat1, pat2) in filaments:
-					if frozenset((p1, p2)) in shape_edges:
+					pair_key = frozenset((p1, p2))
+					if pair_key in shape_edges:
+						continue
+					# skip internal minors; those are drawn in the parent color already
+					if pat1 == pat2:
+						continue
+					# also skip any pair we already drew as an internal minor (if that set exists)
+					if 'claimed_internal_minors' in locals() and pair_key in claimed_internal_minors:
 						continue
 
 					in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
@@ -967,11 +979,11 @@ def render_chart_with_shapes(
 					in_singleton2 = p2 in active_singletons
 
 					if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
-						r1 = deg_to_rad(pos[p1], asc_deg)
-						r2 = deg_to_rad(pos[p2], asc_deg)
-						ax.plot([r1, r2], [1, 1], linestyle="dotted",
-								color=ASPECTS[asp_name]["color"], linewidth=1)
-
+						r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
+						ax.plot([r1, r2], [1, 1],
+								linestyle="dotted",
+								color=ASPECTS[asp_name]["color"],
+								linewidth=1)
 
 	# sub-shapes
 	for s in active_shapes:
@@ -1018,6 +1030,89 @@ def render_chart_with_shapes(
 		)
 
 	return fig, visible_objects, active_shapes, cusps
+
+
+def _render_zoomable_chart(fig):
+        import io
+
+        buf = io.BytesIO()
+        export_dpi = 300
+        fig.savefig(buf, format="png", dpi=export_dpi, bbox_inches="tight")
+        buf.seek(0)
+        encoded = base64.b64encode(buf.read()).decode("utf-8")
+        buf.close()
+
+        html = textwrap.dedent(f"""
+                <div class="chart-zoom-container" style="width:100%;">
+                        <style>
+                        .chart-zoom-container pinch-zoom {{
+                                display: block;
+                                width: 100%;
+                                background: transparent;
+                                border-radius: 12px;
+                                overflow: hidden;
+                        }}
+                        .chart-zoom-container pinch-zoom > img {{
+                                width: 100%;
+                                height: auto;
+                                display: block;
+                                border-radius: inherit;
+                                user-select: none;
+                                -webkit-user-drag: none;
+                        }}
+                        </style>
+                        <pinch-zoom class="chart-zoom-target" min-scale="1" max-scale="6">
+                                <img src="data:image/png;base64,{encoded}" alt="Astrology chart" draggable="false" />
+                        </pinch-zoom>
+                </div>
+                <script>
+                (function() {{
+                        const sendHeight = () => {{
+                                const height = document.documentElement.scrollHeight;
+                                window.parent.postMessage({{type: 'streamlit:setFrameHeight', height}}, '*');
+                        }};
+
+                        const ensureScript = () => {{
+                                if (window.customElements && window.customElements.get('pinch-zoom')) {{
+                                        sendHeight();
+                                        return;
+                                }}
+                                if (window.__pinch_zoom_element_loading) {{
+                                        return;
+                                }}
+                                window.__pinch_zoom_element_loading = true;
+                                const script = document.createElement('script');
+                                script.src = 'https://unpkg.com/pinch-zoom-element@2.0.0/dist/pinch-zoom-element.js';
+                                script.async = true;
+                                script.onload = sendHeight;
+                                document.head.appendChild(script);
+                        }};
+
+                        ensureScript();
+
+                        const img = document.querySelector('.chart-zoom-target img');
+                        if (img) {{
+                                if (img.complete) {{
+                                        sendHeight();
+                                }} else {{
+                                        img.addEventListener('load', sendHeight, {{once: true}});
+                                }}
+                        }}
+
+                        if ('ResizeObserver' in window) {{
+                                new ResizeObserver(sendHeight).observe(document.body);
+                        }} else {{
+                                window.addEventListener('load', sendHeight);
+                                window.addEventListener('resize', sendHeight);
+                                setTimeout(sendHeight, 300);
+                        }}
+
+                        sendHeight();
+                }})();
+                </script>
+        """)
+
+        components.html(html, height=650, scrolling=False)
 
 from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
@@ -2392,12 +2487,9 @@ if st.session_state.get("chart_ready", False):
 		singleton_toggles=singleton_toggles, major_edges_all=major_edges_all
 	)
 
-	import io
-
-	buf = io.BytesIO()
-	fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
-	st.image(buf, use_container_width=True)
-
+	_render_zoomable_chart(fig)
+	plt.close(fig)
+	st.caption("📱 Pinch or double-tap the chart to zoom in.")
 
 	def _sign_from_degree(deg):
 		# 0=Aries ... 11=Pisces
