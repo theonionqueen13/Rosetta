@@ -397,11 +397,11 @@ def draw_shape_edges(ax, pos, edges, asc_deg,
 
         ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=lw)
 
-
-def draw_minor_edges(ax, pos, edges, asc_deg):
+def draw_minor_edges(ax, pos, edges, asc_deg, group_color=None):
     """
     Draw minor-aspect edges inside a parent pattern (always dotted).
     edges: list of ((p1, p2), aspect_name)
+    If group_color is given, use that instead of the aspect default.
     """
     for (p1, p2), asp in edges:
         d1, d2 = pos.get(p1), pos.get(p2)
@@ -410,5 +410,9 @@ def draw_minor_edges(ax, pos, edges, asc_deg):
         r1 = deg_to_rad(d1, asc_deg)
         r2 = deg_to_rad(d2, asc_deg)
 
-        color = ASPECTS[asp]["color"] if asp in ASPECTS else "gray"
+        if group_color is not None:
+            color = group_color
+        else:
+            color = ASPECTS[asp]["color"] if asp in ASPECTS else "gray"
+
         ax.plot([r1, r2], [1, 1], linestyle="dotted", color=color, linewidth=1)
