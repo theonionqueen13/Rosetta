@@ -169,12 +169,18 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
 
         specs = []
         for (x, y), asp in candidate_edges:
+            is_forced_approx = asp.endswith("_approx")
+            asp_clean = asp.replace("_approx", "")
+
             # Strict edge present in filtered master list?
-            if has_edge(x, y, asp):
+            if has_edge(x, y, asp_clean):
+                specs.append(((x, y), asp_clean))
+            # Allow explicitly provided approximate edges to pass through
+            elif is_forced_approx:
                 specs.append(((x, y), asp))
             # Otherwise, if we're in widen_orb mode, allow an approximate edge
-            elif has_edge_loose(x, y, asp, bonus=approx_bonus):
-                specs.append(((x, y), asp + "_approx"))
+            elif has_edge_loose(x, y, asp_clean, bonus=approx_bonus):
+                specs.append(((x, y), f"{asp_clean}_approx"))
 
         if not specs:
             return False
@@ -190,38 +196,120 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     # SHAPE DETECTION LOGIC
     # (unchanged from your version; uses has_edge/add_once)
     # -----------------------
+    def aspect_ok(a, b, aspect, slack=0.75):
+        """Return True if the aspect exists or is very close within slack degrees."""
+        if has_edge(a, b, aspect):
+            return True
+
+        da = rep_pos.get(a, pos.get(a))
+        db = rep_pos.get(b, pos.get(b))
+        if da is None or db is None:
+            return False
+
+        angle = abs((da - db) % 360)
+        if angle > 180:
+            angle = 360 - angle
+
+        data = ASPECTS[aspect]
+        return abs(angle - data["angle"]) <= (data["orb"] + slack)
+
+    def aspect_ok(a, b, aspect, slack=0.75):
+        """Return True if the aspect exists or is very close within slack degrees."""
+        if has_edge(a, b, aspect):
+            return True
+
+        da = rep_pos.get(a, pos.get(a))
+        db = rep_pos.get(b, pos.get(b))
+        if da is None or db is None:
+            return False
+
+        angle = abs((da - db) % 360)
+        if angle > 180:
+            angle = 360 - angle
+
+        data = ASPECTS[aspect]
+        return abs(angle - data["angle"]) <= (data["orb"] + slack)
 
     # Envelope (5 nodes, chain of 4 Sextiles, with Oppositions and Trines)
     for quint in combinations(R, 5):
-        for perm in permutations(quint):
-            a, b, c, d, e = perm
-            if (has_edge(a, b, "Sextile") and has_edge(b, c, "Sextile") and
-                has_edge(c, d, "Sextile") and has_edge(d, e, "Sextile")):
+        opp_pairs = [
+            pair
+            for pair in combinations(quint, 2)
+            if aspect_ok(pair[0], pair[1], "Opposition")
+        ]
+        if len(opp_pairs) < 2:
+            continue
 
-                suppresses = {
-                    "Sextile Wedge": {frozenset([a, b, c]), frozenset([c, d, e])},
-                    "Kite": {frozenset([a, b, c, e]), frozenset([a, c, d, e])},
-                    "Cradle": {frozenset([a, b, c, d]), frozenset([b, c, d, e])},
-                    "Wedge": {
-                        frozenset([a, b, d]), frozenset([c, d, e]),
-                        frozenset([a, c, d]), frozenset([a, b, e]),
-                        frozenset([a, d, e]), frozenset([b, c, e]),
-                        frozenset([b, d, e]),
-                    },
-                }
-                keep = {
-                    "Sextile Wedge": {frozenset([b, c, d])},
-                    "Mystic Rectangle": {frozenset([a, b, d, e])},
-                    "Grand Trine": {frozenset([a, c, e])},
-                }
-                candidate_edges = [
-                    ((a, b), "Sextile"), ((b, c), "Sextile"),
-                    ((c, d), "Sextile"), ((d, e), "Sextile"),
-                    ((a, d), "Opposition"), ((b, e), "Opposition"),
-                    ((a, e), "Trine"), ((b, d), "Trine"),
-                ]
-                add_once("Envelope", (a, b, c, d, e), candidate_edges,
-                         {"suppress": suppresses, "keep": keep})
+        added = False
+        for opp1, opp2 in combinations(opp_pairs, 2):
+            if set(opp1) & set(opp2):
+                continue  # oppositions must be disjoint
+
+            center_candidates = set(quint) - set(opp1) - set(opp2)
+            if len(center_candidates) != 1:
+                continue
+
+            c = next(iter(center_candidates))
+
+            for pair_primary, pair_secondary in ((opp1, opp2), (opp2, opp1)):
+                for a, d in (pair_primary, pair_primary[::-1]):
+                    for b, e in (pair_secondary, pair_secondary[::-1]):
+                        sextile_specs = [
+                            ((a, b), "Sextile"),
+                            ((b, c), "Sextile"),
+                            ((c, d), "Sextile"),
+                            ((d, e), "Sextile"),
+                        ]
+                        if not all(has_edge(x, y, asp) for (x, y), asp in sextile_specs):
+                            continue
+
+                        diag_specs = []
+                        diag_checks = [
+                            ((a, d), "Opposition"),
+                            ((b, e), "Opposition"),
+                            ((a, e), "Trine"),
+                            ((b, d), "Trine"),
+                        ]
+                        valid_diag = True
+                        for (x, y), asp in diag_checks:
+                            if not aspect_ok(x, y, asp):
+                                valid_diag = False
+                                break
+                            label = asp if has_edge(x, y, asp) else f"{asp}_approx"
+                            diag_specs.append(((x, y), label))
+                        if not valid_diag:
+                            continue
+
+                        suppresses = {
+                            "Sextile Wedge": {frozenset([a, b, c]), frozenset([c, d, e])},
+                            "Kite": {frozenset([a, b, c, e]), frozenset([a, c, d, e])},
+                            "Cradle": {frozenset([a, b, c, d]), frozenset([b, c, d, e])},
+                            "Wedge": {
+                                frozenset([a, b, d]), frozenset([c, d, e]),
+                                frozenset([a, c, d]), frozenset([a, b, e]),
+                                frozenset([a, d, e]), frozenset([b, c, e]),
+                                frozenset([b, d, e]),
+                            },
+                        }
+                        keep = {
+                            "Sextile Wedge": {frozenset([b, c, d])},
+                            "Mystic Rectangle": {frozenset([a, b, d, e])},
+                            "Grand Trine": {frozenset([a, c, e])},
+                        }
+                        candidate_edges = sextile_specs + diag_specs
+                        add_once(
+                            "Envelope",
+                            (a, b, c, d, e),
+                            candidate_edges,
+                            {"suppress": suppresses, "keep": keep},
+                        )
+                        added = True
+                        break
+                    if added:
+                        break
+                if added:
+                    break
+            if added:
                 break
 
     # Grand Cross
@@ -246,21 +334,37 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     # Mystic Rectangle
     for quad in combinations(R, 4):
         a, b, c, d = quad
-        if (has_edge(a, c, "Opposition") and has_edge(b, d, "Opposition") and
-            has_edge(a, b, "Sextile") and has_edge(c, d, "Sextile") and
-            has_edge(a, d, "Trine") and has_edge(b, c, "Trine")):
+        sextile_specs = [
+            ((a, b), "Sextile"),
+            ((c, d), "Sextile"),
+        ]
+        if not all(has_edge(x, y, asp) for (x, y), asp in sextile_specs):
+            continue
 
-            suppresses = {"Wedge": {
-                frozenset([a, b, c]), frozenset([a, b, d]),
-                frozenset([b, c, d]), frozenset([a, c, d]),
-            }}
-            candidate_edges = [
-                ((a, c), "Opposition"), ((b, d), "Opposition"),
-                ((a, b), "Sextile"), ((c, d), "Sextile"),
-                ((a, d), "Trine"), ((b, c), "Trine"),
-            ]
-            add_once("Mystic Rectangle", (a, b, c, d), candidate_edges,
-                     {"suppress": suppresses})
+        diag_checks = [
+            ((a, c), "Opposition"),
+            ((b, d), "Opposition"),
+            ((a, d), "Trine"),
+            ((b, c), "Trine"),
+        ]
+        diag_specs = []
+        valid_diag = True
+        for (x, y), asp in diag_checks:
+            if not aspect_ok(x, y, asp):
+                valid_diag = False
+                break
+            label = asp if has_edge(x, y, asp) else f"{asp}_approx"
+            diag_specs.append(((x, y), label))
+        if not valid_diag:
+            continue
+
+        suppresses = {"Wedge": {
+            frozenset([a, b, c]), frozenset([a, b, d]),
+            frozenset([b, c, d]), frozenset([a, c, d]),
+        }}
+        candidate_edges = sextile_specs + diag_specs
+        add_once("Mystic Rectangle", (a, b, c, d), candidate_edges,
+                 {"suppress": suppresses})
 
     # Cradle
     for quad in permutations(R, 4):
@@ -319,9 +423,24 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     # Grand Trine
     for trio in combinations(R, 3):
         a, b, c = trio
-        if (has_edge(a, b, "Trine") and has_edge(b, c, "Trine") and has_edge(a, c, "Trine")):
-            candidate_edges = [((a, b), "Trine"), ((b, c), "Trine"), ((a, c), "Trine")]
-            add_once("Grand Trine", (a, b, c), candidate_edges)
+        tri_specs = [
+            ((a, b), "Trine"),
+            ((b, c), "Trine"),
+            ((a, c), "Trine"),
+        ]
+        valid_tri = True
+        candidate_edges = []
+        for (x, y), asp in tri_specs:
+            if has_edge(x, y, asp):
+                candidate_edges.append(((x, y), asp))
+            elif aspect_ok(x, y, asp):
+                candidate_edges.append(((x, y), f"{asp}_approx"))
+            else:
+                valid_tri = False
+                break
+        if not valid_tri:
+            continue
+        add_once("Grand Trine", (a, b, c), candidate_edges)
 
     # T-Square
     for trio in combinations(R, 3):
@@ -622,7 +741,35 @@ def detect_shapes(pos, patterns, major_edges_all):
     # -------------------------------
     # final sort + return
     # -------------------------------
-    shapes.sort(key=lambda s: (s.get("remainder", False), s["id"]))
+    envelope_order = {}
+    desired_sequence = [
+        ("Envelope", 0),
+        ("Mystic Rectangle", 1),
+        ("Grand Trine", 2),
+        ("Sextile Wedge", 3),
+    ]
+
+    for sh in shapes:
+        if sh["type"] != "Envelope":
+            continue
+        env_id = sh["id"]
+        env_key = ("Envelope", frozenset(sh["members"]))
+        envelope_order[env_key] = (env_id, 0)
+
+        keep_map = sh.get("suppresses", {}).get("keep", {})
+        for shape_type, slot in desired_sequence[1:]:
+            for members in keep_map.get(shape_type, set()):
+                envelope_order[(shape_type, members)] = (env_id, slot)
+
+    def sort_key(shape):
+        remainder_flag = shape.get("remainder", False)
+        key = (shape["type"], frozenset(shape["members"]))
+        if key in envelope_order:
+            env_id, slot = envelope_order[key]
+            return (remainder_flag, env_id, slot, shape["id"])
+        return (remainder_flag, shape["id"], 0, shape["id"])
+
+    shapes.sort(key=sort_key)
     return shapes
 
 # -------------------------------
