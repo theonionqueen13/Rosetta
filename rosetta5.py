@@ -62,7 +62,6 @@ HOUSE_INTERPRETATIONS        = _Lget("HOUSE_INTERPRETATIONS")
 HOUSE_SYSTEM_INTERPRETATIONS = _Lget("HOUSE_SYSTEM_INTERPRETATIONS")
 PLANETARY_RULERS             = _Lget("PLANETARY_RULERS")
 DIGNITIES                    = _Lget("DIGNITIES")
-COLOR_EMOJI                  = _Lget("COLOR_EMOJI")
 SHAPE_INSTRUCTIONS           = _Lget("SHAPE_INSTRUCTIONS")
 OBJECT_INTERPRETATIONS       = _Lget("OBJECT_INTERPRETATIONS")
 CATEGORY_MAP                 = _Lget("CATEGORY_MAP")
@@ -73,6 +72,8 @@ HOUSE_MEANINGS               = _Lget("HOUSE_MEANINGS")
 OBJECT_MEANINGS_SHORT        = _Lget("OBJECT_MEANINGS_SHORT")
 
 import streamlit as st, importlib
+import importlib, rosetta.drawing
+importlib.reload(rosetta.drawing)
 
 @st.cache_resource
 def get_lookup():
@@ -416,160 +417,160 @@ def _house_of_degree(deg, cusps):
 	return 12
 
 def draw_degree_markers(ax, asc_deg, dark_mode):
-    """Draw tick marks at 1°, 5°, and 10° intervals, plus a circular outline."""
+	"""Draw tick marks at 1°, 5°, and 10° intervals, plus a circular outline."""
 
-    base_color = "white" if dark_mode else "black"
+	base_color = "white" if dark_mode else "black"
 
-    # --- Outer circle outline at r=1.0
-    circle_r = 1.0
-    circle = plt.Circle((0, 0), circle_r, transform=ax.transData._b, 
-                        fill=False, color=base_color, linewidth=1)
-    ax.add_artist(circle)
+	# --- Outer circle outline at r=1.0
+	circle_r = 1.0
+	circle = plt.Circle((0, 0), circle_r, transform=ax.transData._b, 
+						fill=False, color=base_color, linewidth=1)
+	ax.add_artist(circle)
 
-    # --- Ticks every 1°
-    for deg in range(0, 360, 1):
-        r = deg_to_rad(deg, asc_deg)
-        ax.plot([r, r], [circle_r, circle_r + 0.015], 
-                color=base_color, linewidth=0.5)
+	# --- Ticks every 1°
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg)
+		ax.plot([r, r], [circle_r, circle_r + 0.015], 
+				color=base_color, linewidth=0.5)
 
-    # --- Ticks every 5°
-    for deg in range(0, 360, 5):
-        r = deg_to_rad(deg, asc_deg)
-        ax.plot([r, r], [circle_r, circle_r + 0.03], 
-                color=base_color, linewidth=0.8)
+	# --- Ticks every 5°
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg)
+		ax.plot([r, r], [circle_r, circle_r + 0.03], 
+				color=base_color, linewidth=0.8)
 
-    # --- Ticks + labels every 10°
-    for deg in range(0, 360, 10):
-        r = deg_to_rad(deg, asc_deg)
-        ax.plot([r, r], [circle_r, circle_r + 0.05], 
-                color=base_color, linewidth=1.2)
+	# --- Ticks + labels every 10°
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg)
+		ax.plot([r, r], [circle_r, circle_r + 0.05], 
+				color=base_color, linewidth=1.2)
 
 
 import numpy as np  # (already imported near top; keep once)
 import numpy as np  # already imported above; keep once
 
 def draw_zodiac_signs(ax, asc_deg):
-    """Draw zodiac signs + modalities around the wheel, with a pastel element ring and black dividers."""
+	"""Draw zodiac signs + modalities around the wheel, with a pastel element ring and black dividers."""
 
-    # Remap requested:
-    PASTEL_BLUE   = "#D9EAF7"  # blue
-    PASTEL_GREEN  = "#D9EAD3"  # green
-    PASTEL_ORANGE = "#FFD1B3"  # orange
-    PASTEL_RED    = "#EAD1DC"  # soft red/pink
+	# Remap requested:
+	PASTEL_BLUE   = "#D9EAF7"  # blue
+	PASTEL_GREEN  = "#D9EAD3"  # green
+	PASTEL_ORANGE = "#FFD1B3"  # orange
+	PASTEL_RED    = "#EAD1DC"  # soft red/pink
 
-    # After-remap element → color
-    element_color = {
-        "fire":  PASTEL_BLUE,    # was orange → blue
-        "earth": PASTEL_RED,     # was green  → red
-        "air":   PASTEL_GREEN,   # was blue   → green
-        "water": PASTEL_ORANGE,  # was red    → orange
-    }
+	# After-remap element → color
+	element_color = {
+		"fire":  PASTEL_BLUE,    # was orange → blue
+		"earth": PASTEL_RED,     # was green  → red
+		"air":   PASTEL_GREEN,   # was blue   → green
+		"water": PASTEL_ORANGE,  # was red    → orange
+	}
 
-    # Aries→Pisces elements
-    elements = ["fire", "earth", "air", "water"] * 3
+	# Aries→Pisces elements
+	elements = ["fire", "earth", "air", "water"] * 3
 
-    sector_width = np.deg2rad(30)
+	sector_width = np.deg2rad(30)
 
-    # 🔹 Radii for ring vs. dividers (independent)
-    ring_inner, ring_outer = 1.45, 1.58
-    divider_inner, divider_outer = 1.457, 1.573
+	# 🔹 Radii for ring vs. dividers (independent)
+	ring_inner, ring_outer = 1.45, 1.58
+	divider_inner, divider_outer = 1.457, 1.573
 
-    # Background ring: 12 annular bars (polar-aware, so it's a true circle)
-    for i in range(12):
-        theta_left = deg_to_rad(i * 30, asc_deg)
-        ax.bar(
-            theta_left,
-            ring_outer - ring_inner,
-            width=sector_width,
-            bottom=ring_inner,
-            align="edge",
-            color=element_color[elements[i]],
-            edgecolor=None,
-            linewidth=0,
-            alpha=0.85,
-            zorder=0,
-        )
+	# Background ring: 12 annular bars (polar-aware, so it's a true circle)
+	for i in range(12):
+		theta_left = deg_to_rad(i * 30, asc_deg)
+		ax.bar(
+			theta_left,
+			ring_outer - ring_inner,
+			width=sector_width,
+			bottom=ring_inner,
+			align="edge",
+			color=element_color[elements[i]],
+			edgecolor=None,
+			linewidth=0,
+			alpha=0.85,
+			zorder=0,
+		)
 
-    # Glyphs
-    for i, base_deg in enumerate(range(0, 360, 30)):
-        rad = deg_to_rad(base_deg + 15, asc_deg)
-        ax.text(
-            rad, 1.50, ZODIAC_SIGNS[i],
-            ha="center", va="center",
-            fontsize=16, fontweight="bold",
-            color=ZODIAC_COLORS[i],
-            zorder=1,
-        )
+	# Glyphs
+	for i, base_deg in enumerate(range(0, 360, 30)):
+		rad = deg_to_rad(base_deg + 15, asc_deg)
+		ax.text(
+			rad, 1.50, ZODIAC_SIGNS[i],
+			ha="center", va="center",
+			fontsize=16, fontweight="bold",
+			color=ZODIAC_COLORS[i],
+			zorder=1,
+		)
 
-    # Black dividers at whole-sign boundaries
-    asc_sign_start = int(asc_deg // 30) * 30.0
-    cusps = [(asc_sign_start + i * 30.0) % 360.0 for i in range(12)]
-    for deg in cusps:
-        rad = deg_to_rad(deg, asc_deg)
-        ax.plot(
-            [rad, rad],
-            [divider_inner, divider_outer],
-            color="black",
-            linestyle="solid",
-            linewidth=1,
-            zorder=5,  # above ring, below glyphs
-        )
+	# Black dividers at whole-sign boundaries
+	asc_sign_start = int(asc_deg // 30) * 30.0
+	cusps = [(asc_sign_start + i * 30.0) % 360.0 for i in range(12)]
+	for deg in cusps:
+		rad = deg_to_rad(deg, asc_deg)
+		ax.plot(
+			[rad, rad],
+			[divider_inner, divider_outer],
+			color="black",
+			linestyle="solid",
+			linewidth=1,
+			zorder=5,  # above ring, below glyphs
+		)
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
-    """Draw planet glyphs/names with degree (no sign), combining cluster fan-out with global spacing."""
+	"""Draw planet glyphs/names with degree (no sign), combining cluster fan-out with global spacing."""
 
-    degree_threshold = 3  # how close in degrees to be considered a cluster
-    min_spacing = 7       # degrees of minimum separation between clusters
+	degree_threshold = 3  # how close in degrees to be considered a cluster
+	min_spacing = 7       # degrees of minimum separation between clusters
 
-    # ---- group planets into clusters ----
-    sorted_pos = sorted(pos.items(), key=lambda x: x[1])
-    clusters = []
-    for name, degree in sorted_pos:
-        placed = False
-        for cluster in clusters:
-            if abs(degree - cluster[0][1]) <= degree_threshold:
-                cluster.append((name, degree))
-                placed = True
-                break
-        if not placed:
-            clusters.append([(name, degree)])
+	# ---- group planets into clusters ----
+	sorted_pos = sorted(pos.items(), key=lambda x: x[1])
+	clusters = []
+	for name, degree in sorted_pos:
+		placed = False
+		for cluster in clusters:
+			if abs(degree - cluster[0][1]) <= degree_threshold:
+				cluster.append((name, degree))
+				placed = True
+				break
+		if not placed:
+			clusters.append([(name, degree)])
 
-    # ---- compute cluster anchor angles ----
-    cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
+	# ---- compute cluster anchor angles ----
+	cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
 
-    # ---- enforce global spacing between clusters ----
-    for i in range(1, len(cluster_degrees)):
-        if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
-            cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
+	# ---- enforce global spacing between clusters ----
+	for i in range(1, len(cluster_degrees)):
+		if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
+			cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
 
-    # wrap-around check (last vs first)
-    if (cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing:
-        cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
+	# wrap-around check (last vs first)
+	if (cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing:
+		cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
 
-    color = "white" if dark_mode else "black"
+	color = "white" if dark_mode else "black"
 
-    # ---- draw planets within each cluster ----
-    for cluster, base_degree in zip(clusters, cluster_degrees):
-        n = len(cluster)
-        if n == 1:
-            items = [(cluster[0][0], base_degree)]
-        else:
-            # Fan-out cluster members around base_degree
-            spread = 3  # degrees per step inside the cluster
-            start = base_degree - (spread * (n - 1) / 2)
-            items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
+	# ---- draw planets within each cluster ----
+	for cluster, base_degree in zip(clusters, cluster_degrees):
+		n = len(cluster)
+		if n == 1:
+			items = [(cluster[0][0], base_degree)]
+		else:
+			# Fan-out cluster members around base_degree
+			spread = 3  # degrees per step inside the cluster
+			start = base_degree - (spread * (n - 1) / 2)
+			items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
 
-        # Draw each item
-        for name, deg in items:
-            rad = deg_to_rad(deg % 360.0, asc_deg)
-            base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
-            deg_int = int(deg % 30)
-            deg_label = f"{deg_int}°"
+		# Draw each item
+		for name, deg in items:
+			rad = deg_to_rad(deg % 360.0, asc_deg)
+			base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
+			deg_int = int(deg % 30)
+			deg_label = f"{deg_int}°"
 
-            ax.text(rad, 1.35, base_label,
-                    ha="center", va="center", fontsize=9, color=color)
-            ax.text(rad, 1.27, deg_label,
-                    ha="center", va="center", fontsize=6, color=color)
+			ax.text(rad, 1.35, base_label,
+					ha="center", va="center", fontsize=9, color=color)
+			ax.text(rad, 1.27, deg_label,
+					ha="center", va="center", fontsize=6, color=color)
 
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
@@ -928,37 +929,51 @@ def render_chart_with_shapes(
 			visible_objects.update(patterns[idx])
 			if active_parents:
 				# draw only edges inside active patterns, using master edge list
-				draw_aspect_lines(
-					ax, pos, patterns,
-					active_patterns=active_parents,
-					asc_deg=asc_deg,
-					group_colors=GROUP_COLORS,
-					edges=major_edges_all
-				)
+				if len(active_parents) > 1:
+					# filter out minors when layered (they'll be redrawn in parent color below)
+					edges = internal_edges_for_pattern(pos, pattern)
+
+					# If layered mode (more than one circuit active), drop minor aspects
+					if len(active_parents) > 1:
+						edges = [
+							(pair, asp) for (pair, asp) in edges
+							if asp not in ("semi-sextile", "quincunx", "septile", "novile", "semi-square", "sesquiquadrate")
+						]
+
+					draw_aspect_lines(ax, pos, edges, asc_deg)
 
 				# optional: internal minors + filaments
-				for idx in active_parents:
-					_ = internal_minor_edges_for_pattern(pos, list(patterns[idx]))
-					for (p1, p2, asp_name, pat1, pat2) in filaments:
-						if frozenset((p1, p2)) in shape_edges:
-							continue
+				for p_idx in active_parents:
+					# draw internal minor edges for each active parent pattern
+					minor_edges = internal_minor_edges_for_pattern(pos, list(patterns[p_idx]))
+					for (p1, p2), asp in minor_edges:
+						r1 = deg_to_rad(pos[p1], asc_deg)
+						r2 = deg_to_rad(pos[p2], asc_deg)
+						use_color = (
+							GROUP_COLORS[p_idx % len(GROUP_COLORS)]
+							if len(active_parents) > 1
+							else (ASPECTS[asp]["color"] if asp in ASPECTS else "gray")
+						)
+						ax.plot([r1, r2], [1, 1], linestyle="dotted", color=use_color, linewidth=1)
 
-						in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
-						in_parent2 = any((i in active_parents) and (p2 in patterns[i]) for i in active_parents)
-						in_shape1 = any(p1 in s["members"] for s in active_shapes)
-						in_shape2 = any(p2 in s["members"] for s in active_shapes)
-						in_singleton1 = p1 in active_singletons
-						in_singleton2 = p2 in active_singletons
+				# existing filaments (keep aspect colors)
+				for (p1, p2, asp_name, pat1, pat2) in filaments:
+					if frozenset((p1, p2)) in shape_edges:
+						continue
 
-						if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
-							r1 = deg_to_rad(pos[p1], asc_deg)
-							r2 = deg_to_rad(pos[p2], asc_deg)
-							ax.plot(
-								[r1, r2], [1, 1],
-								linestyle="dotted",
-								color=ASPECTS[asp_name]["color"],
-								linewidth=1
-							)
+					in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
+					in_parent2 = any((i in active_parents) and (p2 in patterns[i]) for i in active_parents)
+					in_shape1 = any(p1 in s["members"] for s in active_shapes)
+					in_shape2 = any(p2 in s["members"] for s in active_shapes)
+					in_singleton1 = p1 in active_singletons
+					in_singleton2 = p2 in active_singletons
+
+					if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
+						r1 = deg_to_rad(pos[p1], asc_deg)
+						r2 = deg_to_rad(pos[p2], asc_deg)
+						ax.plot([r1, r2], [1, 1], linestyle="dotted",
+								color=ASPECTS[asp_name]["color"], linewidth=1)
+
 
 	# sub-shapes
 	for s in active_shapes:
@@ -991,21 +1006,6 @@ def render_chart_with_shapes(
 	# draw singleton dots (twice as wide as aspect lines)
 	if active_singletons:
 		draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0)
-
-	# connectors (filaments) not already claimed by shapes
-	for (p1, p2, asp_name, pat1, pat2) in filaments:
-		if frozenset((p1, p2)) in shape_edges:
-			continue
-		in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
-		in_parent2 = any((i in active_parents) and (p2 in patterns[i]) for i in active_parents)
-		in_shape1 = any(p1 in s["members"] for s in active_shapes)
-		in_shape2 = any(p2 in s["members"] for s in active_shapes)
-		in_singleton1 = p1 in active_singletons
-		in_singleton2 = p2 in active_singletons
-		if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
-			r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
-			ax.plot([r1, r2], [1, 1], linestyle="dotted",
-					color=ASPECTS[asp_name]["color"], linewidth=1)
 
 	# --- Compass Rose overlay (always independent of circuits/shapes) ---
 	if st.session_state.get("toggle_compass_rose", True):
@@ -2239,11 +2239,10 @@ if st.session_state.get("chart_ready", False):
 
 			# color chip for layered mode
 			group_color = GROUP_COLORS[i % len(GROUP_COLORS)]
-			chip = COLOR_EMOJI.get(group_color, "⬛")
 
 			with target_col:
 				# checkbox row: [chip] Circuit N
-				cbox = st.checkbox(f"{chip} {circuit_title}", key=checkbox_key)
+				cbox = st.checkbox(f"{circuit_title}", key=checkbox_key)
 				toggles.append(cbox)
 				pattern_labels.append(circuit_title)
 
@@ -2347,10 +2346,10 @@ if st.session_state.get("chart_ready", False):
 		with c1:
 			# ✅ real, functional control
 			house_choice = st.selectbox(
-    			"House System",
-    			["Equal", "Whole Sign", "Placidus"],
-    			index=0,
-    			key="house_system_main",
+				"House System",
+				["Equal", "Whole Sign", "Placidus"],
+				index=0,
+				key="house_system_main",
 			)
 			house_system = house_choice.lower().replace(" sign", "")
 
