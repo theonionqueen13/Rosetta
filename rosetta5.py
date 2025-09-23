@@ -1,9 +1,5 @@
 import streamlit as st
 st.set_page_config(layout="wide")
-
-import sys
-st.write("Python executable:", sys.executable)
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -521,61 +517,67 @@ def draw_zodiac_signs(ax, asc_deg):
 		)
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
-	"""Draw planet glyphs/names with degree (no sign), combining cluster fan-out with global spacing."""
+    """Draw planet glyphs/names with degree (no sign), combining cluster fan-out with global spacing."""
 
-	degree_threshold = 3  # how close in degrees to be considered a cluster
-	min_spacing = 7       # degrees of minimum separation between clusters
+    degree_threshold = 3  # how close in degrees to be considered a cluster
+    min_spacing = 7       # degrees of minimum separation between clusters
 
-	# ---- group planets into clusters ----
-	sorted_pos = sorted(pos.items(), key=lambda x: x[1])
-	clusters = []
-	for name, degree in sorted_pos:
-		placed = False
-		for cluster in clusters:
-			if abs(degree - cluster[0][1]) <= degree_threshold:
-				cluster.append((name, degree))
-				placed = True
-				break
-		if not placed:
-			clusters.append([(name, degree)])
+    # ---- group planets into clusters ----
+    sorted_pos = sorted(pos.items(), key=lambda x: x[1])
+    clusters = []
+    for name, degree in sorted_pos:
+        placed = False
+        for cluster in clusters:
+            if abs(degree - cluster[0][1]) <= degree_threshold:
+                cluster.append((name, degree))
+                placed = True
+                break
+        if not placed:
+            clusters.append([(name, degree)])
 
-	# ---- compute cluster anchor angles ----
-	cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
+    # ---- compute cluster anchor angles ----
+    cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
 
-	# ---- enforce global spacing between clusters ----
-	for i in range(1, len(cluster_degrees)):
-		if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
-			cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
+    # ---- enforce global spacing between clusters ----
+    for i in range(1, len(cluster_degrees)):
+        if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
+            cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
 
-	# wrap-around check (last vs first)
-	if (cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing:
-		cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
+    # wrap-around check (last vs first)
+    if (cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing:
+        cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
 
-	color = "white" if dark_mode else "black"
+    color = "white" if dark_mode else "black"
 
-	# ---- draw planets within each cluster ----
-	for cluster, base_degree in zip(clusters, cluster_degrees):
-		n = len(cluster)
-		if n == 1:
-			items = [(cluster[0][0], base_degree)]
-		else:
-			# Fan-out cluster members around base_degree
-			spread = 3  # degrees per step inside the cluster
-			start = base_degree - (spread * (n - 1) / 2)
-			items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
+    # ---- draw planets within each cluster ----
+    for cluster, base_degree in zip(clusters, cluster_degrees):
+        n = len(cluster)
+        if n == 1:
+            items = [(cluster[0][0], cluster[0][1])]  # keep the true degree
+        else:
+            # Fan-out cluster members around base_degree (for positioning only)
+            spread = 3  # degrees per step inside the cluster
+            start = base_degree - (spread * (n - 1) / 2)
+            items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
 
-		# Draw each item
-		for name, deg in items:
-			rad = deg_to_rad(deg % 360.0, asc_deg)
-			base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
-			deg_int = int(deg % 30)
-			deg_label = f"{deg_int}°"
+        # ---- draw each item ----
+        for (name, display_degree), (_, true_degree) in zip(items, cluster):
+            # True values (for labels)
+            deg_true = true_degree % 360.0
+            rad_true = deg_to_rad(display_degree % 360.0, asc_deg)
 
-			ax.text(rad, 1.35, base_label,
-					ha="center", va="center", fontsize=9, color=color)
-			ax.text(rad, 1.27, deg_label,
-					ha="center", va="center", fontsize=6, color=color)
+            # Labels (from true degree, never shifted)
+            base_label = GLYPHS.get(name, name) if label_style == "Glyph" else name
+            deg_int = int(deg_true % 30)
+            deg_label = f"{deg_int}°"
 
+            # Draw glyph
+            ax.text(rad_true, 1.35, base_label,
+                    ha="center", va="center", fontsize=9, color=color)
+
+            # Draw degree
+            ax.text(rad_true, 1.27, deg_label,
+                    ha="center", va="center", fontsize=6, color=color)
 
 def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
 	"""Draw dotted lines for minor aspects between active patterns."""
