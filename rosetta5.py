@@ -202,7 +202,43 @@ creds = get_auth_credentials()
 auth_cfg = st.secrets.get("auth", {})
 cookie_name  = auth_cfg.get("cookie_name", "rosetta_auth")
 cookie_key   = auth_cfg.get("cookie_key", "change_me")
-cookie_days  = int(auth_cfg.get("cookie_expiry_days", 30))
+
+DEFAULT_COOKIE_EXPIRY_DAYS = 90
+
+
+def _resolve_cookie_expiry_days(default_days: float = DEFAULT_COOKIE_EXPIRY_DAYS) -> float:
+        """Return a positive cookie lifetime in days.
+
+        Priority order:
+        1. Environment/Streamlit secret ``ROSETTA_COOKIE_EXPIRY_DAYS``
+        2. ``[auth] cookie_expiry_days`` value from ``.streamlit/secrets.toml``
+        3. ``default_days`` fallback (90 days by default)
+        """
+
+        raw_value = get_secret("ROSETTA_COOKIE_EXPIRY_DAYS")
+        if raw_value is None:
+                raw_value = auth_cfg.get("cookie_expiry_days", default_days)
+
+        try:
+                days = float(raw_value)
+        except (TypeError, ValueError):
+                st.warning(
+                        f"Invalid cookie expiry '{raw_value}'. "
+                        f"Falling back to {default_days} days."
+                )
+                return float(default_days)
+
+        if days <= 0:
+                st.warning(
+                        "Cookie expiry must be a positive number of days. "
+                        f"Falling back to {default_days} days."
+                )
+                return float(default_days)
+
+        return days
+
+
+cookie_days = _resolve_cookie_expiry_days()
 
 authenticator = stauth.Authenticate(
 	credentials=creds,
