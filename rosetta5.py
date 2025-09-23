@@ -1,5 +1,9 @@
 import streamlit as st
 st.set_page_config(layout="wide")
+
+import sys
+st.write("Python executable:", sys.executable)
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -847,6 +851,7 @@ def render_chart_with_shapes(
 	house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
 	major_edges_all
 ):
+
 	asc_deg = get_ascendant_degree(df)
 	fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
 	if dark_mode:
@@ -928,37 +933,40 @@ def render_chart_with_shapes(
 		if idx < len(patterns):
 			visible_objects.update(patterns[idx])
 			if active_parents:
-				# draw only edges inside active patterns, using master edge list
-				if len(active_parents) > 1:
-					# filter out minors when layered (they'll be redrawn in parent color below)
-					edges = internal_edges_for_pattern(pos, pattern)
+				# filter edges: only majors where both points are inside this parent pattern
+				edges = [((p1, p2), asp_name)
+						 for ((p1, p2), asp_name) in major_edges_all
+						 if p1 in patterns[idx] and p2 in patterns[idx]]
 
-					# If layered mode (more than one circuit active), drop minor aspects
-					if len(active_parents) > 1:
-						edges = [
-							(pair, asp) for (pair, asp) in edges
-							if asp not in ("semi-sextile", "quincunx", "septile", "novile", "semi-square", "sesquiquadrate")
-						]
+				draw_aspect_lines(ax, pos, patterns, active_parents, asc_deg, edges=edges)
 
-					draw_aspect_lines(ax, pos, edges, asc_deg)
-
-				# optional: internal minors + filaments
+				# optional: internal minors (drawn in parent color when layered)
 				for p_idx in active_parents:
-					# draw internal minor edges for each active parent pattern
-					minor_edges = internal_minor_edges_for_pattern(pos, list(patterns[p_idx]))
-					for (p1, p2), asp in minor_edges:
-						r1 = deg_to_rad(pos[p1], asc_deg)
-						r2 = deg_to_rad(pos[p2], asc_deg)
-						use_color = (
-							GROUP_COLORS[p_idx % len(GROUP_COLORS)]
-							if len(active_parents) > 1
-							else (ASPECTS[asp]["color"] if asp in ASPECTS else "gray")
-						)
-						ax.plot([r1, r2], [1, 1], linestyle="dotted", color=use_color, linewidth=1)
+					if p_idx >= len(patterns):
+						continue
 
-				# existing filaments (keep aspect colors)
+					# extract just the internal minor edges from filaments
+					minor_edges = [((p1, p2), asp_name)
+								   for (p1, p2, asp_name, pat1, pat2) in filaments
+								   if pat1 == p_idx and pat2 == p_idx]
+
+					# draw them: use parent color in layered mode, aspect colors otherwise
+					if len(active_parents) > 1:
+						parent_color = GROUP_COLORS[p_idx % len(GROUP_COLORS)]
+						draw_minor_edges(ax, pos, minor_edges, asc_deg, group_color=parent_color)
+					else:
+						draw_minor_edges(ax, pos, minor_edges, asc_deg)
+
+				# connectors (filaments) not already claimed by shapes or internal-minor overrides
 				for (p1, p2, asp_name, pat1, pat2) in filaments:
-					if frozenset((p1, p2)) in shape_edges:
+					pair_key = frozenset((p1, p2))
+					if pair_key in shape_edges:
+						continue
+					# skip internal minors; those are drawn in the parent color already
+					if pat1 == pat2:
+						continue
+					# also skip any pair we already drew as an internal minor (if that set exists)
+					if 'claimed_internal_minors' in locals() and pair_key in claimed_internal_minors:
 						continue
 
 					in_parent1 = any((i in active_parents) and (p1 in patterns[i]) for i in active_parents)
@@ -969,11 +977,11 @@ def render_chart_with_shapes(
 					in_singleton2 = p2 in active_singletons
 
 					if (in_parent1 or in_shape1 or in_singleton1) and (in_parent2 or in_shape2 or in_singleton2):
-						r1 = deg_to_rad(pos[p1], asc_deg)
-						r2 = deg_to_rad(pos[p2], asc_deg)
-						ax.plot([r1, r2], [1, 1], linestyle="dotted",
-								color=ASPECTS[asp_name]["color"], linewidth=1)
-
+						r1 = deg_to_rad(pos[p1], asc_deg); r2 = deg_to_rad(pos[p2], asc_deg)
+						ax.plot([r1, r2], [1, 1],
+								linestyle="dotted",
+								color=ASPECTS[asp_name]["color"],
+								linewidth=1)
 
 	# sub-shapes
 	for s in active_shapes:
