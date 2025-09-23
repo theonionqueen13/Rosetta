@@ -14,7 +14,7 @@ from rosetta.calc import calculate_chart
 from rosetta.db import supa
 from rosetta.auth_reset import request_password_reset, verify_reset_code_and_set_password
 from rosetta.authn import get_auth_credentials, get_user_role_cached, ensure_user_row_linked
-from rosetta.config import get_openai_client, get_secret
+from rosetta.config import get_gemini_client, get_secret
 from rosetta.users import (
 	user_exists, create_user, get_user_role, is_admin,
 	verify_password, set_password, delete_user_account,
@@ -137,11 +137,7 @@ def _canonical_shape_name(shape_dict: dict) -> str:
 				return canon
 	return ""
 
-client = get_openai_client()
-if client is None:
-	import streamlit as st
-	st.error("Missing OPENAI_API_KEY. Set it as env var or in Streamlit Secrets.")
-	st.stop()
+genai = get_gemini_client()
 
 # -------------------------
 # Init / session management
@@ -1987,20 +1983,23 @@ def _one_full_parent_selected(aspect_blocks):
 	except Exception:
 		return False
 
-def ask_gpt(prompt_text: str, model: str = "gpt-4o-mini", temperature: float = 0.2) -> str:
-	"""Send your already-built Astroneurology prompt as-is. No extra magic."""
-	r = client.chat.completions.create(
-		model=model,
-		temperature=temperature,
-		messages=[
-			{"role": "system", "content": (
-				"You are an Astroneurology interpreter. Use ONLY the data provided by the app. "
-				"Do NOT import traditional astrology or outside meanings. If data is missing, say so."
-			)},
-			{"role": "user", "content": prompt_text},
-		],
-	)
-	return r.choices[0].message.content.strip()
+def ask_gemini(prompt_text: str,
+               model: str = "gemini-1.5-flash",
+               temperature: float = 0.2) -> str:
+    generative_model = genai.GenerativeModel(
+        model_name=model,
+        system_instruction=(
+            "You are an Astroneurology interpreter. Use ONLY the data provided by the app. "
+            "Do NOT import traditional astrology or outside meanings. If data is missing, say so."
+        ),
+        generation_config={"temperature": temperature},
+    )
+    response = generative_model.generate_content(prompt_text)
+
+    # Safety handling
+    if not response.candidates:
+        return "⚠️ Gemini blocked or returned no content."
+    return (response.text or "").strip()
 
 
 _CANON_SHAPES = {s.lower(): s for s in SHAPE_INSTRUCTIONS.keys()}
@@ -2169,7 +2168,7 @@ if st.session_state.get("chart_ready", False):
 			)
 			st.caption(
 				"Scroll down. Below the chart, "
-				'press "Send to GPT" to see (or listen to) the interpretation.'
+				'press "Send to Gemini" to read or listen to the interpretation.'
 			)
 			st.caption(
 				"After studying your Compass Rose, choose one sub-shape from a circuit to study next. "
@@ -3251,7 +3250,7 @@ if st.session_state.get("chart_ready", False):
 			Voice: Address the chart holder as “you.” Keep it precise, readable, and non-jargony. No moralizing or fate claims. Give usable insight and agency.
 			""").strip()
 
-			# IMPORTANT: define prompt so Send-to-GPT works in this branch
+			# IMPORTANT: define prompt so Send-to-Gemini works in this branch
 			prompt = compass_only_msg
 
 			prompt_html = compass_only_msg.replace("\n", "<br>")
@@ -3283,21 +3282,21 @@ if st.session_state.get("chart_ready", False):
 		else:
 			st.markdown("_(Calculate or Load a birth chart)_")
 
-	# --- Send to GPT controls (show ONLY when a prompt exists) ---
+	# --- Send to Gemini controls (show ONLY when a prompt exists) ---
 	colA, colB, colC = st.columns([1, 1, 2])
 	with colA:
-		run_it = st.button("Send to GPT", type="primary", key="send_to_gpt")
+		run_it = st.button("Send to Gemini", type="primary", key="send_to_gemini")
 	with colB:
 		creative = st.toggle("Creative mode", value=False)
 		temp = 0.60 if creative else 0.20
 
 	with colC:
-		model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"], index=0, key="gpt_model")
+		model = st.selectbox("Model", ["gemini-1.5-flash", "gemini-1.5-pro"], index=0, key="gpt_model")
 
 	if run_it:
 		with st.spinner("Calling model..."):
 			try:
-				out = ask_gpt(prompt, model=model, temperature=temp)
+				out = ask_gemini(prompt, model=model, temperature=temp)
 				st.session_state["latest_interpretation"] = out
 			except Exception as e:
 				st.session_state["latest_interpretation"] = f"LLM error: {e}"
@@ -3307,7 +3306,7 @@ if st.session_state.get("chart_ready", False):
 
 	interp_text = st.session_state.get(
 		"latest_interpretation",
-		"_(Click **Send to GPT** above to generate.)_"
+		"_(Click **Send to Gemini** above to generate.)_"
 	)
 
 	with st.expander("Interpretation"):

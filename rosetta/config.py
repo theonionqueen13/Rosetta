@@ -1,6 +1,7 @@
 # rosetta/config.py
 from __future__ import annotations
 import os
+import google.generativeai as genai
 
 # Streamlit is optional; this module should also work in plain Python.
 try:
@@ -34,17 +35,13 @@ def get_secret(key: str, default: str | None = None) -> str | None:
         pass
     return default
 
-
-def _get_openai_api_key() -> str:
-    key = get_secret("OPENAI_API_KEY")
+def _get_gemini_api_key() -> str:
+    key = get_secret("GOOGLE_API_KEY")
     if not key:
-        raise RuntimeError(
-            "Missing OPENAI_API_KEY. Set it in env or add it to Streamlit secrets."
-        )
+        raise RuntimeError("Missing GOOGLE_API_KEY. Set it in env or Streamlit secrets.")
     return key
 
-
 @_cache_resource
-def get_openai_client() -> OpenAI:
-    """Return a cached OpenAI client (one per process)."""
-    return OpenAI(api_key=_get_openai_api_key())
+def get_gemini_client() -> None:
+    genai.configure(api_key=_get_gemini_api_key())
+    return genai  # module acts as the configured client
