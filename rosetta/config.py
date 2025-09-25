@@ -14,9 +14,6 @@ except Exception:
     def _cache_resource(fn):  # no-op fallback
         return fn
 
-from openai import OpenAI
-
-
 def get_secret(key: str, default: str | None = None) -> str | None:
     """
     Resolve a secret from environment first, then Streamlit secrets.
