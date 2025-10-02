@@ -590,8 +590,10 @@ def build_fixed_star_context(pos: dict, catalog: pd.DataFrame) -> dict:
 # -----------------------------
 def analyze_dispositors(pos: dict, df) -> dict:
     """
-    Build a rulership (dispositor) graph across ALL objects in pos.
-    Returned JSON is compact:
+    Build rulership (dispositor) graphs across ALL objects in pos, separated by sign- and
+    house-based rulership chains.
+
+    Returned JSON groups the familiar summary fields under "by_sign" and "by_house":
       - dominant_rulers: out-degree >= 3
       - final_dispositors: in-degree >=1 and out-degree == 0
       - sovereign: single-node self-rulers (Sun in Leo, Saturn in Capricorn, etc.)
@@ -600,52 +602,77 @@ def analyze_dispositors(pos: dict, df) -> dict:
     Internally we label parallel edges (sign, house, or both) but that’s not returned.
     """
     cusps = _extract_cusps_from_df(df)
-    G = nx.DiGraph()
+    G_sign = nx.DiGraph()
+    G_house = nx.DiGraph()
 
-    # Track parallel reasons internally, in case you want to log
-    from collections import defaultdict
-    reasons = defaultdict(set)  # (src, dst) -> {'sign','house'}
-
-    def _add_reasons(src, dsts, why: str):
+    def _add_edges(graph: nx.DiGraph, src: str, dsts):
         if not dsts:
+            graph.add_node(src)
             return
-        if isinstance(dsts, (list, tuple)):
-            for d in dsts:
-                if d:
-                    G.add_edge(src, d)
-                    reasons[(src, d)].add(why)
+
+        if isinstance(dsts, str):
+            candidates = [dsts]
+        elif isinstance(dsts, (list, tuple, set)):
+            candidates = list(dsts)
         else:
-            G.add_edge(src, dsts)
-            reasons[(src, dsts)].add(why)
+            candidates = [dsts]
+
+        added = False
+        for d in candidates:
+            if not d:
+                continue
+            graph.add_edge(src, d)
+            added = True
+
+        if not added:
+            graph.add_node(src)
 
     for obj, deg in pos.items():
         sign = SIGN_NAMES[_sign_index(deg)]
         sign_rulers = PLANETARY_RULERS.get(sign, [])
-        _add_reasons(obj, sign_rulers, "sign")
+        _add_edges(G_sign, obj, sign_rulers)
 
         if cusps:
             h = _house_of_degree(deg, cusps)
             if h:
                 cusp_sign = SIGN_NAMES[_sign_index(cusps[h - 1])]
                 house_rulers = PLANETARY_RULERS.get(cusp_sign, [])
-                _add_reasons(obj, house_rulers, "house")
+                _add_edges(G_house, obj, house_rulers)
+            else:
+                G_house.add_node(obj)
+        else:
+            G_house.add_node(obj)
 
-    # Classify
-    cycles = list(nx.simple_cycles(G))
-    sovereign = sorted([c[0] for c in cycles if len(c) == 1])   # single-node self-loop
-    loops     = [c for c in cycles if len(c) >= 2]              # multi-node only
+    def _summarize(graph: nx.DiGraph) -> dict:
+        if graph.number_of_nodes() == 0:
+            return {
+                "dominant_rulers": [],
+                "final_dispositors": [],
+                "sovereign": [],
+                "loops": [],
+            }
 
-    dominant = sorted([n for n, outdeg in G.out_degree() if outdeg >= 3])
-    final    = sorted([n for n in G.nodes if G.out_degree(n) == 0 and G.in_degree(n) >= 1])
+        cycles = list(nx.simple_cycles(graph))
+        sovereign = sorted([c[0] for c in cycles if len(c) == 1])
+        loops = [c for c in cycles if len(c) >= 2]
 
-    # We do NOT include raw edges in JSON. If you ever need a compact edge summary,
-    # you could compute counts here without listing each link.
+        dominant = sorted([n for n, outdeg in graph.out_degree() if outdeg >= 3])
+        final = sorted([
+            n
+            for n in graph.nodes
+            if graph.out_degree(n) == 0 and graph.in_degree(n) >= 1
+        ])
+
+        return {
+            "dominant_rulers": dominant,
+            "final_dispositors": final,
+            "sovereign": sovereign,
+            "loops": loops,
+        }
 
     return {
-        "dominant_rulers": dominant,
-        "final_dispositors": final,
-        "sovereign": sovereign,
-        "loops": loops,
+        "by_sign": _summarize(G_sign),
+        "by_house": _summarize(G_house),
     }
 
 # -----------------------------

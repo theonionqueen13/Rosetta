@@ -135,14 +135,21 @@ def build_aspect_graph(pos):
                 break
     return list(nx.connected_components(G))
 
-def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
+def format_dms(value, is_latlon: bool = False, is_decl: bool = False, is_speed: bool = False):
     """Convert decimal degrees (or hours/day for speed) into DMS string with hemispheres."""
+    
+    PRIME = "′"
+    DOUBLE_PRIME = "″"
+
     try:
         val = float(value)
     except (TypeError, ValueError):
         return str(value)
 
     if is_speed:
+        is_negative = val < 0
+        val = abs(val)
+
         deg = int(val)
         m_float = (val - deg) * 60
         minutes = int(m_float)
@@ -156,9 +163,10 @@ def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
             deg += 1
             minutes -= 60
 
-        return f"{deg}°{minutes:02d}'{seconds:02d}\""
+        body = f"{deg}°{minutes:02d}{PRIME}{seconds:02d}{DOUBLE_PRIME}"
+        return f"-{body}" if is_negative else body
 
-        sign = ""
+    sign = ""
     if is_latlon or is_decl:
         sign = "N" if val >= 0 else "S"
         val = abs(val)
@@ -176,7 +184,7 @@ def format_dms(value, is_latlon=False, is_decl=False, is_speed=False):
         deg += 1
         minutes -= 60
 
-    return f"{deg}°{minutes:02d}'{seconds:02d}\" {sign}".strip()
+    return f"{deg}°{minutes:02d}{PRIME}{seconds:02d}{DOUBLE_PRIME} {sign}".strip()
 
 SIGN_NAMES = [
     "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
