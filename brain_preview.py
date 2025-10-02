@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 import argparse, json, os, inspect
 import pandas as pd
-from rosetta.brain import choose_task_instruction
+from rosetta.brain import (
+    build_context_for_objects,
+    load_fixed_star_catalog,
+    ensure_profile_detail_strings,
+    choose_task_instruction
+)
 
 # Import your modules
 from rosetta.calc import calculate_chart
@@ -15,6 +20,7 @@ SIGN_NAMES    = getattr(_L, "SIGN_NAMES", [
     "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
 ])
 PLANETARY_RULERS = getattr(_L, "PLANETARY_RULERS", {})
+ASPECTS = getattr(_L, "ASPECTS", {})
 COMPASS = ["Ascendant","Descendant","MC","IC","North Node","South Node"]
 
 def _sign_index(deg: float) -> int:
@@ -125,7 +131,10 @@ def main():
     # 3) Which placements are “visible”
     visible = _visible(args.mode, args.objects, pos)
 
-    # 3.5) Build profile_rows by forwarding DF rows for visible objects (no recomputation)
+    # 4) Aspects: for CLI we include only Compass axes (no recalculation)
+    aspects = _compass_aspects(visible)
+
+    # 4.5) Build profile_rows mirroring the sidebar formatting (no recomputation)
     profile_rows = {}
     if "Object" in df.columns:
         obj_series = df["Object"].astype("string").str.strip()
@@ -134,53 +143,42 @@ def main():
             if not hit.empty:
                 row = hit.iloc[0].to_dict()
 
-                # Inject Sign Ruler from lookup so the brain can read it (pure mapping)
+                # degree for this object (prefer DF abs_deg, else from pos)
+                deg = None
+                if isinstance(row.get("abs_deg"), (int, float)):
+                    deg = float(row["abs_deg"])
+                elif obj in pos:
+                    deg = float(pos[obj])
+
+                if deg is not None:
+                    # Sign (only if missing)
+                    if not row.get("Sign"):
+                        row["Sign"] = _sign_from_degree(deg)
+
+                    # House (compute here so the brain doesn't)
+                    if cusps and len(cusps) == 12:
+                        hs = _house_of_degree(deg, cusps)
+                        if hs:
+                            row["House"] = int(hs)
+                            # House Ruler (from cusp sign)
+                            cusp_sign = SIGN_NAMES[_sign_index(cusps[hs - 1])]
+                            hr = PLANETARY_RULERS.get(cusp_sign, [])
+                            if isinstance(hr, str):
+                                hr = [hr]
+                            elif isinstance(hr, tuple):
+                                hr = list(hr)
+                            row["House Ruler"] = hr if hr else []
                 sign = (row.get("Sign") or "").strip()
                 rulers = PLANETARY_RULERS.get(sign, [])
-                if not isinstance(rulers, (list, tuple)):
+                if isinstance(rulers, str):
                     rulers = [rulers] if rulers else []
-                row["Sign Ruler"] = rulers
+                elif isinstance(rulers, tuple):
+                    rulers = list(rulers)
+                row["Sign Ruler"] = rulers if rulers else []
+
+                ensure_profile_detail_strings(row)
 
                 profile_rows[obj] = row
-
-    # 4) Aspects: for CLI we include only Compass axes (no recalculation)
-    aspects = _compass_aspects(visible)
-
-    # 4.5) Build profile_rows by forwarding DF rows for the visible objects (no recomputation)
-    profile_rows = {}
-    if "Object" in df.columns:
-        obj_series = df["Object"].astype("string").str.strip()
-        for obj in visible:
-            hit = df[obj_series == obj]
-            if not hit.empty:
-                profile_rows[obj] = hit.iloc[0].to_dict()
-
-    # 4.6) Enrich profile_rows with Sign / House / House Ruler (CLI mirrors app sidebar)
-    if profile_rows:
-        for obj, row in profile_rows.items():
-            # degree for this object (prefer DF abs_deg, else from pos)
-            deg = None
-            if isinstance(row.get("abs_deg"), (int, float)):
-                deg = float(row["abs_deg"])
-            elif obj in pos:
-                deg = float(pos[obj])
-
-            if deg is not None:
-                # Sign (only if missing)
-                if not row.get("Sign"):
-                    row["Sign"] = _sign_from_degree(deg)
-
-                # House (compute here so the brain doesn't)
-                if cusps and len(cusps) == 12:
-                    hs = _house_of_degree(deg, cusps)
-                    if hs:
-                        row["House"] = int(hs)
-                        # House Ruler (from cusp sign)
-                        cusp_sign = SIGN_NAMES[_sign_index(cusps[hs - 1])]
-                        hr = PLANETARY_RULERS.get(cusp_sign, [])
-                        if isinstance(hr, str):
-                            hr = [hr]
-                        row["House Ruler"] = hr
 
     # 5) Optional star catalog
     star_path = os.path.join("rosetta", "2b) Fixed Star Lookup.xlsx")

@@ -15,7 +15,13 @@ from rosetta.db import supa
 from rosetta.auth_reset import request_password_reset, verify_reset_code_and_set_password
 from rosetta.authn import get_auth_credentials, get_user_role_cached, ensure_user_row_linked
 from rosetta.config import get_gemini_client, get_secret
-from rosetta.brain import build_context_for_objects, ask_gemini_brain, choose_task_instruction, load_fixed_star_catalog
+from rosetta.brain import (
+		build_context_for_objects,
+		ask_gemini_brain,
+		choose_task_instruction,
+		load_fixed_star_catalog,
+		ensure_profile_detail_strings,
+)
 from rosetta.users import (
 	user_exists, create_user, get_user_role, is_admin,
 	verify_password, set_password, delete_user_account,
@@ -703,48 +709,30 @@ def format_planet_profile(row):
 			formatted = str(lon)
 		html_parts.append(f"<div style='font-weight:bold;'>{formatted}</div>")
 
-		# --- House (always show if available) ---
+	# --- House (always show if available) ---
 	h = row.get("House", None)
 	try:
-		if h is not None and int(h) >= 1:
-			html_parts.append(f"<div style='font-size:0.9em;'>House: {int(h)}</div>")
+			if h is not None and int(h) >= 1:
+					html_parts.append(f"<div style='font-size:0.9em;'>House: {int(h)}</div>")
 	except Exception:
-		pass
+			pass
 
 	# --- Extra details (only if present) ---
-	for label, value in [
-		("Speed", row.get("Speed", "")),
-		("Latitude", row.get("Latitude", "")),
-		("Declination", row.get("Declination", "")),
-		("Out of Bounds", row.get("OOB Status", "")),
-		("Conjunct Fixed Star", row.get("Fixed Star Conjunction", "")),
+	detail_strings = ensure_profile_detail_strings(row)
+	for label in [
+			"Speed",
+			"Latitude",
+			"Declination",
+			"Out of Bounds",
+			"Conjunct Fixed Star",
 	]:
-		val_str = str(value).strip()
-		if not val_str or val_str.lower() in ["none", "nan", "no"]:
-			continue
-		try:
-			fval = float(val_str)
-			if fval == 0.0:
-				continue
-		except Exception:
-			fval = None
-
-		# Apply special DMS formatting
-		if label == "Speed" and fval is not None:
-			val_str = format_dms(fval, is_speed=True)
-		elif label == "Latitude" and fval is not None:
-			val_str = format_dms(fval, is_latlon=True)
-		elif label == "Declination" and fval is not None:
-			val_str = format_dms(fval, is_decl=True)
-		elif label == "Conjunct Fixed Star":
-			# Convert internal multi-star delimiter to commas
-			parts = [p.strip() for p in val_str.split("|||") if p.strip()]
-			val_str = ", ".join(parts)
-
-		html_parts.append(f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
+			val_str = detail_strings.get(label)
+			if val_str:
+					html_parts.append(f"<div style='font-size:0.9em;'>{label}: {val_str}</div>")
 
 	# Force single spacing with line-height here
 	return "<div style='line-height:1.1; margin-bottom:6px;'>" + "".join(html_parts) + "</div>"
+
 from matplotlib.patches import FancyBboxPatch
 
 def _current_chart_header_lines():
@@ -2590,6 +2578,9 @@ if st.session_state.get("chart_ready", False):
 				list(rul) if isinstance(rul, (list, tuple))
 				else ([rul] if rul else [])
 			)
+
+	for row in enhanced_objects_data.values():
+			ensure_profile_detail_strings(row)
 
 	def _build_rulership_html(obj_name, row, enhanced_objects_data, ordered_objects, cusp_signs):
 		# --- Rulership BY HOUSE (who rules *this obj* by house it occupies)

@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple, Any
 import importlib
 import math
 import networkx as nx  # if you don’t have it, install with: pip install networkx
+from rosetta.helpers import format_dms
 from rosetta.patterns import _cluster_conjunctions_for_detection
 # ---- Load your lookups once (same pattern as rosetta5) ----
 _L = importlib.import_module("rosetta.lookup")
@@ -112,6 +113,73 @@ def _resolve_dignity(obj: str, sign: str) -> str:
         pass
     return ""
 
+
+_DETAIL_FIELD_SOURCES = {
+    "Speed": ("Speed",),
+    "Latitude": ("Latitude",),
+    "Declination": ("Declination",),
+    "Out of Bounds": ("OOB Status", "OOB", "Out of Bounds"),
+    "Conjunct Fixed Star": ("Fixed Star Conjunction",),
+}
+
+
+def ensure_profile_detail_strings(row: dict | None) -> dict:
+    """Ensure sidebar detail fields are formatted exactly once and cached on the row.
+
+    Returns a mapping of label -> formatted string for any detail that should display.
+    """
+
+    if not isinstance(row, dict):
+        return {}
+
+    out: dict[str, str] = {}
+
+    for label, keys in _DETAIL_FIELD_SOURCES.items():
+        display_key = f"{label} Display"
+        existing = row.get(display_key)
+        if existing:
+            val_str = str(existing).strip()
+            if val_str:
+                out[label] = val_str
+            continue
+
+        raw_val = ""
+        for key in keys:
+            if key in row and str(row[key]).strip():
+                raw_val = row[key]
+                break
+
+        val_str = str(raw_val).strip()
+        if not val_str or val_str.lower() in {"none", "nan", "no"}:
+            row[display_key] = ""
+            continue
+
+        numeric_val = None
+        try:
+            numeric_val = float(val_str)
+        except Exception:
+            numeric_val = None
+
+        if numeric_val is not None:
+            if numeric_val == 0.0:
+                row[display_key] = ""
+                continue
+            if label == "Speed":
+                val_str = format_dms(numeric_val, is_speed=True)
+            elif label == "Latitude":
+                val_str = format_dms(numeric_val, is_latlon=True)
+            elif label == "Declination":
+                val_str = format_dms(numeric_val, is_decl=True)
+        elif label == "Conjunct Fixed Star":
+            parts = [p.strip() for p in val_str.split("|||") if p.strip()]
+            val_str = ", ".join(parts)
+
+        row[display_key] = val_str
+        if val_str:
+            out[label] = val_str
+
+    return out
+
 def _extract_cusps_from_df(df) -> List[float]:
     """
     Try to extract the 12 house cusp longitudes from the DataFrame your app already produces.
@@ -198,6 +266,8 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
     _d = row.get("Dignity")
     dignity = _d.strip() if isinstance(_d, str) else ""
 
+    # Ensure sidebar-formatted detail strings are available for reuse
+    details = ensure_profile_detail_strings(row)
 
     # Rulers: ONLY if present in row (no lookup fallback)
     def _as_list(x):
@@ -207,6 +277,15 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
 
     sign_ruler  = _as_list(row.get("Sign Ruler"))
     house_ruler = _as_list(row.get("House Ruler"))
+
+    def _clean_detail(val: Any) -> str:
+        if isinstance(val, str):
+            return val.strip()
+        return ""
+
+    declination = _clean_detail(row.get("Declination Display") or details.get("Declination"))
+    latitude    = _clean_detail(row.get("Latitude Display")    or details.get("Latitude"))
+    speed       = _clean_detail(row.get("Speed Display")       or details.get("Speed"))
 
     display_name = (row.get("Display Name") or canonical).strip()
     sabian = (row.get("Sabian Symbol") or row.get("Sabian") or "").strip()
@@ -227,9 +306,9 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
         "retrograde": bool(rx_flag),
         "station": bool(station_flag),
         "oob": bool(oob_flag),
-        "declination": row.get("Declination", ""),
-        "latitude": row.get("Latitude", ""),
-        "speed": row.get("Speed", ""),
+        "declination": declination,
+        "latitude": latitude,
+        "speed": speed,
         "dignity": dignity,
         "sign_ruler": sign_ruler,
         "house_ruler": house_ruler,
