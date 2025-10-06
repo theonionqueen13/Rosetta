@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import argparse, json, os, inspect
+import argparse
+import json
+import os
+import inspect
 import pandas as pd
 from rosetta.brain import (
     build_context_for_objects,
@@ -10,7 +13,6 @@ from rosetta.brain import (
 
 # Import your modules
 from rosetta.calc import calculate_chart
-from rosetta.brain import build_context_for_objects, load_fixed_star_catalog
 import importlib
 
 _L = importlib.import_module("rosetta.lookup")

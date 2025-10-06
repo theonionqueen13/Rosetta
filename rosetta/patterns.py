@@ -47,7 +47,6 @@ def connected_components_from_edges(nodes, edges):
 # Conjunction clustering
 # -------------------------------
 
-from rosetta.lookup import ASPECTS
 
 
 def _cluster_conjunctions_for_detection(pos, members, orb=None):

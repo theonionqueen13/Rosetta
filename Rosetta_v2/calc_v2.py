@@ -1,5 +1,6 @@
 from zoneinfo import ZoneInfo
-import os, swisseph as swe
+import os
+import swisseph as swe
 import networkx as nx
 
 # Force path to the ephe folder in your repo
@@ -190,7 +191,8 @@ def calculate_chart(
     # ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
     # This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
     global SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS, MAJOR_OBJECTS, SIGNS
-    import importlib.util, pathlib
+    import importlib.util
+    import pathlib
 
     here = pathlib.Path(__file__).resolve()
     lookup_path = here.with_name("lookup_v2.py")

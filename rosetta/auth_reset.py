@@ -1,6 +1,7 @@
 # rosetta/auth_reset.py
 from __future__ import annotations
-import time, hashlib
+import time
+import hashlib
 import streamlit as st
 from rosetta.db import supa
 from rosetta.users import set_password  # already in your project
@@ -84,7 +85,8 @@ def request_password_reset(identifier: str):
     host = smtp.get("host")
     if host:
         try:
-            import smtplib, ssl
+            import smtplib
+            import ssl
             from email.message import EmailMessage
 
             port = int(smtp.get("port", 587))

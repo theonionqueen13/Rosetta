@@ -1,4 +1,5 @@
-import psycopg2, os
+import psycopg2
+import os
 
 conn = psycopg2.connect(
     host=os.environ["PGHOST"],

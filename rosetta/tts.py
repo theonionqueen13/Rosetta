@@ -1,6 +1,7 @@
 # rosetta/tts.py
 def tts_controls(text: str, key: str, label: str = "🔊 Read"):
-    import json, uuid
+    import json
+    import uuid
     from streamlit.components.v1 import html as st_html
 
     uid = f"tts-{key}-{uuid.uuid4().hex[:8]}"

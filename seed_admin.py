@@ -1,4 +1,6 @@
-import os, sqlite3, bcrypt
+import os
+import sqlite3
+import bcrypt
 
 # Same DB path logic as your app
 BASE_DIR = os.path.dirname(__file__)

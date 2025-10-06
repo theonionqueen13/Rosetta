@@ -1,8 +1,7 @@
 # rosetta/drawing.py
-import swisseph as swe
 import matplotlib.pyplot as plt
 from rosetta.helpers import deg_to_rad
-from rosetta.lookup import ASPECTS, GLYPHS, GROUP_COLORS
+from rosetta.lookup import ASPECTS, GROUP_COLORS
 
 
 # -------------------------------

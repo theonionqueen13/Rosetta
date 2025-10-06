@@ -5,7 +5,7 @@ import streamlit as st
 import json
 import time
 import bcrypt
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from .db import supa
 
 # ---------- Users ----------

@@ -7,12 +7,7 @@ import pandas as pd
 import networkx as nx
 from itertools import combinations
 from rosetta.lookup import (
-    GLYPHS,
     ASPECTS,
-    ZODIAC_SIGNS,
-    ZODIAC_COLORS,
-    MODALITIES,
-    GROUP_COLORS,
 )
 
 print("HELPERS FILE LOADED:", __file__)

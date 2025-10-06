@@ -3,14 +3,11 @@ import streamlit as st
 st.set_page_config(layout="wide")
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 import streamlit.components.v1 as components
-import swisseph as swe
 import re
-import json, pathlib
 import streamlit_authenticator as stauth
 import datetime as dt
-from rosetta.topics_wizard import WIZARD_TARGETS, apply_wizard_targets
+from rosetta.topics_wizard import WIZARD_TARGETS
 from rosetta.calc import calculate_chart
 from rosetta.db import supa
 from rosetta.auth_reset import (
@@ -22,11 +19,10 @@ from rosetta.authn import (
     get_user_role_cached,
     ensure_user_row_linked,
 )
-from rosetta.config import get_openai_client, get_secret
+from rosetta.config import get_openai_client
 from rosetta.users import (
     user_exists,
     create_user,
-    get_user_role,
     is_admin,
     verify_password,
     set_password,
@@ -43,8 +39,6 @@ from rosetta.helpers import (
     get_ascendant_degree,
     deg_to_rad,
     annotate_fixed_stars,
-    get_fixed_star_meaning,
-    build_aspect_graph,
     format_dms,
     format_longitude,
     SIGN_NAMES,
@@ -58,7 +52,6 @@ from rosetta.drawing import (
     draw_aspect_lines,
     draw_filament_lines,
     draw_shape_edges,
-    draw_minor_edges,
     draw_singleton_dots,
     draw_compass_rose,
 )
@@ -150,7 +143,8 @@ elif FOCUS_NONE_OPTION is not None:
     # Normalize to exactly the detected sentinel for downstream comparisons.
     ORDERED_OBJECTS_FOCUS[0] = FOCUS_NONE_OPTION
 
-import streamlit as st, importlib
+import streamlit as st
+import importlib
 
 
 @st.cache_resource
@@ -962,7 +956,6 @@ def format_planet_profile(row):
     )
 
 
-from matplotlib.patches import FancyBboxPatch
 
 
 def _current_chart_header_lines():
@@ -1001,7 +994,6 @@ def _current_chart_header_lines():
 
 import matplotlib.patheffects as pe
 
-import matplotlib.patheffects as pe
 
 
 def _draw_header_on_figure(fig, name, date_line, city, dark_mode):

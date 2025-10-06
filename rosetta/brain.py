@@ -1,9 +1,8 @@
 # rosetta/brain.py
 # A lightweight “brain” that builds structured context from your own lookups & chart data.
 from __future__ import annotations
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Any
 import importlib
-import math
 import networkx as nx  # if you don’t have it, install with: pip install networkx
 from rosetta.helpers import format_dms
 from rosetta.patterns import _cluster_conjunctions_for_detection

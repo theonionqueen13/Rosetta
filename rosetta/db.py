@@ -1,5 +1,4 @@
 # rosetta/db.py
-import os
 import httpx
 import streamlit as st
 from supabase import create_client, ClientOptions  # type: ignore

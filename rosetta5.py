@@ -5,12 +5,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit.components.v1 as components
-import swisseph as swe
 import re
-import os, json, bcrypt, time, hashlib
 import streamlit_authenticator as stauth
 import datetime as dt
-import plotly.tools as tls
 from rosetta.calc import calculate_chart
 from rosetta.db import supa
 from rosetta.auth_reset import (
@@ -22,11 +19,10 @@ from rosetta.authn import (
     get_user_role_cached,
     ensure_user_row_linked,
 )
-from rosetta.config import get_gemini_client, get_secret
+from rosetta.config import get_gemini_client
 from rosetta.users import (
     user_exists,
     create_user,
-    get_user_role,
     is_admin,
     verify_password,
     set_password,
@@ -43,8 +39,6 @@ from rosetta.helpers import (
     get_ascendant_degree,
     deg_to_rad,
     annotate_fixed_stars,
-    get_fixed_star_meaning,
-    build_aspect_graph,
     format_dms,
     format_longitude,
     SIGN_NAMES,
@@ -65,11 +59,10 @@ from rosetta.patterns import (
     detect_minor_links_with_singletons,
     generate_combo_groups,
     detect_shapes,
-    internal_minor_edges_for_pattern,
     connected_components_from_edges,
     _cluster_conjunctions_for_detection,
 )
-from rosetta.topics_wizard import WIZARD_TARGETS, apply_wizard_targets
+from rosetta.topics_wizard import WIZARD_TARGETS
 import importlib
 
 _L = importlib.import_module("rosetta.lookup")
@@ -105,8 +98,10 @@ SIGN_MEANINGS = _Lget("SIGN_MEANINGS")
 HOUSE_MEANINGS = _Lget("HOUSE_MEANINGS")
 OBJECT_MEANINGS_SHORT = _Lget("OBJECT_MEANINGS_SHORT")
 
-import streamlit as st, importlib
-import importlib, rosetta.drawing
+import streamlit as st
+import importlib
+import importlib
+import rosetta.drawing
 
 importlib.reload(rosetta.drawing)
 
@@ -530,8 +525,6 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
         ax.plot([r, r], [circle_r, circle_r + 0.05], color=base_color, linewidth=1.2)
 
 
-import numpy as np  # (already imported near top; keep once)
-import numpy as np  # already imported above; keep once
 
 
 def draw_zodiac_signs(ax, asc_deg):
@@ -889,7 +882,6 @@ def format_planet_profile(row):
     )
 
 
-from matplotlib.patches import FancyBboxPatch
 
 
 def _current_chart_header_lines():
@@ -928,7 +920,6 @@ def _current_chart_header_lines():
 
 import matplotlib.patheffects as pe
 
-import matplotlib.patheffects as pe
 
 
 def _draw_header_on_figure(fig, name, date_line, city, dark_mode):
