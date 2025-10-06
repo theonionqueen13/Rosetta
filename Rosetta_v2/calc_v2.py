@@ -157,6 +157,7 @@ def calculate_chart(
 	tz_name: str | None = None,
 	# house_system kept for back-compat but ignored
 	house_system: str | None = None,
+	include_aspects: bool = False,   # <-- NEW
 ):
 	# ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
 	# This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
@@ -449,15 +450,21 @@ def calculate_chart(
 	# --- Build final DataFrame (objects + all cusps) ---
 	base_df = pd.DataFrame(rows)
 	cusp_df = pd.DataFrame(all_cusp_rows)
-	return pd.concat([base_df, cusp_df], ignore_index=True)
+	combined_df = pd.concat([base_df, cusp_df], ignore_index=True)
+
+	if include_aspects:
+		aspect_df = build_aspect_table(combined_df)
+		return combined_df, aspect_df  # two DFs when requested
+
+	return combined_df
 
 def chart_sect_from_df(df) -> str:
-    # exact object names from your DF: "Sun" and "AC"
-    sun = float(df.loc[df["Object"] == "Sun", "Longitude"].iloc[0]) % 360.0
-    ac  = float(df.loc[df["Object"] == "AC",  "Longitude"].iloc[0]) % 360.0
-    dc  = (ac + 180.0) % 360.0
-    # Above the horizon = DC → AC arc
-    return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
+	# exact object names from your DF: "Sun" and "AC"
+	sun = float(df.loc[df["Object"] == "Sun", "Longitude"].iloc[0]) % 360.0
+	ac  = float(df.loc[df["Object"] == "AC",  "Longitude"].iloc[0]) % 360.0
+	dc  = (ac + 180.0) % 360.0
+	# Above the horizon = DC → AC arc
+	return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
 
 def _house_of_degree(deg: float, cusps: list[float]) -> int | None:
 	"""
@@ -668,4 +675,204 @@ def _resolve_dignity(obj: str, sign_name: str):
 			return label
 	return None
 
+# === Aspect helpers & builders ===
+
+# Degrees for the septile family:
+# septile = 51°26′ -> 51 + 26/60
+# biseptile = 102°52′
+# triseptile = 154°17′
+_SEPTILE  = 51 + 26/60
+_BISEPT   = 102 + 52/60
+_TRISEPT  = 154 + 17/60
+
+_ASPECTS_MAJOR = {
+	"Conjunction":   {"angle": 0,   "orb": 5},
+	"Semi-sextile":  {"angle": 30,  "orb": 2},   # minor, kept here for unified scan; we'll sort into minors later
+	"Sextile":       {"angle": 60,  "orb": 3},
+	"Square":        {"angle": 90,  "orb": 3},
+	"Trine":         {"angle": 120, "orb": 3},
+	"Sesquisquare":  {"angle": 135, "orb": 2},   # 135°
+	"Quincunx":      {"angle": 150, "orb": 3},
+	"Opposition":    {"angle": 180, "orb": 3},
+}
+
+# Minor-only set (we'll classify major vs minor after detection)
+_ASPECTS_MINOR = {
+	"Semi-square":   {"angle": 45,   "orb": 2},
+	"Quintile":      {"angle": 72,   "orb": 2},
+	"Biquintile":    {"angle": 144,  "orb": 2},
+	"Septile":       {"angle": _SEPTILE,  "orb": 2},
+	"Biseptile":     {"angle": _BISEPT,   "orb": 2},
+	"Triseptile":    {"angle": _TRISEPT,  "orb": 2},
+}
+
+# One combined lookup for detection pass
+_ASPECTS_ALL = {**_ASPECTS_MAJOR, **_ASPECTS_MINOR}
+
+# Which names count as "major" for output bucketing
+_MAJOR_NAMES = {"Conjunction", "Sextile", "Square", "Trine", "Sesquisquare", "Quincunx", "Opposition"}
+_MINOR_NAMES = set(_ASPECTS_ALL.keys()) - _MAJOR_NAMES
+
+
+def _norm360(x: float) -> float:
+	"""Normalize degrees to [0, 360)."""
+	return x % 360.0
+
+def _sep_deg(a: float, b: float) -> float:
+	"""Unsigned separation 0..180 (smallest arc)."""
+	d = abs(_norm360(a) - _norm360(b)) % 360.0
+	return d if d <= 180.0 else 360.0 - d
+
+def _distance_to_target(a: float, b: float, target: float) -> float:
+	"""Unsigned distance from the pair separation to the target aspect angle."""
+	return abs(_sep_deg(a, b) - target)
+
+def _within_orb(a: float, b: float, target: float, orb: float) -> tuple[bool, float]:
+	"""Return (hit?, orb_delta) where orb_delta >= 0 is the absolute difference from exact."""
+	delta = _distance_to_target(a, b, target)
+	return (delta <= orb, delta)
+
+def _fmt_orb(delta: float) -> str:
+	# Keep one decimal by default; adjust if you prefer integer rounding
+	return f"{delta:.1f}°"
+
+def _applying_or_separating(
+	lon1: float, speed1: float,
+	lon2: float, speed2: float,
+	target: float
+) -> str:
+	"""
+	Heuristic: look one day ahead using current speeds (already in deg/day)
+	and see whether the distance-to-target decreases (Applying) or increases (Separating).
+	Speeds are used internally only (not added to the table).
+	"""
+	now = _distance_to_target(lon1, lon2, target)
+	# Predict a simple next-step separation using linear motion
+	lon1_next = _norm360(lon1 + speed1)   # ~1 day
+	lon2_next = _norm360(lon2 + speed2)
+	nxt = _distance_to_target(lon1_next, lon2_next, target)
+	return "Applying" if nxt < now else "Separating"
+
+
+def _extract_object_rows(df: pd.DataFrame) -> pd.DataFrame:
+	"""
+	Return only the rows that represent objects (no cusps).
+	We treat anything with 'cusp' in the Object name as a cusp row.
+	"""
+	objs = df[~df["Object"].str.contains("cusp", case=False, na=False)].copy()
+	return objs
+
+
+def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
+	"""
+	Build a top-left triangular aspect matrix:
+	  - Rows & columns are the object names (no cusps)
+	  - (row == col) shows 'X'
+	  - Only the TOP-LEFT half is filled; the BOTTOM-RIGHT half is blank
+		so the last/bottom row has only the very first cell filled, and
+		the last/far-right column has only the top cell filled.
+
+	Cells show: "<AspectName> (<orb°>)" or blank if no aspect in orb.
+	Applying/separating is not printed here to keep the matrix compact.
+	"""
+	objs = _extract_object_rows(df)
+	names = list(objs["Object"])
+	lons  = dict(zip(objs["Object"], objs["Longitude"]))
+	spds  = dict(zip(objs["Object"], objs["Speed"]))  # for edges helper
+
+	n = len(names)
+	data = []
+
+	# We'll fill only cells where (j <= n - i - 1) in 0-based indexing
+	# (i.e., upper-left triangle relative to the anti-diagonal).
+	for i, rname in enumerate(names):
+		row_vals = []
+		for j, cname in enumerate(names):
+			# "X" on diagonal only if we're inside the filled half; otherwise blank
+			if i == j:
+				# Check anti-diagonal rule: j <= n - i - 1
+				if j <= (n - i - 1):
+					row_vals.append("X")
+				else:
+					row_vals.append("")
+				continue
+
+			# Enforce top-left half fill:
+			if j > (n - i - 1):
+				row_vals.append("")  # bottom-right kept blank
+				continue
+
+			A = lons[rname]
+			B = lons[cname]
+			best_hit = ""
+			best_delta = None
+			best_name = None
+
+			# Scan all aspects & pick the closest that lands within its orb
+			for name, spec in _ASPECTS_ALL.items():
+				target = spec["angle"]
+				orb    = spec["orb"]
+				hit, delta = _within_orb(A, B, target, orb)
+				if not hit:
+					continue
+				if best_delta is None or delta < best_delta:
+					best_delta = delta
+					best_name  = name
+
+			if best_name is None:
+				row_vals.append("")
+			else:
+				row_vals.append(f"{best_name} ({_fmt_orb(best_delta)})")
+
+		data.append(row_vals)
+
+	return pd.DataFrame(data, index=names, columns=names)
+
+
+def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
+	"""
+	Return (edges_major, edges_minor), each as a list of tuples:
+	  (obj1, obj2, {"aspect": <name>, "orb": <float>, "appsep": "Applying"/"Separating"})
+	Pairs are de-duplicated (A,B) only once (A < B by index).
+	"""
+	objs = _extract_object_rows(df)
+	names = list(objs["Object"])
+	lons  = dict(zip(objs["Object"], objs["Longitude"]))
+	spds  = dict(zip(objs["Object"], objs["Speed"]))
+
+	edges_major = []
+	edges_minor = []
+
+	for i in range(len(names)):
+		for j in range(i + 1, len(names)):  # de-duplicate: only upper pairs
+			a = names[i]
+			b = names[j]
+			A, B = lons[a], lons[b]
+			sA, sB = spds[a], spds[b]
+
+			best_delta = None
+			best_name  = None
+			best_target = None
+
+			for name, spec in _ASPECTS_ALL.items():
+				hit, delta = _within_orb(A, B, spec["angle"], spec["orb"])
+				if not hit:
+					continue
+				if best_delta is None or delta < best_delta:
+					best_delta  = delta
+					best_name   = name
+					best_target = spec["angle"]
+
+			if best_name is None:
+				continue
+
+			appsep = _applying_or_separating(A, sA, B, sB, best_target)
+			record = (a, b, {"aspect": best_name, "orb": float(f"{best_delta:.3f}"), "appsep": appsep})
+
+			if best_name in _MAJOR_NAMES:
+				edges_major.append(record)
+			else:
+				edges_minor.append(record)
+
+	return edges_major, edges_minor
 
