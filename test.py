@@ -1,4 +1,5 @@
-import psycopg2, os
+import psycopg2
+import os
 
 conn = psycopg2.connect(
     host=os.environ["PGHOST"],
@@ -6,7 +7,7 @@ conn = psycopg2.connect(
     database=os.environ["PGDATABASE"],
     user=os.environ["PGUSER"],
     password=os.environ["PGPASSWORD"],
-    sslmode="require"
+    sslmode="require",
 )
 cur = conn.cursor()
 cur.execute("SELECT version()")

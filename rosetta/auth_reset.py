@@ -1,6 +1,7 @@
 # rosetta/auth_reset.py
 from __future__ import annotations
-import time, hashlib
+import time
+import hashlib
 import streamlit as st
 from rosetta.db import supa
 from rosetta.users import set_password  # already in your project
@@ -10,6 +11,7 @@ def _hash_code(code: str, pepper: str) -> str:
     h = hashlib.sha256()
     h.update((pepper + str(code)).encode("utf-8"))
     return h.hexdigest()
+
 
 def _find_user_by_identifier(identifier: str):
     sb = supa()
@@ -29,18 +31,24 @@ def _find_user_by_identifier(identifier: str):
     row = rows[0]
     return row["username"], row["email"]
 
-def _store_reset_code(username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15):
+
+def _store_reset_code(
+    username: str, email_addr: str, code_hash: str, ttl_minutes: int = 15
+):
     sb = supa()
     now = int(time.time())
     exp = now + ttl_minutes * 60
-    sb.table("password_resets").insert({
-        "username": username,
-        "code_hash": code_hash,
-        "sent_to": email_addr,
-        "expires_at": exp,
-        "used": False,
-        "created_at": now,
-    }).execute()
+    sb.table("password_resets").insert(
+        {
+            "username": username,
+            "code_hash": code_hash,
+            "sent_to": email_addr,
+            "expires_at": exp,
+            "used": False,
+            "created_at": now,
+        }
+    ).execute()
+
 
 def request_password_reset(identifier: str):
     """
@@ -60,6 +68,7 @@ def request_password_reset(identifier: str):
 
     # 6-digit code
     import secrets as pysecrets
+
     code = f"{pysecrets.randbelow(1_000_000):06d}"
 
     # Hash + store with TTL
@@ -76,15 +85,16 @@ def request_password_reset(identifier: str):
     host = smtp.get("host")
     if host:
         try:
-            import smtplib, ssl
+            import smtplib
+            import ssl
             from email.message import EmailMessage
 
-            port       = int(smtp.get("port", 587))
-            user       = smtp.get("user") or smtp.get("username")
-            password   = smtp.get("password")
-            sender     = smtp.get("sender") or user or f"no-reply@{host}"
-            use_ssl    = bool(smtp.get("ssl", False))
-            starttls   = bool(smtp.get("starttls", True))
+            port = int(smtp.get("port", 587))
+            user = smtp.get("user") or smtp.get("username")
+            password = smtp.get("password")
+            sender = smtp.get("sender") or user or f"no-reply@{host}"
+            use_ssl = bool(smtp.get("ssl", False))
+            starttls = bool(smtp.get("starttls", True))
 
             msg = EmailMessage()
             msg["Subject"] = "Your Rosetta password reset code"
@@ -119,7 +129,10 @@ def request_password_reset(identifier: str):
     # No SMTP configured → DEV path
     return True, username, code
 
-def verify_reset_code_and_set_password(username: str, code: str, new_password: str) -> bool:
+
+def verify_reset_code_and_set_password(
+    username: str, code: str, new_password: str
+) -> bool:
     sb = supa()
     now = int(time.time())
     pepper = st.secrets.get("security", {}).get("reset_pepper", "static-dev-pepper")

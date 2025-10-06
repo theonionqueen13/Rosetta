@@ -6,13 +6,16 @@ import google.generativeai as genai
 # Streamlit is optional; this module should also work in plain Python.
 try:
     import streamlit as st
+
     _cache_resource = st.cache_resource
     _secrets = st.secrets
 except Exception:
     st = None
     _secrets = {}
+
     def _cache_resource(fn):  # no-op fallback
         return fn
+
 
 def get_secret(key: str, default: str | None = None) -> str | None:
     """
@@ -32,11 +35,15 @@ def get_secret(key: str, default: str | None = None) -> str | None:
         pass
     return default
 
+
 def _get_gemini_api_key() -> str:
     key = get_secret("GOOGLE_API_KEY")
     if not key:
-        raise RuntimeError("Missing GOOGLE_API_KEY. Set it in env or Streamlit secrets.")
+        raise RuntimeError(
+            "Missing GOOGLE_API_KEY. Set it in env or Streamlit secrets."
+        )
     return key
+
 
 @_cache_resource
 def get_gemini_client() -> None:
