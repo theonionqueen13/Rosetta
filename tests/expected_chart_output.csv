@@ -1,0 +1,43 @@
+Object,Longitude,Sign,DMS,Sabian Index,Sabian Symbol,Retrograde,OOB Status,Dignity,Ruled by (sign),Latitude,Declination,Distance,Speed,Computed Absolute Degree,House System
+Sun,125.944618,Leo,"5°56'40""",126.0,An old fashioned ‘conservative’ woman is confronted by an up-to-date girl.,,No,"{'domicile': ['Sun'], 'detriment': ['Saturn'], 'exaltation': [], 'fall': []}",Sun,-0.000151,18.787993,1.015299,0.956063,,
+Moon,213.010639,Scorpio,"3°00'38""",214.0,A youth holding a lighted candle in a devotional ritual.,,No,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': [], 'fall': ['Moon']}","Pluto, Mars",-5.267416,-17.460159,0.002687,12.024953,,
+Mercury,149.787446,Leo,"29°47'14""",150.0,An unsealed letter.,,No,"{'domicile': ['Sun'], 'detriment': ['Saturn'], 'exaltation': [], 'fall': []}",Sun,0.490248,12.006928,1.090224,1.452706,,
+Venus,101.052532,Cancer,"11°03'09""",102.0,A chinese woman nursing a baby whose aura reveals him to be the reincarnation of a great teacher.,,No,"{'domicile': ['Moon'], 'detriment': ['Saturn'], 'exaltation': ['Jupiter'], 'fall': ['Mars']}",Moon,-0.335948,22.64721,1.502061,1.208984,,
+Mars,40.962773,Taurus,"10°57'45""",41.0,A woman sprinkling flowers.,,No,"{'domicile': ['Venus'], 'detriment': ['Mars'], 'exaltation': ['Moon'], 'fall': []}",Venus,-2.033672,13.183868,1.038253,0.634097,,
+Jupiter,115.640403,Cancer,"25°38'25""",116.0,Guests are reading in the library of a luxurious home.,,No,"{'domicile': ['Moon'], 'detriment': ['Saturn'], 'exaltation': ['Jupiter'], 'fall': ['Mars']}",Moon,0.251464,21.264241,6.222445,0.222237,,
+Saturn,290.958894,Capricorn,"20°57'32""",291.0,A relay race.,Rx,No,"{'domicile': ['Saturn'], 'detriment': ['Moon'], 'exaltation': ['Mars'], 'fall': ['Jupiter']}",Saturn,0.053846,-21.754945,9.024649,-0.070141,,
+Uranus,276.466149,Capricorn,"6°27'58""",277.0,"A veiled prophet speaks, seized by the power of a god.",Rx,Yes,"{'domicile': ['Saturn'], 'detriment': ['Moon'], 'exaltation': ['Mars'], 'fall': ['Jupiter']}",Saturn,-0.328611,-23.612292,18.52719,-0.033453,,
+Neptune,282.568035,Capricorn,"12°34'04""",283.0,A fire worshipper meditates on the ultimate realities of existence.,Rx,No,"{'domicile': ['Saturn'], 'detriment': ['Moon'], 'exaltation': ['Mars'], 'fall': ['Jupiter']}",Saturn,0.868264,-21.983594,29.271192,-0.024252,,
+Pluto,224.971558,Scorpio,"14°58'17""",225.0,Children playing around five mounds of sand.,,No,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': [], 'fall': ['Moon']}","Pluto, Mars",15.483969,-1.491203,29.489953,0.001873,,
+North Node,307.294047,Aquarius,"7°17'38""",308.0,Beautifully gowned wax figures on display.,,No,"{'domicile': ['Saturn'], 'detriment': ['Sun'], 'exaltation': [], 'fall': []}","Uranus, Saturn",0.0,-18.450244,0.002591,0.000275,,
+South Node,127.294047,Leo,"7°17'38""",128.0,Glass blowers shape beautiful vases with their controlled breathing.,,No,"{'domicile': ['Sun'], 'detriment': ['Saturn'], 'exaltation': [], 'fall': []}",Sun,0.0,0.0,0.0,0.0,,
+Ascendant,74.375496,Gemini,"14°22'31""",75.0,Two dutch children talking.,,No,"{'domicile': ['Mercury'], 'detriment': ['Jupiter'], 'exaltation': [], 'fall': []}",Mercury,0.0,0.0,0.0,0.0,,
+MC,321.733471,Aquarius,"21°44'00""",322.0,A rug placed on a floor for children to play on.,,No,"{'domicile': ['Saturn'], 'detriment': ['Sun'], 'exaltation': [], 'fall': []}","Uranus, Saturn",0.0,0.0,0.0,0.0,,
+Vertex,217.751066,Scorpio,"7°45'03""",218.0,The moon shining across a lake.,,No,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': [], 'fall': ['Moon']}","Pluto, Mars",0.0,0.0,0.0,0.0,,
+Part of Fortune,347.309475,Pisces,"17°18'34""",348.0,In a huge tent a famous revivalist conducts his meeting with a spectacular performance.,,No,"{'domicile': ['Jupiter'], 'detriment': ['Mercury'], 'exaltation': ['Venus'], 'fall': ['Mercury']}","Neptune, Jupiter",0.0,0.0,0.0,0.0,,
+Black Moon Lilith (True),238.957453,Scorpio,"28°57'26""",239.0,An indian woman pleading to the chief for the lives of her children.,Rx,Yes,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': [], 'fall': ['Moon']}","Pluto, Mars",-4.910899,-24.716982,0.002705,-1.154091,,
+Black Moon Lilith (Mean),239.856343,Scorpio,"29°51'22""",240.0,Children in halloween costumes indulging in various pranks.,,Yes,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': [], 'fall': ['Moon']}","Pluto, Mars",-4.756336,-24.765984,0.002711,0.111868,,
+Lilith (Asteroid),303.066512,Aquarius,"3°03'59""",304.0,A hindu healer.,Rx,No,"{'domicile': ['Saturn'], 'detriment': ['Sun'], 'exaltation': [], 'fall': []}","Uranus, Saturn",6.021634,-13.609536,1.752957,-0.230284,,
+Chiron,110.703965,Cancer,"20°42'14""",111.0,A prima donna singing.,,No,"{'domicile': ['Moon'], 'detriment': ['Saturn'], 'exaltation': ['Jupiter'], 'fall': ['Mars']}",Moon,-6.266192,15.650408,11.88605,0.105543,,
+Ceres,137.205554,Leo,"17°12'19""",138.0,A chemist conducts an experiment for his students.,,No,"{'domicile': ['Sun'], 'detriment': ['Saturn'], 'exaltation': [], 'fall': []}",Sun,6.719342,22.071288,3.535174,0.45203,,
+Pallas,101.864847,Cancer,"11°51'53""",102.0,A chinese woman nursing a baby whose aura reveals him to be the reincarnation of a great teacher.,,No,"{'domicile': ['Moon'], 'detriment': ['Saturn'], 'exaltation': ['Jupiter'], 'fall': ['Mars']}",Moon,-24.963032,-1.962698,2.962036,0.595687,,
+Juno,220.882267,Scorpio,"10°52'56""",221.0,A drowning man is being rescued.,,No,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': [], 'fall': ['Moon']}","Pluto, Mars",13.064174,-2.650982,3.114654,0.118116,,
+Vesta,50.609934,Taurus,"20°36'35""",51.0,Moving finger points to significant passages in a book.,,No,"{'domicile': ['Venus'], 'detriment': ['Mars'], 'exaltation': ['Moon'], 'fall': []}",Venus,-6.800657,11.341035,2.549891,0.306579,,
+Pholus,99.005382,Cancer,"9°00'19""",100.0,A large diamond in the first stages of the cutting process.,,No,"{'domicile': ['Moon'], 'detriment': ['Saturn'], 'exaltation': ['Jupiter'], 'fall': ['Mars']}",Moon,-9.352186,13.804188,9.762437,0.129011,,
+Eris,17.580519,Aries,"17°34'49""",18.0,An empty hammock.,Rx,No,"{'domicile': ['Mars'], 'detriment': ['Venus'], 'exaltation': ['Sun'], 'fall': ['Saturn']}",Mars,-17.391224,-9.181222,97.135561,-0.002638,,
+Eros,66.765069,Gemini,"6°45'54""",67.0,An old-fashioned well.,,Yes,"{'domicile': ['Mercury'], 'detriment': ['Jupiter'], 'exaltation': [], 'fall': []}",Mercury,9.362288,30.659565,1.621695,0.779434,,
+Psyche,62.479803,Gemini,"2°28'47""",63.0,The garden of the tuileries in paris.,,No,"{'domicile': ['Mercury'], 'detriment': ['Jupiter'], 'exaltation': [], 'fall': []}",Mercury,-2.631823,18.077709,2.844562,0.361407,,
+Descendant,254.375496,Sagittarius,"14°22'31""",255.0,The ground hog looking for its shadow on ground hog day.,,No,,,0.0,0.0,0.0,0.0,,
+IC,141.733471,Leo,"21°44'00""",142.0,A carrier pigeon fulfilling its mission.,,No,,,0.0,0.0,0.0,0.0,,
+1H Cusp,,,,,,,,,,,,,,74.375496,equal
+2H Cusp,,,,,,,,,,,,,,104.375496,equal
+3H Cusp,,,,,,,,,,,,,,134.375496,equal
+4H Cusp,,,,,,,,,,,,,,164.375496,equal
+5H Cusp,,,,,,,,,,,,,,194.375496,equal
+6H Cusp,,,,,,,,,,,,,,224.375496,equal
+7H Cusp,,,,,,,,,,,,,,254.375496,equal
+8H Cusp,,,,,,,,,,,,,,284.375496,equal
+9H Cusp,,,,,,,,,,,,,,314.375496,equal
+10H Cusp,,,,,,,,,,,,,,344.375496,equal
+11H Cusp,,,,,,,,,,,,,,14.375496,equal
+12H Cusp,,,,,,,,,,,,,,44.375496,equal
