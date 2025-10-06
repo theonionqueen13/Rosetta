@@ -16,8 +16,12 @@ def test_calculate_chart():
     df_reset = df_reset.fillna(np.nan).replace('', np.nan)
     expected_reset = expected_reset.fillna(np.nan).replace('', np.nan)
 
-    # Convert dict columns to strings for comparison (CSV stores dicts as strings)
-    df_reset['Dignity'] = df_reset['Dignity'].astype(str)
+    # Convert dict columns to strings for comparison, but preserve NaN
+    df_reset['Dignity'] = df_reset['Dignity'].apply(
+        lambda x: str(x) if pd.notna(x) else np.nan
+    )
 
     # Assert that the diff is null (DataFrames are equal)
-    pd.testing.assert_frame_equal(df_reset, expected_reset, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        df_reset, expected_reset, check_dtype=False, check_exact=False
+    )

@@ -12,6 +12,7 @@ testfile = os.path.join(EPHE_PATH, "se01181s.se1")
 import datetime
 import pandas as pd
 from rosetta.lookup import SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS
+from rosetta.chart_models import ChartObject, HouseCusp, AstrologicalChart
 
 SIGNS = [
     "Aries",
@@ -99,10 +100,29 @@ def calculate_chart(
     input_is_ut: bool = False,
     tz_name: str | None = None,
     house_system: str = "equal",
-) -> pd.DataFrame:
+    return_dataframe: bool = True,
+) -> pd.DataFrame | AstrologicalChart:
     """
     Build the chart using Swiss Ephemeris.
     Adds Descendant, house cusps, and Liliths.
+    
+    Args:
+        year: Year of birth
+        month: Month of birth
+        day: Day of birth
+        hour: Hour of birth
+        minute: Minute of birth
+        tz_offset: Timezone offset in hours
+        lat: Latitude
+        lon: Longitude
+        input_is_ut: Whether input time is already UTC
+        tz_name: Optional timezone name (e.g., 'America/New_York')
+        house_system: House system to use ('equal', 'placidus', 'whole')
+        return_dataframe: If True, returns pd.DataFrame (default for backward compatibility)
+                         If False, returns AstrologicalChart object
+    
+    Returns:
+        Either a pandas DataFrame or an AstrologicalChart object
     """
 
     # -------- Time -> UTC --------
@@ -205,24 +225,24 @@ def calculate_chart(
         dignity = DIGNITIES.get(sign, "")
         rulership = PLANETARY_RULERS.get(sign, [])
 
-        rows.append(
-            {
-                "Object": name,
-                "Longitude": round(lon_, 6),
-                "Sign": sign,
-                "DMS": dms,
-                "Sabian Index": sabian_index,
-                "Sabian Symbol": sabian_symbol,
-                "Retrograde": retro,
-                "OOB Status": oob,
-                "Dignity": dignity,
-                "Ruled by (sign)": ", ".join(rulership),
-                "Latitude": round(lat_, 6),
-                "Declination": round(decl, 6),
-                "Distance": round(dist, 6),
-                "Speed": round(speed, 6),
-            }
+        # Create ChartObject
+        chart_obj = ChartObject(
+            object_name=name,
+            longitude=round(lon_, 6),
+            sign=sign,
+            dms=dms,
+            sabian_index=sabian_index,
+            sabian_symbol=sabian_symbol,
+            retrograde=retro,
+            oob_status=oob,
+            dignity=dignity,
+            ruled_by_sign=", ".join(rulership),
+            latitude=round(lat_, 6),
+            declination=round(decl, 6),
+            distance=round(dist, 6),
+            speed=round(speed, 6),
         )
+        rows.append(chart_obj)
 
     # --- Add Descendant ---
     if asc_val is not None:
@@ -230,46 +250,46 @@ def calculate_chart(
         sign, dms, sabian_index = deg_to_sign(dc_val)
         sabian_symbol = SABIAN_SYMBOLS.get((sign, int(dc_val % 30) + 1), "")
         rows.append(
-            {
-                "Object": "Descendant",
-                "Longitude": round(dc_val, 6),
-                "Sign": sign,
-                "DMS": dms,
-                "Sabian Index": sabian_index,
-                "Sabian Symbol": sabian_symbol,
-                "Retrograde": "",
-                "OOB Status": "No",
-                "Dignity": "",
-                "Ruled by (sign)": "",
-                "Latitude": 0.0,
-                "Declination": 0.0,
-                "Distance": 0.0,
-                "Speed": 0.0,
-            }
+            ChartObject(
+                object_name="Descendant",
+                longitude=round(dc_val, 6),
+                sign=sign,
+                dms=dms,
+                sabian_index=sabian_index,
+                sabian_symbol=sabian_symbol,
+                retrograde="",
+                oob_status="No",
+                dignity="",
+                ruled_by_sign="",
+                latitude=0.0,
+                declination=0.0,
+                distance=0.0,
+                speed=0.0,
+            )
         )
 
-        # --- Add IC (opposite MC) ---
+    # --- Add IC (opposite MC) ---
     if mc_val is not None:
         ic_val = (mc_val + 180.0) % 360.0
         sign, dms, sabian_index = deg_to_sign(ic_val)
         sabian_symbol = SABIAN_SYMBOLS.get((sign, int(ic_val % 30) + 1), "")
         rows.append(
-            {
-                "Object": "IC",
-                "Longitude": round(ic_val, 6),
-                "Sign": sign,
-                "DMS": dms,
-                "Sabian Index": sabian_index,
-                "Sabian Symbol": sabian_symbol,
-                "Retrograde": "",
-                "OOB Status": "No",
-                "Dignity": "",
-                "Ruled by (sign)": "",
-                "Latitude": 0.0,
-                "Declination": 0.0,
-                "Distance": 0.0,
-                "Speed": 0.0,
-            }
+            ChartObject(
+                object_name="IC",
+                longitude=round(ic_val, 6),
+                sign=sign,
+                dms=dms,
+                sabian_index=sabian_index,
+                sabian_symbol=sabian_symbol,
+                retrograde="",
+                oob_status="No",
+                dignity="",
+                ruled_by_sign="",
+                latitude=0.0,
+                declination=0.0,
+                distance=0.0,
+                speed=0.0,
+            )
         )
 
     # ----------------------------
@@ -280,30 +300,34 @@ def calculate_chart(
     if house_system == "placidus":
         cusps, ascmc = swe.houses_ex(jd, lat, lon, b"P")
         if cusps is None or ascmc is None:
-            raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
+            raise ValueError(
+                "Swiss Ephemeris could not calculate Placidus houses"
+            )
         for i, deg in enumerate(cusps[:12], start=1):
             cusp_rows.append(
-                {
-                    "Object": f"{i}H Cusp",
-                    "Computed Absolute Degree": round(deg, 6),
-                    "House System": house_system,
-                }
+                HouseCusp(
+                    cusp_number=i,
+                    absolute_degree=round(deg, 6),
+                    house_system=house_system,
+                )
             )
 
     elif house_system == "equal":
         if asc_val is None:
             cusps, ascmc = swe.houses_ex(jd, lat, lon, b"E")
             if ascmc is None:
-                raise ValueError("Swiss Ephemeris could not calculate Equal houses")
+                raise ValueError(
+                    "Swiss Ephemeris could not calculate Equal houses"
+                )
             asc_val = ascmc[0]
         for i in range(12):
             deg = (asc_val + i * 30.0) % 360.0
             cusp_rows.append(
-                {
-                    "Object": f"{i+1}H Cusp",
-                    "Computed Absolute Degree": round(deg, 6),
-                    "House System": house_system,
-                }
+                HouseCusp(
+                    cusp_number=i + 1,
+                    absolute_degree=round(deg, 6),
+                    house_system=house_system,
+                )
             )
 
     elif house_system == "whole":
@@ -315,17 +339,28 @@ def calculate_chart(
         for i in range(12):
             deg = (asc_sign + i * 30.0) % 360.0
             cusp_rows.append(
-                {
-                    "Object": f"{i+1}H Cusp",
-                    "Computed Absolute Degree": round(deg, 6),
-                    "House System": house_system,
-                }
+                HouseCusp(
+                    cusp_number=i + 1,
+                    absolute_degree=round(deg, 6),
+                    house_system=house_system,
+                )
             )
 
-    # merge with main planet rows
-    cusp_df = pd.DataFrame(cusp_rows)
-    base_df = pd.DataFrame(rows)
-    return pd.concat([base_df, cusp_df], ignore_index=True)
+    # Create AstrologicalChart object
+    chart = AstrologicalChart(
+        objects=rows,
+        house_cusps=cusp_rows,
+        chart_datetime=utc_dt.isoformat(),
+        timezone=tz_used if 'tz_used' in locals() else "UTC",
+        latitude=lat,
+        longitude=lon,
+    )
+
+    # Return based on preference
+    if return_dataframe:
+        return chart.to_dataframe()
+    else:
+        return chart
 
 
 if __name__ == "__main__":
