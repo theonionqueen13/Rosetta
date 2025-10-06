@@ -7,25 +7,42 @@ import math
 import networkx as nx  # if you don’t have it, install with: pip install networkx
 from rosetta.helpers import format_dms
 from rosetta.patterns import _cluster_conjunctions_for_detection
+
 # ---- Load your lookups once (same pattern as rosetta5) ----
 _L = importlib.import_module("rosetta.lookup")
 
-GLYPHS                 = getattr(_L, "GLYPHS", {})
-ALIASES_MEANINGS       = getattr(_L, "ALIASES_MEANINGS", {})
-OBJECT_MEANINGS        = getattr(_L, "OBJECT_MEANINGS", {})
+GLYPHS = getattr(_L, "GLYPHS", {})
+ALIASES_MEANINGS = getattr(_L, "ALIASES_MEANINGS", {})
+OBJECT_MEANINGS = getattr(_L, "OBJECT_MEANINGS", {})
 OBJECT_INTERPRETATIONS = getattr(_L, "OBJECT_INTERPRETATIONS", {})
-OBJECT_MEANINGS_SHORT  = getattr(_L, "OBJECT_MEANINGS_SHORT", {})
-SIGN_MEANINGS          = getattr(_L, "SIGN_MEANINGS", {})
-HOUSE_MEANINGS         = getattr(_L, "HOUSE_MEANINGS", {})
-ASPECTS                = getattr(_L, "ASPECTS", {})
+OBJECT_MEANINGS_SHORT = getattr(_L, "OBJECT_MEANINGS_SHORT", {})
+SIGN_MEANINGS = getattr(_L, "SIGN_MEANINGS", {})
+HOUSE_MEANINGS = getattr(_L, "HOUSE_MEANINGS", {})
+ASPECTS = getattr(_L, "ASPECTS", {})
 ASPECT_INTERPRETATIONS = getattr(_L, "ASPECT_INTERPRETATIONS", {})
-PLANETARY_RULERS       = getattr(_L, "PLANETARY_RULERS", {})
-DIGNITIES              = getattr(_L, "DIGNITIES", {})
-CATEGORY_MAP           = getattr(_L, "CATEGORY_MAP", {})
-SABIAN_SYMBOLS         = getattr(_L, "SABIAN_SYMBOLS", {})
-SIGN_NAMES             = getattr(_L, "SIGN_NAMES", [
-    "Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
-])
+PLANETARY_RULERS = getattr(_L, "PLANETARY_RULERS", {})
+DIGNITIES = getattr(_L, "DIGNITIES", {})
+CATEGORY_MAP = getattr(_L, "CATEGORY_MAP", {})
+SABIAN_SYMBOLS = getattr(_L, "SABIAN_SYMBOLS", {})
+SIGN_NAMES = getattr(
+    _L,
+    "SIGN_NAMES",
+    [
+        "Aries",
+        "Taurus",
+        "Gemini",
+        "Cancer",
+        "Leo",
+        "Virgo",
+        "Libra",
+        "Scorpio",
+        "Sagittarius",
+        "Capricorn",
+        "Aquarius",
+        "Pisces",
+    ],
+)
+
 
 # ------------ Small internal helpers (no UI, no plotting) ------------
 def _norm_name(name: str) -> str:
@@ -34,13 +51,16 @@ def _norm_name(name: str) -> str:
         return name
     return ALIASES_MEANINGS.get(name, name)
 
+
 def _sign_index(longitude_deg: float) -> int:
     """0..11 sign index from absolute ecliptic longitude."""
     return int((longitude_deg % 360.0) // 30)
 
+
 def _deg_in_sign(longitude_deg: float) -> int:
     """0..29 integer degrees within sign."""
     return int(round(longitude_deg % 30.0))
+
 
 def _degree_for(name: str, pos: Dict[str, float]) -> float | None:
     """
@@ -63,6 +83,7 @@ def _degree_for(name: str, pos: Dict[str, float]) -> float | None:
             return pos[alias]
 
     return None
+
 
 def _get_row_from_df(name: str, df):
     """
@@ -88,6 +109,7 @@ def _get_row_from_df(name: str, df):
     if hit.empty:
         return None
     return hit.iloc[0].to_dict()
+
 
 def _resolve_dignity(obj: str, sign: str) -> str:
     """
@@ -180,6 +202,7 @@ def ensure_profile_detail_strings(row: dict | None) -> dict:
 
     return out
 
+
 def _extract_cusps_from_df(df) -> List[float]:
     """
     Try to extract the 12 house cusp longitudes from the DataFrame your app already produces.
@@ -189,8 +212,18 @@ def _extract_cusps_from_df(df) -> List[float]:
         return []
     # Common labels you already use (variants are handled)
     labels = [
-        "1 H Cusp","2 H Cusp","3 H Cusp","4 H Cusp","5 H Cusp","6 H Cusp",
-        "7 H Cusp","8 H Cusp","9 H Cusp","10 H Cusp","11 H Cusp","12 H Cusp"
+        "1 H Cusp",
+        "2 H Cusp",
+        "3 H Cusp",
+        "4 H Cusp",
+        "5 H Cusp",
+        "6 H Cusp",
+        "7 H Cusp",
+        "8 H Cusp",
+        "9 H Cusp",
+        "10 H Cusp",
+        "11 H Cusp",
+        "12 H Cusp",
     ]
     cusps = []
     for lab in labels:
@@ -203,11 +236,13 @@ def _extract_cusps_from_df(df) -> List[float]:
             return []
     return cusps  # 12 floats
 
+
 def _in_forward_arc(start_deg: float, end_deg: float, x_deg: float) -> bool:
     """True if x lies on the forward arc from start->end (mod 360)."""
     span = (end_deg - start_deg) % 360.0
-    off  = (x_deg   - start_deg) % 360.0
+    off = (x_deg - start_deg) % 360.0
     return (off < span) if span != 0 else (off == 0)
+
 
 def _house_of_degree(deg: float, cusps: List[float]) -> int | None:
     """Given a degree and 12 cusp list, return 1..12 or None."""
@@ -220,16 +255,24 @@ def _house_of_degree(deg: float, cusps: List[float]) -> int | None:
             return i + 1
     return 12
 
+
 def _angle_sep(a: float, b: float) -> float:
     """Smallest angular separation (0..180)."""
     d = abs((a - b) % 360.0)
     return 360.0 - d if d > 180.0 else d
 
-def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = None) -> dict:
+
+def build_object_context(
+    name: str, pos: dict, df, profile_rows: dict | None = None
+) -> dict:
     canonical = _norm_name(name)
     abs_deg = _degree_for(name, pos)
     if abs_deg is None:
-        return {"object": canonical, "available": False, "reason": f"No position for {name!r} in pos"}
+        return {
+            "object": canonical,
+            "available": False,
+            "reason": f"No position for {name!r} in pos",
+        }
 
     # Prefer prebuilt sidebar/enriched row
     row = {}
@@ -256,11 +299,21 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
             house = None
 
     # Motion/flags: read as-is from row
-    motion_raw = " ".join(str(row.get(k, "")) for k in ["Retrograde","Rx","Motion","Station"]).lower()
-    rx_flag      = ("rx" in motion_raw) or ("retro" in motion_raw)
-    station_flag = ("station" in motion_raw)
-    oob_raw  = str(row.get("OOB Status", "") or row.get("OOB", "") or row.get("Out of Bounds", "")).strip().lower()
-    oob_flag = oob_raw in ("yes","true","y","1")
+    motion_raw = " ".join(
+        str(row.get(k, "")) for k in ["Retrograde", "Rx", "Motion", "Station"]
+    ).lower()
+    rx_flag = ("rx" in motion_raw) or ("retro" in motion_raw)
+    station_flag = "station" in motion_raw
+    oob_raw = (
+        str(
+            row.get("OOB Status", "")
+            or row.get("OOB", "")
+            or row.get("Out of Bounds", "")
+        )
+        .strip()
+        .lower()
+    )
+    oob_flag = oob_raw in ("yes", "true", "y", "1")
 
     # Dignity: ONLY if present in row (no lookup fallback) — be robust to non-strings
     _d = row.get("Dignity")
@@ -275,7 +328,7 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
             return list(x)
         return [x] if x else []
 
-    sign_ruler  = _as_list(row.get("Sign Ruler"))
+    sign_ruler = _as_list(row.get("Sign Ruler"))
     house_ruler = _as_list(row.get("House Ruler"))
 
     def _clean_detail(val: Any) -> str:
@@ -283,9 +336,11 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
             return val.strip()
         return ""
 
-    declination = _clean_detail(row.get("Declination Display") or details.get("Declination"))
-    latitude    = _clean_detail(row.get("Latitude Display")    or details.get("Latitude"))
-    speed       = _clean_detail(row.get("Speed Display")       or details.get("Speed"))
+    declination = _clean_detail(
+        row.get("Declination Display") or details.get("Declination")
+    )
+    latitude = _clean_detail(row.get("Latitude Display") or details.get("Latitude"))
+    speed = _clean_detail(row.get("Speed Display") or details.get("Speed"))
 
     display_name = (row.get("Display Name") or canonical).strip()
     sabian = (row.get("Sabian Symbol") or row.get("Sabian") or "").strip()
@@ -300,7 +355,8 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
         "house": int(house) if house else None,
         "house_meaning": HOUSE_MEANINGS.get(int(house), "") if house else "",
         "sign_meaning": SIGN_MEANINGS.get(sign_name, ""),
-        "object_meaning": OBJECT_MEANINGS.get(canonical) or OBJECT_INTERPRETATIONS.get(canonical, ""),
+        "object_meaning": OBJECT_MEANINGS.get(canonical)
+        or OBJECT_INTERPRETATIONS.get(canonical, ""),
         "object_meaning_short": OBJECT_MEANINGS_SHORT.get(canonical, ""),
         "sabian_symbol": sabian,
         "retrograde": bool(rx_flag),
@@ -314,6 +370,7 @@ def build_object_context(name: str, pos: dict, df, profile_rows: dict | None = N
         "house_ruler": house_ruler,
     }
     return ctx
+
 
 def build_context_for_objects(
     targets: List[str],
@@ -333,7 +390,9 @@ def build_context_for_objects(
     - fixed_stars: optional hits
     """
     # Per-object profiles (visible only)
-    out_objects = [build_object_context(t, pos, df, profile_rows=profile_rows) for t in targets]
+    out_objects = [
+        build_object_context(t, pos, df, profile_rows=profile_rows) for t in targets
+    ]
 
     context = {
         "version": "brain.v1",
@@ -347,7 +406,7 @@ def build_context_for_objects(
                 "but do not output those as full profiles unless relevant."
             )
         },
-        "global": {}
+        "global": {},
     }
 
     # Clustered aspects (ONLY what the renderer hands in)
@@ -355,8 +414,8 @@ def build_context_for_objects(
         context["aspects"] = _collapse_aspects_by_clusters(aspects, targets, pos)
 
     # Silent global layers
-    context["global"].update(build_compass_context(pos, df))              # keep
-    context.update(build_shapes_context(active_shapes))                    # keep
+    context["global"].update(build_compass_context(pos, df))  # keep
+    context.update(build_shapes_context(active_shapes))  # keep
     context["global"]["dispositor_graph"] = analyze_dispositors(pos, df)  # summary only
 
     # Fixed stars (optional)
@@ -364,6 +423,7 @@ def build_context_for_objects(
         context.update(build_fixed_star_context(pos, star_catalog))
 
     return context
+
 
 def _collapse_aspects_by_clusters(
     aspects: List[Dict[str, str]],
@@ -396,9 +456,11 @@ def _collapse_aspects_by_clusters(
 
     # 2) Collapse endpoints to their clusters
     seen = set()
-    out  = []
+    out = []
     for e in aspects:
-        a = e.get("from"); b = e.get("to"); asp = e.get("aspect")
+        a = e.get("from")
+        b = e.get("to")
+        asp = e.get("aspect")
         if not a or not b or not asp:
             continue
         L = members_for(a)
@@ -418,11 +480,18 @@ def _collapse_aspects_by_clusters(
 
     return out
 
+
 # ------------ Minimal Gemini wrapper (output-only safe) ------------
 import json
 
-def ask_gemini_brain(genai_module, prompt_text: str, context: Dict[str, Any],
-                     model: str = "gemini-1.5-flash", temperature: float = 0.2) -> str:
+
+def ask_gemini_brain(
+    genai_module,
+    prompt_text: str,
+    context: Dict[str, Any],
+    model: str = "gemini-1.5-flash",
+    temperature: float = 0.2,
+) -> str:
     generative_model = genai_module.GenerativeModel(
         model_name=model,
         system_instruction=(
@@ -465,16 +534,16 @@ def build_dispositor_context(pos: dict, df) -> dict:
 
     for obj, deg in pos.items():
         # object's sign + sign ruler
-        sign_idx    = _sign_index(deg)
-        sign        = SIGN_NAMES[sign_idx]
-        sign_ruler  = PLANETARY_RULERS.get(sign, "")
+        sign_idx = _sign_index(deg)
+        sign = SIGN_NAMES[sign_idx]
+        sign_ruler = PLANETARY_RULERS.get(sign, "")
 
         # object's house + ruler of that house cusp sign
-        house       = _house_of_degree(deg, cusps) if cusps else None
+        house = _house_of_degree(deg, cusps) if cusps else None
         house_ruler = ""
         if house and cusps and 1 <= house <= 12:
-            cusp_deg   = cusps[house - 1]
-            cusp_sign  = SIGN_NAMES[_sign_index(cusp_deg)]
+            cusp_deg = cusps[house - 1]
+            cusp_sign = SIGN_NAMES[_sign_index(cusp_deg)]
             house_ruler = PLANETARY_RULERS.get(cusp_sign, "")
 
         out[_norm_name(obj)] = {
@@ -485,6 +554,7 @@ def build_dispositor_context(pos: dict, df) -> dict:
         }
 
     return {"dispositors": out}
+
 
 def build_compass_context(pos: dict, df) -> dict:
     """
@@ -514,11 +584,13 @@ def build_compass_context(pos: dict, df) -> dict:
         }
     return {"compass": out}
 
+
 import pandas as pd
 
 # -----------------------------
 # Shapes Context
 # -----------------------------
+
 
 def build_shapes_context(active_shapes: list) -> dict:
     """
@@ -528,16 +600,14 @@ def build_shapes_context(active_shapes: list) -> dict:
     out = []
     for shape in active_shapes or []:
         instruction = SHAPE_INSTRUCTIONS.get(shape, "")
-        out.append({
-            "name": shape,
-            "instruction": instruction
-        })
+        out.append({"name": shape, "instruction": instruction})
     return {"shapes": out}
 
 
 # -----------------------------
 # Fixed Stars Context
 # -----------------------------
+
 
 def load_fixed_star_catalog(path: str) -> pd.DataFrame:
     """
@@ -575,15 +645,14 @@ def build_fixed_star_context(pos: dict, catalog: pd.DataFrame) -> dict:
 
             sep = abs((deg - abs_deg + 180) % 360 - 180)  # min separation
             if sep <= orb:
-                matches.append({
-                    "star": star_name,
-                    "orb": round(sep, 2),
-                    "meaning": meaning
-                })
+                matches.append(
+                    {"star": star_name, "orb": round(sep, 2), "meaning": meaning}
+                )
 
         if matches:
             out[_norm_name(obj)] = matches
     return {"fixed_stars": out}
+
 
 # -----------------------------
 # Dispositor Graph Analysis
@@ -657,11 +726,13 @@ def analyze_dispositors(pos: dict, df) -> dict:
         loops = [c for c in cycles if len(c) >= 2]
 
         dominant = sorted([n for n, outdeg in graph.out_degree() if outdeg >= 3])
-        final = sorted([
-            n
-            for n in graph.nodes
-            if graph.out_degree(n) == 0 and graph.in_degree(n) >= 1
-        ])
+        final = sorted(
+            [
+                n
+                for n in graph.nodes
+                if graph.out_degree(n) == 0 and graph.in_degree(n) >= 1
+            ]
+        )
 
         return {
             "dominant_rulers": dominant,
@@ -675,13 +746,13 @@ def analyze_dispositors(pos: dict, df) -> dict:
         "by_house": _summarize(G_house),
     }
 
+
 # -----------------------------
 # Task Dispatcher
 # -----------------------------
-def choose_task_instruction(chart_mode: str,
-                            visible_objects: list,
-                            active_shapes: list,
-                            context: dict) -> str:
+def choose_task_instruction(
+    chart_mode: str, visible_objects: list, active_shapes: list, context: dict
+) -> str:
     if chart_mode == "natal":
         return (
             "You are an astrology interpreter.\n"

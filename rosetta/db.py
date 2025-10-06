@@ -3,21 +3,27 @@ import os
 import httpx
 import streamlit as st
 from supabase import create_client, ClientOptions  # type: ignore
+
 try:
     _cache_resource = st.cache_resource  # Streamlit >= 1.18
 except Exception:
+
     def _cache_resource(func):
         return func
+
 
 @_cache_resource
 def _get_supabase_keys() -> tuple[str, str]:
     # Hard-wire to your nested secrets format. No env, no flat names.
-    blk = st.secrets["supabase"]           # raises clearly if the block is missing
-    url = blk["url"]                       # raises clearly if missing
+    blk = st.secrets["supabase"]  # raises clearly if the block is missing
+    url = blk["url"]  # raises clearly if missing
     key = blk.get("service_role") or blk["key"]  # prefer service_role, else key
     if not url or not key:
-        raise RuntimeError("Missing [supabase].url and key/service_role in secrets.toml")
+        raise RuntimeError(
+            "Missing [supabase].url and key/service_role in secrets.toml"
+        )
     return url, key
+
 
 @_cache_resource
 def supa():  # -> Client

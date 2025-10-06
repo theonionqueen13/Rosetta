@@ -5,42 +5,62 @@ from rosetta.brain import (
     build_context_for_objects,
     load_fixed_star_catalog,
     ensure_profile_detail_strings,
-    choose_task_instruction
+    choose_task_instruction,
 )
 
 # Import your modules
 from rosetta.calc import calculate_chart
 from rosetta.brain import build_context_for_objects, load_fixed_star_catalog
 import importlib
+
 _L = importlib.import_module("rosetta.lookup")
 
 MAJOR_OBJECTS = getattr(_L, "MAJOR_OBJECTS", [])
-SIGN_NAMES    = getattr(_L, "SIGN_NAMES", [
-    "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
-    "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
-])
+SIGN_NAMES = getattr(
+    _L,
+    "SIGN_NAMES",
+    [
+        "Aries",
+        "Taurus",
+        "Gemini",
+        "Cancer",
+        "Leo",
+        "Virgo",
+        "Libra",
+        "Scorpio",
+        "Sagittarius",
+        "Capricorn",
+        "Aquarius",
+        "Pisces",
+    ],
+)
 PLANETARY_RULERS = getattr(_L, "PLANETARY_RULERS", {})
 ASPECTS = getattr(_L, "ASPECTS", {})
-COMPASS = ["Ascendant","Descendant","MC","IC","North Node","South Node"]
+COMPASS = ["Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"]
+
 
 def _sign_index(deg: float) -> int:
     return int((float(deg) % 360.0) // 30)
 
+
 def _sign_from_degree(deg: float) -> str:
     return SIGN_NAMES[_sign_index(deg)]
 
+
 def _in_forward_arc(a: float, b: float, x: float) -> bool:
     span = (b - a) % 360.0
-    off  = (x - a) % 360.0
+    off = (x - a) % 360.0
     return (off < span) if span != 0 else (off == 0)
+
 
 def _house_of_degree(deg: float, cusps: list[float]) -> int | None:
     if not cusps or len(cusps) != 12:
         return None
     for i in range(12):
-        if _in_forward_arc(cusps[i], cusps[(i+1) % 12], deg):
+        if _in_forward_arc(cusps[i], cusps[(i + 1) % 12], deg):
             return i + 1
     return 12
+
 
 def _extract_cusps(df: pd.DataFrame):
     """
@@ -49,16 +69,27 @@ def _extract_cusps(df: pd.DataFrame):
     """
     if "Object" not in df.columns:
         return []
-    cusp_rows = df[df["Object"].astype(str).str.contains(r"^\s*\d+\s*H\s*Cusp\s*$", case=False, regex=True)].copy()
+    cusp_rows = df[
+        df["Object"]
+        .astype(str)
+        .str.contains(r"^\s*\d+\s*H\s*Cusp\s*$", case=False, regex=True)
+    ].copy()
     if cusp_rows.empty:
         return []
     # sort by the numeric house number in "Object"
-    cusp_rows["_house"] = cusp_rows["Object"].str.extract(r"(\d+)", expand=False).astype(int)
+    cusp_rows["_house"] = (
+        cusp_rows["Object"].str.extract(r"(\d+)", expand=False).astype(int)
+    )
     cusp_rows = cusp_rows.sort_values("_house")
     # prefer 'Computed Absolute Degree' (your calc.py), fallback to 'Longitude'
-    deg_col = "Computed Absolute Degree" if "Computed Absolute Degree" in cusp_rows.columns else "Longitude"
+    deg_col = (
+        "Computed Absolute Degree"
+        if "Computed Absolute Degree" in cusp_rows.columns
+        else "Longitude"
+    )
     vals = cusp_rows[deg_col].astype(float).tolist()
     return vals if len(vals) == 12 else []
+
 
 def _build_pos(df: pd.DataFrame):
     """Create pos dict for major objects (and compass points if present)."""
@@ -77,6 +108,7 @@ def _build_pos(df: pd.DataFrame):
                 pos[obj] = float(val) % 360.0
     return pos
 
+
 def _visible(mode: str, custom_list: str, pos: dict):
     if mode == "compass":
         return [o for o in COMPASS if o in pos]
@@ -88,39 +120,55 @@ def _visible(mode: str, custom_list: str, pos: dict):
         return [o for o in items if o in pos]
     return []
 
+
 def _compass_aspects(visible):
     """Only add the three axes as oppositions to keep 'single source of truth' for this CLI."""
     A = []
-    def add(a,b):
+
+    def add(a, b):
         if a in visible and b in visible:
             A.append({"from": a, "to": b, "aspect": "Opposition"})
-    add("South Node","North Node")
-    add("Ascendant","Descendant")
-    add("MC","IC")
+
+    add("South Node", "North Node")
+    add("Ascendant", "Descendant")
+    add("MC", "IC")
     return A
 
+
 def main():
-    ap = argparse.ArgumentParser(description="Print Rosetta brain JSON context (no Gemini).")
-    ap.add_argument("--year",   type=int, required=True)
-    ap.add_argument("--month",  type=int, required=True, help="1-12")
-    ap.add_argument("--day",    type=int, required=True)
-    ap.add_argument("--hour",   type=int, required=True)
+    ap = argparse.ArgumentParser(
+        description="Print Rosetta brain JSON context (no Gemini)."
+    )
+    ap.add_argument("--year", type=int, required=True)
+    ap.add_argument("--month", type=int, required=True, help="1-12")
+    ap.add_argument("--day", type=int, required=True)
+    ap.add_argument("--hour", type=int, required=True)
     ap.add_argument("--minute", type=int, required=True)
-    ap.add_argument("--lat",    type=float, required=True)
-    ap.add_argument("--lon",    type=float, required=True)
-    ap.add_argument("--tz",     dest="tz_name", required=True, help="IANA tz, e.g. America/Chicago")
-    ap.add_argument("--house",  default="equal", choices=["equal","whole","placidus"])
-    ap.add_argument("--mode",   default="compass", choices=["compass","all","custom"])
+    ap.add_argument("--lat", type=float, required=True)
+    ap.add_argument("--lon", type=float, required=True)
+    ap.add_argument(
+        "--tz", dest="tz_name", required=True, help="IANA tz, e.g. America/Chicago"
+    )
+    ap.add_argument("--house", default="equal", choices=["equal", "whole", "placidus"])
+    ap.add_argument("--mode", default="compass", choices=["compass", "all", "custom"])
     ap.add_argument("--objects", default="", help="Comma list for --mode custom")
     ap.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
-    ap.add_argument("--out",    default="", help="Write JSON to file")
+    ap.add_argument("--out", default="", help="Write JSON to file")
     args = ap.parse_args()
 
     # 1) Calculate chart DataFrame using your engine
     df = calculate_chart(
-        args.year, args.month, args.day, args.hour, args.minute,
-        tz_offset=0.0, lat=args.lat, lon=args.lon,
-        input_is_ut=False, tz_name=args.tz_name, house_system=args.house
+        args.year,
+        args.month,
+        args.day,
+        args.hour,
+        args.minute,
+        tz_offset=0.0,
+        lat=args.lat,
+        lon=args.lon,
+        input_is_ut=False,
+        tz_name=args.tz_name,
+        house_system=args.house,
     )
 
     # 2) Build pos + cusps
@@ -227,6 +275,7 @@ def main():
         print(f"Wrote {args.out}")
     else:
         print(text)
+
 
 if __name__ == "__main__":
     main()

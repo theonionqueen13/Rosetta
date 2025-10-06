@@ -6,7 +6,8 @@ def tts_controls(text: str, key: str, label: str = "🔊 Read"):
     uid = f"tts-{key}-{uuid.uuid4().hex[:8]}"
     payload = json.dumps(text or "")
 
-    st_html(f"""
+    st_html(
+        f"""
 <div id="{uid}" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.25rem 0 .75rem;">
   <!-- main controls -->
   <button id="{uid}-play">{label}</button>
@@ -131,4 +132,6 @@ def tts_controls(text: str, key: str, label: str = "🔊 Read"):
   }}
 }})();
 </script>
-""", height=110)
+""",
+        height=110,
+    )
