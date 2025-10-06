@@ -2,10 +2,6 @@
 from zoneinfo import ZoneInfo
 import os, swisseph as swe
 
-import os, swisseph as swe
-
-import os, swisseph as swe
-
 # Force path to the ephe folder in your repo
 EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
