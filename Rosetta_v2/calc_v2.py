@@ -286,10 +286,10 @@ def calculate_chart(
 			"Object": name,
 			"Dignity": dignity,         # filled later
 			"Reception": "",       
+			"Ruled by (sign)": sign_rulers_str,
 			"Longitude": round(lon_, 6),
 			"Sign": sign,
 			"Sign Index": _sign_index(lon_),
-			"Ruled by (sign)": sign_rulers_str,
 			"Degree In Sign": degree_in_sign,
 			"Minute In Sign": minute_in_sign,
 			"Second In Sign": second_in_sign,

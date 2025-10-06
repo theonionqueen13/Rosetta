@@ -172,34 +172,26 @@ def run_chart(lat, lon, tz_name):
 	# Keep it around if you want to reference later
 	st.session_state["last_df"] = df
 
-	# === Simple table output ===
-	st.subheader("Calculated Chart (DataFrame)")
-	# Sect (print-only, not in the DataFrame)
+	# === Sect info stays visible ===
 	try:
 		sect = chart_sect_from_df(df)
 		st.info(f"Sect: **{sect}**")
 	except Exception as e:
 		st.warning(f"Sect unavailable: {e}")
 
-	st.dataframe(df, use_container_width=True)
+	# === Popover triggers ===
+	with st.popover("🪐", use_container_width=True):
+		st.subheader("Calculated Chart")
+		st.dataframe(df, use_container_width=True)
 
-	# === Aspect Graph output (optional second table) ===
-	if aspect_df is not None:
-		st.subheader("Aspect Graph")
-		st.dataframe(aspect_df, use_container_width=True)
+	with st.popover("📐", use_container_width=True):
+		if aspect_df is not None:
+			st.subheader("Aspect Graph")
+			st.dataframe(aspect_df, use_container_width=True)
 
-		# --- Aspect edge lists (for plotting / graphing) ---
-		edges_major, edges_minor = build_aspect_edges(df)
-
-		# Store them if you want to reuse later (optional)
-		st.session_state["edges_major"] = edges_major
-		st.session_state["edges_minor"] = edges_minor
-
-		# Quick sanity preview (remove later if not needed)
-		st.markdown("**Major Aspects (edges):**")
-		st.json(edges_major)
-		st.markdown("**Minor Aspects (edges):**")
-		st.json(edges_minor)
+	# (optional) keep edges around for later use, without re-building
+	st.session_state["edges_major"] = edges_major
+	st.session_state["edges_minor"] = edges_minor
 
 with col_right:
 	if st.button("Calculate Chart"):
