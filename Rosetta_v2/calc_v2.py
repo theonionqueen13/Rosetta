@@ -284,7 +284,8 @@ def calculate_chart(
 
 		rows.append({
 			"Object": name,
-			"Dignity": dignity,
+			"Dignity": dignity,         # filled later
+			"Reception": "",       
 			"Longitude": round(lon_, 6),
 			"Sign": sign,
 			"Sign Index": _sign_index(lon_),
@@ -876,3 +877,120 @@ def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
 
 	return edges_major, edges_minor
 
+def _sign_to_index(sign_name: str) -> int | None:
+	"""Return 0..11 for Aries..Pisces using your SIGNS list."""
+	try:
+		return SIGNS.index(sign_name)
+	except Exception:
+		return None
+
+# Reception aspects we consider (the five mapped by sign-distance)
+_RECEPTION_ASPECTS = {
+	"Conjunction": 0,
+	"Sextile": 60,
+	"Square": 90,
+	"Trine": 120,
+	"Opposition": 180,
+}
+_RECEPTION_ASPECT_NAMES = set(_RECEPTION_ASPECTS.keys())
+
+def _aspect_name_for_sign_distance(d: int) -> str | None:
+	"""
+	Sign-distance mapping (0..6) → name.
+	  0 -> Conjunction
+	  2 -> Sextile
+	  3 -> Square
+	  4 -> Trine
+	  6 -> Opposition
+	"""
+	return {
+		0: "Conjunction",
+		2: "Sextile",
+		3: "Square",
+		4: "Trine",
+		6: "Opposition",
+	}.get(d)
+
+def _sign_distance(i: int, j: int) -> int:
+	"""
+	Modular distance on 12-sign circle (0..6).
+	"""
+	d = abs(i - j)
+	return d if d <= 6 else 12 - d
+
+def annotate_reception(df: pd.DataFrame, edges_major: list[tuple]) -> pd.DataFrame:
+    """
+    Sign-only Reception (no house reception).
+    Uses supplied edges_major (no aspect recalculation).
+
+    Outputs all matching receptions to all rulers, e.g.:
+      "Opposite Mars, Conjunct Pluto"
+    For sign-distance fallback, appends " (by sign)" per item.
+    Suppresses self-conjunction (planet conjunct itself in domicile).
+    """
+    out = df.copy()
+
+    # Objects only & quick lookups
+    objs_only = out[~out["Object"].str.contains("cusp", case=False, na=False)].copy()
+    name_to_sign = dict(zip(objs_only["Object"], objs_only["Sign"]))
+    name_set = set(name_to_sign.keys())
+
+    # Aspect display mapping for wording tweaks
+    _DISPLAY = {"Conjunction": "Conjunct", "Opposition": "Opposite"}
+    def _disp(aspect_name: str) -> str:
+        return _DISPLAY.get(aspect_name, aspect_name)
+
+    # Build lookup from supplied edges_major
+    pair_to_aspect = {}
+    for a, b, meta in edges_major:
+        asp = meta.get("aspect")
+        if asp in _RECEPTION_ASPECT_NAMES:  # {"Conjunction","Sextile","Square","Trine","Opposition"}
+            pair_to_aspect[tuple(sorted((a, b)))] = asp
+
+    results = []
+    for _, row in out.iterrows():
+        obj = row.get("Object", "")
+        if "cusp" in str(obj).lower():
+            results.append("")
+            continue
+
+        sign = row.get("Sign", "")
+        rulers = lookup_sign_rulers(sign, PLANETARY_RULERS) or []
+
+        # Collect *all* receptions across all rulers
+        found_items = []
+        for ruler in rulers:
+            if ruler not in name_set:
+                continue  # ruler not present among objects
+
+            # --- by ORB (preferred) using supplied edges ---
+            key = tuple(sorted((obj, ruler)))
+            aspname = pair_to_aspect.get(key)
+            if aspname in _RECEPTION_ASPECT_NAMES:
+                # suppress self-conjunction
+                if obj == ruler and aspname == "Conjunction":
+                    pass  # skip
+                else:
+                    found_items.append(f"{_disp(aspname)} {ruler}")
+                continue  # don't also add a by-sign fallback for this ruler
+
+            # --- by SIGN (fallback) using modular sign distance ---
+            obj_si = _sign_to_index(sign)
+            ruler_sign = name_to_sign.get(ruler, "")
+            rul_si = _sign_to_index(ruler_sign)
+            if obj_si is None or rul_si is None:
+                continue
+
+            dist = _sign_distance(obj_si, rul_si)  # 0..6
+            sign_aspect = _aspect_name_for_sign_distance(dist)
+            if sign_aspect is not None:
+                # suppress self-conjunction
+                if obj == ruler and sign_aspect == "Conjunction":
+                    pass  # skip
+                else:
+                    found_items.append(f"{_disp(sign_aspect)} {ruler} (by sign)")
+
+        results.append(", ".join(found_items) if found_items else "")
+
+    out["Reception"] = results
+    return out

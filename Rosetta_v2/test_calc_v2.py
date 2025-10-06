@@ -12,6 +12,7 @@ spec.loader.exec_module(calc_mod)
 calculate_chart = calc_mod.calculate_chart  # <-- use this below
 chart_sect_from_df = calc_mod.chart_sect_from_df
 build_aspect_edges = calc_mod.build_aspect_edges
+annotate_reception = calc_mod.annotate_reception
 
 MONTH_NAMES = [
 	"January","February","March","April","May","June",
@@ -161,6 +162,12 @@ def run_chart(lat, lon, tz_name):
 	else:
 		df = result
 		aspect_df = None
+
+	# Build edges ONCE (no recalculation inside annotate_reception)
+	edges_major, edges_minor = build_aspect_edges(df)
+
+	# Annotate sign-only reception using supplied edges_major
+	df = annotate_reception(df, edges_major)
 
 	# Keep it around if you want to reference later
 	st.session_state["last_df"] = df
