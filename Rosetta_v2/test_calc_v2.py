@@ -1,7 +1,8 @@
 # ---- Test stubs to satisfy UI/backend imports ----
 # Keep these ABOVE imports of your app modules.
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from house_selector_v2 import _selected_house_system
+from donate_v2 import donate_chart
 import datetime as dt
 import pytz
 
@@ -12,44 +13,44 @@ _TEST_PROFILES: Dict[str, Dict[str, Any]] = {}
 _TEST_COMMUNITY: Dict[str, Dict[str, Any]] = {}
 
 def save_user_profile_db(user_id: str, name: str, payload: Dict[str, Any]) -> None:
-    users = _TEST_PROFILES.setdefault(user_id, {})
-    users[name] = payload.copy()
+	users = _TEST_PROFILES.setdefault(user_id, {})
+	users[name] = payload.copy()
 
 def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
-    return _TEST_PROFILES.get(user_id, {}).copy()
+	return _TEST_PROFILES.get(user_id, {}).copy()
 
 def delete_user_profile_db(user_id: str, name: str) -> None:
-    if user_id in _TEST_PROFILES and name in _TEST_PROFILES[user_id]:
-        del _TEST_PROFILES[user_id][name]
+	if user_id in _TEST_PROFILES and name in _TEST_PROFILES[user_id]:
+		del _TEST_PROFILES[user_id][name]
 
 def community_save(profile_name: str, payload: Dict[str, Any], submitted_by: Optional[str] = None) -> str:
-    # Return a fake ID like a DB would
-    new_id = f"comm_{len(_TEST_COMMUNITY)+1}"
-    _TEST_COMMUNITY[new_id] = {
-        "id": new_id,
-        "profile_name": profile_name,
-        "payload": payload.copy(),
-        "submitted_by": submitted_by or current_user_id,
-    }
-    return new_id
+	# Return a fake ID like a DB would
+	new_id = f"comm_{len(_TEST_COMMUNITY)+1}"
+	_TEST_COMMUNITY[new_id] = {
+		"id": new_id,
+		"profile_name": profile_name,
+		"payload": payload.copy(),
+		"submitted_by": submitted_by or current_user_id,
+	}
+	return new_id
 
 def community_list(limit: int = 100) -> List[Dict[str, Any]]:
-    return list(_TEST_COMMUNITY.values())[:limit]
+	return list(_TEST_COMMUNITY.values())[:limit]
 
 # Some parts of your code use community_get; others say community_load.
 # Provide both so either name works.
 def community_get(comm_id: str) -> Optional[Dict[str, Any]]:
-    return _TEST_COMMUNITY.get(comm_id)
+	return _TEST_COMMUNITY.get(comm_id)
 
 def community_delete(comm_id: str) -> None:
-    _TEST_COMMUNITY.pop(comm_id, None)
+	_TEST_COMMUNITY.pop(comm_id, None)
 
 # Back-compat alias if something imports 'community_load'
 community_load = community_get
 
 def is_admin(user_id: str) -> bool:
-    # In tests, just say yes or no—doesn’t matter unless you assert on it.
-    return True
+	# In tests, just say yes or no—doesn’t matter unless you assert on it.
+	return True
 # ---- End stubs ----
 
 from geopy.geocoders import OpenCage
@@ -62,6 +63,29 @@ from drawing_v2 import render_chart, render_chart_with_shapes
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
+
+
+def _geocode_city_with_timezone(city_query: str) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
+	"""Return (lat, lon, tz_name, formatted_address) for the provided city query."""
+	lat = lon = tz_name = None
+	formatted_address = None
+
+	if not city_query:
+		return lat, lon, tz_name, formatted_address
+
+	try:
+		opencage_key = st.secrets["OPENCAGE_API_KEY"]
+	except Exception as exc:
+		raise RuntimeError("OpenCage API key missing from Streamlit secrets") from exc
+
+	geolocator = OpenCage(api_key=opencage_key)
+	location = geolocator.geocode(city_query, timeout=20)
+	if location:
+		lat, lon = location.latitude, location.longitude
+		formatted_address = location.address
+		tz_name = TimezoneFinder().timezone_at(lng=lon, lat=lat)
+
+	return lat, lon, tz_name, formatted_address
 
 # --- Sidebar profile styling (single-space lines + thin separators) ---
 st.sidebar.markdown("""
@@ -389,28 +413,23 @@ with col_left:
 				st.session_state["hour_val"] = hour_val
 				st.session_state["minute_val"] = minute_val
 
-				# Geocode only now (on submit)
-				opencage_key = st.secrets["OPENCAGE_API_KEY"]
-				geolocator = OpenCage(api_key=opencage_key)
-				lat = lon = tz_name = None
 				try:
-					if city_name:
-						location = geolocator.geocode(city_name, timeout=20)
-						if location:
-							lat, lon = location.latitude, location.longitude
-							tf = TimezoneFinder()
-							tz_name = tf.timezone_at(lng=lon, lat=lat)
-							st.session_state["last_location"] = location.address
-							st.session_state["last_timezone"] = tz_name
-							st.session_state["current_lat"] = lat
-							st.session_state["current_lon"] = lon
-							st.session_state["current_tz_name"] = tz_name
-						else:
-							st.session_state["last_location"] = None
-							st.session_state["last_timezone"] = "City not found. Try a more specific query."
+					lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_name)
 				except Exception as e:
 					st.session_state["last_location"] = None
 					st.session_state["last_timezone"] = f"Lookup error: {e}"
+
+					lat = lon = tz_name = None
+				else:
+					if lat is not None and lon is not None and tz_name:
+						st.session_state["last_location"] = formatted_address or city_name
+						st.session_state["last_timezone"] = tz_name
+						st.session_state["current_lat"] = lat
+						st.session_state["current_lon"] = lon
+						st.session_state["current_tz_name"] = tz_name
+					else:
+						st.session_state["last_location"] = None
+						st.session_state["last_timezone"] = "City not found. Try a more specific query."
 
 				# Persist “profile_*” used by run_chart
 				st.session_state["profile_year"] = year
@@ -434,109 +453,130 @@ with col_left:
 				elif st.session_state.get("last_timezone"):
 					st.error(st.session_state["last_timezone"])
 
-	df_cached     = st.session_state.get("last_df")
-	if df_cached is not None:
+df_cached     = st.session_state.get("last_df")
+
+# --- Quick city UI state defaults & safe-clear ---
+st.session_state.setdefault("show_now_city_field", False)
+st.session_state.setdefault("now_city_temp", "")
+st.session_state.setdefault("__clear_now_city_temp__", False)
+st.session_state.setdefault("__now_city_submit__", False)  # <- fire on Enter
+
+# Clear the quick-city field safely BEFORE any widgets are instantiated here
+if st.session_state.get("__clear_now_city_temp__", False):
+    st.session_state.pop("now_city_temp", None)
+    st.session_state["__clear_now_city_temp__"] = False
+
+# Enter key callback (no-arg fn)
+def _mark_now_city_entered():
+    st.session_state["__now_city_submit__"] = True
+
+# Optional geocoder hook: define to avoid NameError in this file
+# Replace this later with: from your_module import lookup_city as geocode_city
+try:
+	geocode_city  # type: ignore  # if not defined, NameError
+except NameError:
+	geocode_city = None
 
 with col_mid:
-    if st.button("🌟 Now", key="btn_now"):
-        stored_lat = st.session_state.get("current_lat")
-        stored_lon = st.session_state.get("current_lon")
-        stored_tz  = st.session_state.get("current_tz_name")
-        city_name  = st.session_state.get("profile_city", "")
+	if st.button("🌟 Now", key="btn_now"):
+		stored_lat = st.session_state.get("current_lat")
+		stored_lon = st.session_state.get("current_lon")
+		stored_tz  = st.session_state.get("current_tz_name")
+		city_name  = st.session_state.get("profile_city", "")
 
-        # If we don't have a valid location yet, show the quick field right here
-        if not (isinstance(stored_lat, (int, float)) and isinstance(stored_lon, (int, float)) and stored_tz):
-            st.error("Enter a city.")
-            st.session_state["show_now_city_field"] = True
-        else:
-            try:
-                tz = pytz.timezone(stored_tz)
-                now = dt.datetime.now(tz)
+		# If we don't have a valid location yet, show the quick field right here
+		if not (isinstance(stored_lat, (int, float)) and isinstance(stored_lon, (int, float)) and stored_tz):
+			st.error("Enter a city.")
+			st.session_state["show_now_city_field"] = True
+		else:
+			try:
+				tz = pytz.timezone(stored_tz)
+				now = dt.datetime.now(tz)
 
-                # update only the profile_* inputs
-                st.session_state["profile_year"]        = now.year
-                st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
-                st.session_state["profile_day"]         = now.day
-                st.session_state["profile_hour"]        = now.hour
-                st.session_state["profile_minute"]      = now.minute
-                st.session_state["profile_city"]        = city_name
+				# update only the profile_* inputs
+				st.session_state["profile_year"]        = now.year
+				st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
+				st.session_state["profile_day"]         = now.day
+				st.session_state["profile_hour"]        = now.hour
+				st.session_state["profile_minute"]      = now.minute
+				st.session_state["profile_city"]        = city_name
 
-                # ensure current_* cache
-                st.session_state["current_lat"]     = stored_lat
-                st.session_state["current_lon"]     = stored_lon
-                st.session_state["current_tz_name"] = stored_tz
+				# ensure current_* cache
+				st.session_state["current_lat"]     = stored_lat
+				st.session_state["current_lon"]     = stored_lon
+				st.session_state["current_tz_name"] = stored_tz
 
-                # compute planets (house system is used later at render)
-                run_chart(stored_lat, stored_lon, stored_tz)
+				# compute planets (house system is used later at render)
+				run_chart(stored_lat, stored_lon, stored_tz)
 
-                st.session_state["chart_ready"] = True
-                st.rerun()
-            except Exception as e:
-                st.error(f"Chart calculation failed: {e}")
-                st.session_state["chart_ready"] = False
+				st.session_state["chart_ready"] = True
+				st.rerun()
+			except Exception as e:
+				st.error(f"Chart calculation failed: {e}")
+				st.session_state["chart_ready"] = False
 
-    # Quick city field — only shows if the guard above failed
-    if st.session_state.get("show_now_city_field", False):
-        st.caption("Quick city entry for Now:")
-        st.text_input(
+# Quick city field — only shows if the guard above failed
+if st.session_state.get("show_now_city_field", False):
+    st.caption("Quick city entry for Now:")
+
+    # A tiny form prevents duplicated buttons and lets Enter submit
+    with st.form("now_city_form", clear_on_submit=True):
+        city_str = st.text_input(
             "City (e.g., Denver, CO, USA)",
             key="now_city_temp",
             placeholder="City, State/Province, Country",
         )
-        c_now1, c_now2 = st.columns([1, 1], gap="small")
-        with c_now1:
-            if st.button("Use this city", key="btn_now_geocode", use_container_width=True):
-                city_str = (st.session_state.get("now_city_temp") or "").strip()
-                if not city_str:
-                    st.error("Please type a city.")
+        f1, f2 = st.columns([1, 1], gap="small")
+        with f1:
+            submit_now = st.form_submit_button("Lookup City", use_container_width=True)
+        with f2:
+            cancel_now = st.form_submit_button("Cancel", use_container_width=True)
+
+    if cancel_now:
+        st.session_state["show_now_city_field"] = False
+        st.rerun()
+
+    if submit_now:
+        city_str = (city_str or "").strip()
+        if not city_str:
+            st.error("Please type a city.")
+        else:
+            try:
+                lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_str)
+            except Exception as e:
+                st.error(f"City lookup failed: {e}")
+            else:
+                if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
+                    st.error("City lookup returned invalid results.")
+                elif tz_name not in pytz.all_timezones:
+                    st.error(f"Unrecognized timezone '{tz_name}'.")
                 else:
+                    # Store city + geocode
+                    st.session_state["profile_city"]    = city_str
+                    st.session_state["city_input"]      = city_str
+                    st.session_state["current_lat"]     = lat
+                    st.session_state["current_lon"]     = lon
+                    st.session_state["current_tz_name"] = tz_name
+                    st.session_state["last_location"]   = formatted_address or city_str
+                    st.session_state["last_timezone"]   = tz_name
+
+                    # Compute "Now" in that timezone (3-arg run_chart)
+                    tz = pytz.timezone(tz_name)
+                    now = dt.datetime.now(tz)
+                    st.session_state["profile_year"]        = now.year
+                    st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
+                    st.session_state["profile_day"]         = now.day
+                    st.session_state["profile_hour"]        = now.hour
+                    st.session_state["profile_minute"]      = now.minute
+
                     try:
-                        lat, lon, tz_name = geocode_city(city_str)  # <-- uses injected geocoder
+                        run_chart(lat, lon, tz_name)
+                        st.session_state["chart_ready"] = True
+                        st.session_state["show_now_city_field"] = False
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"City lookup failed: {e}")
-                    else:
-                        if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
-                            st.error("City lookup returned invalid results.")
-                        elif tz_name not in pytz.all_timezones:
-                            st.error(f"Unrecognized timezone '{tz_name}'.")
-                        else:
-                            # store city + geocode
-                            st.session_state["profile_city"]   = city_str
-                            st.session_state["city_input"]     = city_str
-                            st.session_state["current_lat"]    = lat
-                            st.session_state["current_lon"]    = lon
-                            st.session_state["current_tz_name"]= tz_name
-                            st.session_state["last_location"]  = city_str
-                            st.session_state["last_timezone"]  = tz_name
-
-                            # compute "Now" in that timezone
-                            tz = pytz.timezone(tz_name)
-                            now = dt.datetime.now(tz)
-                            st.session_state["profile_year"]        = now.year
-                            st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
-                            st.session_state["profile_day"]         = now.day
-                            st.session_state["profile_hour"]        = now.hour
-                            st.session_state["profile_minute"]      = now.minute
-
-                            try:
-                                run_chart(lat, lon, tz_name)  # 3-arg version
-                                st.session_state["chart_ready"] = True
-                                # hide the quick field and clear temp
-                                st.session_state["show_now_city_field"] = False
-                                st.session_state["now_city_temp"] = ""
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Chart calculation failed: {e}")
-                                st.session_state["chart_ready"] = False
-        with c_now2:
-            if st.button("Cancel", key="btn_now_geocode_cancel", use_container_width=True):
-                st.session_state["show_now_city_field"] = False
-                st.session_state["now_city_temp"] = ""
-
-        with c_now2:
-            if st.button("Cancel", key="btn_now_cancel_city", use_container_width=True):
-                st.session_state["show_now_city_field"] = False
-                st.session_state["now_city_temp"] = ""
+                        st.error(f"Chart calculation failed: {e}")
+                        st.session_state["chart_ready"] = False
 
 with col_right:
 	from profile_manager_v2 import ensure_profile_session_defaults, render_profile_manager
@@ -568,26 +608,19 @@ with col_right:
 		)
 
 	if df_cached is not None:
-		c1, c2 = st.columns([2, 2])
-
-		with c1:
-			from house_selector_v2 import render_house_system_selector, _selected_house_system
-
-			with c1:
-				# Renders the selector UI; does NOT call run_chart
-				render_house_system_selector()
-
-		with c2:
-			# Choose how to show planet labels
-			label_style = st.radio(
-				"Label Style",
-				["Text", "Glyph"],
-				index=1,
-				horizontal=True
-			)
-
-			dark_mode = st.checkbox("🌙 Dark Mode", value=False)
-		
+		# Call donate UI OUTSIDE the profile manager expander to avoid nesting
+		donate_chart(
+			MONTH_NAMES=MONTH_NAMES,
+			current_user_id=current_user_id,
+			is_admin=is_admin,
+			community_save=community_save,
+			community_list=community_list,
+			community_get=community_get,
+			community_delete=community_delete,
+			run_chart=run_chart,
+			chart_ready=st.session_state.get("chart_ready", False),
+		)
+	
 # BEFORE you use patterns/shapes in the UI:
 patterns = st.session_state.get("patterns", [])
 shapes = st.session_state.get("shapes", [])
@@ -622,7 +655,7 @@ if df_cached is not None:
 	else:
 		st.caption("Calculate a chart to render the wheel.")
 
-	st.subheader("Nerdy Chart Specs for Astrologers")
+	st.subheader("🤓 Nerdy Chart Specs for Astrologers 📋")
 	if sect_cached:
 		st.info(f"Sect: **{sect_cached}**")
 	elif sect_err:
