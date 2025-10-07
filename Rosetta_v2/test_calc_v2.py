@@ -446,7 +446,7 @@ with col_mid:
 
         # If we don't have a valid location yet, show the quick field right here
         if not (isinstance(stored_lat, (int, float)) and isinstance(stored_lon, (int, float)) and stored_tz):
-            st.error("Enter a city first, or use the quick field below.")
+            st.error("Enter a city.")
             st.session_state["show_now_city_field"] = True
         else:
             try:
