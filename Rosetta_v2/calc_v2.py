@@ -1,7 +1,7 @@
 from zoneinfo import ZoneInfo
 import os, swisseph as swe
 import networkx as nx
-
+from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
 # Force path to the ephe folder in your repo
 EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
@@ -161,7 +161,7 @@ def calculate_chart(
 ):
 	# ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
 	# This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
-	global SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS, MAJOR_OBJECTS, SIGNS
+	global DIGNITIES, PLANETARY_RULERS, MAJOR_OBJECTS, SIGNS
 	import importlib.util, pathlib
 
 	here = pathlib.Path(__file__).resolve()
@@ -171,7 +171,6 @@ def calculate_chart(
 	mod = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(mod)
 
-	SABIAN_SYMBOLS = mod.SABIAN_SYMBOLS
 	DIGNITIES = mod.DIGNITIES
 	PLANETARY_RULERS = mod.PLANETARY_RULERS
 	MAJOR_OBJECTS = mod.MAJOR_OBJECTS
@@ -261,28 +260,25 @@ def calculate_chart(
 			decl = eq[1]
 
 		# --- common calculations ---
+		glyph = glyph_for(name)
 		sign, dms, sabian_index = deg_to_sign(lon_)
-		sabian_symbol = SABIAN_SYMBOLS.get((sign, int(lon_ % 30) + 1), "")
-
+		sabian_symbol = sabian_for(sign, lon_)
+		star_hits = find_fixed_star_conjunctions(lon_, STAR_CATALOG, orb=1.0)
+		star_names = ", ".join(h["Name"] for h in star_hits)
 		degree_in_sign = int(lon_ % 30)
 		minute_in_sign = int(((lon_ % 30) - degree_in_sign) * 60)
 		second_in_sign = int(((((lon_ % 30) - degree_in_sign) * 60) - minute_in_sign) * 60)
-
 		retro_bool = (speed < 0)
 		retro = "Rx" if retro_bool else ""
 		oob_bool = is_out_of_bounds(decl)
 		oob = "Yes" if oob_bool else "No"
-
 		dignity = _resolve_dignity(name, sign)
-
-		# sign rulers (both list + string)
 		sign_rulers_list = lookup_sign_rulers(sign, PLANETARY_RULERS)
 		sign_rulers_str = ", ".join(sign_rulers_list)
-
-		# record for dispositor graphs
 		pos_for_dispositors[name] = lon_
 
 		rows.append({
+			"Glyph": glyph,
 			"Object": name,
 			"Dignity": dignity,         # filled later
 			"Reception": "",       
@@ -296,6 +292,7 @@ def calculate_chart(
 			"DMS": dms,
 			"Sabian Index": sabian_index,
 			"Sabian Symbol": sabian_symbol,
+			"Fixed Star Conj": star_names,
 			"Retrograde Bool": retro_bool,
 			"OOB Status": oob,
 			"Latitude": round(lat_, 6),
@@ -567,94 +564,195 @@ def house_rulers_across_systems(cusps_by_system, planetary_rulers, compute_cusp_
 	return out
 
 def analyze_dispositors(pos: dict, cusps: list[float]) -> dict:
-	"""
-	Build rulership (dispositor) graphs across ALL objects in pos, separated by sign- and
-	house-based rulership chains.
+    """
+    Build rulership (dispositor) graphs in two scopes and return BOTH:
+      1) Raw, directional connections (edges) and chain listings
+      2) Summaries: dominant rulers, final dispositors, sovereigns (self-rulers), and loops
 
-	Parameters
-	----------
-	pos : dict[str, float]
-		Mapping of object name -> absolute longitude in degrees.
-	cusps : list[float]
-		12 house cusp longitudes for the house system you want to analyze.
+    Input
+    -----
+    pos   : {object_name -> absolute longitude in degrees}
+    cusps : 12 house cusp longitudes for ONE house system (pass [] or None for sign-only)
 
-	Returns
-	-------
-	dict
-		{
-		  "by_sign": {
-			"dominant_rulers": [...],
-			"final_dispositors": [...],
-			"sovereign": [...],
-			"loops": [...]
-		  },
-		  "by_house": { ...same keys... }
-		}
-	"""
-	G_sign = nx.DiGraph()
-	G_house = nx.DiGraph()
+    Returns
+    -------
+    {
+      "by_sign": {
+        "edges": [(src, dst), ...],
+        "chains": ["A rules B rules C", ...],
+        "dominant_rulers": [...],
+        "final_dispositors": [...],
+        "sovereign": [...],
+        "loops": [[...], ...],
+      },
+      "by_house": { ...same keys... }
+    }
+    """
+    import networkx as nx
 
-	def _add_edges(graph: nx.DiGraph, src: str, dsts):
-		if not dsts:
-			graph.add_node(src)
-			return
-		if isinstance(dsts, str):
-			candidates = [dsts]
-		elif isinstance(dsts, (list, tuple, set)):
-			candidates = list(dsts)
-		else:
-			candidates = [dsts]
-		added = False
-		for d in candidates:
-			if not d:
-				continue
-			graph.add_edge(src, d)
-			added = True
-		if not added:
-			graph.add_node(src)
+    def _ensure_list(x):
+        if x is None:
+            return []
+        if isinstance(x, (list, tuple, set)):
+            return list(x)
+        return [x]
 
-	for obj, deg in pos.items():
-		# --- sign-based chain ---
-		sign = SIGNS[_sign_index(deg)]
-		sign_rulers = PLANETARY_RULERS.get(sign, [])
-		_add_edges(G_sign, obj, sign_rulers)
+    names = list(pos.keys())
+    name_set = set(names)
 
-		# --- house-based chain ---
-		if cusps and len(cusps) >= 12:
-			h = _house_of_degree(deg, cusps)
-			if h:
-				cusp_sign = SIGNS[_sign_index(cusps[h - 1])]
-				house_rulers = PLANETARY_RULERS.get(cusp_sign, [])
-				_add_edges(G_house, obj, house_rulers)
-			else:
-				G_house.add_node(obj)
-		else:
-			G_house.add_node(obj)
+    def _edges_sign() -> list[tuple[str, str]]:
+        edges = []
+        for obj, deg in pos.items():
+            sign = SIGNS[_sign_index(deg)]
+            rulers = _ensure_list(PLANETARY_RULERS.get(sign, []))
+            if rulers:
+                for r in rulers:
+                    if r in name_set:
+                        edges.append((obj, r))
+            else:
+                edges.append((obj, obj))  # self-node if no valid rulers
+        return edges
 
-	def _summarize(graph: nx.DiGraph) -> dict:
-		if graph.number_of_nodes() == 0:
-			return {
-				"dominant_rulers": [],
-				"final_dispositors": [],
-				"sovereign": [],
-				"loops": [],
-			}
-		cycles = list(nx.simple_cycles(graph))
-		sovereign = sorted([c[0] for c in cycles if len(c) == 1])
-		loops = [c for c in cycles if len(c) >= 2]
-		dominant = sorted([n for n, outdeg in graph.out_degree() if outdeg >= 3])
-		final = sorted([n for n in graph.nodes if graph.out_degree(n) == 0 and graph.in_degree(n) >= 1])
-		return {
-			"dominant_rulers": dominant,
-			"final_dispositors": final,
-			"sovereign": sovereign,
-			"loops": loops,
-		}
+    def _edges_house() -> list[tuple[str, str]]:
+        if not cusps or len(cusps) < 12:
+            return []
+        edges = []
+        for obj, deg in pos.items():
+            h = _house_of_degree(deg, cusps)
+            if not h:
+                edges.append((obj, obj))
+                continue
+            cusp_sign = SIGNS[_sign_index(cusps[h - 1])]
+            rulers = _ensure_list(PLANETARY_RULERS.get(cusp_sign, []))
+            if rulers:
+                for r in rulers:
+                    if r in name_set:
+                        edges.append((obj, r))
+            else:
+                edges.append((obj, obj))
+        return edges
 
-	return {
-		"by_sign": _summarize(G_sign),
-		"by_house": _summarize(G_house),
-	}
+    def _summarize(edges: list[tuple[str, str]]) -> dict:
+        G = nx.DiGraph()
+        G.add_nodes_from(names)
+        G.add_edges_from(edges)
+
+        # Sovereign = self-rulers
+        sovereign = sorted([n for n in G.nodes if G.has_edge(n, n)])
+
+        # Loops = cycles length >= 2
+        loops = [cycle for cycle in nx.simple_cycles(G) if len(cycle) >= 2]
+
+        # Dominant = max in-degree from others
+        indeg = {n: 0 for n in G.nodes}
+        for u, v in G.edges:
+            if u != v:
+                indeg[v] += 1
+        max_in = max(indeg.values()) if indeg else 0
+        dominant = sorted([n for n, c in indeg.items() if c == max_in and c > 0])
+
+        # Final dispositors = sovereign with no outgoing edges to others
+        finals = sorted([
+            n for n in sovereign
+            if set(G.successors(n)) - {n} == set()
+        ])
+
+        # Chains = readable rulership hierarchies
+        def _all_chains_from(start: str, max_depth: int = 16) -> list[list[str]]:
+            results = []
+            def dfs(node: str, path: list[str], seen: set[str]):
+                if len(path) >= max_depth:
+                    results.append(path[:])
+                    return
+                nexts = list(G.successors(node))
+                if not nexts:
+                    results.append(path[:])
+                    return
+                for nxt in nexts:
+                    if nxt in seen:
+                        # loop closure
+                        results.append(path + [nxt])
+                    else:
+                        dfs(nxt, path + [nxt], seen | {nxt})
+            dfs(start, [start], {start})
+            return results
+
+        chain_strs = []
+        for n in G.nodes:
+            chains = _all_chains_from(n)
+            for path in chains:
+                chain_strs.append(" rules ".join(path))
+
+        # de-duplicate & sort
+        chain_strs = sorted(set(chain_strs))
+
+        return {
+            "edges": edges,
+            "chains": chain_strs,
+            "dominant_rulers": dominant,
+            "final_dispositors": finals,
+            "sovereign": sovereign,
+            "loops": loops,
+        }
+
+    edges_s = _edges_sign()
+    by_sign = _summarize(edges_s)
+
+    edges_h = _edges_house()
+    by_house = _summarize(edges_h) if edges_h else {
+        "edges": [],
+        "chains": [],
+        "dominant_rulers": [],
+        "final_dispositors": [],
+        "sovereign": [],
+        "loops": [],
+    }
+
+    return {"by_sign": by_sign, "by_house": by_house}
+
+def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
+    """
+    Returns two UI-ready tables:
+      chains_rows  : [{"Scope": "...", "Hierarchy": "Venus rules Mars …"}, ...]
+      summary_rows : [{"Scope":"...", "Final":"...", "Dominant":"...", "Sovereign":"...", "Loops":"..."}, ...]
+    """
+    # objects → longitude (exclude cusps)
+    objs = df[~df["Object"].str.contains("cusp", case=False, na=False)]
+    pos = dict(zip(objs["Object"], objs["Longitude"]))
+
+    def _cusps(label: str) -> list[float]:
+        vals = []
+        for h in range(1, 13):
+            m = df.loc[df["Object"] == f"{label} {h}H cusp", "Longitude"]
+            if not m.empty:
+                vals.append(float(m.iloc[0]) % 360.0)
+        return vals if len(vals) == 12 else []
+
+    scopes = [
+        ("Sign", []),
+        ("Placidus", _cusps("Placidus")),
+        ("Equal", _cusps("Equal")),
+        ("Whole Sign", _cusps("Whole Sign")),
+    ]
+
+    chains_rows: list[dict] = []
+    summary_rows: list[dict] = []
+
+    for name, cusps in scopes:
+        res   = analyze_dispositors(pos, cusps)
+        scope = res["by_sign"] if name == "Sign" else res["by_house"]
+
+        # Summary
+        loops_fmt = " | ".join(" → ".join(loop) for loop in scope.get("loops", []))
+        summary_rows.append({
+            "Scope": name,
+            "Final": ", ".join(scope.get("final_dispositors", [])),
+            "Dominant": ", ".join(scope.get("dominant_rulers", [])),
+            "Sovereign": ", ".join(scope.get("sovereign", [])),
+            "Loops": loops_fmt,
+        })
+
+    return chains_rows, summary_rows
 
 def _resolve_dignity(obj: str, sign_name: str):
 	"""
@@ -677,11 +775,6 @@ def _resolve_dignity(obj: str, sign_name: str):
 	return None
 
 # === Aspect helpers & builders ===
-
-# Degrees for the septile family:
-# septile = 51°26′ -> 51 + 26/60
-# biseptile = 102°52′
-# triseptile = 154°17′
 _SEPTILE  = 51 + 26/60
 _BISEPT   = 102 + 52/60
 _TRISEPT  = 154 + 17/60
@@ -713,7 +806,6 @@ _ASPECTS_ALL = {**_ASPECTS_MAJOR, **_ASPECTS_MINOR}
 # Which names count as "major" for output bucketing
 _MAJOR_NAMES = {"Conjunction", "Sextile", "Square", "Trine", "Sesquisquare", "Quincunx", "Opposition"}
 _MINOR_NAMES = set(_ASPECTS_ALL.keys()) - _MAJOR_NAMES
-
 
 def _norm360(x: float) -> float:
 	"""Normalize degrees to [0, 360)."""
@@ -754,7 +846,6 @@ def _applying_or_separating(
 	nxt = _distance_to_target(lon1_next, lon2_next, target)
 	return "Applying" if nxt < now else "Separating"
 
-
 def _extract_object_rows(df: pd.DataFrame) -> pd.DataFrame:
 	"""
 	Return only the rows that represent objects (no cusps).
@@ -762,7 +853,6 @@ def _extract_object_rows(df: pd.DataFrame) -> pd.DataFrame:
 	"""
 	objs = df[~df["Object"].str.contains("cusp", case=False, na=False)].copy()
 	return objs
-
 
 def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
 	"""
@@ -829,26 +919,31 @@ def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
 
 	return pd.DataFrame(data, index=names, columns=names)
 
-
 def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
 	"""
 	Return (edges_major, edges_minor), each as a list of tuples:
-	  (obj1, obj2, {"aspect": <name>, "orb": <float>, "appsep": "Applying"/"Separating"})
+	  (obj1, obj2, {
+	      "aspect": <name>,
+	      "orb": <float>,                 # absolute orb (deg)
+	      "appsep": "Applying"|"Separating",
+	      "applying": bool,               # NEW: True if applying
+	      "decl_diff": <float|None>,      # NEW: |decl1 - decl2| in deg
+	  })
 	Pairs are de-duplicated (A,B) only once (A < B by index).
 	"""
-	objs = _extract_object_rows(df)
+	objs  = _extract_object_rows(df)
 	names = list(objs["Object"])
 	lons  = dict(zip(objs["Object"], objs["Longitude"]))
 	spds  = dict(zip(objs["Object"], objs["Speed"]))
+	decls = dict(zip(objs["Object"], objs["Declination"]))  # for decl_diff
 
-	edges_major = []
-	edges_minor = []
+	edges_major: list[tuple] = []
+	edges_minor: list[tuple] = []
 
 	for i in range(len(names)):
 		for j in range(i + 1, len(names)):  # de-duplicate: only upper pairs
-			a = names[i]
-			b = names[j]
-			A, B = lons[a], lons[b]
+			a = names[i]; b = names[j]
+			A, B   = lons[a], lons[b]
 			sA, sB = spds[a], spds[b]
 
 			best_delta = None
@@ -868,7 +963,19 @@ def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
 				continue
 
 			appsep = _applying_or_separating(A, sA, B, sB, best_target)
-			record = (a, b, {"aspect": best_name, "orb": float(f"{best_delta:.3f}"), "appsep": appsep})
+
+			# Declination difference (absolute degrees), if both present
+			dA = decls.get(a); dB = decls.get(b)
+			decl_diff = float(f"{abs(float(dA) - float(dB)):.3f}") if dA is not None and dB is not None else None
+
+			meta = {
+				"aspect": best_name,
+				"orb": float(f"{best_delta:.3f}"),
+				"appsep": appsep,                        # "Applying" or "Separating"
+				"applying": (appsep == "Applying"),     # NEW boolean
+				"decl_diff": decl_diff,                 # NEW declination difference
+			}
+			record = (a, b, meta)
 
 			if best_name in _MAJOR_NAMES:
 				edges_major.append(record)
@@ -994,3 +1101,48 @@ def annotate_reception(df: pd.DataFrame, edges_major: list[tuple]) -> pd.DataFra
 
     out["Reception"] = results
     return out
+
+def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> list[dict]:
+    """
+    Build conjunction clusters using *existing* edges_major (no recomputation).
+    Returns a UI-ready list of rows: [{"Cluster": "Sun, South Node, IC"}, ...]
+    - Clusters are undirected connected components formed only by 'Conjunction' edges.
+    - Members are ordered by the objects' order in the DF (not by longitude).
+    - Singletons (size 1) are ignored.
+    """
+    # Objects in DF order
+    objs = _extract_object_rows(df)
+    names = list(objs["Object"])
+    order_ix = {name: i for i, name in enumerate(names)}
+
+    # Build undirected adjacency from conjunction pairs
+    from collections import defaultdict, deque
+    adj = defaultdict(set)
+    for a, b, meta in edges_major or []:
+        if meta.get("aspect") == "Conjunction":
+            adj[a].add(b)
+            adj[b].add(a)
+
+    # Find connected components (size >= 2)
+    visited = set()
+    clusters = []
+    for n in list(adj.keys()):
+        if n in visited:
+            continue
+        comp = []
+        q = deque([n])
+        visited.add(n)
+        while q:
+            u = q.popleft()
+            comp.append(u)
+            for v in adj[u]:
+                if v not in visited:
+                    visited.add(v)
+                    q.append(v)
+        if len(comp) >= 2:
+            comp_sorted = sorted(comp, key=lambda x: order_ix.get(x, 10**9))
+            clusters.append({"Cluster": ", ".join(comp_sorted)})
+
+    # Sort clusters by the first member’s DF order (stable)
+    clusters.sort(key=lambda row: order_ix.get(row["Cluster"].split(", ")[0], 10**9))
+    return clusters

@@ -1,4 +1,12 @@
 import swisseph as swe
+GLYPHS = {
+    "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
+    "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇",
+    "Chiron": "⚷", "Ceres": "⚳", "Pallas": "⚴", "Juno": "⚵", "Vesta": "⚶",
+    "North Node": "☊", "South Node": "☋", "Part of Fortune": "⊗", "Black Moon Lilith (Mean)": "⚸",
+    "Vertex": "☩", "North Node": "☊", "Ascendant": "AC", "Descendant": "DC", "Psyche": "Ψ", "Eros": "♡", 
+    "Midheaven": "MC", "Imum Coeli": "IC"
+}
 
 # --- Core object list (with Liliths) ---
 MAJOR_OBJECTS = {
