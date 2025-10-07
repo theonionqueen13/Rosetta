@@ -30,6 +30,8 @@ def ensure_profile_session_defaults(month_names: List[str]) -> None:
     # circuit pattern list may or may not exist yet
     st.session_state.setdefault("patterns", [])
     st.session_state.setdefault("chart_ready", False) 
+    st.session_state.setdefault("show_now_city_field", False)
+    st.session_state.setdefault("now_city_temp", "")
 
 def render_profile_manager(
     *,
@@ -45,6 +47,7 @@ def render_profile_manager(
     community_get: Callable[[Any], Optional[Dict[str, Any]]],
     community_delete: Callable[[Any], None],
     is_admin: Callable[[str], bool],
+    geocode_city: Callable[[str], tuple[float, float, str]], 
     # Optional live geocode inputs (fallback to session_state if None)
     lat: Optional[float] = None,
     lon: Optional[float] = None,
@@ -182,7 +185,7 @@ def render_profile_manager(
                             if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
                                 st.error(f"Profile '{name}' is missing location/timezone info. Re-save it after a successful city lookup.")
                             else:
-                                run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
+                                run_chart(data["lat"], data["lon"], data["tz_name"],)
                                 st.session_state["chart_ready"] = True
                                 st.success(f"Profile '{name}' loaded and chart calculated!")
                                 st.rerun()
@@ -397,7 +400,7 @@ def render_profile_manager(
                             if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
                                 st.error("This donated profile is missing location/timezone info.")
                             else:
-                                run_chart(data["lat"], data["lon"], data["tz_name"], _selected_house_system())
+                                run_chart(data["lat"], data["lon"], data["tz_name"],)
                                 st.session_state["chart_ready"] = True
                                 st.success(f"Loaded donated profile: {r['profile_name']}")
                                 st.rerun()

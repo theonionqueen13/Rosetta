@@ -2,6 +2,8 @@
 # Keep these ABOVE imports of your app modules.
 from typing import Dict, Any, List, Optional
 from house_selector_v2 import _selected_house_system
+import datetime as dt
+import pytz
 
 current_user_id = "test-user"
 
@@ -309,7 +311,7 @@ def run_chart(lat, lon, tz_name):
 	label_style  = st.session_state.get("label_style", "glyph")  # "glyph" | "text"
 	dark_mode    = st.session_state.get("dark_mode", False)
 
-col_left, col_right = st.columns([2, 1])
+col_left, col_mid, col_right = st.columns([3, 2, 3])
 # -------------------------
 # Left column: Birth Data (FORM)
 # -------------------------
@@ -434,8 +436,108 @@ with col_left:
 
 	df_cached     = st.session_state.get("last_df")
 	if df_cached is not None:
-		render_guided_wizard()
-					
+
+with col_mid:
+    if st.button("🌟 Now", key="btn_now"):
+        stored_lat = st.session_state.get("current_lat")
+        stored_lon = st.session_state.get("current_lon")
+        stored_tz  = st.session_state.get("current_tz_name")
+        city_name  = st.session_state.get("profile_city", "")
+
+        # If we don't have a valid location yet, show the quick field right here
+        if not (isinstance(stored_lat, (int, float)) and isinstance(stored_lon, (int, float)) and stored_tz):
+            st.error("Enter a city first, or use the quick field below.")
+            st.session_state["show_now_city_field"] = True
+        else:
+            try:
+                tz = pytz.timezone(stored_tz)
+                now = dt.datetime.now(tz)
+
+                # update only the profile_* inputs
+                st.session_state["profile_year"]        = now.year
+                st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
+                st.session_state["profile_day"]         = now.day
+                st.session_state["profile_hour"]        = now.hour
+                st.session_state["profile_minute"]      = now.minute
+                st.session_state["profile_city"]        = city_name
+
+                # ensure current_* cache
+                st.session_state["current_lat"]     = stored_lat
+                st.session_state["current_lon"]     = stored_lon
+                st.session_state["current_tz_name"] = stored_tz
+
+                # compute planets (house system is used later at render)
+                run_chart(stored_lat, stored_lon, stored_tz)
+
+                st.session_state["chart_ready"] = True
+                st.rerun()
+            except Exception as e:
+                st.error(f"Chart calculation failed: {e}")
+                st.session_state["chart_ready"] = False
+
+    # Quick city field — only shows if the guard above failed
+    if st.session_state.get("show_now_city_field", False):
+        st.caption("Quick city entry for Now:")
+        st.text_input(
+            "City (e.g., Denver, CO, USA)",
+            key="now_city_temp",
+            placeholder="City, State/Province, Country",
+        )
+        c_now1, c_now2 = st.columns([1, 1], gap="small")
+        with c_now1:
+            if st.button("Use this city", key="btn_now_geocode", use_container_width=True):
+                city_str = (st.session_state.get("now_city_temp") or "").strip()
+                if not city_str:
+                    st.error("Please type a city.")
+                else:
+                    try:
+                        lat, lon, tz_name = geocode_city(city_str)  # <-- uses injected geocoder
+                    except Exception as e:
+                        st.error(f"City lookup failed: {e}")
+                    else:
+                        if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
+                            st.error("City lookup returned invalid results.")
+                        elif tz_name not in pytz.all_timezones:
+                            st.error(f"Unrecognized timezone '{tz_name}'.")
+                        else:
+                            # store city + geocode
+                            st.session_state["profile_city"]   = city_str
+                            st.session_state["city_input"]     = city_str
+                            st.session_state["current_lat"]    = lat
+                            st.session_state["current_lon"]    = lon
+                            st.session_state["current_tz_name"]= tz_name
+                            st.session_state["last_location"]  = city_str
+                            st.session_state["last_timezone"]  = tz_name
+
+                            # compute "Now" in that timezone
+                            tz = pytz.timezone(tz_name)
+                            now = dt.datetime.now(tz)
+                            st.session_state["profile_year"]        = now.year
+                            st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
+                            st.session_state["profile_day"]         = now.day
+                            st.session_state["profile_hour"]        = now.hour
+                            st.session_state["profile_minute"]      = now.minute
+
+                            try:
+                                run_chart(lat, lon, tz_name)  # 3-arg version
+                                st.session_state["chart_ready"] = True
+                                # hide the quick field and clear temp
+                                st.session_state["show_now_city_field"] = False
+                                st.session_state["now_city_temp"] = ""
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Chart calculation failed: {e}")
+                                st.session_state["chart_ready"] = False
+        with c_now2:
+            if st.button("Cancel", key="btn_now_geocode_cancel", use_container_width=True):
+                st.session_state["show_now_city_field"] = False
+                st.session_state["now_city_temp"] = ""
+
+        with c_now2:
+            if st.button("Cancel", key="btn_now_cancel_city", use_container_width=True):
+                st.session_state["show_now_city_field"] = False
+                st.session_state["now_city_temp"] = ""
+
 with col_right:
 	from profile_manager_v2 import ensure_profile_session_defaults, render_profile_manager
 

@@ -5,8 +5,37 @@ from pathlib import Path
 from typing import List, Dict
 import pandas as pd
 import re
-from lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS
 import html 
+# --- shared lookups -------------------------------------------------------
+#
+# The module is imported from multiple entry-points (as a package via
+# ``Rosetta_v2.profiles_v2`` and also sometimes as a loose script from inside
+# the ``Rosetta_v2`` directory).  The original code unconditionally tried to
+# import ``lookup_v2`` using the bare module name and then, further down in the
+# file, overwrote ``OBJECT_MEANINGS`` with ``{}`` if a package-style import
+# failed.  When the file was executed from inside the directory that bare
+# import succeeded, but the later fallback path still failed and replaced the
+# populated dictionary with an empty one—leaving the profiles without any
+# meaning text.
+#
+# To keep the meanings populated regardless of how the module is loaded we
+# attempt the imports in order of preference (package-relative first, then the
+# older flat layout) and only fall back to the legacy ``rosetta.lookup`` module
+# if both of those fail.  We also avoid clobbering already-imported globals.
+try:  # Preferred: package relative
+    from .lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS  # type: ignore
+except ImportError:
+    try:  # Fallback: same directory on sys.path
+        from lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS  # type: ignore
+    except ImportError:
+        # Last resort: legacy lookup module.  Only assign when available so we
+        # never end up with an empty dictionary due to import order.
+        from rosetta.lookup import (  # type: ignore
+            SABIAN_SYMBOLS,  # noqa: F401 (re-exported)
+            GLYPHS,          # noqa: F401 (re-exported)
+            OBJECT_MEANINGS,
+        )
+
 
 def glyph_for(obj: str) -> str:
     """
@@ -184,18 +213,6 @@ __all__ = [
     "find_fixed_star_conjunctions",
     "STAR_CATALOG",
 ]
-
-import re
-import pandas as pd
-
-# Optional meanings (safe if the dict isn't present)
-try:
-    from Rosetta_v2.lookup_v2 import OBJECT_MEANINGS  # {"Sun": "...", ...}
-except Exception:
-    try:  # fall back to legacy lookup if v2 table is missing meanings
-        from rosetta.lookup import OBJECT_MEANINGS  # type: ignore
-    except Exception:
-        OBJECT_MEANINGS = {}
 
 # Map “Conjunct/Opposite/…” → noun form for your Reception line
 _ASPECT_VERB_TO_NOUN = {
