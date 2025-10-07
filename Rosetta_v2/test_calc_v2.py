@@ -50,7 +50,6 @@ if "defaults_loaded" not in st.session_state:
 	st.session_state["city"] = "Newton, KS"
 	st.session_state["defaults_loaded"] = True
 
-
 def _refresh_chart_figure():
     """Rebuild the chart figure using the current session-state toggles."""
     df = st.session_state.get("last_df")
