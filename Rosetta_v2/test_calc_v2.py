@@ -137,90 +137,6 @@ def _refresh_chart_figure():
         st.session_state["ai_text"] = out_text
         st.session_state["render_result"] = None
 
-def _refresh_chart_figure():
-    """Rebuild the chart figure using the current session-state toggles."""
-    df = st.session_state.get("last_df")
-    pos = st.session_state.get("chart_positions")
-
-    if df is None or pos is None:
-        return
-
-    patterns = st.session_state.get("patterns") or []
-    shapes = st.session_state.get("shapes") or []
-    filaments = st.session_state.get("filaments") or []
-    combos = st.session_state.get("combos") or {}
-    singleton_map = st.session_state.get("singleton_map") or {}
-    major_edges_all = st.session_state.get("major_edges_all") or []
-
-    pattern_labels = [
-        st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
-        for i in range(len(patterns))
-    ]
-    toggles = [
-        st.session_state.get(f"toggle_pattern_{i}", False)
-        for i in range(len(patterns))
-    ]
-    singleton_toggles = {
-        planet: st.session_state.get(f"singleton_{planet}", False)
-        for planet in singleton_map
-    }
-    shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
-    combo_toggles = st.session_state.get("combo_toggles", {})
-
-    house_system = st.session_state.get("house_system", "placidus")
-    label_style = st.session_state.get("label_style", "glyph")
-    dark_mode = st.session_state.get("dark_mode", False)
-
-    edges_major = st.session_state.get("edges_major") or []
-    edges_minor = st.session_state.get("edges_minor") or []
-
-    try:
-        fig, visible_objects, active_shapes, cusps, out_text = render_chart_with_shapes(
-            pos=pos,
-            patterns=patterns,
-            pattern_labels=pattern_labels,
-            toggles=toggles,
-            filaments=filaments,
-            combo_toggles=combo_toggles,
-            label_style=label_style,
-            singleton_map=singleton_map or {},
-            df=df,
-            house_system=house_system,
-            dark_mode=dark_mode,
-            shapes=shapes,
-            shape_toggles_by_parent=shape_toggles_by_parent,
-            singleton_toggles=singleton_toggles,
-            major_edges_all=major_edges_all,
-        )
-    except Exception:
-        rr = render_chart(
-            df,
-            visible_toggle_state=None,
-            edges_major=edges_major,
-            edges_minor=edges_minor,
-            house_system=house_system,
-            dark_mode=dark_mode,
-            label_style=label_style,
-            compass_on=st.session_state.get("toggle_compass_rose", True),
-            degree_markers=True,
-            zodiac_labels=True,
-            figsize=(6.0, 6.0),
-            dpi=144,
-        )
-        st.session_state["render_fig"] = rr.fig
-        st.session_state["render_result"] = rr
-        st.session_state["visible_objects"] = rr.visible_objects
-        st.session_state["active_shapes"] = []
-        st.session_state["last_cusps"] = rr.cusps
-        st.session_state["ai_text"] = None
-    else:
-        st.session_state["render_fig"] = fig
-        st.session_state["visible_objects"] = sorted(visible_objects)
-        st.session_state["active_shapes"] = active_shapes
-        st.session_state["last_cusps"] = cusps
-        st.session_state["ai_text"] = out_text
-        st.session_state["render_result"] = None
-
 def run_chart(lat, lon, tz_name):
     """
     Build chart DF, aspects, dispositors, clusters, circuits/shapes—then render
@@ -580,9 +496,8 @@ if df_cached is not None:
 				else:
 					st.markdown("_(no sub-shapes found)_")
 
-				if "shape_toggles_by_parent" not in st.session_state:
-					st.session_state.shape_toggles_by_parent = {}
-				st.session_state.shape_toggles_by_parent[i] = shape_entries
+				shape_toggle_map = st.session_state.setdefault("shape_toggles_by_parent", {})
+				shape_toggle_map[i] = shape_entries
 
 	# --- Save Circuit Names button (only if edits exist) ---
 	unsaved_changes = False
@@ -605,7 +520,7 @@ if df_cached is not None:
 				saved_profiles = load_user_profiles_db(current_user_id)
 				st.session_state["saved_circuit_names"] = current.copy()
 
-		_refresh_chart_figure()
+	_refresh_chart_figure()
 
 	st.subheader("Chart")
 	fig = st.session_state.get("render_fig")

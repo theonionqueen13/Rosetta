@@ -773,18 +773,18 @@ _BISEPT   = 102 + 52/60
 _TRISEPT  = 154 + 17/60
 
 _ASPECTS_MAJOR = {
-	"Conjunction":   {"angle": 0,   "orb": 5},
+	"Conjunction":   {"angle": 0,   "orb": 4},
 	"Semi-sextile":  {"angle": 30,  "orb": 2},   # minor, kept here for unified scan; we'll sort into minors later
 	"Sextile":       {"angle": 60,  "orb": 3},
 	"Square":        {"angle": 90,  "orb": 3},
 	"Trine":         {"angle": 120, "orb": 3},
-	"Sesquisquare":  {"angle": 135, "orb": 2},   # 135°
-	"Quincunx":      {"angle": 150, "orb": 3},
 	"Opposition":    {"angle": 180, "orb": 3},
 }
 
 # Minor-only set (we'll classify major vs minor after detection)
 _ASPECTS_MINOR = {
+	"Sesquisquare":  {"angle": 135, "orb": 2},   # 135°
+	"Quincunx":      {"angle": 150, "orb": 3},
 	"Semi-square":   {"angle": 45,   "orb": 2},
 	"Quintile":      {"angle": 72,   "orb": 2},
 	"Biquintile":    {"angle": 144,  "orb": 2},
@@ -797,7 +797,7 @@ _ASPECTS_MINOR = {
 _ASPECTS_ALL = {**_ASPECTS_MAJOR, **_ASPECTS_MINOR}
 
 # Which names count as "major" for output bucketing
-_MAJOR_NAMES = {"Conjunction", "Sextile", "Square", "Trine", "Sesquisquare", "Quincunx", "Opposition"}
+_MAJOR_NAMES = {"Conjunction", "Sextile", "Square", "Trine", "Opposition"}
 _MINOR_NAMES = set(_ASPECTS_ALL.keys()) - _MAJOR_NAMES
 
 def _norm360(x: float) -> float:
