@@ -223,6 +223,85 @@ ASPECTS = {
     "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
     "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
 }
+
+ALIASES_MEANINGS = {
+    "ASC": "Ascendant",
+    "AC": "Ascendant",
+    "DSC": "Descendant",
+    "MC": "Midheaven",
+    "IC": "Imum Coeli",
+    "True Node": "North Node",
+    "Black Moon Lilith": "Lilith",
+}
+
+
+OBJECT_MEANINGS_SHORT = {
+    # Axes & Points
+    "Ascendant": "House of Self — how you appear and begin things.",
+    "Descendant": "House of Others — partnerships and mirroring.",
+    "MC": "Public role, career, and reputation.",
+    "IC": "Home, roots, and inner foundation.",
+    "North Node": "Growth path and future direction.",
+    "South Node": "Comfort zone and past strengths.",
+    "Vertex": "Fated encounters and turning points.",
+    "Part of Fortune": "Your personal key to luck and flow.",
+    "Black Moon Lilith": "Raw boundaries and untamed power.",
+
+    # Luminaries & Planets
+    "Sun": "Core self and vitality.",
+    "Moon": "Emotions, instincts, and needs.",
+    "Mercury": "Mind, communication, and learning.",
+    "Venus": "Love, beauty, and values.",
+    "Mars": "Drive, action, and courage.",
+    "Jupiter": "Growth, luck, and expansion.",
+    "Saturn": "Discipline, limits, and mastery.",
+    "Uranus": "Change, freedom, and innovation.",
+    "Neptune": "Dreams, spirit, and illusions.",
+    "Pluto": "Power, shadow, and transformation.",
+
+    # Healing, devotion, sovereignty
+    "Ceres": "Nurturing and care cycles.",
+    "Pallas": "Wisdom, patterns, and strategy.",
+    "Juno": "Commitments and contracts.",
+    "Vesta": "Sacred focus and devotion.",
+    "Lilith": "Authenticity and defiance.",
+    "Chiron": "Wounding and healing gift.",
+    "Eros": "Desire and creative spark.",
+    "Psyche": "Soul, bonds, and intuition.",
+    "Eris": "Disruption, truth, and empowerment.",
+}
+
+
+SIGN_MEANINGS = {
+    "Aries": "Sign of Action & Initiation",
+    "Taurus": "Sign of Stability & Sensation",
+    "Gemini": "Sign of Communication & Curiosity",
+    "Cancer": "Sign of Nurturing & Home",
+    "Leo": "Sign of Creativity & Expression",
+    "Virgo": "Sign of Service & Refinement",
+    "Libra": "Sign of Balance & Relationships",
+    "Scorpio": "Sign of Transformation & Depth",
+    "Sagittarius": "Sign of Exploration & Belief",
+    "Capricorn": "Sign of Ambition & Structure",
+    "Aquarius": "Sign of Innovation & Community",
+    "Pisces": "Sign of Imagination & Compassion",
+}
+
+HOUSE_MEANINGS = {
+    1: "House of Self & Identity",
+    2: "House of Money, Values & Work Routines",
+    3: "House of Communication, Local Neighborhood & Peers",
+    4: "House of Home, Family & Ancestry",
+    5: "House of Creativity, Pleasure & Children",
+    6: "House of Health & Daily Routines",
+    7: "House of Partnerships & Relationships with Others",
+    8: "House of Transformation & Shared Resources",
+    9: "House of Philosophy, Travel & Higher Learning",
+    10: "House of Career, Legacy & Public Life",
+    11: "House of Community & Friends",
+    12: "House of Spirituality, Institutions, & the Subconscious",
+}
+
 # Sabian Symbol Lookup Dictionary
 SABIAN_SYMBOLS = {
     ('Aries', 1): 'A woman has risen out of the ocean, a seal is embracing her.',
