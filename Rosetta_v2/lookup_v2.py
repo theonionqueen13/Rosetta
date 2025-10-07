@@ -208,7 +208,21 @@ DIGNITIES = {
   }
 }
 
-
+GROUP_COLORS = [
+    "crimson", "teal", "darkorange", "slateblue", "seagreen",
+    "hotpink", "gold", "deepskyblue", "orchid"
+]
+ZODIAC_SIGNS = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
+ZODIAC_COLORS = ["red", "green", "#DAA520", "blue"] * 3
+ASPECTS = {
+    "Conjunction": {"angle": 0, "orb": 5, "color": "#888888", "style": "solid"},
+    "Sextile": {"angle": 60, "orb": 3, "color": "purple", "style": "solid"},
+    "Square": {"angle": 90, "orb": 3, "color": "red", "style": "solid"},
+    "Trine": {"angle": 120, "orb": 3, "color": "blue", "style": "solid"},
+    "Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted"},
+    "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
+    "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
+}
 # Sabian Symbol Lookup Dictionary
 SABIAN_SYMBOLS = {
     ('Aries', 1): 'A woman has risen out of the ocean, a seal is embracing her.',

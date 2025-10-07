@@ -303,24 +303,10 @@ def calculate_chart(
 			# Per-system House fields will be filled after cusps are computed
 			"Placidus House": None,
 			"Placidus House Rulers": None,
-			"Placidus House: Dominant Ruler": None,
-			"Placidus House: Final Dispositor": None,
-			"Placidus House: Sovereign": None,
-			"Placidus House: In Loop": None,
-
 			"Equal House": None,
 			"Equal House Rulers": None,
-			"Equal House: Dominant Ruler": None,
-			"Equal House: Final Dispositor": None,
-			"Equal House: Sovereign": None,
-			"Equal House: In Loop": None,
-
 			"Whole Sign House": None,
 			"Whole Sign House Rulers": None,
-			"Whole Sign House: Dominant Ruler": None,
-			"Whole Sign House: Final Dispositor": None,
-			"Whole Sign House: Sovereign": None,
-			"Whole Sign House: In Loop": None,
 		})
 
 	# --- House cusps (ALL systems appended to DF) ---
@@ -713,8 +699,8 @@ def analyze_dispositors(pos: dict, cusps: list[float]) -> dict:
 def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
     """
     Returns two UI-ready tables:
-      chains_rows  : [{"Scope": "...", "Hierarchy": "Venus rules Mars …"}, ...]
-      summary_rows : [{"Scope":"...", "Final":"...", "Dominant":"...", "Sovereign":"...", "Loops":"..."}, ...]
+      chains_rows  : (unused, kept for API compatibility)
+      summary_rows : [{"Scope":"...", "Final":"...", "Dominant":"...", "Sovereign":"...", "Loops":"...", "Chains":"..."}, ...]
     """
     # objects → longitude (exclude cusps)
     objs = df[~df["Object"].str.contains("cusp", case=False, na=False)]
@@ -742,14 +728,21 @@ def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
         res   = analyze_dispositors(pos, cusps)
         scope = res["by_sign"] if name == "Sign" else res["by_house"]
 
-        # Summary
-        loops_fmt = " | ".join(" → ".join(loop) for loop in scope.get("loops", []))
+        # Loops: list[list[str]] → "A → B → C | X → Y"
+        loops_list = scope.get("loops", []) or []
+        loops_fmt  = " | ".join(" → ".join(loop) for loop in loops_list)
+
+        # Chains: list[str] with "A rules B rules C" → "A → B → C | ..."
+        chains_list = scope.get("chains", []) or []
+        chains_fmt  = " | ".join(s.replace(" rules ", " → ") for s in chains_list)
+
         summary_rows.append({
             "Scope": name,
-            "Final": ", ".join(scope.get("final_dispositors", [])),
-            "Dominant": ", ".join(scope.get("dominant_rulers", [])),
-            "Sovereign": ", ".join(scope.get("sovereign", [])),
+            "Final": ", ".join(scope.get("final_dispositors", []) or []),
+            "Dominant": ", ".join(scope.get("dominant_rulers", []) or []),
+            "Sovereign": ", ".join(scope.get("sovereign", []) or []),
             "Loops": loops_fmt,
+            "Chains": chains_fmt,   # <-- NEW
         })
 
     return chains_rows, summary_rows
