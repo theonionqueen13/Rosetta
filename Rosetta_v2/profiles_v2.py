@@ -40,7 +40,33 @@ def glyph_for(obj: str) -> str:
 
     return GLYPHS.get(key, "")
 
-# ---------- Sabian symbols ----------
+def meaning_for(obj: str) -> str:
+    """Return the long-form meaning string for an object name."""
+    if not obj:
+        return ""
+
+    # exact match first
+    meaning = OBJECT_MEANINGS.get(obj)
+    if meaning:
+        return meaning
+
+    # strip trailing parentheses (e.g. "Black Moon Lilith (Mean)")
+    base = re.sub(r"\s*\(.*?\)\s*$", "", str(obj)).strip()
+
+    alias = {
+        "AC": "Ascendant",
+        "Asc": "Ascendant",
+        "DC": "Descendant",
+        "POF": "Part of Fortune",
+        "MC": "MC",
+        "IC": "IC",
+        "North Node (True)": "North Node",
+        "South Node (True)": "South Node",
+        "Black Moon Lilith": "Black Moon Lilith",
+    }
+
+    key = alias.get(obj, alias.get(base, base))
+    return OBJECT_MEANINGS.get(key, "")
 
 def sabian_for(sign: str, lon_abs: float) -> str:
     """
@@ -166,7 +192,10 @@ import pandas as pd
 try:
     from Rosetta_v2.lookup_v2 import OBJECT_MEANINGS  # {"Sun": "...", ...}
 except Exception:
-    OBJECT_MEANINGS = {}
+    try:  # fall back to legacy lookup if v2 table is missing meanings
+        from rosetta.lookup import OBJECT_MEANINGS  # type: ignore
+    except Exception:
+        OBJECT_MEANINGS = {}
 
 # Map “Conjunct/Opposite/…” → noun form for your Reception line
 _ASPECT_VERB_TO_NOUN = {
@@ -221,6 +250,7 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
     """
     glyph = (row.get("Glyph") or "").strip()
     obj   = (row.get("Object") or "").strip()
+    meaning = meaning_for(obj)
 
     # Header tag: (Rx first, then dignity) — omit if neither present
     tags = []
@@ -273,8 +303,8 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
     lines.append(f"<div class='pf-title'><strong>{glyph} {obj}{paren}</strong></div>")
 
     # Meaning line directly under the title
-    if meaning_short:
-        lines.append(f"<div class='pf-meaning'>{html.escape(meaning_short)}</div>")
+    if meaning:
+        lines.append(f"<div class='pf-meaning'>{html.escape(meaning)}</div>")
 
     # Sign & degree, Sabian
     if sign or dms:

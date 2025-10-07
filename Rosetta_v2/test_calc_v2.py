@@ -441,28 +441,29 @@ with col_right:
 
 	# Make sure the session keys exist before rendering any widgets in this panel
 	ensure_profile_session_defaults(MONTH_NAMES)
-
-	saved_profiles = render_profile_manager(
-		MONTH_NAMES=MONTH_NAMES,
-		current_user_id=current_user_id,
-		run_chart=run_chart,
-		_selected_house_system=_selected_house_system,
-		save_user_profile_db=save_user_profile_db,
-		load_user_profiles_db=load_user_profiles_db,
-		delete_user_profile_db=delete_user_profile_db,
-		community_save=community_save,
-		community_list=community_list,
-		community_get=community_get,
-		community_delete=community_delete,
-		is_admin=is_admin,
-		# optional live geocode inputs; omit if you prefer all from session_state
-		lat=st.session_state.get("current_lat"),
-		lon=st.session_state.get("current_lon"),
-		tz_name=st.session_state.get("current_tz_name"),
-		hour_val=st.session_state.get("hour_val"),
-		minute_val=st.session_state.get("minute_val"),
-		city_name=st.session_state.get("profile_city", ""),
-	)
+	with st.expander("Chart Profile Manager"):
+		saved_profiles = render_profile_manager(
+			MONTH_NAMES=MONTH_NAMES,
+			current_user_id=current_user_id,
+			run_chart=run_chart,
+			_selected_house_system=_selected_house_system,
+			save_user_profile_db=save_user_profile_db,
+			load_user_profiles_db=load_user_profiles_db,
+			delete_user_profile_db=delete_user_profile_db,
+			community_save=community_save,
+			community_list=community_list,
+			community_get=community_get,
+			community_delete=community_delete,
+			is_admin=is_admin,
+			# optional live geocode inputs; omit if you prefer all from session_state
+			lat=st.session_state.get("current_lat"),
+			lon=st.session_state.get("current_lon"),
+			tz_name=st.session_state.get("current_tz_name"),
+			hour_val=st.session_state.get("hour_val"),
+			minute_val=st.session_state.get("minute_val"),
+			city_name=st.session_state.get("profile_city", ""),
+			chart_ready=st.session_state.get("chart_ready", False),
+		)
 
 	if df_cached is not None:
 		c1, c2 = st.columns([2, 2])
@@ -513,13 +514,13 @@ if df_cached is not None:
 
 	_refresh_chart_figure()
 
-	st.subheader("Chart")
 	fig = st.session_state.get("render_fig")
 	if fig is not None:
 		st.pyplot(fig, clear_figure=False)
 	else:
 		st.caption("Calculate a chart to render the wheel.")
 
+	st.subheader("Nerdy Chart Specs for Astrologers")
 	if sect_cached:
 		st.info(f"Sect: **{sect_cached}**")
 	elif sect_err:
