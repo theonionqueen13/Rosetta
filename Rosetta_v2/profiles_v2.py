@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import List, Dict
 import pandas as pd
 import re
-from lookup_v2 import SABIAN_SYMBOLS, GLYPHS
+from lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS
+import html 
 
 def glyph_for(obj: str) -> str:
     """
@@ -229,6 +230,15 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
         tags.append(str(row.get("Dignity")).strip())
     paren = f" ({', '.join(tags)})" if tags else ""
 
+    # Short meaning (from lookup_v2.OBJECT_MEANINGS)
+    # Try exact key first, then a version with any trailing "(...)" removed.
+    base_obj = re.sub(r"\s*\(.*?\)\s*$", "", obj).strip()
+    meaning_short = (
+        OBJECT_MEANINGS.get(obj)
+        or OBJECT_MEANINGS.get(base_obj)
+        or ""
+    )
+
     # Core text bits already in DF
     sign   = row.get("Sign") or ""
     dms    = row.get("DMS") or ""                       # precomputed positional DMS
@@ -262,8 +272,9 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
     # Title line (slightly larger/bold—your CSS controls exact look)
     lines.append(f"<div class='pf-title'><strong>{glyph} {obj}{paren}</strong></div>")
 
-    # Meaning line (optional external mapping—leave blank if you don’t have one)
-    # lines.append(f"<div class='pf-meaning'>{html.escape(meaning)}</div>")
+    # Meaning line directly under the title
+    if meaning_short:
+        lines.append(f"<div class='pf-meaning'>{html.escape(meaning_short)}</div>")
 
     # Sign & degree, Sabian
     if sign or dms:
