@@ -113,6 +113,107 @@ _COMPASS_ALIAS_MAP: dict[str, list[str]] = {
     "South Node": ["South Node"],
 }
 
+_cache_major_edges = {}
+_cache_shapes = {}
+
+def get_major_edges_and_patterns(pos):
+	"""
+	Build master list of major edges from positions, then cluster into patterns.
+	"""
+	pos_items_tuple = tuple(sorted(pos.items()))
+	if pos_items_tuple not in _cache_major_edges:
+		temp_edges = []
+		planets = list(pos.keys())
+		for i in range(len(planets)):
+			for j in range(i + 1, len(planets)):
+				p1, p2 = planets[i], planets[j]
+				d1, d2 = pos.get(p1), pos.get(p2)
+				if d1 is None or d2 is None:
+					continue
+				angle = abs(d1 - d2) % 360
+				if angle > 180:
+					angle = 360 - angle
+				for aspect in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
+					data = ASPECTS[aspect]
+					if abs(angle - data["angle"]) <= data["orb"]:
+						temp_edges.append(((p1, p2), aspect))
+						break
+		patterns = connected_components_from_edges(list(pos.keys()), temp_edges)
+		_cache_major_edges[pos_items_tuple] = (tuple(temp_edges), patterns)
+	return _cache_major_edges[pos_items_tuple]
+
+def get_shapes(pos, patterns, major_edges_all):
+	pos_items_tuple = tuple(sorted(pos.items()))
+	patterns_key = tuple(tuple(sorted(p)) for p in patterns)
+	edges_tuple = tuple(major_edges_all)
+	key = (pos_items_tuple, patterns_key, edges_tuple)
+	if key not in _cache_shapes:
+		_cache_shapes[key] = detect_shapes(pos, patterns, major_edges_all)
+	return _cache_shapes[key]
+
+SUBSHAPE_COLORS = [
+	"#FF5214", "#FFA600", "#FBFF00", "#87DB00",
+	"#00B828", "#049167", "#006EFF", "#1100FF",
+	"#6320FF", "#9E0099", "#FF00EA", "#720022",
+	"#4B2C06", "#534546", "#C4A5A5", "#5F7066",
+]
+
+_HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
+
+
+def _current_chart_header_lines():
+	name = (
+		st.session_state.get("current_profile_title")
+		or st.session_state.get("current_profile")
+		or "Untitled Chart"
+	)
+	if isinstance(name, str) and name.startswith("community:"):
+		name = "Community Chart"
+
+	month  = st.session_state.get("profile_month_name", "")
+	day    = st.session_state.get("profile_day", "")
+	year   = st.session_state.get("profile_year", "")
+	hour   = st.session_state.get("profile_hour")
+	minute = st.session_state.get("profile_minute")
+	city   = st.session_state.get("profile_city", "")
+
+	# 12-hour time
+	time_str = ""
+	if hour is not None and minute is not None:
+		h = int(hour); m = int(minute)
+		ampm = "AM" if h < 12 else "PM"
+		h12  = 12 if (h % 12 == 0) else (h % 12)
+		time_str = f"{h12}:{m:02d} {ampm}"
+
+	date_line = f"{month} {day}, {year}".strip()
+	if date_line and time_str:
+		date_line = f"{date_line}, {time_str}"
+	elif time_str:
+		date_line = time_str
+
+	return name, date_line, city
+import matplotlib.patheffects as pe
+
+import matplotlib.patheffects as pe
+
+def _draw_header_on_figure(fig, name, date_line, city, dark_mode):
+	"""Paint a 3-line header in the figure margin (top-left), never over the wheel."""
+	color  = "white" if dark_mode else "black"
+	stroke = "black" if dark_mode else "white"
+	effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+
+	y0 = 0.99   # top margin in figure coords
+	x0 = 0.00   # left margin
+
+	fig.text(x0, y0, name, ha="left", va="top",
+			 fontsize=12, fontweight="bold", color=color, path_effects=effects)
+	if date_line:
+		fig.text(x0, y0 - 0.035, date_line, ha="left", va="top",
+				 fontsize=9, color=color, path_effects=effects)
+	if city:
+		fig.text(x0, y0 - 0.065, city, ha="left", va="top",
+				 fontsize=9, color=color, path_effects=effects)
+
 def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | None:
     if not pos:
         return None
@@ -164,6 +265,17 @@ GROUP_COLORS = _import_lookup_attr(
         "hotpink","gold","deepskyblue","orchid",
     ),
 )
+
+def group_color_for(idx: int) -> str:
+    """Return a deterministic colour for the given circuit index."""
+
+    if not GROUP_COLORS:
+        return "teal"
+    try:
+        return GROUP_COLORS[idx % len(GROUP_COLORS)]
+    except Exception:
+        return "teal"
+
 
 ZODIAC_SIGNS = _import_lookup_attr(
     "ZODIAC_SIGNS",
