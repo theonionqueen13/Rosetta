@@ -158,6 +158,24 @@ SUBSHAPE_COLORS = [
 	"#4B2C06", "#534546", "#C4A5A5", "#5F7066",
 ]
 
+def shape_color_for(shape_id: Any) -> str:
+    """Return a stable solid colour for the given shape identifier."""
+
+    palette: Sequence[str] = SUBSHAPE_COLORS or ("teal",)
+    key = "_shape_color_map_v2"
+    try:
+        color_map = st.session_state.setdefault(key, {})
+    except Exception:
+        color_map = {}
+    if shape_id not in color_map:
+        idx = len(color_map) % len(palette)
+        color_map[shape_id] = palette[idx]
+        try:
+            st.session_state[key] = color_map
+        except Exception:
+            pass
+    return color_map[shape_id]
+
 _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 
 
@@ -921,6 +939,9 @@ def render_chart_with_shapes(
     ]
     active_shapes = [s for s in shapes if s["id"] in active_shape_ids]
 
+    active_toggle_count = len(active_parents) + len(active_shapes)
+    layered_mode = active_toggle_count > 1
+
     active_singletons = {obj for obj, on in singleton_toggles.items() if on}
     visible_objects = set()
 
@@ -953,7 +974,7 @@ def render_chart_with_shapes(
                     for ((p1, p2), asp_name) in major_edges_all
                     if p1 in patterns[idx] and p2 in patterns[idx]]
 
-            color = group_color_for(idx)
+            color = group_color_for(idx) if layered_mode else None
             # major edges in this circuit’s color
             draw_aspect_lines(ax, pos, edges, asc_deg, color_override=color)
             for (p1, p2), asp in edges:
@@ -977,7 +998,8 @@ def render_chart_with_shapes(
     # Sub-shapes edges
     for s in active_shapes:
         visible_objects.update(s["members"])
-        draw_aspect_lines(ax, pos, s["edges"], asc_deg)
+        color = shape_color_for(s["id"]) if layered_mode else None
+        draw_aspect_lines(ax, pos, s["edges"], asc_deg, color_override=color)
         for (p1, p2), asp in s["edges"]:
             _add_edge(p1, asp, p2)
 
