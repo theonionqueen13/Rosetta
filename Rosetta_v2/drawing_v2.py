@@ -1,7 +1,6 @@
 """Utilities for rendering the Rosetta v2 chart wheel using precomputed data."""
 
 from __future__ import annotations
-from lookup_v2 import ZODIAC_COLORS, ZODIAC_SIGNS, ASPECTS
 from dataclasses import dataclass
 from typing import Any, Collection, Iterable, Mapping, Sequence
 import math
@@ -35,10 +34,6 @@ def _import_lookup_attr(name: str, default: Any) -> Any:
         _legacy_lookup = {}
 
     return _legacy_lookup.get(name, default)
-
-# color helper
-def group_color_for(idx: int) -> str:
-    return GROUP_COLORS[idx % len(GROUP_COLORS)]
 
 GLYPHS: Mapping[str, str] = _import_lookup_attr("GLYPHS", {})
 
@@ -108,6 +103,104 @@ for group in _ALIAS_GROUPS:
     canon_group = {_canonical_name(name) for name in group}
     for entry in canon_group:
         _ALIAS_LOOKUP[entry] = canon_group
+
+_COMPASS_ALIAS_MAP: dict[str, list[str]] = {
+    "Ascendant": ["AC", "Ascendant"],
+    "Descendant": ["DC", "Descendant"],
+    "MC": ["MC", "Midheaven"],
+    "IC": ["IC", "Imum Coeli"],
+    "North Node": ["North Node", "True Node"],
+    "South Node": ["South Node"],
+}
+
+def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | None:
+    if not pos:
+        return None
+    value = pos.get(name)
+    if value is not None:
+        try:
+            return float(value) % 360.0
+        except Exception:
+            return None
+    canon = _canonical_name(name)
+    aliases = _ALIAS_LOOKUP.get(canon, {canon})
+    for key, val in pos.items():
+        if val is None:
+            continue
+        try:
+            deg = float(val) % 360.0
+        except Exception:
+            continue
+        if _canonical_name(key) in aliases:
+            return deg
+    return None
+
+_COMPASS_ALIAS_MAP: dict[str, list[str]] = {
+    "Ascendant": ["AC", "Ascendant"],
+    "Descendant": ["DC", "Descendant"],
+    "MC": ["MC", "Midheaven"],
+    "IC": ["IC", "Imum Coeli"],
+    "North Node": ["North Node", "True Node"],
+    "South Node": ["South Node"],
+}
+
+ASPECTS = _import_lookup_attr(
+    "ASPECTS",
+    {
+        "Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
+        "Sextile": {"angle": 60, "orb": 3, "color": "purple",  "style": "solid"},
+        "Square": {"angle": 90, "orb": 3, "color": "red",     "style": "solid"},
+        "Trine": {"angle": 120, "orb": 3, "color": "blue",    "style": "solid"},
+        "Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted"},
+        "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
+        "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
+    },
+)
+
+GROUP_COLORS = _import_lookup_attr(
+    "GROUP_COLORS",
+    (
+        "crimson","teal","darkorange","slateblue","seagreen",
+        "hotpink","gold","deepskyblue","orchid",
+    ),
+)
+
+ZODIAC_SIGNS = _import_lookup_attr(
+    "ZODIAC_SIGNS",
+    ("♈️","♉️","♊️","♋️","♌️","♍️","♎️","♏️","♐️","♑️","♒️","♓️"),
+)
+
+# NEW: add a safe default palette for sign colors
+ZODIAC_COLORS = _import_lookup_attr(
+    "ZODIAC_COLORS",
+    (
+        "#E57373", "#F06292", "#BA68C8", "#9575CD",
+        "#64B5F6", "#4FC3F7", "#4DD0E1", "#81C784",
+        "#AED581", "#FFD54F", "#FFB74D", "#A1887F",
+    ),
+)
+
+def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | None:
+    if not pos:
+        return None
+    value = pos.get(name)
+    if value is not None:
+        try:
+            return float(value) % 360.0
+        except Exception:
+            return None
+    canon = _canonical_name(name)
+    aliases = _ALIAS_LOOKUP.get(canon, {canon})
+    for key, val in pos.items():
+        if val is None:
+            continue
+        try:
+            deg = float(val) % 360.0
+        except Exception:
+            continue
+        if _canonical_name(key) in aliases:
+            return deg
+    return None
 
 def _expand_visible_canon(names: Collection[str] | None) -> set[str] | None:
     if not names:
@@ -207,16 +300,8 @@ def extract_compass_positions(
     visible_names: Collection[str] | None = None,
 ) -> dict[str, float]:
     visible_canon = _expand_visible_canon(visible_names)
-    compass_map = {
-        "Ascendant": ["AC", "Ascendant"],
-        "Descendant": ["DC", "Descendant"],
-        "MC": ["MC", "Midheaven"],
-        "IC": ["IC", "Imum Coeli"],
-        "North Node": ["North Node", "True Node"],
-        "South Node": ["South Node"],
-    }
     out: dict[str, float] = {}
-    for label, names in compass_map.items():
+    for label, names in _COMPASS_ALIAS_MAP.items():
         row = _find_row(df, names)
         if row is None:
             continue
@@ -528,7 +613,7 @@ def draw_compass_rose(
         colors = {"nodal": "purple", "acdc": "green", "mcic": "orange"}
 
     def _get_deg(name: str) -> float | None:
-        return pos.get(name)
+        return _degree_for_label(pos, name)
 
     z_axes = zorder + 1
     z_nodal_line = zorder + 2
@@ -536,18 +621,36 @@ def draw_compass_rose(
 
     ac = _get_deg("Ascendant")
     dc = _get_deg("Descendant")
+    if ac is not None and dc is None:
+        dc = (ac + 180.0) % 360.0
+    elif dc is not None and ac is None:
+        ac = (dc + 180.0) % 360.0
     if ac is not None and dc is not None:
         r1 = deg_to_rad(ac, asc_deg)
         r2 = deg_to_rad(dc, asc_deg)
-        ax.plot([r1, r2], [1, 1], color=colors["acdc"], linewidth=linewidth_base, zorder=z_axes)
-
+    ax.plot(
+            [r1, r2],
+            [1, 1],
+            color=colors.get("acdc", "#4E83AF"),
+            linewidth=linewidth_base,
+            zorder=z_axes,
+        )
     mc = _get_deg("MC")
     ic = _get_deg("IC")
+    if mc is not None and ic is None:
+        ic = (mc + 180.0) % 360.0
+    elif ic is not None and mc is None:
+        mc = (ic + 180.0) % 360.0
     if mc is not None and ic is not None:
         r1 = deg_to_rad(mc, asc_deg)
         r2 = deg_to_rad(ic, asc_deg)
-        ax.plot([r1, r2], [1, 1], color=colors["mcic"], linewidth=linewidth_base, zorder=z_axes)
-
+        ax.plot(
+            [r1, r2],
+            [1, 1],
+            color=colors.get("mcic", "#4E83AF"),
+            linewidth=linewidth_base,
+            zorder=z_axes,
+        )
     sn = _get_deg("South Node")
     nn = _get_deg("North Node")
     if sn is not None and nn is not None:
@@ -569,7 +672,7 @@ def draw_compass_rose(
                 arrowstyle="-|>",
                 mutation_scale=arrow_mutation_scale,
                 lw=linewidth_base * nodal_width_multiplier,
-                color=colors["nodal"],
+                color=colors.get("nodal", "purple"),
                 shrinkA=0,
                 shrinkB=0,
             ),
@@ -773,17 +876,43 @@ def render_chart_with_shapes(
 
     # Compass
     if st.session_state.get("toggle_compass_rose", True):
+        compass_positions = extract_compass_positions(df)
+        compass_source = compass_positions or pos
         draw_compass_rose(
-            ax, pos, asc_deg,
+            ax, compass_source, asc_deg,
             colors={"nodal": "purple", "acdc": "#4E83AF", "mcic": "#4E83AF"},
             linewidth_base=2.0, zorder=100, arrow_mutation_scale=22.0,
             nodal_width_multiplier=2.0, sn_dot_markersize=12.0
         )
-        if "South Node" in pos and "North Node" in pos:
+        visible_objects.update({"Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"})
+        for names in _COMPASS_ALIAS_MAP.values():
+            row = _find_row(df, names)
+            if row is not None:
+                obj_name = str(row.get("Object"))
+                if obj_name:
+                    visible_objects.add(obj_name)
+
+        sn = _degree_for_label(compass_source, "South Node")
+        nn = _degree_for_label(compass_source, "North Node")
+        if sn is not None and nn is not None:
             _add_edge("South Node", "Opposition", "North Node")
-        if "Ascendant" in pos and "Descendant" in pos:
+
+        ac_val = _degree_for_label(compass_source, "Ascendant")
+        dc_val = _degree_for_label(compass_source, "Descendant")
+        if ac_val is not None and dc_val is None:
+            dc_val = (ac_val + 180.0) % 360.0
+        elif dc_val is not None and ac_val is None:
+            ac_val = (dc_val + 180.0) % 360.0
+        if ac_val is not None and dc_val is not None:
             _add_edge("Ascendant", "Opposition", "Descendant")
-        if "MC" in pos and "IC" in pos:
+
+        mc_val = _degree_for_label(compass_source, "MC")
+        ic_val = _degree_for_label(compass_source, "IC")
+        if mc_val is not None and ic_val is None:
+            ic_val = (mc_val + 180.0) % 360.0
+        elif ic_val is not None and mc_val is None:
+            mc_val = (ic_val + 180.0) % 360.0
+        if mc_val is not None and ic_val is not None:
             _add_edge("MC", "Opposition", "IC")
 
     # Interpretation (best-effort: skip if those helpers aren’t wired yet)

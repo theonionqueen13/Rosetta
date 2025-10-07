@@ -408,9 +408,6 @@ if df_cached is not None:
 		circuit_title  = st.session_state[circuit_name_key]   # shown on checkbox row
 		members_label  = ", ".join(component)                  # shown in expander header
 
-		# color chip for layered mode
-		group_color = GROUP_COLORS[i % len(GROUP_COLORS)]
-
 		with target_col:
 			# checkbox row: [chip] Circuit N
 			cbox = st.checkbox(f"{circuit_title}", key=checkbox_key)
