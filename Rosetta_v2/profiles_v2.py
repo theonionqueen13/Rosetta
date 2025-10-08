@@ -3,9 +3,10 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import List, Dict
+from collections import defaultdict
 import pandas as pd
 import re
-import html 
+import html
 # --- shared lookups -------------------------------------------------------
 #
 # The module is imported from multiple entry-points (as a package via
@@ -24,9 +25,20 @@ import html
 # if both of those fail.  We also avoid clobbering already-imported globals.
 try:  # Preferred: package relative
     from .lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS  # type: ignore
+    from .lookup_v2 import (  # type: ignore
+        SABIAN_SYMBOLS,
+        GLYPHS,
+        OBJECT_MEANINGS,
+        ALIASES_MEANINGS,
+    )
 except ImportError:
     try:  # Fallback: same directory on sys.path
-        from lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS  # type: ignore
+        from lookup_v2 import (  # type: ignore
+            SABIAN_SYMBOLS,
+            GLYPHS,
+            OBJECT_MEANINGS,
+            ALIASES_MEANINGS,
+        )
     except ImportError:
         # Last resort: legacy lookup module.  Only assign when available so we
         # never end up with an empty dictionary due to import order.
@@ -35,7 +47,7 @@ except ImportError:
             GLYPHS,          # noqa: F401 (re-exported)
             OBJECT_MEANINGS,
         )
-
+        ALIASES_MEANINGS: Dict[str, str] = {}
 
 def glyph_for(obj: str) -> str:
     """
@@ -207,11 +219,419 @@ def find_fixed_star_conjunctions(lon_abs: float, catalog: pd.DataFrame, orb: flo
 # Adjust the path if needed.
 STAR_CATALOG = load_fixed_star_catalog("Rosetta_v2/fixed_stars.xlsx")
 
+
+# ----- Profile ordering helpers -------------------------------------------------
+
+_CLUSTER_MEMBER_ORDER = [
+    "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus",
+    "Neptune", "Pluto", "Eris", "Ceres", "Pallas", "Juno", "Vesta", "Eros",
+    "Psyche", "Chiron", "Nessus", "Ixion", "Hidalgo", "Varuna", "Typhon",
+    "Quaoar", "Sedna", "Orcus", "Haumea", "Makemake", "Iris", "Hygiea",
+    "Thalia", "Euterpe", "Pomona", "Polyhymnia", "Harmonia", "Isis", "Ariadne",
+    "Mnemosyne", "Echo", "Niobe", "Eurydike", "Freia", "Terpsichore",
+    "Minerva", "Hekate", "Zephyr", "Kassandra", "Lachesis", "Nemesis",
+    "Medusa", "Aletheia", "Magdalena", "Arachne", "Fama", "Veritas", "Sirene",
+    "Siva", "Lilith (Asteroid)", "Copernicus", "Icarus", "Toro", "Apollo",
+    "Koussevitzky", "Osiris", "Lucifer", "Anteros", "Tezcatlipoca", "West",
+    "Bacchus", "Hephaistos", "Panacea", "Orpheus", "Kafka", "Pamela",
+    "Dionysus", "Kaali", "Asclepius", "Singer", "Angel", "Black Moon Lilith (Mean)",
+    "Part of Fortune", "Vertex", "Anti-Vertex", "East Point", "Ascendant",
+    "Descendant", "MC", "IC", "North Node", "South Node",
+]
+
+_FALLBACK_OBJECT_ORDER = [
+    "Ascendant", "Descendant", "MC", "IC", "North Node", "South Node", "Sun",
+    "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus",
+    "Neptune", "Pluto", "Eris", "Ceres", "Pallas", "Juno", "Vesta", "Eros",
+    "Psyche", "Chiron", "Nessus", "Ixion", "Hidalgo", "Varuna", "Typhon",
+    "Quaoar", "Sedna", "Orcus", "Haumea", "Makemake", "Iris", "Hygiea",
+    "Thalia", "Euterpe", "Pomona", "Polyhymnia", "Harmonia", "Isis", "Ariadne",
+    "Mnemosyne", "Echo", "Niobe", "Eurydike", "Freia", "Terpsichore",
+    "Minerva", "Hekate", "Zephyr", "Kassandra", "Lachesis", "Nemesis",
+    "Medusa", "Aletheia", "Magdalena", "Arachne", "Fama", "Veritas", "Sirene",
+    "Siva", "Lilith (Asteroid)", "Copernicus", "Icarus", "Toro", "Apollo",
+    "Koussevitzky", "Osiris", "Lucifer", "Anteros", "Tezcatlipoca", "West",
+    "Bacchus", "Hephaistos", "Panacea", "Orpheus", "Kafka", "Pamela",
+    "Dionysus", "Kaali", "Asclepius", "Singer", "Angel", "Black Moon Lilith (Mean)",
+    "Part of Fortune", "Vertex", "Anti-Vertex", "East Point",
+]
+
+_ASPECT_PRIORITY = {
+    "opposition": 0,
+    "trine": 1,
+    "square": 2,
+    "sextile": 3,
+}
+
+_CANON_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _strip_parenthetical(name: str | None) -> str:
+    if not name:
+        return ""
+    return re.sub(r"\s*\(.*?\)\s*$", "", str(name)).strip()
+
+
+def _canon(value: str | None) -> str:
+    if not value:
+        return ""
+    return _CANON_RE.sub("", str(value).lower())
+
+
+_ALIAS_CANON_MAP = {
+    _canon(src): _canon(dst)
+    for src, dst in (ALIASES_MEANINGS or {}).items()
+    if _canon(src) and _canon(dst)
+}
+
+_REVERSE_ALIAS_MAP: dict[str, set[str]] = defaultdict(set)
+for src, dst in (ALIASES_MEANINGS or {}).items():
+    src_c = _canon(src)
+    dst_c = _canon(dst)
+    if src_c and dst_c:
+        _REVERSE_ALIAS_MAP[dst_c].add(src_c)
+
+
+def _canon_variants(name: str | None) -> set[str]:
+    text = "" if name is None else str(name)
+    variants: set[str] = set()
+    stack: list[str] = []
+
+    def _push(candidate: str | None) -> None:
+        if not candidate:
+            return
+        canon_val = _canon(candidate)
+        if canon_val and canon_val not in variants:
+            variants.add(canon_val)
+            stack.append(canon_val)
+
+    _push(text)
+    base = _strip_parenthetical(text)
+    if base and base != text:
+        _push(base)
+
+    alias = ALIASES_MEANINGS.get(text)
+    if alias:
+        _push(alias)
+    if base:
+        alias_base = ALIASES_MEANINGS.get(base)
+        if alias_base:
+            _push(alias_base)
+
+    for rev in _REVERSE_ALIAS_MAP.get(_canon(text), set()):
+        _push(rev)
+    if base:
+        for rev in _REVERSE_ALIAS_MAP.get(_canon(base), set()):
+            _push(rev)
+
+    while stack:
+        canon_key = stack.pop()
+        alias_target = _ALIAS_CANON_MAP.get(canon_key)
+        if alias_target and alias_target not in variants:
+            variants.add(alias_target)
+            stack.append(alias_target)
+        for rev in _REVERSE_ALIAS_MAP.get(canon_key, set()):
+            if rev not in variants:
+                variants.add(rev)
+                stack.append(rev)
+
+    if not variants:
+        canon_text = _canon(text)
+        if canon_text:
+            variants.add(canon_text)
+    return variants
+
+
+def _build_rank_map(order_list: List[str]) -> dict[str, int]:
+    ranks: dict[str, int] = {}
+    for idx, name in enumerate(order_list):
+        for variant in _canon_variants(name) | {_canon(name)}:
+            if variant and variant not in ranks:
+                ranks[variant] = idx
+    return ranks
+
+
+_CLUSTER_RANKS = _build_rank_map(_CLUSTER_MEMBER_ORDER)
+_FALLBACK_RANKS = _build_rank_map(_FALLBACK_OBJECT_ORDER)
+
+
+def _get_rank(name: str, ranks: dict[str, int]) -> int | None:
+    for variant in _canon_variants(name):
+        if variant in ranks:
+            return ranks[variant]
+    return None
+
+
+def _sort_key(name: str, ranks: dict[str, int]) -> tuple[float, str, str]:
+    rank = _get_rank(name, ranks)
+    canon = _canon(name)
+    return (
+        float(rank) if rank is not None else float("inf"),
+        canon,
+        str(name).lower(),
+    )
+
+
+def _sort_members(members: List[str], ranks: dict[str, int]) -> List[str]:
+    return sorted(members, key=lambda member: _sort_key(member, ranks))
+
+
+def _min_rank(names: List[str], ranks: dict[str, int]) -> float:
+    values = [_get_rank(name, ranks) for name in names]
+    filtered = [v for v in values if v is not None]
+    return float(min(filtered)) if filtered else float("inf")
+
+
+def _build_clusters(edges_major: List[tuple], visible_canons: set[str]) -> List[set[str]]:
+    adjacency: dict[str, set[str]] = defaultdict(set)
+    for edge in edges_major or []:
+        try:
+            a, b, meta = edge
+        except ValueError:
+            continue
+        aspect = None
+        if isinstance(meta, dict):
+            aspect = meta.get("aspect")
+        else:
+            aspect = getattr(meta, "aspect", None)
+        if not isinstance(aspect, str) or aspect.lower() != "conjunction":
+            continue
+        ca = _canon(a)
+        cb = _canon(b)
+        if ca in visible_canons and cb in visible_canons:
+            adjacency[ca].add(cb)
+            adjacency[cb].add(ca)
+
+    clusters: List[set[str]] = []
+    visited: set[str] = set()
+    for node in adjacency:
+        if node in visited:
+            continue
+        stack = [node]
+        component: set[str] = set()
+        visited.add(node)
+        while stack:
+            cur = stack.pop()
+            component.add(cur)
+            for nxt in adjacency[cur]:
+                if nxt not in visited:
+                    visited.add(nxt)
+                    stack.append(nxt)
+        if len(component) >= 2:
+            clusters.append(component)
+    return clusters
+
+
+def _build_units(
+    canon_to_name: dict[str, str],
+    canon_to_pos: dict[str, int],
+    clusters: List[set[str]],
+) -> tuple[dict[str, dict], dict[str, str], List[str]]:
+    units: dict[str, dict] = {}
+    canon_to_unit: dict[str, str] = {}
+
+    for idx, cluster in enumerate(clusters):
+        members = [canon_to_name[c] for c in cluster if c in canon_to_name]
+        if not members:
+            continue
+        first_index = min(canon_to_pos.get(c, 10**9) for c in cluster)
+        unit_id = f"cluster_{idx}"
+        units[unit_id] = {
+            "members": members,
+            "canons": set(cluster),
+            "size": len(members),
+            "first_index": first_index,
+        }
+        for canon in cluster:
+            canon_to_unit[canon] = unit_id
+
+    for canon, name in canon_to_name.items():
+        if canon in canon_to_unit:
+            continue
+        unit_id = f"single_{canon}"
+        units[unit_id] = {
+            "members": [name],
+            "canons": {canon},
+            "size": 1,
+            "first_index": canon_to_pos.get(canon, 10**9),
+        }
+        canon_to_unit[canon] = unit_id
+
+    unit_order = sorted(units.keys(), key=lambda uid: units[uid]["first_index"])
+    return units, canon_to_unit, unit_order
+
+
+def _units_with_aspects(
+    primary_id: str,
+    units: dict[str, dict],
+    canon_to_unit: dict[str, str],
+    edges_major: List[tuple],
+) -> List[str]:
+    priorities: dict[str, int] = {}
+    for edge in edges_major or []:
+        try:
+            a, b, meta = edge
+        except ValueError:
+            continue
+        aspect = None
+        if isinstance(meta, dict):
+            aspect = meta.get("aspect")
+        else:
+            aspect = getattr(meta, "aspect", None)
+        if not isinstance(aspect, str):
+            continue
+        aspect_key = aspect.strip().lower()
+        priority = _ASPECT_PRIORITY.get(aspect_key)
+        if priority is None:
+            continue
+        ca = _canon(a)
+        cb = _canon(b)
+        unit_a = canon_to_unit.get(ca)
+        unit_b = canon_to_unit.get(cb)
+        if unit_a == primary_id and unit_b and unit_b != primary_id:
+            prev = priorities.get(unit_b)
+            if prev is None or priority < prev:
+                priorities[unit_b] = priority
+        elif unit_b == primary_id and unit_a and unit_a != primary_id:
+            prev = priorities.get(unit_a)
+            if prev is None or priority < prev:
+                priorities[unit_a] = priority
+
+    sorted_units = sorted(
+        priorities.items(),
+        key=lambda item: (
+            item[1],
+            _min_rank(units[item[0]]["members"], _CLUSTER_RANKS),
+            units[item[0]]["first_index"],
+        ),
+    )
+    return [uid for uid, _ in sorted_units]
+
+
+def _determine_visible_order(
+    objs_df: pd.DataFrame,
+    edges_major: List[tuple],
+) -> List[str]:
+    canon_to_name: dict[str, str] = {}
+    canon_to_pos: dict[str, int] = {}
+    names_in_order: List[tuple[str, int]] = []
+
+    for pos, (_, row) in enumerate(objs_df.iterrows()):
+        name = str(row.get("Object") or "").strip()
+        canon = str(row.get("__canon") or "")
+        if not name:
+            continue
+        names_in_order.append((name, pos))
+        if not canon:
+            continue
+        canon_to_name.setdefault(canon, name)
+        canon_to_pos.setdefault(canon, pos)
+
+    if not canon_to_name:
+        names_in_order.sort(key=lambda item: _sort_key(item[0], _FALLBACK_RANKS) + (item[1],))
+        return [name for name, _ in names_in_order]
+
+    visible_canons = set(canon_to_name.keys())
+    clusters = _build_clusters(edges_major, visible_canons)
+    units, canon_to_unit, unit_order = _build_units(canon_to_name, canon_to_pos, clusters)
+    if not units:
+        names_in_order.sort(key=lambda item: _sort_key(item[0], _FALLBACK_RANKS) + (item[1],))
+        return [name for name, _ in names_in_order]
+
+    cluster_unit_ids = [uid for uid in unit_order if units[uid]["size"] >= 2]
+    if not cluster_unit_ids:
+        names_in_order.sort(key=lambda item: _sort_key(item[0], _FALLBACK_RANKS) + (item[1],))
+        return [name for name, _ in names_in_order]
+
+    primary_unit_id = sorted(
+        cluster_unit_ids,
+        key=lambda uid: (
+            -units[uid]["size"],
+            _min_rank(units[uid]["members"], _CLUSTER_RANKS),
+            units[uid]["first_index"],
+        ),
+    )[0]
+
+    ordered_names: List[str] = []
+    processed_units = {primary_unit_id}
+    ordered_names.extend(_sort_members(units[primary_unit_id]["members"], _CLUSTER_RANKS))
+
+    for uid in _units_with_aspects(primary_unit_id, units, canon_to_unit, edges_major):
+        if uid in processed_units:
+            continue
+        ordered_names.extend(_sort_members(units[uid]["members"], _CLUSTER_RANKS))
+        processed_units.add(uid)
+
+    remaining_units = [uid for uid in unit_order if uid not in processed_units]
+    remaining_units.sort(
+        key=lambda uid: (
+            _min_rank(units[uid]["members"], _FALLBACK_RANKS),
+            -units[uid]["size"],
+            units[uid]["first_index"],
+        ),
+    )
+
+    for uid in remaining_units:
+        ordered_names.extend(_sort_members(units[uid]["members"], _CLUSTER_RANKS))
+
+    return ordered_names
+
+
+def ordered_object_rows(
+    df: pd.DataFrame,
+    *,
+    visible_objects: List[str] | None = None,
+    edges_major: List[tuple] | None = None,
+) -> pd.DataFrame:
+    """Return object rows ordered according to visibility and pattern rules."""
+
+    if df is None or "Object" not in df:
+        return pd.DataFrame()
+
+    obj_series = df["Object"].astype("string")
+    mask = ~obj_series.str.contains("cusp", case=False, na=False)
+    objs_only = df.loc[mask].copy()
+    if objs_only.empty:
+        return objs_only
+
+    objs_only["Object"] = objs_only["Object"].astype("string")
+    objs_only["__canon"] = objs_only["Object"].map(_canon)
+
+    if visible_objects:
+        visible_canon = {_canon(name) for name in visible_objects if name}
+        if visible_canon:
+            objs_only = objs_only[objs_only["__canon"].isin(visible_canon)]
+
+    if objs_only.empty:
+        return objs_only.drop(columns=["__canon"], errors="ignore")
+
+    order_names = _determine_visible_order(objs_only, edges_major or [])
+
+    ordered_indices: List[int] = []
+    seen_indices: set[int] = set()
+
+    if order_names:
+        for name in order_names:
+            idxs = objs_only.index[objs_only["Object"] == name].tolist()
+            for idx in idxs:
+                if idx not in seen_indices:
+                    ordered_indices.append(idx)
+                    seen_indices.add(idx)
+
+    for idx in objs_only.index:
+        if idx not in seen_indices:
+            ordered_indices.append(idx)
+            seen_indices.add(idx)
+
+    ordered_df = objs_only.loc[ordered_indices]
+    return ordered_df.drop(columns=["__canon"], errors="ignore")
+
 __all__ = [
     "sabian_for",
     "load_fixed_star_catalog",
     "find_fixed_star_conjunctions",
     "STAR_CATALOG",
+    "ordered_object_rows",
 ]
 
 # Map “Conjunct/Opposite/…” → noun form for your Reception line

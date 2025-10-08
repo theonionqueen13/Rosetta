@@ -1134,8 +1134,14 @@ def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> li
                     q.append(v)
         if len(comp) >= 2:
             comp_sorted = sorted(comp, key=lambda x: order_ix.get(x, 10**9))
-            clusters.append({"Cluster": ", ".join(comp_sorted)})
+            clusters.append({
+                "Cluster": ", ".join(comp_sorted),
+                "Members": comp_sorted,
+                "Size": len(comp_sorted),
+            })
 
     # Sort clusters by the first member’s DF order (stable)
-    clusters.sort(key=lambda row: order_ix.get(row["Cluster"].split(", ")[0], 10**9))
+    clusters.sort(
+        key=lambda row: order_ix.get(row["Members"][0], 10**9) if row.get("Members") else 10**9
+    )
     return clusters

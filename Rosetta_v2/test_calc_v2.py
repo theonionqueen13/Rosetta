@@ -55,7 +55,7 @@ def is_admin(user_id: str) -> bool:
 
 from geopy.geocoders import OpenCage
 from timezonefinder import TimezoneFinder
-from profiles_v2 import format_object_profile_html
+from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, importlib.util, streamlit as st
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
@@ -718,8 +718,23 @@ with st.sidebar:
 
 	# 2) Render all profiles inside one wrapper so the CSS applies uniformly
 	if df_cached is not None:
-		objs_only = df_cached[~df_cached["Object"].str.contains("cusp", case=False, na=False)]
-		blocks = [format_object_profile_html(r, house_label="Placidus") for _, r in objs_only.iterrows()]
-		st.markdown("<div class='pf-root'>" + "\n".join(blocks) + "</div>", unsafe_allow_html=True)
+		visible_objects = st.session_state.get("visible_objects")
+		edges_major = st.session_state.get("edges_major") or []
+		ordered_rows = ordered_object_rows(
+			df_cached,
+			visible_objects=visible_objects,
+			edges_major=edges_major,
+		)
+		if not ordered_rows.empty:
+			blocks = [
+				format_object_profile_html(r, house_label=_selected_house_system)
+				for _, r in ordered_rows.iterrows()
+			]
+			st.markdown(
+				"<div class='pf-root'>" + "\n".join(blocks) + "</div>",
+				unsafe_allow_html=True,
+			)
+		else:
+			st.caption("No objects currently visible with the selected toggles.")
 	else:
 		st.caption("Calculate a chart to see profiles.")
