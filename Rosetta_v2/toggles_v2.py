@@ -84,9 +84,14 @@ def render_circuit_toggles(
 
 	# ---------- LEFT: circuits & sub-shapes ----------
 	with c1:
-		# Compass Needle (independent overlay, ON by default)
+		# Compass overlay: show full rose when birth time known, needle otherwise
 		st.session_state.setdefault("toggle_compass_rose", True)
-		st.checkbox("Compass Needle", key="toggle_compass_rose")
+		unknown_time = bool(
+				st.session_state.get("chart_unknown_time")
+				or st.session_state.get("profile_unknown_time")
+		)
+		label = "Compass Needle" if unknown_time else "Compass Rose"
+		st.checkbox(label, key="toggle_compass_rose")
 
 		# Pattern checkboxes + expanders
 		half = (len(patterns) + 1) // 2

@@ -3,11 +3,13 @@
 from typing import Dict, Any, List, Optional, Tuple
 from house_selector_v2 import _selected_house_system
 from donate_v2 import donate_chart
+from now_v2 import render_now_widget
+from event_lookup_v2 import update_events_html_state
 import datetime as dt
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from now_v2 import render_now_widget
 import pytz
+
 current_user_id = "test-user"
 
 # In-memory stores used by the stubs
@@ -235,6 +237,25 @@ def run_chart(lat, lon, tz_name):
 	minute = int(st.session_state["profile_minute"])
 	unknown_time = bool(st.session_state.get("profile_unknown_time"))
 
+	# --- Determine the chart datetime (UTC) for downstream consumers ---
+	new_chart_dt_utc = None
+	try:
+		tzinfo = ZoneInfo(tz_name) if tz_name else None
+	except Exception:
+		tzinfo = None
+
+	if tzinfo is not None:
+		try:
+			chart_dt_local = datetime(year, month, day, hour, minute, tzinfo=tzinfo)
+			new_chart_dt_utc = chart_dt_local.astimezone(ZoneInfo("UTC"))
+		except Exception:
+			new_chart_dt_utc = None
+
+	st.session_state["chart_dt_utc"] = new_chart_dt_utc
+
+	# Always clear/recompute the events panel whenever a new chart is requested.
+	update_events_html_state(new_chart_dt_utc)
+
 	# --- Calculate chart (no tz_offset when tz_name is provided) ---
 	result = calculate_chart(
 		year=year,
@@ -436,7 +457,7 @@ with col_left:
 					else:
 						hour_val = hour_12
 					minute_val = int(minute_str)
-					
+
 				st.session_state["hour_val"] = hour_val
 				st.session_state["minute_val"] = minute_val
 

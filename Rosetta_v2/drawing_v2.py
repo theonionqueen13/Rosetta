@@ -829,13 +829,61 @@ def draw_compass_rose(
     if colors is None:
         colors = {"nodal": "purple", "acdc": "#4E83AF", "mcic": "#4E83AF"}
 
+    def _get_deg(label: str) -> float | None:
+        deg = _degree_for_label(pos, label)
+        if deg is not None:
+            return deg
+        for alias in _COMPASS_ALIAS_MAP.get(label, []):
+            if alias == label:
+                continue
+            alias_deg = _degree_for_label(pos, alias)
+            if alias_deg is not None:
+                return alias_deg
+        return None
+
     sn = _degree_for_label(pos, "South Node")
     nn = _degree_for_label(pos, "North Node")
     if sn is None or nn is None:
         return
-
+    
+    z_axes = zorder + 1
     z_nodal_line = zorder + 2
     z_nodal_top = zorder + 3
+
+    if include_axes:
+        ac = _get_deg("Ascendant")
+        dc = _get_deg("Descendant")
+        if ac is not None and dc is None:
+            dc = (ac + 180.0) % 360.0
+        elif dc is not None and ac is None:
+            ac = (dc + 180.0) % 360.0
+        if ac is not None and dc is not None:
+            r1 = deg_to_rad(ac, asc_deg)
+            r2 = deg_to_rad(dc, asc_deg)
+            ax.plot(
+                [r1, r2],
+                [1, 1],
+                color=colors.get("acdc", "#4E83AF"),
+                linewidth=linewidth_base,
+                zorder=z_axes,
+            )
+
+        mc = _get_deg("MC")
+        ic = _get_deg("IC")
+        if mc is not None and ic is None:
+            ic = (mc + 180.0) % 360.0
+        elif ic is not None and mc is None:
+            mc = (ic + 180.0) % 360.0
+        if mc is not None and ic is not None:
+            r1 = deg_to_rad(mc, asc_deg)
+            r2 = deg_to_rad(ic, asc_deg)
+            ax.plot(
+                [r1, r2],
+                [1, 1],
+                color=colors.get("mcic", "#4E83AF"),
+                linewidth=linewidth_base,
+                zorder=z_axes,
+            )
 
     sn_rad = deg_to_rad(sn, asc_deg)
     nn_rad = deg_to_rad(nn, asc_deg)
@@ -1050,7 +1098,12 @@ def render_chart(
 
     if compass_on:
         compass_positions = extract_compass_positions(df, visible_names)
-        draw_compass_rose(ax, compass_positions, asc_deg)
+        draw_compass_rose(
+            ax,
+            compass_positions,
+            asc_deg,
+            include_axes=not unknown_time_chart,
+        )
     
     draw_center_earth(ax)
 
@@ -1196,8 +1249,11 @@ def render_chart_with_shapes(
             arrow_mutation_scale=22.0,
             nodal_width_multiplier=2.0,
             sn_dot_markersize=12.0,
+            include_axes=not unknown_time_chart,
         )
         visible_objects.update({"North Node", "South Node"})
+        if not unknown_time_chart:
+            visible_objects.update({"Ascendant", "Descendant", "MC", "IC"})
         for names in (
             _COMPASS_ALIAS_MAP["North Node"],
             _COMPASS_ALIAS_MAP["South Node"],
@@ -1210,9 +1266,18 @@ def render_chart_with_shapes(
 
         sn = _degree_for_label(compass_source, "South Node")
         nn = _degree_for_label(compass_source, "North Node")
-        if sn is not None and nn is not None:
+        if sn is not None and nn is not None:            
             _add_edge("South Node", "Opposition", "North Node")
-
+        if not unknown_time_chart:
+            ac = _degree_for_label(compass_source, "Ascendant")
+            dc = _degree_for_label(compass_source, "Descendant")
+            if ac is not None and dc is not None:
+                _add_edge("Ascendant", "Opposition", "Descendant")
+            mc = _degree_for_label(compass_source, "MC")
+            ic = _degree_for_label(compass_source, "IC")
+            if mc is not None and ic is not None:
+                _add_edge("MC", "Opposition", "IC")
+                
     draw_center_earth(ax)
 
     # Interpretation (best-effort: skip if those helpers aren’t wired yet)
