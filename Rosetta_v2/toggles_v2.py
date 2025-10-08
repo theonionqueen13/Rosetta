@@ -1,4 +1,5 @@
 import streamlit as st
+from event_lookup_v2 import update_events_html_state
 
 def render_circuit_toggles(
 	patterns,
@@ -16,6 +17,7 @@ def render_circuit_toggles(
 	Returns:
 		toggles (list[bool]), pattern_labels (list[str]), saved_profiles (dict)
 	"""
+	st.session_state.pop("events_block", None)
 	# guards
 	patterns = patterns or []
 	shapes = shapes or []
@@ -54,12 +56,25 @@ def render_circuit_toggles(
 				for planet in singleton_map.keys():
 					st.session_state[f"singleton_{planet}"] = False
 			st.rerun()
-
 	with d4:
-		from event_lookup_v2 import render_event_lookup
-		if st.session_state["chart_dt_utc"] is not None:
-			render_event_lookup(st.session_state["chart_dt_utc"])
+		from event_lookup_v2 import update_events_html_state
 
+		# Always compute and blank/overwrite first on every rerun
+		update_events_html_state(
+			st.session_state.get("chart_dt_utc"),
+			events_path="events.jsonl",
+			show_no_events=False,   # flip True if you want a soft message on no results
+		)
+
+		# Single, fixed render point
+		html = st.session_state.get("events_lookup_html", "")
+		if html:
+			st.markdown(html, unsafe_allow_html=True)
+		else:
+			# intentionally blank when no results / no target
+			pass
+
+	st.divider()
 	c1, c2 = st.columns([4, 2])
 
 	# ---------- LEFT: circuits & sub-shapes ----------
