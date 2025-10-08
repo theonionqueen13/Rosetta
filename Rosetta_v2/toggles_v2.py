@@ -56,24 +56,29 @@ def render_circuit_toggles(
 				for planet in singleton_map.keys():
 					st.session_state[f"singleton_{planet}"] = False
 			st.rerun()
+
 	with d4:
-		from event_lookup_v2 import update_events_html_state
+			from event_lookup_v2 import update_events_html_state
 
-		# Always compute and blank/overwrite first on every rerun
-		update_events_html_state(
-			st.session_state.get("chart_dt_utc"),
-			events_path="events.jsonl",
-			show_no_events=False,   # flip True if you want a soft message on no results
-		)
+			# Reserve a dedicated spot for the events block so we can reliably
+			# clear any prior render when a new chart is calculated.
+			events_placeholder = st.empty()
 
-		# Single, fixed render point
-		html = st.session_state.get("events_lookup_html", "")
-		if html:
-			st.markdown(html, unsafe_allow_html=True)
-		else:
-			# intentionally blank when no results / no target
-			pass
+			# Always compute and blank/overwrite first on every rerun
+			update_events_html_state(
+					st.session_state.get("chart_dt_utc"),
+					events_path="events.jsonl",
+					show_no_events=False,   # flip True if you want a soft message on no results
+			)
 
+			# Single, fixed render point. When there is no HTML, explicitly
+			# empty the placeholder so stale content never lingers.
+			html = st.session_state.get("events_lookup_html", "")
+			if html:
+					events_placeholder.markdown(html, unsafe_allow_html=True)
+			else:
+					events_placeholder.empty()
+						
 	st.divider()
 	c1, c2 = st.columns([4, 2])
 

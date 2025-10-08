@@ -6,9 +6,8 @@ from donate_v2 import donate_chart
 import datetime as dt
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from now_v2 import render_now_widget, render_moon_phase_from_chart
+from now_v2 import render_now_widget
 import pytz
-from event_lookup_v2 import render_event_lookup
 current_user_id = "test-user"
 
 # In-memory stores used by the stubs
@@ -592,7 +591,20 @@ if df_cached is not None:
 		render_guided_wizard()
 	with col_c:
 		st.caption("← Chart features by topic 📜🔍")
-	st.divider()
+	
+	st.markdown(
+		"""
+		<style>
+		.thick-divider {
+			border-top: 5px solid #333; /* Adjust thickness and color as needed */
+			margin-top: 20px; /* Adjust spacing above the line */
+			margin-bottom: 20px; /* Adjust spacing below the line */
+		}
+		</style>
+		<div class="thick-divider"></div>
+		""",
+		unsafe_allow_html=True
+	)
 
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
