@@ -35,7 +35,7 @@ def render_circuit_toggles(
 	
 	# ---------- Header + bulk actions ----------
 	
-	d1, d2, d3 = st.columns([1, 1, 5])
+	d1, d2, d3, d4 = st.columns([2, 1, 2, 4])
 	with d1:
 		st.subheader("🗺️Circuits")
 	with d2:
@@ -54,6 +54,11 @@ def render_circuit_toggles(
 				for planet in singleton_map.keys():
 					st.session_state[f"singleton_{planet}"] = False
 			st.rerun()
+
+	with d4:
+		from event_lookup_v2 import render_event_lookup
+		if st.session_state["chart_dt_utc"] is not None:
+			render_event_lookup(st.session_state["chart_dt_utc"])
 
 	c1, c2 = st.columns([4, 2])
 
@@ -174,3 +179,4 @@ def render_circuit_toggles(
 
 	# return AFTER both columns render
 	return toggles, pattern_labels, saved_profiles
+

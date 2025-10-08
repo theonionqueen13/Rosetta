@@ -566,9 +566,22 @@ aspect_cached = st.session_state.get("last_aspect_df")
 sect_cached   = st.session_state.get("last_sect")
 sect_err      = st.session_state.get("last_sect_error")
 
+st.markdown(
+    """
+    <style>
+    .thick-divider {
+        border-top: 5px solid #333; /* Adjust thickness and color as needed */
+        margin-top: 20px; /* Adjust spacing above the line */
+        margin-bottom: 20px; /* Adjust spacing below the line */
+    }
+    </style>
+    <div class="thick-divider"></div>
+    """,
+    unsafe_allow_html=True
+)
+
 # Only show the bottom bar after a chart is calculated
 if df_cached is not None:
-	st.divider()
 	col_a, col_b, col_c = st.columns([1, 3, 1])
 	# -------------------------
 	# Wizard
@@ -580,10 +593,6 @@ if df_cached is not None:
 	with col_c:
 		st.caption("← Chart features by topic 📜🔍")
 	st.divider()
-
-	from event_lookup_v2 import render_event_lookup
-	if st.session_state["chart_dt_utc"] is not None:
-		render_event_lookup(st.session_state["chart_dt_utc"])
 
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
