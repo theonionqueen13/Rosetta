@@ -4,8 +4,11 @@ from typing import Dict, Any, List, Optional, Tuple
 from house_selector_v2 import _selected_house_system
 from donate_v2 import donate_chart
 import datetime as dt
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from now_v2 import render_now_widget, render_moon_phase_from_chart
 import pytz
-
+from event_lookup_v2 import render_event_lookup
 current_user_id = "test-user"
 
 # In-memory stores used by the stubs
@@ -460,6 +463,13 @@ with col_left:
 				else:
 					run_chart(lat, lon, tz_name)
 
+					chart_dt_local = datetime(
+						year, month, day, hour_val, minute_val,
+						tzinfo=ZoneInfo(tz_name)
+					)
+					chart_dt_utc = chart_dt_local.astimezone(ZoneInfo("UTC"))
+					st.session_state["chart_dt_utc"] = chart_dt_utc
+
 				# Location info BELOW, optional
 				if st.session_state.get("last_location"):
 					st.success(f"Found: {st.session_state['last_location']}")
@@ -493,205 +503,14 @@ except NameError:
 	geocode_city = None
 
 with col_mid:
-	if st.button("🌟 Now", key="btn_now"):
-		stored_lat = st.session_state.get("current_lat")
-		stored_lon = st.session_state.get("current_lon")
-		stored_tz  = st.session_state.get("current_tz_name")
-		city_name  = st.session_state.get("profile_city", "")
+    with st.container():
+        render_now_widget(
+            col_mid,
+            MONTH_NAMES,
+            run_chart,
+            _geocode_city_with_timezone,
+        )
 
-		# If we don't have a valid location yet, show the quick field right here
-		if not (isinstance(stored_lat, (int, float)) and isinstance(stored_lon, (int, float)) and stored_tz):
-			st.error("Enter a city.")
-			st.session_state["show_now_city_field"] = True
-		else:
-			try:
-				tz = pytz.timezone(stored_tz)
-				now = dt.datetime.now(tz)
-
-				# update only the profile_* inputs
-				st.session_state["profile_year"]        = now.year
-				st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
-				st.session_state["profile_day"]         = now.day
-				st.session_state["profile_hour"]        = now.hour
-				st.session_state["profile_minute"]      = now.minute
-				st.session_state["profile_city"]        = city_name
-
-				# ensure current_* cache
-				st.session_state["current_lat"]     = stored_lat
-				st.session_state["current_lon"]     = stored_lon
-				st.session_state["current_tz_name"] = stored_tz
-
-				# compute planets (house system is used later at render)
-				run_chart(stored_lat, stored_lon, stored_tz)
-
-				st.session_state["chart_ready"] = True
-				st.rerun()
-			except Exception as e:
-				st.error(f"Chart calculation failed: {e}")
-				st.session_state["chart_ready"] = False
-
-	# --- Current Date / Time / Moon Phase (always "now" via Swiss Ephemeris) ---
-
-	def _format_time_12h(dt_obj):
-		h = dt_obj.hour
-		m = dt_obj.minute
-		ampm = "AM" if h < 12 else "PM"
-		h12 = h % 12
-		if h12 == 0:
-			h12 = 12
-		return f"{h12}:{m:02d} {ampm}"
-
-	def _moon_phase_label_emoji(sun_lon_deg: float, moon_lon_deg: float):
-		"""
-		Compute phase from ecliptic longitudes (degrees 0..360).
-		Phase angle = (Moon - Sun) mod 360
-		Buckets:
-		  0°        -> New Moon             🌑
-		  0–90°     -> Waxing Crescent      🌒
-		  90°       -> First Quarter        🌓
-		  90–180°   -> Waxing Gibbous       🌔
-		  180°      -> Full Moon            🌕
-		  180–270°  -> Waning Gibbous       🌖
-		  270°      -> Last Quarter         🌗
-		  270–360°  -> Waning Crescent      🌘
-		"""
-		phase = (moon_lon_deg - sun_lon_deg) % 360.0
-
-		# small tolerance so exact quarter/full snap nicely
-		def _is_close(x, target, tol=0.8):
-			return abs((x - target + 180) % 360 - 180) <= tol
-
-		if _is_close(phase, 0.0) or phase < 1:
-			return "New Moon", "🌑"
-		if 0 < phase < 90:
-			return "Waxing Crescent", "🌒"
-		if _is_close(phase, 90.0):
-			return "First Quarter", "🌓"
-		if 90 < phase < 180:
-			return "Waxing Gibbous", "🌔"
-		if _is_close(phase, 180.0):
-			return "Full Moon", "🌕"
-		if 180 < phase < 270:
-			return "Waning Gibbous", "🌖"
-		if _is_close(phase, 270.0):
-			return "Last Quarter", "🌗"
-		return "Waning Crescent", "🌘"
-
-	# 1) Choose timezone: user-input city (if present) else CST default
-	_city_str = (st.session_state.get("profile_city") or "").strip()
-	_tz_name  = st.session_state.get("current_tz_name")
-	if _city_str and _tz_name:
-		tz = pytz.timezone(_tz_name)
-		show_cst_default_note = False
-	else:
-		tz = pytz.timezone("America/Chicago")  # CST region
-		show_cst_default_note = True
-
-	now_local = dt.datetime.now(tz)
-
-	# 2) Date & time lines
-	date_line = f"{MONTH_NAMES[now_local.month - 1]} {now_local.day}, {now_local.year}"
-	time_line = _format_time_12h(now_local)
-	if show_cst_default_note:
-		time_line += " (CST: default)"
-
-	# 3) Always compute Sun/Moon longitudes for *current* time (Swiss Ephemeris)
-	try:
-		import swisseph as swe
-		ut = now_local.astimezone(pytz.UTC)
-		jd_ut = swe.julday(
-			ut.year, ut.month, ut.day,
-			ut.hour + ut.minute/60.0 + ut.second/3600.0
-		)
-		sun_lon  = swe.calc_ut(jd_ut, swe.SUN)[0][0] % 360.0
-		moon_lon = swe.calc_ut(jd_ut, swe.MOON)[0][0] % 360.0
-
-		label, emoji = _moon_phase_label_emoji(sun_lon, moon_lon)
-		phase_line = f"{label} {emoji}"
-	except Exception:
-		phase_line = "Moon phase unavailable"
-
-	# 4) Render the three lines
-	st.markdown(
-		f"""
-**{date_line}**  
-{time_line}  
-{phase_line}
-		""".strip()
-	)
-
-# Quick city field — only shows if the guard above failed
-if st.session_state.get("show_now_city_field", False):
-	st.caption("Quick city entry for Now:")
-
-	# A tiny form prevents duplicated buttons and lets Enter submit
-	with st.form("now_city_form", clear_on_submit=True):
-		city_str = st.text_input(
-			"City (e.g., Denver, CO, USA)",
-			key="now_city_temp",
-			placeholder="City, State/Province, Country",
-		)
-		f1, f2 = st.columns([1, 1], gap="small")
-		with f1:
-			submit_now = st.form_submit_button("Lookup City", use_container_width=True)
-		with f2:
-			cancel_now = st.form_submit_button("Cancel", use_container_width=True)
-
-	if cancel_now:
-		st.session_state["show_now_city_field"] = False
-		st.rerun()
-
-	if submit_now:
-		city_str = (city_str or "").strip()
-		if not city_str:
-			st.error("Please type a city.")
-		else:
-			try:
-				lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_query)
-
-				# Make the location visible to drawing_v2
-				if lat is not None and lon is not None:
-					st.session_state["chart_lat"] = float(lat)
-					st.session_state["chart_lon"] = float(lon)
-				else:
-					# Explicitly clear if lookup failed, so we fall back to 🌐
-					st.session_state["chart_lat"] = None
-					st.session_state["chart_lon"] = None
-
-			except Exception as e:
-				st.error(f"City lookup failed: {e}")
-			else:
-				if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
-					st.error("City lookup returned invalid results.")
-				elif tz_name not in pytz.all_timezones:
-					st.error(f"Unrecognized timezone '{tz_name}'.")
-				else:
-					# Store city + geocode
-					st.session_state["profile_city"]    = city_str
-					st.session_state["city_input"]      = city_str
-					st.session_state["current_lat"]     = lat
-					st.session_state["current_lon"]     = lon
-					st.session_state["current_tz_name"] = tz_name
-					st.session_state["last_location"]   = formatted_address or city_str
-					st.session_state["last_timezone"]   = tz_name
-
-					# Compute "Now" in that timezone (3-arg run_chart)
-					tz = pytz.timezone(tz_name)
-					now = dt.datetime.now(tz)
-					st.session_state["profile_year"]        = now.year
-					st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
-					st.session_state["profile_day"]         = now.day
-					st.session_state["profile_hour"]        = now.hour
-					st.session_state["profile_minute"]      = now.minute
-
-					try:
-						run_chart(lat, lon, tz_name)
-						st.session_state["chart_ready"] = True
-						st.session_state["show_now_city_field"] = False
-						st.rerun()
-					except Exception as e:
-						st.error(f"Chart calculation failed: {e}")
-						st.session_state["chart_ready"] = False
 
 with col_right:
 	from profile_manager_v2 import ensure_profile_session_defaults, render_profile_manager
@@ -761,6 +580,11 @@ if df_cached is not None:
 	with col_c:
 		st.caption("← Chart features by topic 📜🔍")
 	st.divider()
+
+	from event_lookup_v2 import render_event_lookup
+	if st.session_state["chart_dt_utc"] is not None:
+		render_event_lookup(st.session_state["chart_dt_utc"])
+
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
 	saved_profiles = load_user_profiles_db(current_user_id)

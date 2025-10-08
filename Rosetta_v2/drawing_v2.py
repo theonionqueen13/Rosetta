@@ -2,15 +2,16 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Collection, Iterable, Mapping, Sequence
-import math
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.image as mpimg
-import os
-import re
+import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
+import os, re, math
 import numpy as np
-import streamlit as st  # used by _selected_house_system/reset_chart_state/render_chart_with_shapes
+import streamlit as st
 from patterns_v2 import detect_shapes, connected_components_from_edges
+from now_v2 import _moon_phase_label_emoji
+
 try:  # Pandas is part of the calculation pipeline; import defensively.
     import pandas as pd
 except Exception:  # pragma: no cover - pandas is expected to be present.
@@ -19,6 +20,11 @@ except Exception:  # pragma: no cover - pandas is expected to be present.
 # ---------------------------------------------------------------------------
 # Lookup tables (glyphs, aspect metadata, colours)
 # ---------------------------------------------------------------------------
+
+import os
+import matplotlib.image as mpimg
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from now_v2 import _moon_phase_label_emoji  # reuse your existing label+icon mapping
 
 def _import_lookup_attr(name: str, default: Any) -> Any:
     """Attempt to import ``name`` from lookup_v2, falling back to legacy data."""
@@ -214,8 +220,6 @@ def _current_chart_header_lines():
 	return name, date_line, city
 import matplotlib.patheffects as pe
 
-import matplotlib.patheffects as pe
-
 def _draw_header_on_figure(fig, name, date_line, city, dark_mode):
 	"""Paint a 3-line header in the figure margin (top-left), never over the wheel."""
 	color  = "white" if dark_mode else "black"
@@ -233,6 +237,64 @@ def _draw_header_on_figure(fig, name, date_line, city, dark_mode):
 	if city:
 		fig.text(x0, y0 - 0.065, city, ha="left", va="top",
 				 fontsize=9, color=color, path_effects=effects)
+
+def _draw_moon_phase_on_axes(ax, df, dark_mode: bool, icon_frac: float = 0.10) -> None:
+    """
+    Draw the chart-based moon phase (icon + label) INSIDE the main chart axes,
+    anchored at the upper-right corner. This does NOT change the figure/frame size.
+    icon_frac = width/height of inset as a fraction of the parent axes.
+    """
+    try:
+        if df is None or "Object" not in df or "Longitude" not in df:
+            return
+
+        sun_row  = df[df["Object"].astype(str).str.lower() == "sun"].head(1)
+        moon_row = df[df["Object"].astype(str).str.lower() == "moon"].head(1)
+        if sun_row.empty or moon_row.empty:
+            return
+
+        sun_lon  = float(sun_row["Longitude"].iloc[0]) % 360.0
+        moon_lon = float(moon_row["Longitude"].iloc[0]) % 360.0
+
+        # Reuse your existing mapping to get label + PNG path
+        label, icon_path = _moon_phase_label_emoji(sun_lon, moon_lon, emoji_size_px=None)
+        if not os.path.exists(icon_path):
+            return
+
+        # --- ICON inset inside the axes (upper-right) ---
+        icon_ax = inset_axes(
+            ax,
+            width=f"{int(icon_frac * 100)}%",
+            height=f"{int(icon_frac * 100)}%",
+            loc="upper right",
+            bbox_to_anchor=(0.0, 0.075, 1.0, 1.0),   # <<< push the icon a bit DOWN
+            bbox_transform=ax.transAxes,
+            borderpad=0.0,
+        )
+
+        icon_ax.set_axis_off()
+        try:
+            img = mpimg.imread(icon_path)
+            icon_ax.imshow(img)
+        except Exception:
+            pass
+
+        # --- LABEL just to the left of the icon (still inside axes) ---
+        import matplotlib.patheffects as pe
+        color  = "white" if dark_mode else "black"
+        stroke = "black" if dark_mode else "white"
+        effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+
+        ax.text(
+            0.89, 1.078, label,                 # <<< y almost at 1.0 (top); x near right edge
+            transform=ax.transAxes,
+            ha="right", va="top",
+            fontsize=10, color=color, path_effects=effects, zorder=10,
+        )
+
+    except Exception:
+        # decorative only; fail silently
+        return
 
 def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | None:
     if not pos:
@@ -950,6 +1012,8 @@ def render_chart(
 
     fig.subplots_adjust(top=0.95, bottom=0.05, left=0.05, right=0.95)
 
+    _draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
+
     cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
     if degree_markers:
         draw_degree_markers(ax, asc_deg, dark_mode)
@@ -1018,6 +1082,7 @@ def render_chart_with_shapes(
     try:
         name, date_line, city = _current_chart_header_lines()  # type: ignore
         _draw_header_on_figure(fig, name, date_line, city, dark_mode)  # type: ignore
+        _draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
     except Exception:
         pass
 
