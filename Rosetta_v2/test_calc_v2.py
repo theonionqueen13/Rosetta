@@ -131,10 +131,12 @@ if "defaults_loaded" not in st.session_state:
 	st.session_state["minute_str"] = "39"
 	st.session_state["ampm"] = "AM"
 	st.session_state["city"] = "Newton, KS"
+	st.session_state["profile_unknown_time"] = False
 	st.session_state["defaults_loaded"] = True
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
+st.session_state["profile_unknown_time"] = False
 
 def _refresh_chart_figure():
 	"""Rebuild the chart figure using the current session-state toggles."""
@@ -231,6 +233,7 @@ def run_chart(lat, lon, tz_name):
 	day    = int(st.session_state["profile_day"])
 	hour   = int(st.session_state["profile_hour"])   # already 24h
 	minute = int(st.session_state["profile_minute"])
+	unknown_time = bool(st.session_state.get("profile_unknown_time"))
 
 	# --- Calculate chart (no tz_offset when tz_name is provided) ---
 	result = calculate_chart(
@@ -244,8 +247,11 @@ def run_chart(lat, lon, tz_name):
 		lon=lon,
 		input_is_ut=False,
 		tz_name=tz_name,
-		include_aspects=True,
+        include_aspects=True,
+        unknown_time=unknown_time,
 	)
+	
+	st.session_state["chart_unknown_time"] = unknown_time
 
 	# Unpack DF(s)
 	if isinstance(result, tuple):
@@ -378,6 +384,15 @@ with col_left:
 					value=st.session_state.get("profile_city", ""),
 					key="city"
 				)
+				unknown_choice = st.radio(
+					"Unknown Time",
+					options=["No", "Yes"],
+					index=(1 if st.session_state.get("profile_unknown_time") else 0),
+					horizontal=True,
+					key="__unknown_time_choice",
+				)
+				unknown_time = unknown_choice == "Yes"
+				st.session_state["profile_unknown_time"] = unknown_time
 
 			# --- Time widgets (own row of columns; NOT nested inside col1) ---
 			tcol1, tcol2, tcol3 = st.columns(3)
@@ -385,19 +400,23 @@ with col_left:
 				hour_12 = st.selectbox(
 					"Birth Time",
 					list(range(1, 13)),
-					key="hour_12"
+					key="hour_12",
+					disabled=unknown_time,
 				)
+				
 			with tcol2:
 				minute_str = st.selectbox(
 					" ",
 					[f"{m:02d}" for m in range(60)],
-					key="minute_str"
+					key="minute_str",
+					disabled=unknown_time,
 				)
 			with tcol3:
 				ampm = st.selectbox(
 					" ",
 					["AM", "PM"],
-					key="ampm"
+					key="ampm",
+					disabled=unknown_time,
 				)
 
 			# Submit button: only on click do we geocode + calculate
@@ -405,13 +424,19 @@ with col_left:
 
 			if submitted:
 				# Convert to 24h
-				if ampm == "PM" and hour_12 != 12:
-					hour_val = hour_12 + 12
-				elif ampm == "AM" and hour_12 == 12:
-					hour_val = 0
+				if unknown_time:
+					hour_val = 12
+					minute_val = 0
 				else:
-					hour_val = hour_12
-				minute_val = int(minute_str)
+					# Convert to 24h
+					if ampm == "PM" and hour_12 != 12:
+						hour_val = hour_12 + 12
+					elif ampm == "AM" and hour_12 == 12:
+						hour_val = 0
+					else:
+						hour_val = hour_12
+					minute_val = int(minute_str)
+					
 				st.session_state["hour_val"] = hour_val
 				st.session_state["minute_val"] = minute_val
 

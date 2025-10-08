@@ -186,57 +186,76 @@ def shape_color_for(shape_id: Any) -> str:
 
 _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 
-
 def _current_chart_header_lines():
-	name = (
-		st.session_state.get("current_profile_title")
-		or st.session_state.get("current_profile")
-		or "Untitled Chart"
-	)
-	if isinstance(name, str) and name.startswith("community:"):
-		name = "Community Chart"
+        name = (
+                st.session_state.get("current_profile_title")
+                or st.session_state.get("current_profile")
+                or "Untitled Chart"
+        )
+        if isinstance(name, str) and name.startswith("community:"):
+                name = "Community Chart"
 
-	month  = st.session_state.get("profile_month_name", "")
-	day    = st.session_state.get("profile_day", "")
-	year   = st.session_state.get("profile_year", "")
-	hour   = st.session_state.get("profile_hour")
-	minute = st.session_state.get("profile_minute")
-	city   = st.session_state.get("profile_city", "")
+        month  = st.session_state.get("profile_month_name", "")
+        day    = st.session_state.get("profile_day", "")
+        year   = st.session_state.get("profile_year", "")
+        hour   = st.session_state.get("profile_hour")
+        minute = st.session_state.get("profile_minute")
+        city   = st.session_state.get("profile_city", "")
+        unknown_time = bool(
+                st.session_state.get("chart_unknown_time")
+                or st.session_state.get("profile_unknown_time")
+        )
 
-	# 12-hour time
-	time_str = ""
-	if hour is not None and minute is not None:
-		h = int(hour); m = int(minute)
-		ampm = "AM" if h < 12 else "PM"
-		h12  = 12 if (h % 12 == 0) else (h % 12)
-		time_str = f"{h12}:{m:02d} {ampm}"
+        date_line = f"{month} {day}, {year}".strip()
 
-	date_line = f"{month} {day}, {year}".strip()
-	if date_line and time_str:
-		date_line = f"{date_line}, {time_str}"
-	elif time_str:
-		date_line = time_str
+        if unknown_time:
+                time_line = "Unknown Time"
+                extra_line = "AC = Aries 0° (default)"
+        else:
+                time_line = ""
+                extra_line = ""
+                if hour is not None and minute is not None:
+                        h = int(hour)
+                        m = int(minute)
+                        ampm = "AM" if h < 12 else "PM"
+                        h12 = 12 if (h % 12 == 0) else (h % 12)
+                        time_line = f"{h12}:{m:02d} {ampm}"
 
-	return name, date_line, city
+        return name, date_line, time_line, city, extra_line
 import matplotlib.patheffects as pe
 
-def _draw_header_on_figure(fig, name, date_line, city, dark_mode):
-	"""Paint a 3-line header in the figure margin (top-left), never over the wheel."""
-	color  = "white" if dark_mode else "black"
-	stroke = "black" if dark_mode else "white"
-	effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+def _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode):
+        """Paint a 3-line header in the figure margin (top-left), never over the wheel."""
+        color  = "white" if dark_mode else "black"
+        stroke = "black" if dark_mode else "white"
+        effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
 
-	y0 = 0.99   # top margin in figure coords
-	x0 = 0.00   # left margin
+        y0 = 0.99   # top margin in figure coords
+        x0 = 0.00   # left margin
 
-	fig.text(x0, y0, name, ha="left", va="top",
-			 fontsize=12, fontweight="bold", color=color, path_effects=effects)
-	if date_line:
-		fig.text(x0, y0 - 0.035, date_line, ha="left", va="top",
-				 fontsize=9, color=color, path_effects=effects)
-	if city:
-		fig.text(x0, y0 - 0.065, city, ha="left", va="top",
-				 fontsize=9, color=color, path_effects=effects)
+        fig.text(x0, y0, name, ha="left", va="top",
+                         fontsize=12, fontweight="bold", color=color, path_effects=effects)
+        lines = []
+        if date_line:
+                lines.append(date_line)
+        if time_line:
+                lines.append(time_line)
+        if city:
+                lines.append(city)
+        if extra_line:
+                lines.append(extra_line)
+
+        for idx, line in enumerate(lines, start=1):
+                fig.text(
+                        x0,
+                        y0 - 0.035 * idx,
+                        line,
+                        ha="left",
+                        va="top",
+                        fontsize=9,
+                        color=color,
+                        path_effects=effects,
+                )
 
 def _draw_moon_phase_on_axes(ax, df, dark_mode: bool, icon_frac: float = 0.10) -> None:
     """
@@ -804,76 +823,56 @@ def draw_compass_rose(
     sn_dot_markersize: float = 8.0,
 ) -> None:
     if colors is None:
-        colors = {"nodal": "purple", "acdc": "green", "mcic": "orange"}
+        colors = {"nodal": "purple"}
 
-    def _get_deg(name: str) -> float | None:
-        return _degree_for_label(pos, name)
+    sn = _degree_for_label(pos, "South Node")
+    nn = _degree_for_label(pos, "North Node")
+    if sn is None or nn is None:
+        return
 
-    z_axes = zorder + 1
     z_nodal_line = zorder + 2
     z_nodal_top = zorder + 3
 
-    ac = _get_deg("Ascendant")
-    dc = _get_deg("Descendant")
-    if ac is not None and dc is None:
-        dc = (ac + 180.0) % 360.0
-    elif dc is not None and ac is None:
-        ac = (dc + 180.0) % 360.0
-    if ac is not None and dc is not None:
-        r1 = deg_to_rad(ac, asc_deg)
-        r2 = deg_to_rad(dc, asc_deg)
+    sn_rad = deg_to_rad(sn, asc_deg)
+    nn_rad = deg_to_rad(nn, asc_deg)
+    x1, y1 = math.cos(sn_rad) * 1.0, math.sin(sn_rad) * 1.0
+    x2, y2 = math.cos(nn_rad) * 1.0, math.sin(nn_rad) * 1.0
+    vx, vy = (x2 - x1), (y2 - y1)
+    head_trim_frac = 0.05
+    x2_trim = x2 - head_trim_frac * vx
+    y2_trim = y2 - head_trim_frac * vy
+    r2_trim_theta = math.atan2(y2_trim, x2_trim)
+    r2_trim_rad = math.hypot(x2_trim, y2_trim)
+
     ax.plot(
-            [r1, r2],
-            [1, 1],
-            color=colors.get("acdc", "#4E83AF"),
-            linewidth=linewidth_base,
-            zorder=z_axes,
-        )
-    mc = _get_deg("MC")
-    ic = _get_deg("IC")
-    if mc is not None and ic is None:
-        ic = (mc + 180.0) % 360.0
-    elif ic is not None and mc is None:
-        mc = (ic + 180.0) % 360.0
-    if mc is not None and ic is not None:
-        r1 = deg_to_rad(mc, asc_deg)
-        r2 = deg_to_rad(ic, asc_deg)
-        ax.plot(
-            [r1, r2],
-            [1, 1],
-            color=colors.get("mcic", "#4E83AF"),
-            linewidth=linewidth_base,
-            zorder=z_axes,
-        )
-    sn = _get_deg("South Node")
-    nn = _get_deg("North Node")
-    if sn is not None and nn is not None:
-        x1, y1 = math.cos(deg_to_rad(sn, asc_deg)) * 1.0, math.sin(deg_to_rad(sn, asc_deg)) * 1.0
-        x2, y2 = math.cos(deg_to_rad(nn, asc_deg)) * 1.0, math.sin(deg_to_rad(nn, asc_deg)) * 1.0
-        vx, vy = (x2 - x1), (y2 - y1)
-        head_trim_frac = 0.05
-        x2_trim = x2 - head_trim_frac * vx
-        y2_trim = y2 - head_trim_frac * vy
-        r2_trim_theta = math.atan2(y2_trim, x2_trim)
-        r2_trim_rad = math.hypot(x2_trim, y2_trim)
-        ax.plot([deg_to_rad(sn, asc_deg), r2_trim_theta], [1.0, r2_trim_rad],
-                color=colors["nodal"], linewidth=linewidth_base * nodal_width_multiplier, zorder=z_nodal_line)
-        ax.annotate(
-            "",
-            xy=(deg_to_rad(nn, asc_deg), 1.0),
-            xytext=(deg_to_rad(sn, asc_deg), 1.0),
-            arrowprops=dict(
-                arrowstyle="-|>",
-                mutation_scale=arrow_mutation_scale,
-                lw=linewidth_base * nodal_width_multiplier,
-                color=colors.get("nodal", "purple"),
-                shrinkA=0,
-                shrinkB=0,
-            ),
-            zorder=z_nodal_top,
-        )
-        ax.plot([deg_to_rad(sn, asc_deg)], [1.0], marker="o", markersize=sn_dot_markersize,
-                color=colors["nodal"], zorder=z_nodal_top)
+        [sn_rad, r2_trim_theta],
+        [1.0, r2_trim_rad],
+        color=colors.get("nodal", "purple"),
+        linewidth=linewidth_base * nodal_width_multiplier,
+        zorder=z_nodal_line,
+    )
+    ax.annotate(
+        "",
+        xy=(nn_rad, 1.0),
+        xytext=(sn_rad, 1.0),
+        arrowprops=dict(
+            arrowstyle="-|>",
+            mutation_scale=arrow_mutation_scale,
+            lw=linewidth_base * nodal_width_multiplier,
+            color=colors.get("nodal", "purple"),
+            shrinkA=0,
+            shrinkB=0,
+        ),
+        zorder=z_nodal_top,
+    )
+    ax.plot(
+        [sn_rad],
+        [1.0],
+        marker="o",
+        markersize=sn_dot_markersize,
+        color=colors.get("nodal", "purple"),
+        zorder=z_nodal_top,
+    )
 
 def _get_profile_lat_lon() -> tuple[float | None, float | None]:
     """Pull chart/birth lat/lon from session_state."""
@@ -995,7 +994,13 @@ def render_chart(
     dpi: int = 144,
 ):
     """Render the chart wheel using already-curated data."""
+    unknown_time_chart = bool(
+        st.session_state.get("chart_unknown_time")
+        or st.session_state.get("profile_unknown_time")
+    )
     asc_deg = get_ascendant_degree(df)
+    if unknown_time_chart:
+        asc_deg = 0.0
     visible_names = resolve_visible_objects(visible_toggle_state, df)
     positions = extract_positions(df, visible_names)
     visible_canon = _expand_visible_canon(visible_names)
@@ -1062,7 +1067,13 @@ def render_chart_with_shapes(
     house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
     major_edges_all
 ):
+    unknown_time_chart = bool(
+        st.session_state.get("chart_unknown_time")
+        or st.session_state.get("profile_unknown_time")
+    )
     asc_deg = get_ascendant_degree(df)
+    if unknown_time_chart:
+        asc_deg = 0.0
     fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
     if dark_mode:
         ax.set_facecolor("black")
@@ -1080,8 +1091,8 @@ def render_chart_with_shapes(
 
     # Header helpers (no-ops if not present elsewhere)
     try:
-        name, date_line, city = _current_chart_header_lines()  # type: ignore
-        _draw_header_on_figure(fig, name, date_line, city, dark_mode)  # type: ignore
+        name, date_line, time_line, city, extra_line = _current_chart_header_lines()  # type: ignore
+        _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)  # type: ignore
         _draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
     except Exception:
         pass
@@ -1172,13 +1183,21 @@ def render_chart_with_shapes(
         compass_positions = extract_compass_positions(df)
         compass_source = compass_positions or pos
         draw_compass_rose(
-            ax, compass_source, asc_deg,
-            colors={"nodal": "purple", "acdc": "#4E83AF", "mcic": "#4E83AF"},
-            linewidth_base=2.0, zorder=100, arrow_mutation_scale=22.0,
-            nodal_width_multiplier=2.0, sn_dot_markersize=12.0
+            ax,
+            compass_source,
+            asc_deg,
+            colors={"nodal": "purple"},
+            linewidth_base=2.0,
+            zorder=100,
+            arrow_mutation_scale=22.0,
+            nodal_width_multiplier=2.0,
+            sn_dot_markersize=12.0,
         )
-        visible_objects.update({"Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"})
-        for names in _COMPASS_ALIAS_MAP.values():
+        visible_objects.update({"North Node", "South Node"})
+        for names in (
+            _COMPASS_ALIAS_MAP["North Node"],
+            _COMPASS_ALIAS_MAP["South Node"],
+        ):
             row = _find_row(df, names)
             if row is not None:
                 obj_name = str(row.get("Object"))
@@ -1189,24 +1208,6 @@ def render_chart_with_shapes(
         nn = _degree_for_label(compass_source, "North Node")
         if sn is not None and nn is not None:
             _add_edge("South Node", "Opposition", "North Node")
-
-        ac_val = _degree_for_label(compass_source, "Ascendant")
-        dc_val = _degree_for_label(compass_source, "Descendant")
-        if ac_val is not None and dc_val is None:
-            dc_val = (ac_val + 180.0) % 360.0
-        elif dc_val is not None and ac_val is None:
-            ac_val = (dc_val + 180.0) % 360.0
-        if ac_val is not None and dc_val is not None:
-            _add_edge("Ascendant", "Opposition", "Descendant")
-
-        mc_val = _degree_for_label(compass_source, "MC")
-        ic_val = _degree_for_label(compass_source, "IC")
-        if mc_val is not None and ic_val is None:
-            ic_val = (mc_val + 180.0) % 360.0
-        elif ic_val is not None and mc_val is None:
-            mc_val = (ic_val + 180.0) % 360.0
-        if mc_val is not None and ic_val is not None:
-            _add_edge("MC", "Opposition", "IC")
 
     draw_center_earth(ax)
 

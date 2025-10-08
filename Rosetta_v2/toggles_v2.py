@@ -84,9 +84,9 @@ def render_circuit_toggles(
 
 	# ---------- LEFT: circuits & sub-shapes ----------
 	with c1:
-		# Compass Rose (independent overlay, ON by default)
+		# Compass Needle (independent overlay, ON by default)
 		st.session_state.setdefault("toggle_compass_rose", True)
-		st.checkbox("Compass Rose", key="toggle_compass_rose")
+		st.checkbox("Compass Needle", key="toggle_compass_rose")
 
 		# Pattern checkboxes + expanders
 		half = (len(patterns) + 1) // 2

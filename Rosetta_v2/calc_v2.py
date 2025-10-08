@@ -158,6 +158,7 @@ def calculate_chart(
 	# house_system kept for back-compat but ignored
 	house_system: str | None = None,
 	include_aspects: bool = False,   # <-- NEW
+	unknown_time: bool = False,
 ):
 	# ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
 	# This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
@@ -184,8 +185,30 @@ def calculate_chart(
 	- Assigns per-object House / House Sign / House Rulers for EACH system in separate columns.
 	- Returns a single DataFrame.
 	"""
+
 	# -------- Time -> UTC --------
-	utc_dt = get_utc_datetime(year, month, day, hour, minute, input_is_ut, tz_offset, tz_name)
+	calc_hour = hour
+	calc_minute = minute
+	calc_tz_offset = tz_offset
+	calc_tz_name = tz_name
+	calc_input_is_ut = input_is_ut
+	if unknown_time:
+		calc_hour = 12
+		calc_minute = 0
+		calc_tz_offset = 0
+		calc_tz_name = None
+		calc_input_is_ut = True
+
+	utc_dt = get_utc_datetime(
+		year,
+		month,
+		day,
+		calc_hour,
+		calc_minute,
+		calc_input_is_ut,
+		calc_tz_offset,
+		calc_tz_name,
+	)
 
 	jd = swe.julday(
 		utc_dt.year, utc_dt.month, utc_dt.day,
@@ -196,13 +219,13 @@ def calculate_chart(
 	# -------- Precompute ASC & MC (Placidus) --------
 	asc_val = mc_val = None
 	cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
-	if ascmc:
+	if ascmc and not unknown_time:
 		asc_val = ascmc[0]
 		mc_val = ascmc[1]
 
 	# -------- Precompute Descendant & IC --------
 	extra_objects = {}
-	if asc_val is not None:
+	if not unknown_time and asc_val is not None:
 		dc_val = (asc_val + 180.0) % 360.0
 		extra_objects["DC"] = {
 			"name": "Descendant",
@@ -213,7 +236,7 @@ def calculate_chart(
 			"decl": 0.0,
 		}
 
-	if mc_val is not None:
+	if not unknown_time and mc_val is not None:
 		ic_val = (mc_val + 180.0) % 360.0
 		extra_objects["IC"] = {
 			"name": "IC",
@@ -225,7 +248,15 @@ def calculate_chart(
 		}
 
 	# -------- Combine MAJOR_OBJECTS with extras --------
-	loop_objects = list(MAJOR_OBJECTS.items()) + list(extra_objects.items())
+	base_objects = MAJOR_OBJECTS
+	if unknown_time:
+		base_objects = {
+			name: ident
+			for name, ident in MAJOR_OBJECTS.items()
+			if name not in {"AC", "MC", "Part of Fortune", "Vertex"}
+		}
+
+	loop_objects = list(base_objects.items()) + list(extra_objects.items())
 
 	rows = []
 	pos_for_dispositors = {}  # object -> longitude (exclude cusps)
