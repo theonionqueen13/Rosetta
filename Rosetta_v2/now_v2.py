@@ -240,6 +240,7 @@ def render_now_widget(
 					st.session_state["profile_hour"]        = now.hour
 					st.session_state["profile_minute"]      = now.minute
 					st.session_state["profile_city"]        = city_name
+					st.session_state["profile_unknown_time"] = False
 
 					# ensure current_* cache
 					st.session_state["current_lat"]     = stored_lat

@@ -224,6 +224,8 @@ def _current_chart_header_lines():
         return name, date_line, time_line, city, extra_line
 import matplotlib.patheffects as pe
 
+import matplotlib.patheffects as pe
+
 def _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode):
         """Paint a 3-line header in the figure margin (top-left), never over the wheel."""
         color  = "white" if dark_mode else "black"
@@ -821,9 +823,11 @@ def draw_compass_rose(
     arrow_mutation_scale: float = 20.0,
     nodal_width_multiplier: float = 2.0,
     sn_dot_markersize: float = 8.0,
+    include_axes: bool = True,
 ) -> None:
+    """Draw the compass overlay, optionally suppressing horizon/meridian axes."""
     if colors is None:
-        colors = {"nodal": "purple"}
+        colors = {"nodal": "purple", "acdc": "#4E83AF", "mcic": "#4E83AF"}
 
     sn = _degree_for_label(pos, "South Node")
     nn = _degree_for_label(pos, "North Node")
