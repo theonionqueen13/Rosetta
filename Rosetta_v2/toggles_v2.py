@@ -1,6 +1,8 @@
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
 
+COMPASS_KEY = "ui_compass_overlay"
+
 def render_circuit_toggles(
 	patterns,
 	shapes,
@@ -10,6 +12,16 @@ def render_circuit_toggles(
 	save_user_profile_db,
 	load_user_profiles_db,
 ):
+	# --- PRE-INIT (so keys exist before any widgets render) ---
+	for i in range(len(patterns)):
+		st.session_state.setdefault(f"toggle_pattern_{i}", False)
+		for sh in [sh for sh in shapes if sh["parent"] == i]:
+			st.session_state.setdefault(f"shape_{i}_{sh['id']}", False)
+	if singleton_map:
+		for planet in singleton_map.keys():
+			st.session_state.setdefault(f"singleton_{planet}", False)
+
+	st.session_state.setdefault(COMPASS_KEY, True)
 	"""
 	Renders the Circuits UI (checkboxes, expanders, bulk buttons, compass rose, sub-shapes)
 	and handles saving circuit names.
@@ -23,14 +35,7 @@ def render_circuit_toggles(
 	shapes = shapes or []
 	singleton_map = singleton_map or {}
 
-	# --- PRE-INIT (so keys exist before any widgets render) ---
-	for i in range(len(patterns)):
-		st.session_state.setdefault(f"toggle_pattern_{i}", False)
-		for sh in [sh for sh in shapes if sh["parent"] == i]:
-			st.session_state.setdefault(f"shape_{i}_{sh['id']}", False)
-	if singleton_map:
-		for planet in singleton_map.keys():
-			st.session_state.setdefault(f"singleton_{planet}", False)
+
 
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
@@ -51,7 +56,7 @@ def render_circuit_toggles(
 				st.session_state[f"toggle_pattern_{i}"] = False
 				for sh in [sh for sh in shapes if sh["parent"] == i]:
 					st.session_state[f"shape_{i}_{sh['id']}"] = False
-			st.session_state["toggle_compass_rose"] = False
+			st.session_state[COMPASS_KEY] = False
 			if singleton_map:
 				for planet in singleton_map.keys():
 					st.session_state[f"singleton_{planet}"] = False
@@ -85,13 +90,17 @@ def render_circuit_toggles(
 	# ---------- LEFT: circuits & sub-shapes ----------
 	with c1:
 		# Compass overlay: show full rose when birth time known, needle otherwise
-		st.session_state.setdefault("toggle_compass_rose", True)
 		unknown_time = bool(
 				st.session_state.get("chart_unknown_time")
 				or st.session_state.get("profile_unknown_time")
 		)
+		# Compass overlay: single checkbox, label swaps by unknown_time
+		unknown_time = bool(
+			st.session_state.get("chart_unknown_time")
+			or st.session_state.get("profile_unknown_time")
+		)
 		label = "Compass Needle" if unknown_time else "Compass Rose"
-		st.checkbox(label, key="toggle_compass_rose")
+		st.checkbox(label, key=COMPASS_KEY)
 
 		# Pattern checkboxes + expanders
 		half = (len(patterns) + 1) // 2
