@@ -33,12 +33,11 @@ def render_circuit_toggles(
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
 	
-	st.divider()
 	# ---------- Header + bulk actions ----------
 	
 	d1, d2, d3 = st.columns([1, 1, 5])
 	with d1:
-		st.subheader("Circuits")
+		st.subheader("🗺️Circuits")
 	with d2:
 		if st.button("Show All", key="btn_show_all_main"):
 			for i in range(len(patterns)):

@@ -340,7 +340,7 @@ col_left, col_mid, col_right = st.columns([3, 2, 3])
 # Left column: Birth Data (FORM)
 # -------------------------
 with col_left:
-	with st.expander("Enter Birth Data"):
+	with st.expander("📆 Enter Birth Data"):
 		with st.form("birth_form", clear_on_submit=False):
 			col1, col2 = st.columns([3, 2])
 
@@ -413,8 +413,23 @@ with col_left:
 				st.session_state["hour_val"] = hour_val
 				st.session_state["minute_val"] = minute_val
 
+				# Define the query from the text input you already captured
+				city_query = (city_name or "").strip()
+				# (Optional) keep a copy if other parts of the app look for it
+				st.session_state["city_query"] = city_query
+
 				try:
-					lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_name)
+					lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_query)
+
+					# Make the location visible to drawing_v2
+					if lat is not None and lon is not None:
+						st.session_state["chart_lat"] = float(lat)
+						st.session_state["chart_lon"] = float(lon)
+					else:
+						# Explicitly clear if lookup failed, so we fall back to 🌐
+						st.session_state["chart_lat"] = None
+						st.session_state["chart_lon"] = None
+
 				except Exception as e:
 					st.session_state["last_location"] = None
 					st.session_state["last_timezone"] = f"Lookup error: {e}"
@@ -463,12 +478,12 @@ st.session_state.setdefault("__now_city_submit__", False)  # <- fire on Enter
 
 # Clear the quick-city field safely BEFORE any widgets are instantiated here
 if st.session_state.get("__clear_now_city_temp__", False):
-    st.session_state.pop("now_city_temp", None)
-    st.session_state["__clear_now_city_temp__"] = False
+	st.session_state.pop("now_city_temp", None)
+	st.session_state["__clear_now_city_temp__"] = False
 
 # Enter key callback (no-arg fn)
 def _mark_now_city_entered():
-    st.session_state["__now_city_submit__"] = True
+	st.session_state["__now_city_submit__"] = True
 
 # Optional geocoder hook: define to avoid NameError in this file
 # Replace this later with: from your_module import lookup_city as geocode_city
@@ -515,75 +530,175 @@ with col_mid:
 				st.error(f"Chart calculation failed: {e}")
 				st.session_state["chart_ready"] = False
 
+	# --- Current Date / Time / Moon Phase (always "now" via Swiss Ephemeris) ---
+
+	def _format_time_12h(dt_obj):
+		h = dt_obj.hour
+		m = dt_obj.minute
+		ampm = "AM" if h < 12 else "PM"
+		h12 = h % 12
+		if h12 == 0:
+			h12 = 12
+		return f"{h12}:{m:02d} {ampm}"
+
+	def _moon_phase_label_emoji(sun_lon_deg: float, moon_lon_deg: float):
+		"""
+		Compute phase from ecliptic longitudes (degrees 0..360).
+		Phase angle = (Moon - Sun) mod 360
+		Buckets:
+		  0°        -> New Moon             🌑
+		  0–90°     -> Waxing Crescent      🌒
+		  90°       -> First Quarter        🌓
+		  90–180°   -> Waxing Gibbous       🌔
+		  180°      -> Full Moon            🌕
+		  180–270°  -> Waning Gibbous       🌖
+		  270°      -> Last Quarter         🌗
+		  270–360°  -> Waning Crescent      🌘
+		"""
+		phase = (moon_lon_deg - sun_lon_deg) % 360.0
+
+		# small tolerance so exact quarter/full snap nicely
+		def _is_close(x, target, tol=0.8):
+			return abs((x - target + 180) % 360 - 180) <= tol
+
+		if _is_close(phase, 0.0) or phase < 1:
+			return "New Moon", "🌑"
+		if 0 < phase < 90:
+			return "Waxing Crescent", "🌒"
+		if _is_close(phase, 90.0):
+			return "First Quarter", "🌓"
+		if 90 < phase < 180:
+			return "Waxing Gibbous", "🌔"
+		if _is_close(phase, 180.0):
+			return "Full Moon", "🌕"
+		if 180 < phase < 270:
+			return "Waning Gibbous", "🌖"
+		if _is_close(phase, 270.0):
+			return "Last Quarter", "🌗"
+		return "Waning Crescent", "🌘"
+
+	# 1) Choose timezone: user-input city (if present) else CST default
+	_city_str = (st.session_state.get("profile_city") or "").strip()
+	_tz_name  = st.session_state.get("current_tz_name")
+	if _city_str and _tz_name:
+		tz = pytz.timezone(_tz_name)
+		show_cst_default_note = False
+	else:
+		tz = pytz.timezone("America/Chicago")  # CST region
+		show_cst_default_note = True
+
+	now_local = dt.datetime.now(tz)
+
+	# 2) Date & time lines
+	date_line = f"{MONTH_NAMES[now_local.month - 1]} {now_local.day}, {now_local.year}"
+	time_line = _format_time_12h(now_local)
+	if show_cst_default_note:
+		time_line += " (CST: default)"
+
+	# 3) Always compute Sun/Moon longitudes for *current* time (Swiss Ephemeris)
+	try:
+		import swisseph as swe
+		ut = now_local.astimezone(pytz.UTC)
+		jd_ut = swe.julday(
+			ut.year, ut.month, ut.day,
+			ut.hour + ut.minute/60.0 + ut.second/3600.0
+		)
+		sun_lon  = swe.calc_ut(jd_ut, swe.SUN)[0][0] % 360.0
+		moon_lon = swe.calc_ut(jd_ut, swe.MOON)[0][0] % 360.0
+
+		label, emoji = _moon_phase_label_emoji(sun_lon, moon_lon)
+		phase_line = f"{label} {emoji}"
+	except Exception:
+		phase_line = "Moon phase unavailable"
+
+	# 4) Render the three lines
+	st.markdown(
+		f"""
+**{date_line}**  
+{time_line}  
+{phase_line}
+		""".strip()
+	)
+
 # Quick city field — only shows if the guard above failed
 if st.session_state.get("show_now_city_field", False):
-    st.caption("Quick city entry for Now:")
+	st.caption("Quick city entry for Now:")
 
-    # A tiny form prevents duplicated buttons and lets Enter submit
-    with st.form("now_city_form", clear_on_submit=True):
-        city_str = st.text_input(
-            "City (e.g., Denver, CO, USA)",
-            key="now_city_temp",
-            placeholder="City, State/Province, Country",
-        )
-        f1, f2 = st.columns([1, 1], gap="small")
-        with f1:
-            submit_now = st.form_submit_button("Lookup City", use_container_width=True)
-        with f2:
-            cancel_now = st.form_submit_button("Cancel", use_container_width=True)
+	# A tiny form prevents duplicated buttons and lets Enter submit
+	with st.form("now_city_form", clear_on_submit=True):
+		city_str = st.text_input(
+			"City (e.g., Denver, CO, USA)",
+			key="now_city_temp",
+			placeholder="City, State/Province, Country",
+		)
+		f1, f2 = st.columns([1, 1], gap="small")
+		with f1:
+			submit_now = st.form_submit_button("Lookup City", use_container_width=True)
+		with f2:
+			cancel_now = st.form_submit_button("Cancel", use_container_width=True)
 
-    if cancel_now:
-        st.session_state["show_now_city_field"] = False
-        st.rerun()
+	if cancel_now:
+		st.session_state["show_now_city_field"] = False
+		st.rerun()
 
-    if submit_now:
-        city_str = (city_str or "").strip()
-        if not city_str:
-            st.error("Please type a city.")
-        else:
-            try:
-                lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_str)
-            except Exception as e:
-                st.error(f"City lookup failed: {e}")
-            else:
-                if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
-                    st.error("City lookup returned invalid results.")
-                elif tz_name not in pytz.all_timezones:
-                    st.error(f"Unrecognized timezone '{tz_name}'.")
-                else:
-                    # Store city + geocode
-                    st.session_state["profile_city"]    = city_str
-                    st.session_state["city_input"]      = city_str
-                    st.session_state["current_lat"]     = lat
-                    st.session_state["current_lon"]     = lon
-                    st.session_state["current_tz_name"] = tz_name
-                    st.session_state["last_location"]   = formatted_address or city_str
-                    st.session_state["last_timezone"]   = tz_name
+	if submit_now:
+		city_str = (city_str or "").strip()
+		if not city_str:
+			st.error("Please type a city.")
+		else:
+			try:
+				lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_query)
 
-                    # Compute "Now" in that timezone (3-arg run_chart)
-                    tz = pytz.timezone(tz_name)
-                    now = dt.datetime.now(tz)
-                    st.session_state["profile_year"]        = now.year
-                    st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
-                    st.session_state["profile_day"]         = now.day
-                    st.session_state["profile_hour"]        = now.hour
-                    st.session_state["profile_minute"]      = now.minute
+				# Make the location visible to drawing_v2
+				if lat is not None and lon is not None:
+					st.session_state["chart_lat"] = float(lat)
+					st.session_state["chart_lon"] = float(lon)
+				else:
+					# Explicitly clear if lookup failed, so we fall back to 🌐
+					st.session_state["chart_lat"] = None
+					st.session_state["chart_lon"] = None
 
-                    try:
-                        run_chart(lat, lon, tz_name)
-                        st.session_state["chart_ready"] = True
-                        st.session_state["show_now_city_field"] = False
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Chart calculation failed: {e}")
-                        st.session_state["chart_ready"] = False
+			except Exception as e:
+				st.error(f"City lookup failed: {e}")
+			else:
+				if not (isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and tz_name):
+					st.error("City lookup returned invalid results.")
+				elif tz_name not in pytz.all_timezones:
+					st.error(f"Unrecognized timezone '{tz_name}'.")
+				else:
+					# Store city + geocode
+					st.session_state["profile_city"]    = city_str
+					st.session_state["city_input"]      = city_str
+					st.session_state["current_lat"]     = lat
+					st.session_state["current_lon"]     = lon
+					st.session_state["current_tz_name"] = tz_name
+					st.session_state["last_location"]   = formatted_address or city_str
+					st.session_state["last_timezone"]   = tz_name
+
+					# Compute "Now" in that timezone (3-arg run_chart)
+					tz = pytz.timezone(tz_name)
+					now = dt.datetime.now(tz)
+					st.session_state["profile_year"]        = now.year
+					st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
+					st.session_state["profile_day"]         = now.day
+					st.session_state["profile_hour"]        = now.hour
+					st.session_state["profile_minute"]      = now.minute
+
+					try:
+						run_chart(lat, lon, tz_name)
+						st.session_state["chart_ready"] = True
+						st.session_state["show_now_city_field"] = False
+						st.rerun()
+					except Exception as e:
+						st.error(f"Chart calculation failed: {e}")
+						st.session_state["chart_ready"] = False
 
 with col_right:
 	from profile_manager_v2 import ensure_profile_session_defaults, render_profile_manager
 
 	# Make sure the session keys exist before rendering any widgets in this panel
 	ensure_profile_session_defaults(MONTH_NAMES)
-	with st.expander("Chart Profile Manager"):
+	with st.expander("📂 Chart Profile Manager"):
 		saved_profiles = render_profile_manager(
 			MONTH_NAMES=MONTH_NAMES,
 			current_user_id=current_user_id,
@@ -634,6 +749,18 @@ sect_err      = st.session_state.get("last_sect_error")
 
 # Only show the bottom bar after a chart is calculated
 if df_cached is not None:
+	st.divider()
+	col_a, col_b, col_c = st.columns([1, 3, 1])
+	# -------------------------
+	# Wizard
+	# -------------------------
+	with col_a:
+		st.caption("🧙‍♀️💭 What can I help you find? →")
+	with col_b:
+		render_guided_wizard()
+	with col_c:
+		st.caption("← Chart features by topic 📜🔍")
+	st.divider()
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
 	saved_profiles = load_user_profiles_db(current_user_id)

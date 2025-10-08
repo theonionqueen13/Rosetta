@@ -1,14 +1,16 @@
 """Utilities for rendering the Rosetta v2 chart wheel using precomputed data."""
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Collection, Iterable, Mapping, Sequence
 import math
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import matplotlib.image as mpimg
+import os
 import re
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st  # used by _selected_house_system/reset_chart_state/render_chart_with_shapes
-
+from patterns_v2 import detect_shapes, connected_components_from_edges
 try:  # Pandas is part of the calculation pipeline; import defensively.
     import pandas as pd
 except Exception:  # pragma: no cover - pandas is expected to be present.
@@ -811,6 +813,96 @@ def draw_compass_rose(
         ax.plot([deg_to_rad(sn, asc_deg)], [1.0], marker="o", markersize=sn_dot_markersize,
                 color=colors["nodal"], zorder=z_nodal_top)
 
+def _get_profile_lat_lon() -> tuple[float | None, float | None]:
+    """Pull chart/birth lat/lon from session_state."""
+    SS = st.session_state
+
+    def f(x):
+        try:
+            return float(x)
+        except Exception:
+            return None
+
+    # Highest priority: current chart lookup (city geocode)
+    lat = f(SS.get("chart_lat"))
+    lon = f(SS.get("chart_lon"))
+
+    # If not present, fall back to stored birth coords
+    if lat is None or lon is None:
+        lat = f(SS.get("birth_lat"))
+        lon = f(SS.get("birth_lon"))
+
+    # If still missing, report unknown
+    if lat is None or lon is None:
+        return None, None
+    return lat, lon
+
+def _earth_emoji_for_region(lat: float | None, lon: float | None) -> str:
+    """
+    Region mapping requested:
+      - Africa, Europe, Middle East: 🌍
+      - The Americas: 🌎
+      - Asia and Australia: 🌏
+      - Any other obscure locations: 🌎
+      - Unknown chart location: 🌐
+    """
+    if lat is None or lon is None:
+        # If location isn’t known yet, reserve the 'unknown' globe
+        return "🌐"
+
+    # Normalize longitude to [-180, 180]
+    try:
+        lon = ((lon + 180.0) % 360.0) - 180.0
+    except Exception:
+        return "🌎"
+
+    # Coarse, readable bands by longitude:
+    # Americas: roughly [-170, -30]
+    if -170.0 <= lon <= -30.0:
+        return "🌎"  # Americas
+
+    # Europe / Africa / Middle East: roughly [-30, +60]
+    if -30.0 < lon <= 60.0:
+        return "🌍"
+
+    # Asia / Australia: roughly (+60, +180]
+    if 60.0 < lon <= 180.0:
+        return "🌏"
+
+    # Wraparound edge cases (e.g., extreme Pacific longitudes near -180/+180)
+    # Treat as Asia/Australia band first; if you prefer Americas, swap this.
+    if lon < -170.0 or lon > 180.0:
+        return "🌏"
+
+    # Fallback for anything weird/obscure
+    return "🌎"
+
+def draw_center_earth(ax, *, size: float = 0.22, zorder: int = 10_000) -> None:
+    """
+    Draw a region-appropriate Earth PNG at the chart center.
+    """
+    lat, lon = _get_profile_lat_lon()
+    emoji = _earth_emoji_for_region(lat, lon)
+
+    # Map emoji → filename
+    mapping = {
+        "🌍": "earth_africa.png",
+        "🌎": "earth_americas.png",
+        "🌏": "earth_asia.png",
+        "🌐": "earth_unknown.png",
+    }
+    fname = mapping.get(emoji, "earth_unknown.png")
+
+    # Your folder: Rosetta_v2/pngs/<files>
+    img_path = os.path.join(os.path.dirname(__file__), "pngs", fname)
+    if not os.path.exists(img_path):
+        return  # fail gracefully if file missing
+
+    arr_img = mpimg.imread(img_path)
+    imagebox = OffsetImage(arr_img, zoom=size)
+    ab = AnnotationBbox(imagebox, (0, 0), frameon=False, zorder=zorder)
+    ax.add_artist(ab)
+
 # ---------------------------------------------------------------------------
 # High-level renderer
 # ---------------------------------------------------------------------------
@@ -886,6 +978,8 @@ def render_chart(
     if compass_on:
         compass_positions = extract_compass_positions(df, visible_names)
         draw_compass_rose(ax, compass_positions, asc_deg)
+    
+    draw_center_earth(ax)
 
     return RenderResult(
         fig=fig,
@@ -1048,6 +1142,8 @@ def render_chart_with_shapes(
             mc_val = (ic_val + 180.0) % 360.0
         if mc_val is not None and ic_val is not None:
             _add_edge("MC", "Opposition", "IC")
+
+    draw_center_earth(ax)
 
     # Interpretation (best-effort: skip if those helpers aren’t wired yet)
     out_text = None
