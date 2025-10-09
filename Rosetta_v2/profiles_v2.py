@@ -680,7 +680,12 @@ def _paren_rx_dignity(is_rx: bool, dignity: str | None) -> str:
             parts.append(d.capitalize())
     return f" ({', '.join(parts)})" if parts else ""
 
-def format_object_profile_html(row, house_label: str = "Placidus") -> str:
+def format_object_profile_html(
+    row,
+    *,
+    house_label: str = "Placidus",
+    include_house_data: bool = True,
+) -> str:
     """
     Build a single object's profile block using ONLY values already in the DF row.
     No recalculation here—pure formatting.
@@ -718,7 +723,8 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
     if house is None:
         for alt in ("Placidus House", "Equal House", "Whole Sign House"):
             if row.get(alt) is not None:
-                house = row.get(alt); break
+                house = row.get(alt)
+                break
 
     # Rulership summaries (simple strings the DF already carries)
     by_house = (row.get(f"{house_label} House Rulers") or "").strip()
@@ -758,7 +764,7 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
         lines.append(f"<div>Out of Bounds: {oob}</div>")
 
     # House & Reception (Reception directly after House)
-    if house is not None:
+    if include_house_data and house is not None:
         lines.append(f"<div><strong>House:</strong> {int(house)}</div>")
     if reception:
         lines.append(f"<div><strong>Reception:</strong> {reception}</div>")
@@ -774,7 +780,10 @@ def format_object_profile_html(row, house_label: str = "Placidus") -> str:
         lines.append(f"<div><strong>Distance:</strong> {dist_txt}</div>")
 
     # Rulership summaries
-    if by_house:
+    if not include_house_data:
+        by_house = ""
+
+    if include_house_data and by_house:
         lines.append(f"<div><strong>Rulership by House:</strong><br/>{by_house} rules {obj}</div>")
     if by_sign:
         lines.append(f"<div><strong>Rulership by Sign:</strong><br/>{by_sign} rules {obj}</div>")

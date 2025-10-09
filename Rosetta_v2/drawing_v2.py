@@ -187,77 +187,112 @@ def shape_color_for(shape_id: Any) -> str:
 _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 
 def _current_chart_header_lines():
-        name = (
-                st.session_state.get("current_profile_title")
-                or st.session_state.get("current_profile")
-                or "Untitled Chart"
-        )
-        if isinstance(name, str) and name.startswith("community:"):
-                name = "Community Chart"
+    name = (
+        st.session_state.get("current_profile_title")
+        or st.session_state.get("current_profile")
+        or "Untitled Chart"
+    )
+    if isinstance(name, str) and name.startswith("community:"):
+        name = "Community Chart"
 
-        month  = st.session_state.get("profile_month_name", "")
-        day    = st.session_state.get("profile_day", "")
-        year   = st.session_state.get("profile_year", "")
-        hour   = st.session_state.get("profile_hour")
-        minute = st.session_state.get("profile_minute")
-        city   = st.session_state.get("profile_city", "")
-        unknown_time = bool(
-                st.session_state.get("chart_unknown_time")
-                or st.session_state.get("profile_unknown_time")
-        )
+    month  = st.session_state.get("profile_month_name", "")
+    day    = st.session_state.get("profile_day", "")
+    year   = st.session_state.get("profile_year", "")
+    hour   = st.session_state.get("profile_hour")
+    minute = st.session_state.get("profile_minute")
+    city   = st.session_state.get("profile_city", "")
+    unknown_time = bool(
+        st.session_state.get("chart_unknown_time")
+        or st.session_state.get("profile_unknown_time")
+    )
 
-        date_line = f"{month} {day}, {year}".strip()
+    date_line = f"{month} {day}, {year}".strip()
 
-        if unknown_time:
-                time_line = "Unknown Time"
-                extra_line = "AC = Aries 0° (default)"
-        else:
-                time_line = ""
-                extra_line = ""
-                if hour is not None and minute is not None:
-                        h = int(hour)
-                        m = int(minute)
-                        ampm = "AM" if h < 12 else "PM"
-                        h12 = 12 if (h % 12 == 0) else (h % 12)
-                        time_line = f"{h12}:{m:02d} {ampm}"
+    if unknown_time:
+        # Desired render order:
+        # Line 1: AC = Aries 0° (default)
+        # Line 2: date_line
+        # Line 3: 12:00 PM
+        extra_line = ""
+        date_line  = "AC = Aries 0° (default)"
+        time_line  = f"{month} {day}, {year}".strip()
+        city       = "12:00 PM"
+    else:
+        extra_line = ""
+        time_line = ""
+        if hour is not None and minute is not None:
+            h = int(hour)
+            m = int(minute)
+            ampm = "AM" if h < 12 else "PM"
+            h12 = 12 if (h % 12 == 0) else (h % 12)
+            time_line = f"{h12}:{m:02d} {ampm}"
 
-        return name, date_line, time_line, city, extra_line
-import matplotlib.patheffects as pe
+    return name, date_line, time_line, city, extra_line
 
 import matplotlib.patheffects as pe
 
 def _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode):
-        """Paint a 3-line header in the figure margin (top-left), never over the wheel."""
-        color  = "white" if dark_mode else "black"
-        stroke = "black" if dark_mode else "white"
-        effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+    """Paint header in the figure margin (top-left), with extra_line on same line as name (non-bold)."""
+    import matplotlib.patheffects as pe
 
-        y0 = 0.99   # top margin in figure coords
-        x0 = 0.00   # left margin
+    color  = "white" if dark_mode else "black"
+    stroke = "black" if dark_mode else "white"
+    effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
 
-        fig.text(x0, y0, name, ha="left", va="top",
-                         fontsize=12, fontweight="bold", color=color, path_effects=effects)
-        lines = []
-        if date_line:
-                lines.append(date_line)
-        if time_line:
-                lines.append(time_line)
-        if city:
-                lines.append(city)
-        if extra_line:
-                lines.append(extra_line)
+    y0 = 0.99   # top margin in figure coords
+    x0 = 0.00   # left margin
 
-        for idx, line in enumerate(lines, start=1):
-                fig.text(
-                        x0,
-                        y0 - 0.035 * idx,
-                        line,
-                        ha="left",
-                        va="top",
-                        fontsize=9,
-                        color=color,
-                        path_effects=effects,
-                )
+    # 1) Bold chart name (left)
+    name_text = fig.text(
+        x0, y0, name,
+        ha="left", va="top",
+        fontsize=12, fontweight="bold",
+        color=color, path_effects=effects
+    )
+
+    # 2) Optional extra line on SAME TOP LINE, normal size, right after name
+    if extra_line:
+        # Force a draw so we can measure the name's pixel width reliably
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+
+        name_bbox = name_text.get_window_extent(renderer=renderer)
+        fig_bbox  = fig.get_window_extent(renderer=renderer)
+
+        # Convert the name's pixel width to figure-coordinate width
+        dx = name_bbox.width / fig_bbox.width
+
+        # Small horizontal padding in figure coords
+        pad = 0.01
+
+        fig.text(
+            x0 + dx + pad, y0, extra_line,
+            ha="left", va="top",
+            fontsize=9, fontweight=None,
+            color=color, path_effects=effects
+        )
+
+    # 3) Stack the remaining lines below
+    lines = []
+    if date_line:
+        lines.append(date_line)
+    if time_line:
+        lines.append(time_line)
+    if city:
+        lines.append(city)
+
+    for idx, line in enumerate(lines, start=1):
+        fig.text(
+            x0,
+            y0 - 0.035 * idx,
+            line,
+            ha="left",
+            va="top",
+            fontsize=9,
+            color=color,
+            path_effects=effects,
+        )
+
 
 def _draw_moon_phase_on_axes(ax, df, dark_mode: bool, icon_frac: float = 0.10) -> None:
     """
@@ -543,6 +578,9 @@ def draw_house_cusps(
     dark_mode: bool = False,
     label_r: float = 0.32,
     label_frac: float = 0.50,
+    *,
+    draw_lines: bool = True,
+    draw_labels: bool = True,
 ) -> list[float]:
     system_map = {
         "placidus": "Placidus",
@@ -569,19 +607,30 @@ def draw_house_cusps(
         start = asc_deg % 360.0
         cusps = [(start + i * 30.0) % 360.0 for i in range(12)]
 
-    line_color = "lightgray"
-    for deg in cusps:
-        rad = deg_to_rad(deg, asc_deg)
-        ax.plot([rad, rad], [0, 1.45], color=line_color, linestyle="solid", linewidth=1, zorder=1)
+    if draw_lines:
+        line_color = "lightgray"
+        for deg in cusps:
+            rad = deg_to_rad(deg, asc_deg)
+            ax.plot([rad, rad], [0, 1.45], color=line_color, linestyle="solid", linewidth=1, zorder=1)
 
-    lbl_color = "white" if dark_mode else "black"
-    for i in range(12):
-        a = cusps[i]
-        b = cusps[(i + 1) % 12]
-        span = (b - a) % 360.0
-        label_deg = (a + span * label_frac) % 360.0
-        label_rad = deg_to_rad(label_deg, asc_deg)
-        ax.text(label_rad, label_r, str(i + 1), ha="center", va="center", fontsize=8, color=lbl_color, zorder=100)
+    if draw_labels:
+        lbl_color = "white" if dark_mode else "black"
+        for i in range(12):
+            a = cusps[i]
+            b = cusps[(i + 1) % 12]
+            span = (b - a) % 360.0
+            label_deg = (a + span * label_frac) % 360.0
+            label_rad = deg_to_rad(label_deg, asc_deg)
+            ax.text(
+                label_rad,
+                label_r,
+                str(i + 1),
+                ha="center",
+                va="center",
+                fontsize=8,
+                color=lbl_color,
+                zorder=100,
+            )
 
     return cusps
 
@@ -1071,7 +1120,9 @@ def render_chart(
 
     _draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
 
-    cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
+    cusps: list[float] = []
+    if not unknown_time_chart:
+        cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
     if degree_markers:
         draw_degree_markers(ax, asc_deg, dark_mode)
     if zodiac_labels:
@@ -1155,7 +1206,9 @@ def render_chart_with_shapes(
         pass
 
     # Base wheel
-    cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
+    cusps: list[float] = []
+    if not unknown_time_chart:
+        cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
     draw_degree_markers(ax, asc_deg, dark_mode)
     draw_zodiac_signs(ax, asc_deg)
     draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
@@ -1277,7 +1330,7 @@ def render_chart_with_shapes(
             ic = _degree_for_label(compass_source, "IC")
             if mc is not None and ic is not None:
                 _add_edge("MC", "Opposition", "IC")
-                
+
     draw_center_earth(ax)
 
     # Interpretation (best-effort: skip if those helpers aren’t wired yet)

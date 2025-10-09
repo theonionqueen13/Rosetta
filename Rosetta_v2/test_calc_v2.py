@@ -12,6 +12,8 @@ import pytz
 
 current_user_id = "test-user"
 
+COMPASS_KEY = "ui_compass_overlay"
+
 # In-memory stores used by the stubs
 _TEST_PROFILES: Dict[str, Dict[str, Any]] = {}
 _TEST_COMMUNITY: Dict[str, Dict[str, Any]] = {}
@@ -129,16 +131,14 @@ if "defaults_loaded" not in st.session_state:
 	st.session_state["year"] = 1990
 	st.session_state["month_name"] = "July"
 	st.session_state["day"] = 29
-	st.session_state["hour_12"] = 1
+	st.session_state["hour_12"] = "01"
 	st.session_state["minute_str"] = "39"
 	st.session_state["ampm"] = "AM"
 	st.session_state["city"] = "Newton, KS"
-	st.session_state["profile_unknown_time"] = False
 	st.session_state["defaults_loaded"] = True
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
-st.session_state["profile_unknown_time"] = False
 
 def _refresh_chart_figure():
 	"""Rebuild the chart figure using the current session-state toggles."""
@@ -252,6 +252,7 @@ def run_chart(lat, lon, tz_name):
 			new_chart_dt_utc = None
 
 	st.session_state["chart_dt_utc"] = new_chart_dt_utc
+	st.session_state[COMPASS_KEY] = True
 
 	# Always clear/recompute the events panel whenever a new chart is requested.
 	update_events_html_state(new_chart_dt_utc)
@@ -370,24 +371,73 @@ col_left, col_mid, col_right = st.columns([3, 2, 3])
 # -------------------------
 with col_left:
 	with st.expander("📆 Enter Birth Data"):
+		# --- Unknown Time (live) OUTSIDE the form ---
+		# Model/state keys used by the rest of your app
+		st.session_state.setdefault("profile_unknown_time", False)
+		st.session_state.setdefault("hour_12", "12")
+		st.session_state.setdefault("minute_str", "00")
+		st.session_state.setdefault("ampm", "AM")
+
+		# UI widget gets its OWN key to avoid collisions with any other widget/modules
+		st.session_state.setdefault("unknown_time_ui", st.session_state["profile_unknown_time"])
+
+		def _apply_unknown_time():
+			ut = st.session_state["unknown_time_ui"]  # read the UI widget
+			st.session_state["profile_unknown_time"] = ut  # sync canonical state
+			if ut:
+				st.session_state["hour_12"]    = "--"
+				st.session_state["minute_str"] = "--"
+				st.session_state["ampm"]       = "--"
+			else:
+				# restore defaults only if placeholders were in use
+				if st.session_state["hour_12"] == "--":
+					st.session_state["hour_12"] = "12"
+				if st.session_state["minute_str"] == "--":
+					st.session_state["minute_str"] = "00"
+				if st.session_state["ampm"] == "--":
+					st.session_state["ampm"] = "AM"
+
+		# --- Unknown Time (live) OUTSIDE the form ---
+		st.session_state.setdefault("profile_unknown_time", False)
+		st.session_state.setdefault("hour_12", "12")
+		st.session_state.setdefault("minute_str", "00")
+		st.session_state.setdefault("ampm", "AM")
+
+		def _apply_unknown_time():
+			if st.session_state["profile_unknown_time"]:
+				st.session_state["hour_12"]    = "--"
+				st.session_state["minute_str"] = "--"
+				st.session_state["ampm"]       = "--"
+			else:
+				if st.session_state["hour_12"] == "--":    st.session_state["hour_12"] = "12"
+				if st.session_state["minute_str"] == "--":  st.session_state["minute_str"] = "00"
+				if st.session_state["ampm"] == "--":        st.session_state["ampm"] = "AM"
+
+		st.checkbox(
+			"Unknown Time",
+			key="profile_unknown_time",
+			on_change=_apply_unknown_time,
+		)
+		
 		with st.form("birth_form", clear_on_submit=False):
+			# --- Two columns: Date/Day (left) and City (right) ---
 			col1, col2 = st.columns([3, 2])
 
-			# --- Left side: Date & Day ---
+			# Left: Date & Day
 			with col1:
 				year = st.number_input(
 					"Year",
 					min_value=1000,
 					max_value=3000,
 					step=1,
-					key="year"
+					key="year",
 				)
 
 				import calendar
 				month_name = st.selectbox(
 					"Month",
 					MONTH_NAMES,
-					key="month_name"
+					key="month_name",
 				)
 				month = MONTH_NAMES.index(month_name) + 1
 				days_in_month = calendar.monthrange(year, month)[1]
@@ -395,75 +445,62 @@ with col_left:
 				day = st.selectbox(
 					"Day",
 					list(range(1, days_in_month + 1)),
-					key="day"
+					key="day",
 				)
 
-			# --- Right side: Location ---
+			# Right: City of Birth (restored)
 			with col2:
-				city_name = st.text_input(
-					"City of Birth",
-					value=st.session_state.get("profile_city", ""),
-					key="city"
-				)
-				unknown_choice = st.radio(
-					"Unknown Time",
-					options=["No", "Yes"],
-					index=(1 if st.session_state.get("profile_unknown_time") else 0),
-					horizontal=True,
-					key="__unknown_time_choice",
-				)
-				unknown_time = unknown_choice == "Yes"
-				st.session_state["profile_unknown_time"] = unknown_time
+				st.text_input("City of Birth", key="city")
 
-			# --- Time widgets (own row of columns; NOT nested inside col1) ---
+			# --- Time widgets row ---
+			unknown_time = st.session_state["profile_unknown_time"]
+
+			HOURS   = ["--"] + [f"{h:02d}" for h in range(1, 13)]
+			MINUTES = ["--"] + [f"{m:02d}" for m in range(0, 60)]
+			AMPMS   = ["--", "AM", "PM"]
+
 			tcol1, tcol2, tcol3 = st.columns(3)
 			with tcol1:
-				hour_12 = st.selectbox(
-					"Birth Time",
-					list(range(1, 13)),
-					key="hour_12",
-					disabled=unknown_time,
-				)
-				
+				st.selectbox("Birth Time", options=HOURS,   key="hour_12",    disabled=unknown_time)
 			with tcol2:
-				minute_str = st.selectbox(
-					" ",
-					[f"{m:02d}" for m in range(60)],
-					key="minute_str",
-					disabled=unknown_time,
-				)
+				st.selectbox(" ",          options=MINUTES, key="minute_str", disabled=unknown_time)
 			with tcol3:
-				ampm = st.selectbox(
-					" ",
-					["AM", "PM"],
-					key="ampm",
-					disabled=unknown_time,
-				)
+				st.selectbox(" ",          options=AMPMS,   key="ampm",       disabled=unknown_time)
+
+			# Read + normalize once
+			hour_12    = st.session_state["hour_12"]
+			minute_str = st.session_state["minute_str"]
+			ampm       = st.session_state["ampm"]
+
+			if unknown_time or hour_12 == "--" or minute_str == "--" or ampm == "--":
+				birth_hour_24 = None
+				birth_minute  = None
+			else:
+				h12 = int(hour_12)
+				birth_minute = int(minute_str)
+				birth_hour_24 = (0 if h12 == 12 else h12) if ampm == "AM" else (12 if h12 == 12 else h12 + 12)
+
+			# Persist normalized values if you need them elsewhere
+			st.session_state["profile_birth_hour_24"] = birth_hour_24
+			st.session_state["profile_birth_minute"]  = birth_minute
 
 			# Submit button: only on click do we geocode + calculate
 			submitted = st.form_submit_button("Calculate Chart")
 
 			if submitted:
-				# Convert to 24h
 				if unknown_time:
-					hour_val = 12
+					# Your policy for unknown time (noon chart is common)
+					hour_val   = 12
 					minute_val = 0
 				else:
-					# Convert to 24h
-					if ampm == "PM" and hour_12 != 12:
-						hour_val = hour_12 + 12
-					elif ampm == "AM" and hour_12 == 12:
-						hour_val = 0
-					else:
-						hour_val = hour_12
-					minute_val = int(minute_str)
+					hour_val   = birth_hour_24
+					minute_val = birth_minute
 
 				st.session_state["hour_val"] = hour_val
 				st.session_state["minute_val"] = minute_val
 
-				# Define the query from the text input you already captured
-				city_query = (city_name or "").strip()
-				# (Optional) keep a copy if other parts of the app look for it
+				# City text comes from key="city"
+				city_query = (st.session_state.get("city") or "").strip()
 				st.session_state["city_query"] = city_query
 
 				try:
@@ -481,11 +518,10 @@ with col_left:
 				except Exception as e:
 					st.session_state["last_location"] = None
 					st.session_state["last_timezone"] = f"Lookup error: {e}"
-
 					lat = lon = tz_name = None
 				else:
 					if lat is not None and lon is not None and tz_name:
-						st.session_state["last_location"] = formatted_address or city_name
+						st.session_state["last_location"] = formatted_address or city_query
 						st.session_state["last_timezone"] = tz_name
 						st.session_state["current_lat"] = lat
 						st.session_state["current_lon"] = lon
@@ -500,7 +536,7 @@ with col_left:
 				st.session_state["profile_day"] = day
 				st.session_state["profile_hour"] = hour_val
 				st.session_state["profile_minute"] = minute_val
-				st.session_state["profile_city"] = city_name
+				st.session_state["profile_city"] = city_query
 
 				# Calculate chart only on submit
 				if lat is None or lon is None or tz_name is None:
@@ -508,12 +544,37 @@ with col_left:
 				else:
 					run_chart(lat, lon, tz_name)
 
-					chart_dt_local = datetime(
-						year, month, day, hour_val, minute_val,
-						tzinfo=ZoneInfo(tz_name)
-					)
-					chart_dt_utc = chart_dt_local.astimezone(ZoneInfo("UTC"))
-					st.session_state["chart_dt_utc"] = chart_dt_utc
+				# --- Build chart datetime safely (handles Unknown Time + string widgets) ---
+				year  = int(st.session_state["year"])
+				month = MONTH_NAMES.index(st.session_state["month_name"]) + 1
+				day   = int(st.session_state["day"])
+
+				unknown_time = st.session_state.get("profile_unknown_time", False)
+				h_str = st.session_state.get("hour_12", "--")      # "--" or "01".."12"
+				m_str = st.session_state.get("minute_str", "--")   # "--" or "00".."59"
+				ap    = st.session_state.get("ampm", "--")         # "--" or "AM"/"PM"
+
+				chart_dt_local = None
+				chart_dt_utc   = None
+
+				if not (unknown_time or h_str == "--" or m_str == "--" or ap == "--"):
+					h12    = int(h_str)
+					minute = int(m_str)
+					if ap == "AM":
+						hour24 = 0 if h12 == 12 else h12
+					else:
+						hour24 = 12 if h12 == 12 else h12 + 12
+
+					if tz_name:
+						tzinfo = ZoneInfo(tz_name)
+						chart_dt_local = datetime(year, month, day, hour24, minute, tzinfo=tzinfo)
+						chart_dt_utc   = chart_dt_local.astimezone(ZoneInfo("UTC"))
+					else:
+						chart_dt_local = datetime(year, month, day, hour24, minute)
+						chart_dt_utc   = None
+
+				st.session_state["chart_dt_local"] = chart_dt_local
+				st.session_state["chart_dt_utc"]   = chart_dt_utc
 
 				# Location info BELOW, optional
 				if st.session_state.get("last_location"):
@@ -738,6 +799,10 @@ with st.sidebar:
 	if df_cached is not None:
 		visible_objects = st.session_state.get("visible_objects")
 		edges_major = st.session_state.get("edges_major") or []
+		unknown_time_chart = bool(
+			st.session_state.get("chart_unknown_time")
+			or st.session_state.get("profile_unknown_time")
+		)
 		ordered_rows = ordered_object_rows(
 			df_cached,
 			visible_objects=visible_objects,
@@ -745,7 +810,11 @@ with st.sidebar:
 		)
 		if not ordered_rows.empty:
 			blocks = [
-				format_object_profile_html(r, house_label=_selected_house_system)
+				format_object_profile_html(
+					r,
+					house_label=_selected_house_system,
+					include_house_data=not unknown_time_chart,
+				)
 				for _, r in ordered_rows.iterrows()
 			]
 			st.markdown(
