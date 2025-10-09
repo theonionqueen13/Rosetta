@@ -758,6 +758,7 @@ def format_object_profile_html(
 
     # Fixed stars & OOB
     if stars:
+        lines.append("<div><strong>Fixed Star Conjunctions:</strong></div>")
         lines.append(f"<div>{stars}</div>")
     if oob and oob.lower() != "no":
         # show 'Yes' or 'Extreme'
