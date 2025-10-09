@@ -233,8 +233,22 @@ def _draw_gradient_line(
 ) -> None:
     """Draw a gradient (or solid) line between two polar points on the chart."""
 
+    def _resolve_linestyle(style: str | tuple[int, tuple[float, ...]]):
+        if isinstance(style, tuple):
+            return style
+        style_lower = str(style).lower()
+        if style_lower == "dotted":
+            return (0, (1.0, 2.0))
+        if style_lower == "dashed":
+            return (0, (3.0, 3.0))
+        if style_lower == "dashdot":
+            return (0, (3.0, 2.0, 1.0, 2.0))
+        return style
+
+    resolved_style = _resolve_linestyle(linestyle)
+
     if color_start == color_end:
-        ax.plot([theta1, theta2], [radius, radius], linestyle=linestyle, color=color_start, linewidth=linewidth)
+        ax.plot([theta1, theta2], [radius, radius], linestyle=resolved_style, color=color_start, linewidth=linewidth)
         return
 
     steps = max(8, int(64 * np.hypot(np.cos(theta1) - np.cos(theta2), np.sin(theta1) - np.sin(theta2))))
@@ -242,7 +256,8 @@ def _draw_gradient_line(
     points = np.column_stack([thetas, radii])
     segments = np.stack([points[:-1], points[1:]], axis=1)
     color_vals = np.linspace(to_rgba(color_start), to_rgba(color_end), len(segments))
-    lc = LineCollection(segments, colors=color_vals, linewidth=linewidth, linestyle=linestyle)
+    lc = LineCollection(segments, colors=color_vals, linewidth=linewidth)
+    lc.set_linestyle(resolved_style)
     lc.set_capstyle("round")
     lc.set_joinstyle("round")
     ax.add_collection(lc)
@@ -835,17 +850,42 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
             ax.text(rad_true, 1.35, label, ha="center", va="center", fontsize=9, color=color)
             ax.text(rad_true, 1.27, deg_label, ha="center", va="center", fontsize=6, color=color)
 
-def draw_filament_lines(ax, pos, filaments, active_patterns, asc_deg):
-    """Draw dotted lines for minor aspects between active patterns."""
+def draw_filament_lines(
+    ax,
+    pos,
+    filaments,
+    active_patterns,
+    asc_deg,
+    drawn_keys: set[tuple[frozenset[str], str]] | None = None,
+):
+    """Draw dotted gradient lines for active filament (minor) connections."""
+
+    edges: list[tuple[tuple[str, str], str]] = []
     single_pattern_mode = len(active_patterns) == 1
+
     for p1, p2, asp_name, pat1, pat2 in filaments:
-        if pat1 in active_patterns and pat2 in active_patterns:
-            if single_pattern_mode and pat1 != pat2:
-                continue
-            r1 = deg_to_rad(pos.get(p1, 0.0), asc_deg)
-            r2 = deg_to_rad(pos.get(p2, 0.0), asc_deg)
-            ax.plot([r1, r2], [1, 1], linestyle="dotted",
-                    color=ASPECTS.get(asp_name, {}).get("color", "gray"), linewidth=1)
+        if pat1 not in active_patterns or pat2 not in active_patterns:
+            continue
+        # Internal minors (pat1 == pat2) are handled in draw_minor_edges for each circuit.
+        if pat1 == pat2:
+            continue
+        if single_pattern_mode and pat1 != pat2:
+            continue
+        if p1 not in pos or p2 not in pos:
+            continue
+        edges.append(((p1, p2), asp_name))
+
+    if not edges:
+        return []
+
+    return draw_minor_edges(
+        ax,
+        pos,
+        edges,
+        asc_deg,
+        linewidth_minor=1.0,
+        drawn_keys=drawn_keys,
+    )
 
 def reset_chart_state():
     """Clear transient UI keys so each chart loads cleanly."""
@@ -902,10 +942,23 @@ def draw_aspect_lines(ax, pos, edges, asc_deg, visible_canon=None, linewidth_maj
         drawn.append((a, b, aspect))
     return drawn
 
-def draw_minor_edges(ax, pos, edges, asc_deg, visible_canon=None, linewidth_minor=1.0, color_override: str | None = None):
-    drawn = []
+def draw_minor_edges(
+    ax,
+    pos,
+    edges,
+    asc_deg,
+    visible_canon=None,
+    linewidth_minor=1.0,
+    color_override: str | None = None,
+    drawn_keys: set[tuple[frozenset[str], str]] | None = None,
+):
+    drawn: list[tuple[str, str, str]] = []
     if not edges:
         return drawn
+
+    if drawn_keys is None:
+        drawn_keys = set()
+
     for record in edges:
         a, b, aspect = _edge_record_to_components(record)
         if not a or not b or not aspect:
@@ -913,6 +966,11 @@ def draw_minor_edges(ax, pos, edges, asc_deg, visible_canon=None, linewidth_mino
         canon_a = _canonical_name(a); canon_b = _canonical_name(b)
         if visible_canon is not None and (canon_a not in visible_canon or canon_b not in visible_canon):
             continue
+
+        key = (frozenset((canon_a, canon_b)), str(aspect))
+        if key in drawn_keys:
+            continue
+
         d1 = pos.get(a); d2 = pos.get(b)
         if d1 is None or d2 is None:
             continue
@@ -923,6 +981,7 @@ def draw_minor_edges(ax, pos, edges, asc_deg, visible_canon=None, linewidth_mino
         end_color = base_color if _is_luminary_or_planet(b) else light_color
 
         _draw_gradient_line(ax, r1, r2, start_color, end_color, linewidth_minor, "dotted")
+        drawn_keys.add(key)
         drawn.append((a, b, aspect))
     return drawn
 
@@ -1212,6 +1271,8 @@ def render_chart(
 
     draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode)
 
+    minor_edge_keys: set[tuple[frozenset[str], str]] = set()
+
     major_edges_drawn = draw_aspect_lines(
         ax,
         positions,
@@ -1227,6 +1288,7 @@ def render_chart(
         asc_deg,
         visible_canon=visible_canon,
         linewidth_minor=1.0,
+        drawn_keys=minor_edge_keys,
     )
 
     if compass_on:
@@ -1316,6 +1378,7 @@ def render_chart_with_shapes(
     # Assemble context aspects (what we actually draw)
     aspects_for_context = []
     seen = set()
+    minor_edge_keys: set[tuple[frozenset[str], str]] = set()
 
     def _add_edge(a, aspect, b):
         asp = (aspect or "").replace("_approx", "").strip()
@@ -1346,14 +1409,31 @@ def render_chart_with_shapes(
             internal_minors = [((p1, p2), asp_name)
                             for (p1, p2, asp_name, pat1, pat2) in filaments
                             if pat1 == idx and pat2 == idx]
-            draw_minor_edges(ax, pos, internal_minors, asc_deg, color_override=color)
+            draw_minor_edges(
+                ax,
+                pos,
+                internal_minors,
+                asc_deg,
+                color_override=color,
+                drawn_keys=minor_edge_keys,
+            )
+            
             for (p1, p2), asp in internal_minors:
                 _add_edge(p1, asp, p2)
 
     # Inter-parent filaments (dotted connectors)
     if active_parents:
-        draw_filament_lines(ax, pos, filaments, active_parents, asc_deg)
+        draw_filament_lines(
+            ax,
+            pos,
+            filaments,
+            active_parents,
+            asc_deg,
+            drawn_keys=minor_edge_keys,
+        )
         for (p1, p2, asp_name, pat1, pat2) in filaments:
+            if pat1 == pat2:
+                continue
             if pat1 in active_parents and pat2 in active_parents and frozenset((p1, p2)) not in shape_edges:
                 _add_edge(p1, asp_name, p2)
 
