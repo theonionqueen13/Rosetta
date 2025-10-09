@@ -1,181 +1,479 @@
-{"date": "1980-01-03", "event_type": "solar_orbit", "subtype": "Perihelion", "details": {}, "timestamp_ut": "1980-01-03T14:45:00Z", "meta": {"time_listed": true}}
-{"date": "1980-02-16", "event_type": "eclipse", "subtype": "Total Solar Eclipse", "details": {}, "timestamp_ut": "1980-02-16T08:50:53Z", "meta": {"time_listed": true}}
-{"date": "1980-02-24", "event_type": "perigee", "subtype": "Jupiter Perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1980-02-24T17:18:00Z", "meta": {"time_listed": true}}
-{"date": "1980-02-25", "event_type": "perigee", "subtype": "Mars Perigee", "details": {"planet": "Mars"}, "timestamp_ut": "1980-02-26T06:00:00Z", "meta": {"time_listed": true}}
-{"date": "1980-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1980-03-20T11:09:41Z", "meta": {"time_listed": true}}
-{"date": "1980-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1980-06-21T05:47:00Z", "meta": {"time_listed": true}}
-{"date": "1980-07-05", "event_type": "solar_orbit", "subtype": "Aphelion", "details": {}, "timestamp_ut": "1980-07-05T17:43:00Z", "meta": {"time_listed": true}}
-{"date": "1980-08-10", "event_type": "eclipse", "subtype": "Annular Solar Eclipse", "details": {}, "timestamp_ut": "1980-08-10T19:09:18Z", "meta": {"time_listed": true}}
-{"date": "1980-09-22", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1980-09-22T21:08:41Z", "meta": {"time_listed": true}}
-{"date": "1980-12-19", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1980-12-21T16:56:05Z", "meta": {"time_listed": true}}
-{"date": "1981-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1981-03-20T17:02:50Z", "meta": {"time_listed": true}}
-{"date": "1981-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1981-06-21T11:44:40Z", "meta": {"time_listed": true}}
-{"date": "1981-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1981-09-23T03:05:12Z", "meta": {"time_listed": true}}
-{"date": "1981-12-22", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1981-12-21T22:50:32Z", "meta": {"time_listed": true}}
-{"date": "1982-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1982-03-20T22:55:50Z", "meta": {"time_listed": true}}
-{"date": "1982-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1982-06-21T17:22:59Z", "meta": {"time_listed": true}}
-{"date": "1982-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1982-09-23T08:46:11Z", "meta": {"time_listed": true}}
-{"date": "1982-12-22", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1982-12-22T04:38:09Z", "meta": {"time_listed": true}}
-{"date": "1983-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1983-03-21T04:38:44Z", "meta": {"time_listed": true}}
-{"date": "1983-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1983-06-21T23:08:40Z", "meta": {"time_listed": true}}
-{"date": "1983-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1983-09-23T14:41:36Z", "meta": {"time_listed": true}}
-{"date": "1983-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1983-12-22T10:29:55Z", "meta": {"time_listed": true}}
-{"date": "1984-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1984-03-20T10:24:19Z", "meta": {"time_listed": true}}
-{"date": "1984-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1984-06-21T05:02:14Z", "meta": {"time_listed": true}}
-{"date": "1984-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1984-09-22T20:32:53Z", "meta": {"time_listed": true}}
-{"date": "1984-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1984-12-21T16:22:49Z", "meta": {"time_listed": true}}
-{"date": "1985-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1985-03-20T16:13:44Z", "meta": {"time_listed": true}}
-{"date": "1985-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1985-06-21T10:44:07Z", "meta": {"time_listed": true}}
-{"date": "1985-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1985-09-23T02:07:26Z", "meta": {"time_listed": true}}
-{"date": "1985-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1985-12-21T22:07:39Z", "meta": {"time_listed": true}}
-{"date": "1986-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1986-03-20T22:02:41Z", "meta": {"time_listed": true}}
-{"date": "1986-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1986-06-21T16:29:57Z", "meta": {"time_listed": true}}
-{"date": "1986-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1986-09-23T07:58:52Z", "meta": {"time_listed": true}}
-{"date": "1986-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1986-12-22T04:02:07Z", "meta": {"time_listed": true}}
-{"date": "1987-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1987-03-21T03:51:57Z", "meta": {"time_listed": true}}
-{"date": "1987-03-29", "event_type": "eclipse", "subtype": "Hybrid Solar Eclipse", "details": {"eclipse": "hybrid"}, "timestamp_ut": "1987-03-29T12:45:33Z", "meta": {"time_listed": true}}
-{"date": "1987-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1987-06-21T22:10:44Z", "meta": {"time_listed": true}}
-{"date": "1987-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1987-09-23T13:45:16Z", "meta": {"time_listed": true}}
-{"date": "1987-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1987-12-22T09:45:52Z", "meta": {"time_listed": true}}
-{"date": "1988-01-03", "event_type": "solar_orbit", "subtype": "Earth Perihelion", "details": {}, "timestamp_ut": "1988-01-03T23:58:00Z", "meta": {"time_listed": true}}
-{"date": "1988-03-17", "event_type": "eclipse", "subtype": "Total Solar Eclipse", "details": {"eclipse": "total"}, "timestamp_ut": "1988-03-18T02:02:20Z", "meta": {"time_listed": true}}
-{"date": "1988-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1988-03-20T09:38:36Z", "meta": {"time_listed": true}}
-{"date": "1988-06-20", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1988-06-21T03:56:31Z", "meta": {"time_listed": true}}
-{"date": "1988-09-22", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1988-09-22T19:28:50Z", "meta": {"time_listed": true}}
-{"date": "1988-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1988-12-21T15:27:52Z", "meta": {"time_listed": true}}
-{"date": "1989-01-02", "event_type": "solar_orbit", "subtype": "Earth Perihelion", "details": {}, "timestamp_ut": "1989-01-01T21:53:00Z", "meta": {"time_listed": true}}
-{"date": "1989-03-12", "event_type": "eclipse", "subtype": "Total Solar Eclipse", "details": {"eclipse": "total"}, "timestamp_ut": "1989-03-07T18:18:40Z", "meta": {"time_listed": true}}
-{"date": "1989-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1989-03-20T15:28:15Z", "meta": {"time_listed": true}}
-{"date": "1989-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1989-06-21T09:53:01Z", "meta": {"time_listed": true}}
-{"date": "1989-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1989-09-23T01:19:36Z", "meta": {"time_listed": true}}
-{"date": "1989-12-22", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1989-12-21T21:22:00Z", "meta": {"time_listed": true}}
-{"date": "1990-01-26", "event_type": "eclipse", "subtype": "Annular Solar Eclipse", "details": {"eclipse": "annular"}, "timestamp_ut": "1990-01-26T19:20:02Z", "meta": {"time_listed": true}}
-{"date": "1990-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1990-03-20T21:19:15Z", "meta": {"time_listed": true}}
-{"date": "1990-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1990-06-21T15:32:47Z", "meta": {"time_listed": true}}
-{"date": "1990-07-21", "event_type": "eclipse", "subtype": "Total Solar Eclipse", "details": {"eclipse": "total"}, "timestamp_ut": "1990-07-22T02:54:18Z", "meta": {"time_listed": true}}
-{"date": "1990-09-22", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1990-09-23T06:55:30Z", "meta": {"time_listed": true}}
-{"date": "1990-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1990-12-22T03:06:59Z", "meta": {"time_listed": true}}
-{"date": "1991-01-15", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "1991-01-15T23:49:39Z", "meta": {"time_listed": true}}
-{"date": "1991-01-29", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1991-01-30T06:09:43Z", "meta": {"time_listed": true}}
-{"date": "1991-06-26", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1991-06-27T02:58:25Z", "meta": {"time_listed": true}}
-{"date": "1991-07-06", "event_type": "solar_orbit", "subtype": "The Earth at aphelion", "details": {}, "timestamp_ut": "1991-07-06T15:26:00Z", "meta": {"time_listed": true}}
-{"date": "1991-07-11", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "1991-07-11T19:06:05Z", "meta": {"time_listed": true}}
-{"date": "1991-07-26", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1991-07-26T18:24:21Z", "meta": {"time_listed": true}}
-{"date": "1992-11-22", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1992-11-24T09:11:18Z", "meta": {"time_listed": true}}
-{"date": "1992-12-24", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "1992-12-24T00:42:51Z", "meta": {"time_listed": true}}
-{"date": "1995-02-11", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "1995-02-11T14:15:00Z", "meta": {"time_listed": true}}
-{"date": "1995-04-15", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "1995-04-15T12:08:12Z", "meta": {"time_listed": true}}
-{"date": "1995-06-02", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "1995-06-02T23:08:00Z", "meta": {"time_listed": true}}
-{"date": "1995-10-08", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1995-10-08T15:51:51Z", "meta": {"time_listed": true}}
-{"date": "1996-04-03", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "1996-04-04T00:06:56Z", "meta": {"time_listed": true}}
-{"date": "1996-04-17", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "1996-04-17T22:48:46Z", "meta": {"time_listed": true}}
-{"date": "1996-07-05", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "1996-07-05T17:33:00Z", "meta": {"time_listed": true}}
-{"date": "1996-09-26", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "1996-09-27T02:50:46Z", "meta": {"time_listed": true}}
-{"date": "1997-03-08", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "1997-03-09T01:14:35Z", "meta": {"time_listed": true}}
-{"date": "1997-03-17", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "1997-03-20T16:45:00Z", "meta": {"time_listed": true}}
-{"date": "1997-03-23", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "1997-03-24T04:45:14Z", "meta": {"time_listed": true}}
-{"date": "1997-08-09", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "1997-08-10T01:05:00Z", "meta": {"time_listed": true}}
-{"date": "1997-09-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "1997-09-01T23:51:34Z", "meta": {"time_listed": true}}
-{"date": "1997-09-16", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "1997-09-16T18:50:29Z", "meta": {"time_listed": true}}
-{"date": "1998-02-26", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "1998-02-26T17:25:55Z", "meta": {"time_listed": true}}
-{"date": "1998-03-12", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1998-03-13T04:34:09Z", "meta": {"time_listed": true}}
-{"date": "1998-08-07", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1998-08-08T02:09:37Z", "meta": {"time_listed": true}}
-{"date": "1998-09-06", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "1998-09-06T11:21:22Z", "meta": {"time_listed": true}}
-{"date": "1998-09-15", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "1998-09-15T16:58:00Z", "meta": {"time_listed": true}}
-{"date": "1999-07-28", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "1999-07-28T11:24:47Z", "meta": {"time_listed": true}}
-{"date": "1999-08-11", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "1999-08-11T11:08:30Z", "meta": {"time_listed": true}}
-{"date": "2000-07-16", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2000-07-16T13:55:13Z", "meta": {"time_listed": true}}
-{"date": "2000-08-11", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2000-08-15T05:12:39Z", "meta": {"time_listed": true}}
-{"date": "2001-01-09", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2001-01-09T20:24:24Z", "meta": {"time_listed": true}}
-{"date": "2001-06-13", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2001-06-21T22:51:00Z", "meta": {"time_listed": true}}
-{"date": "2001-06-21", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2001-06-21T11:57:45Z", "meta": {"time_listed": true}}
-{"date": "2001-07-05", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2001-07-05T15:03:46Z", "meta": {"time_listed": true}}
-{"date": "2001-12-14", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2001-12-14T20:47:23Z", "meta": {"time_listed": true}}
-{"date": "2001-12-30", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2001-12-30T10:40:32Z", "meta": {"time_listed": true}}
-{"date": "2001-12-30", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2001-12-31T01:04:00Z", "meta": {"time_listed": true}}
-{"date": "2002-05-26", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2002-05-26T11:51:15Z", "meta": {"time_listed": true}}
-{"date": "2002-06-10", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2002-06-10T23:46:31Z", "meta": {"time_listed": true}}
-{"date": "2002-06-24", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2002-06-24T21:42:21Z", "meta": {"time_listed": true}}
-{"date": "2002-11-19", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2002-11-20T01:33:40Z", "meta": {"time_listed": true}}
-{"date": "2002-12-04", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2002-12-04T07:34:22Z", "meta": {"time_listed": true}}
-{"date": "2003-02-01", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2003-02-01T19:11:00Z", "meta": {"time_listed": true}}
-{"date": "2003-05-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2003-05-16T03:35:57Z", "meta": {"time_listed": true}}
-{"date": "2003-05-30", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2003-05-31T04:19:53Z", "meta": {"time_listed": true}}
-{"date": "2003-08-27", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2003-08-27T09:46:00Z", "meta": {"time_listed": true}}
-{"date": "2003-11-08", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2003-11-09T01:13:22Z", "meta": {"time_listed": true}}
-{"date": "2003-11-23", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2003-11-23T22:58:57Z", "meta": {"time_listed": true}}
-{"date": "2004-03-04", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2004-03-04T09:17:00Z", "meta": {"time_listed": true}}
-{"date": "2004-04-19", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2004-04-19T13:21:12Z", "meta": {"time_listed": true}}
-{"date": "2004-05-04", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2004-05-04T20:33:26Z", "meta": {"time_listed": true}}
-{"date": "2004-10-13", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2004-10-14T02:48:15Z", "meta": {"time_listed": true}}
-{"date": "2004-10-27", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2004-10-28T03:07:22Z", "meta": {"time_listed": true}}
-{"date": "2005-04-04", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2005-04-04T13:38:00Z", "meta": {"time_listed": true}}
-{"date": "2005-04-08", "event_type": "eclipse", "subtype": "Hybrid solar eclipse", "details": {}, "timestamp_ut": "2005-04-08T20:32:01Z", "meta": {"time_listed": true}}
-{"date": "2005-04-24", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2005-04-24T10:06:28Z", "meta": {"time_listed": true}}
-{"date": "2005-10-03", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2005-10-03T10:27:53Z", "meta": {"time_listed": true}}
-{"date": "2005-10-17", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2005-10-17T12:13:38Z", "meta": {"time_listed": true}}
-{"date": "2005-10-29", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2005-10-30T03:20:00Z", "meta": {"time_listed": true}}
-{"date": "2006-03-14", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2006-03-14T23:35:26Z", "meta": {"time_listed": true}}
-{"date": "2006-03-29", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2006-03-29T10:15:15Z", "meta": {"time_listed": true}}
-{"date": "2006-05-05", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2006-05-05T23:44:00Z", "meta": {"time_listed": true}}
-{"date": "2006-09-07", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2006-09-07T18:42:04Z", "meta": {"time_listed": true}}
-{"date": "2006-09-22", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2006-09-22T11:45:03Z", "meta": {"time_listed": true}}
-{"date": "2007-03-03", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2007-03-03T23:17:07Z", "meta": {"time_listed": true}}
-{"date": "2007-03-18", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2007-03-19T02:42:34Z", "meta": {"time_listed": true}}
-{"date": "2007-06-07", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2007-06-07T12:16:00Z", "meta": {"time_listed": true}}
-{"date": "2007-08-28", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2007-08-28T10:35:06Z", "meta": {"time_listed": true}}
-{"date": "2007-09-11", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2007-09-11T12:44:14Z", "meta": {"time_listed": true}}
-{"date": "2007-12-18", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2007-12-18T23:41:00Z", "meta": {"time_listed": true}}
-{"date": "2008-02-06", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2008-02-07T03:44:31Z", "meta": {"time_listed": true}}
-{"date": "2008-02-20", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2008-02-21T03:30:30Z", "meta": {"time_listed": true}}
-{"date": "2008-07-10", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2008-07-10T10:59:00Z", "meta": {"time_listed": true}}
-{"date": "2008-08-01", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2008-08-01T10:12:33Z", "meta": {"time_listed": true}}
-{"date": "2008-08-16", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2008-08-16T21:16:27Z", "meta": {"time_listed": true}}
-{"date": "2009-01-26", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2009-01-26T07:55:17Z", "meta": {"time_listed": true}}
-{"date": "2009-02-09", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2009-02-09T14:49:10Z", "meta": {"time_listed": true}}
-{"date": "2009-07-07", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2009-07-07T09:21:25Z", "meta": {"time_listed": true}}
-{"date": "2009-07-21", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2009-07-22T02:34:36Z", "meta": {"time_listed": true}}
-{"date": "2009-08-05", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2009-08-06T00:54:52Z", "meta": {"time_listed": true}}
-{"date": "2009-08-14", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2009-08-15T03:13:00Z", "meta": {"time_listed": true}}
-{"date": "2009-12-31", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2009-12-31T19:12:45Z", "meta": {"time_listed": true}}
-{"date": "2010-01-15", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2010-01-15T07:11:22Z", "meta": {"time_listed": true}}
-{"date": "2010-06-26", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2010-06-26T11:30:22Z", "meta": {"time_listed": true}}
-{"date": "2010-07-11", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2010-07-11T19:40:27Z", "meta": {"time_listed": true}}
-{"date": "2010-09-20", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2010-09-20T21:19:00Z", "meta": {"time_listed": true}}
-{"date": "2010-12-21", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2010-12-21T08:13:27Z", "meta": {"time_listed": true}}
-{"date": "2011-01-04", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2011-01-04T09:02:37Z", "meta": {"time_listed": true}}
-{"date": "2011-06-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2011-06-01T21:02:36Z", "meta": {"time_listed": true}}
-{"date": "2011-06-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2011-06-15T20:13:35Z", "meta": {"time_listed": true}}
-{"date": "2011-07-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2011-07-01T08:53:55Z", "meta": {"time_listed": true}}
-{"date": "2011-10-27", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2011-10-27T18:41:00Z", "meta": {"time_listed": true}}
-{"date": "2011-11-25", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2011-11-25T06:09:41Z", "meta": {"time_listed": true}}
-{"date": "2011-12-10", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2011-12-10T14:36:23Z", "meta": {"time_listed": true}}
-{"date": "2012-03-05", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2012-03-05T16:55:00Z", "meta": {"time_listed": true}}
-{"date": "2012-05-20", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2012-05-20T23:47:01Z", "meta": {"time_listed": true}}
-{"date": "2012-06-04", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2012-06-04T11:11:34Z", "meta": {"time_listed": true}}
-{"date": "2012-11-13", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2012-11-13T22:08:00Z", "meta": {"time_listed": true}}
-{"date": "2012-11-28", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2012-11-28T14:45:56Z", "meta": {"time_listed": true}}
-{"date": "2012-12-01", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2012-12-01T14:50:00Z", "meta": {"time_listed": true}}
-{"date": "2013-04-25", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {}, "timestamp_ut": "2013-04-25T19:57:07Z", "meta": {"time_listed": true}}
-{"date": "2013-05-09", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2013-05-10T00:28:23Z", "meta": {"time_listed": true}}
-{"date": "2013-05-24", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2013-05-25T04:24:56Z", "meta": {"time_listed": true}}
-{"date": "2013-10-18", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2013-10-18T23:37:40Z", "meta": {"time_listed": true}}
-{"date": "2013-11-03", "event_type": "eclipse", "subtype": "Hybrid solar eclipse", "details": {}, "timestamp_ut": "2013-11-03T12:49:57Z", "meta": {"time_listed": true}}
-{"date": "2014-04-14", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2014-04-14T12:48:00Z", "meta": {"time_listed": true}}
-{"date": "2014-04-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2014-04-15T07:42:18Z", "meta": {"time_listed": true}}
-{"date": "2014-04-29", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2014-04-29T06:14:21Z", "meta": {"time_listed": true}}
-{"date": "2014-10-08", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2014-10-08T10:50:36Z", "meta": {"time_listed": true}}
-{"date": "2014-10-23", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2014-10-23T21:56:39Z", "meta": {"time_listed": true}}
-{"date": "2015-03-20", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2015-03-20T09:36:11Z", "meta": {"time_listed": true}}
-{"date": "2015-04-04", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2015-04-04T12:05:34Z", "meta": {"time_listed": true}}
-{"date": "2015-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {}, "timestamp_ut": "2015-07-06T19:41:00Z", "meta": {"time_listed": true}}
-{"date": "2015-09-13", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {}, "timestamp_ut": "2015-09-13T06:41:16Z", "meta": {"time_listed": true}}
-{"date": "2015-09-27", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {}, "timestamp_ut": "2015-09-28T02:50:30Z", "meta": {"time_listed": true}}
-{"date": "2016-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {}, "timestamp_ut": "2016-01-02T22:49:00Z", "meta": {"time_listed": true}}
-{"date": "2016-03-08", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {}, "timestamp_ut": "2016-03-08T18:12:00Z", "meta": {"time_listed": true}}
-{"date": "2016-03-08", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {}, "timestamp_ut": "2016-03-09T01:54:29Z", "meta": {"time_listed": true}}
-{"date": "2016-03-23", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2016-03-23T12:00:50Z", "meta": {"time_listed": true}}
-{"date": "2016-05-30", "event_type": "perigee", "subtype": "Mars at perigee", "details": {}, "timestamp_ut": "2016-05-30T21:29:00Z", "meta": {"time_listed": true}}
-{"date": "2016-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {}, "timestamp_ut": "2016-07-04T16:24:00Z", "meta": {"time_listed": true}}
-{"date": "2016-09-01", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {}, "timestamp_ut": "2016-09-01T09:03:06Z", "meta": {"time_listed": true}}
-{"date": "2016-09-16", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {}, "timestamp_ut": "2016-09-16T19:05:05Z", "meta": {"time_listed": true}}
+{"date": "1988-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1988-01-03T23:58:00Z", "meta": {"time_listed": true}}
+{"date": "1988-03-03", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "1988-03-03T16:01:04Z", "meta": {"time_listed": true}}
+{"date": "1988-03-17", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "1988-03-18T02:02:20Z", "meta": {"time_listed": true}}
+{"date": "1988-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "1988-03-20T09:38:36Z", "meta": {"time_listed": true}}
+{"date": "1988-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "1988-06-21T03:56:31Z", "meta": {"time_listed": true}}
+{"date": "1988-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1988-07-05T23:56:00Z", "meta": {"time_listed": true}}
+{"date": "1988-08-27", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "1988-08-27T10:55:51Z", "meta": {"time_listed": true}}
+{"date": "1988-09-10", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "1988-09-11T04:49:08Z", "meta": {"time_listed": true}}
+{"date": "1988-09-21", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "1988-09-22T03:13:00Z", "meta": {"time_listed": true}}
+{"date": "1988-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "1988-09-22T19:28:50Z", "meta": {"time_listed": true}}
+{"date": "1988-11-21", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1988-11-21T16:12:00Z", "meta": {"time_listed": true}}
+{"date": "1988-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "1988-12-21T15:27:52Z", "meta": {"time_listed": true}}
+{"date": "1989-01-01", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1989-01-01T21:53:00Z", "meta": {"time_listed": true}}
+{"date": "1989-02-20", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "1989-02-20T15:31:52Z", "meta": {"time_listed": true}}
+{"date": "1989-03-07", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "1989-03-07T18:18:40Z", "meta": {"time_listed": true}}
+{"date": "1989-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "1989-03-20T15:28:15Z", "meta": {"time_listed": true}}
+{"date": "1989-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "1989-06-21T09:53:01Z", "meta": {"time_listed": true}}
+{"date": "1989-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1989-07-04T11:33:00Z", "meta": {"time_listed": true}}
+{"date": "1989-08-16", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "1989-08-17T03:06:37Z", "meta": {"time_listed": true}}
+{"date": "1989-08-30", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "1989-08-31T05:44:31Z", "meta": {"time_listed": true}}
+{"date": "1989-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "1989-09-23T01:19:36Z", "meta": {"time_listed": true}}
+{"date": "1989-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "1989-12-21T21:22:00Z", "meta": {"time_listed": true}}
+{"date": "1989-12-26", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1989-12-26T08:31:00Z", "meta": {"time_listed": true}}
+{"date": "1990-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1990-01-04T17:22:00Z", "meta": {"time_listed": true}}
+{"date": "1990-01-26", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "1990-01-26T19:20:02Z", "meta": {"time_listed": true}}
+{"date": "1990-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1990-07-04T05:04:00Z", "meta": {"time_listed": true}}
+{"date": "1990-07-21", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "1990-07-22T02:54:18Z", "meta": {"time_listed": true}}
+{"date": "1990-11-19", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "1990-11-20T03:53:00Z", "meta": {"time_listed": true}}
+{"date": "1991-01-02", "event_type": "solar_orbit", "subtype": "Perihelion", "details": {}, "timestamp_ut": "1991-01-03T02:59:00Z", "meta": {"time_listed": true}}
+{"date": "1991-01-15", "event_type": "eclipse", "subtype": "Annular Solar Eclipse", "details": {}, "timestamp_ut": "1991-01-15T23:49:39Z", "meta": {"time_listed": true}}
+{"date": "1991-01-28", "event_type": "perigee", "subtype": "Jupiter Perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1991-01-28T08:00:00Z", "meta": {"time_listed": true}}
+{"date": "1991-01-28", "event_type": "eclipse", "subtype": "Penumbral Lunar Eclipse", "details": {}, "timestamp_ut": "1991-01-30T06:09:43Z", "meta": {"time_listed": true}}
+{"date": "1991-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1991-03-21T03:01:55Z", "meta": {"time_listed": true}}
+{"date": "1991-06-21", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1991-06-21T21:18:46Z", "meta": {"time_listed": true}}
+{"date": "1991-06-26", "event_type": "eclipse", "subtype": "Penumbral Lunar Eclipse", "details": {}, "timestamp_ut": "1991-06-27T02:58:25Z", "meta": {"time_listed": true}}
+{"date": "1991-07-06", "event_type": "solar_orbit", "subtype": "Aphelion", "details": {}, "timestamp_ut": "1991-07-06T15:26:00Z", "meta": {"time_listed": true}}
+{"date": "1991-07-11", "event_type": "eclipse", "subtype": "Total Solar Eclipse", "details": {}, "timestamp_ut": "1991-07-11T19:06:05Z", "meta": {"time_listed": true}}
+{"date": "1991-07-26", "event_type": "eclipse", "subtype": "Penumbral Lunar Eclipse", "details": {}, "timestamp_ut": "1991-07-26T18:24:21Z", "meta": {"time_listed": true}}
+{"date": "1991-09-23", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1991-09-23T12:48:05Z", "meta": {"time_listed": true}}
+{"date": "1991-12-21", "event_type": "eclipse", "subtype": "Partial Lunar Eclipse", "details": {}, "timestamp_ut": "1991-12-21T10:23:11Z", "meta": {"time_listed": true}}
+{"date": "1991-12-22", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1991-12-22T08:53:38Z", "meta": {"time_listed": true}}
+{"date": "1992-01-03", "event_type": "solar_orbit", "subtype": "Perihelion", "details": {}, "timestamp_ut": "1992-01-03T15:01:00Z", "meta": {"time_listed": true}}
+{"date": "1992-01-04", "event_type": "eclipse", "subtype": "Annular Solar Eclipse", "details": {}, "timestamp_ut": "1992-01-04T23:09:35Z", "meta": {"time_listed": true}}
+{"date": "1992-02-28", "event_type": "perigee", "subtype": "Jupiter Perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1992-02-29T02:46:00Z", "meta": {"time_listed": true}}
+{"date": "1992-03-20", "event_type": "seasonal", "subtype": "March Equinox", "details": {}, "timestamp_ut": "1992-03-20T08:48:02Z", "meta": {"time_listed": true}}
+{"date": "1992-06-14", "event_type": "eclipse", "subtype": "Partial Lunar Eclipse", "details": {}, "timestamp_ut": "1992-06-15T04:49:44Z", "meta": {"time_listed": true}}
+{"date": "1992-06-20", "event_type": "seasonal", "subtype": "June Solstice", "details": {}, "timestamp_ut": "1992-06-21T03:14:09Z", "meta": {"time_listed": true}}
+{"date": "1992-06-30", "event_type": "eclipse", "subtype": "Total Solar Eclipse", "details": {}, "timestamp_ut": "1992-06-30T12:18:01Z", "meta": {"time_listed": true}}
+{"date": "1992-07-03", "event_type": "solar_orbit", "subtype": "Aphelion", "details": {}, "timestamp_ut": "1992-07-03T12:07:00Z", "meta": {"time_listed": true}}
+{"date": "1992-09-22", "event_type": "seasonal", "subtype": "September Equinox", "details": {}, "timestamp_ut": "1992-09-22T18:42:46Z", "meta": {"time_listed": true}}
+{"date": "1992-12-09", "event_type": "eclipse", "subtype": "Total Lunar Eclipse", "details": {}, "timestamp_ut": "1992-12-09T23:40:41Z", "meta": {"time_listed": true}}
+{"date": "1992-12-21", "event_type": "seasonal", "subtype": "December Solstice", "details": {}, "timestamp_ut": "1992-12-21T14:43:13Z", "meta": {"time_listed": true}}
+{"date": "1992-12-23", "event_type": "eclipse", "subtype": "Partial Solar Eclipse", "details": {}, "timestamp_ut": "1992-12-24T00:42:51Z", "meta": {"time_listed": true}}
+{"date": "1993-01-03", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "1993-01-03T13:27:00Z", "meta": {"time_listed": true}}
+{"date": "1993-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1993-01-04T03:04:00Z", "meta": {"time_listed": true}}
+{"date": "1993-03-30", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1993-03-31T06:41:00Z", "meta": {"time_listed": true}}
+{"date": "1993-05-21", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "1993-05-21T14:06:31Z", "meta": {"time_listed": true}}
+{"date": "1993-06-04", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "1993-06-04T13:02:13Z", "meta": {"time_listed": true}}
+{"date": "1993-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1993-07-04T22:21:00Z", "meta": {"time_listed": true}}
+{"date": "1994-01-01", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1994-01-02T05:54:00Z", "meta": {"time_listed": true}}
+{"date": "1994-05-01", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1994-05-01T17:17:00Z", "meta": {"time_listed": true}}
+{"date": "1994-05-10", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "1994-05-10T17:06:34Z", "meta": {"time_listed": true}}
+{"date": "1994-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1994-07-05T19:16:00Z", "meta": {"time_listed": true}}
+{"date": "1994-11-03", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "1994-11-03T13:35:30Z", "meta": {"time_listed": true}}
+{"date": "1995-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1995-01-04T11:05:00Z", "meta": {"time_listed": true}}
+{"date": "1995-02-11", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "1995-02-11T14:15:00Z", "meta": {"time_listed": true}}
+{"date": "1995-04-29", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "annular solar"}, "timestamp_ut": "1995-04-29T17:36:19Z", "meta": {"time_listed": true}}
+{"date": "1995-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1995-07-04T02:17:00Z", "meta": {"time_listed": true}}
+{"date": "1995-10-08", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "1995-10-08T15:51:51Z", "meta": {"time_listed": true}}
+{"date": "1995-10-23", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "total solar"}, "timestamp_ut": "1995-10-24T04:36:12Z", "meta": {"time_listed": true}}
+{"date": "1996-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1996-01-04T07:26:00Z", "meta": {"time_listed": true}}
+{"date": "1996-04-17", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "1996-04-17T22:48:46Z", "meta": {"time_listed": true}}
+{"date": "1996-07-05", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1996-07-05T17:33:00Z", "meta": {"time_listed": true}}
+{"date": "1996-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1996-07-05T19:00:00Z", "meta": {"time_listed": true}}
+{"date": "1996-10-12", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "1996-10-12T14:14:26Z", "meta": {"time_listed": true}}
+{"date": "1997-01-01", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1997-01-01T23:16:00Z", "meta": {"time_listed": true}}
+{"date": "1997-03-08", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "1997-03-09T01:14:35Z", "meta": {"time_listed": true}}
+{"date": "1997-03-20", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "1997-03-20T16:45:00Z", "meta": {"time_listed": true}}
+{"date": "1997-03-23", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "1997-03-24T04:45:14Z", "meta": {"time_listed": true}}
+{"date": "1997-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1997-07-04T19:19:00Z", "meta": {"time_listed": true}}
+{"date": "1997-08-09", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1997-08-10T01:05:00Z", "meta": {"time_listed": true}}
+{"date": "1997-09-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "1997-09-01T23:51:34Z", "meta": {"time_listed": true}}
+{"date": "1997-09-16", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "1997-09-16T18:50:29Z", "meta": {"time_listed": true}}
+{"date": "1998-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "1998-01-04T21:15:00Z", "meta": {"time_listed": true}}
+{"date": "1998-02-26", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "1998-02-26T17:25:55Z", "meta": {"time_listed": true}}
+{"date": "1998-03-12", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "1998-03-13T04:34:09Z", "meta": {"time_listed": true}}
+{"date": "1998-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "1998-07-03T23:50:00Z", "meta": {"time_listed": true}}
+{"date": "1998-08-07", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "1998-08-08T02:09:37Z", "meta": {"time_listed": true}}
+{"date": "1998-08-21", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "1998-08-22T02:03:06Z", "meta": {"time_listed": true}}
+{"date": "1998-09-06", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "1998-09-06T11:21:22Z", "meta": {"time_listed": true}}
+{"date": "1998-09-15", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "1998-09-15T16:58:00Z", "meta": {"time_listed": true}}
+{"date": "2000-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2000-01-03T05:18:00Z", "meta": {"time_listed": true}}
+{"date": "2000-01-20", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2000-01-21T04:40:27Z", "meta": {"time_listed": true}}
+{"date": "2000-02-05", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2000-02-05T13:03:16Z", "meta": {"time_listed": true}}
+{"date": "2000-07-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2000-07-01T19:19:55Z", "meta": {"time_listed": true}}
+{"date": "2000-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2000-07-03T23:49:00Z", "meta": {"time_listed": true}}
+{"date": "2000-07-16", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2000-07-16T13:55:13Z", "meta": {"time_listed": true}}
+{"date": "2000-07-30", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2000-07-31T02:25:09Z", "meta": {"time_listed": true}}
+{"date": "2000-11-26", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2000-11-26T15:07:00Z", "meta": {"time_listed": true}}
+{"date": "2000-12-25", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2000-12-25T17:21:37Z", "meta": {"time_listed": true}}
+{"date": "2001-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2001-07-04T13:37:00Z", "meta": {"time_listed": true}}
+{"date": "2001-07-05", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "2001-07-05T15:03:46Z", "meta": {"time_listed": true}}
+{"date": "2001-12-14", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2001-12-14T20:47:23Z", "meta": {"time_listed": true}}
+{"date": "2001-12-30", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2001-12-30T10:40:32Z", "meta": {"time_listed": true}}
+{"date": "2001-12-30", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2001-12-31T01:04:00Z", "meta": {"time_listed": true}}
+{"date": "2002-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2002-01-02T14:09:00Z", "meta": {"time_listed": true}}
+{"date": "2002-05-26", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2002-05-26T11:51:15Z", "meta": {"time_listed": true}}
+{"date": "2002-06-10", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2002-06-10T23:46:31Z", "meta": {"time_listed": true}}
+{"date": "2002-06-24", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2002-06-24T21:42:21Z", "meta": {"time_listed": true}}
+{"date": "2002-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2002-07-06T03:47:00Z", "meta": {"time_listed": true}}
+{"date": "2002-11-19", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2002-11-20T01:33:40Z", "meta": {"time_listed": true}}
+{"date": "2002-12-04", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "2002-12-04T07:34:22Z", "meta": {"time_listed": true}}
+{"date": "2003-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2003-01-04T05:01:00Z", "meta": {"time_listed": true}}
+{"date": "2003-02-01", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2003-02-01T19:11:00Z", "meta": {"time_listed": true}}
+{"date": "2003-05-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2003-05-16T03:35:57Z", "meta": {"time_listed": true}}
+{"date": "2003-05-30", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2003-05-31T04:19:53Z", "meta": {"time_listed": true}}
+{"date": "2003-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2003-07-04T05:40:00Z", "meta": {"time_listed": true}}
+{"date": "2003-08-27", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2003-08-27T09:46:00Z", "meta": {"time_listed": true}}
+{"date": "2003-11-08", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2003-11-09T01:13:22Z", "meta": {"time_listed": true}}
+{"date": "2003-11-23", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "2003-11-23T22:58:57Z", "meta": {"time_listed": true}}
+{"date": "2004-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2004-01-04T17:41:00Z", "meta": {"time_listed": true}}
+{"date": "2004-03-04", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2004-03-04T09:17:00Z", "meta": {"time_listed": true}}
+{"date": "2004-04-19", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2004-04-19T13:21:12Z", "meta": {"time_listed": true}}
+{"date": "2004-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2004-07-05T10:53:00Z", "meta": {"time_listed": true}}
+{"date": "2004-10-13", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2004-10-14T02:48:15Z", "meta": {"time_listed": true}}
+{"date": "2004-10-27", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2004-10-28T03:07:22Z", "meta": {"time_listed": true}}
+{"date": "2005-01-01", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2005-01-02T00:35:00Z", "meta": {"time_listed": true}}
+{"date": "2005-04-04", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2005-04-04T13:38:00Z", "meta": {"time_listed": true}}
+{"date": "2005-04-08", "event_type": "eclipse", "subtype": "Hybrid solar eclipse", "details": {"kind": "solar hybrid"}, "timestamp_ut": "2005-04-08T20:32:01Z", "meta": {"time_listed": true}}
+{"date": "2005-04-24", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2005-04-24T10:06:28Z", "meta": {"time_listed": true}}
+{"date": "2005-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2005-07-05T04:58:00Z", "meta": {"time_listed": true}}
+{"date": "2005-10-03", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2005-10-03T10:27:53Z", "meta": {"time_listed": true}}
+{"date": "2005-10-17", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "2005-10-17T12:13:38Z", "meta": {"time_listed": true}}
+{"date": "2006-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2006-01-04T15:30:00Z", "meta": {"time_listed": true}}
+{"date": "2006-03-14", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2006-03-14T23:35:26Z", "meta": {"time_listed": true}}
+{"date": "2006-03-29", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "2006-03-29T10:15:15Z", "meta": {"time_listed": true}}
+{"date": "2006-05-05", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2006-05-05T23:44:00Z", "meta": {"time_listed": true}}
+{"date": "2006-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2006-07-03T23:10:00Z", "meta": {"time_listed": true}}
+{"date": "2006-09-07", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "2006-09-07T18:42:04Z", "meta": {"time_listed": true}}
+{"date": "2006-09-22", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2006-09-22T11:45:03Z", "meta": {"time_listed": true}}
+{"date": "2007-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2007-01-03T19:46:00Z", "meta": {"time_listed": true}}
+{"date": "2007-03-03", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2007-03-03T23:17:07Z", "meta": {"time_listed": true}}
+{"date": "2007-03-18", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2007-03-19T02:42:34Z", "meta": {"time_listed": true}}
+{"date": "2007-06-07", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2007-06-07T12:16:00Z", "meta": {"time_listed": true}}
+{"date": "2007-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2007-07-06T23:52:00Z", "meta": {"time_listed": true}}
+{"date": "2007-08-28", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2007-08-28T10:35:06Z", "meta": {"time_listed": true}}
+{"date": "2007-09-11", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"kind": "solar partial"}, "timestamp_ut": "2007-09-11T12:44:14Z", "meta": {"time_listed": true}}
+{"date": "2007-12-18", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2007-12-18T23:41:00Z", "meta": {"time_listed": true}}
+{"date": "2008-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2008-01-02T23:50:00Z", "meta": {"time_listed": true}}
+{"date": "2008-02-06", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2008-02-07T03:44:31Z", "meta": {"time_listed": true}}
+{"date": "2008-02-20", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2008-02-21T03:30:30Z", "meta": {"time_listed": true}}
+{"date": "2008-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2008-07-04T07:41:00Z", "meta": {"time_listed": true}}
+{"date": "2008-07-10", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2008-07-10T10:59:00Z", "meta": {"time_listed": true}}
+{"date": "2008-08-01", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "2008-08-01T10:12:33Z", "meta": {"time_listed": true}}
+{"date": "2008-08-16", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "2008-08-16T21:16:27Z", "meta": {"time_listed": true}}
+{"date": "2009-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2009-01-04T15:29:00Z", "meta": {"time_listed": true}}
+{"date": "2009-01-26", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2009-01-26T07:55:17Z", "meta": {"time_listed": true}}
+{"date": "2009-02-09", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2009-02-09T14:49:10Z", "meta": {"time_listed": true}}
+{"date": "2009-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2009-07-04T01:40:00Z", "meta": {"time_listed": true}}
+{"date": "2009-07-07", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2009-07-07T09:21:25Z", "meta": {"time_listed": true}}
+{"date": "2009-07-21", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "2009-07-22T02:34:36Z", "meta": {"time_listed": true}}
+{"date": "2009-08-05", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"kind": "lunar penumbral"}, "timestamp_ut": "2009-08-06T00:54:52Z", "meta": {"time_listed": true}}
+{"date": "2009-08-14", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2009-08-15T03:13:00Z", "meta": {"time_listed": true}}
+{"date": "2009-12-31", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "2009-12-31T19:12:45Z", "meta": {"time_listed": true}}
+{"date": "2010-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2010-01-03T00:10:00Z", "meta": {"time_listed": true}}
+{"date": "2010-01-15", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"kind": "solar annular"}, "timestamp_ut": "2010-01-15T07:11:22Z", "meta": {"time_listed": true}}
+{"date": "2010-01-27", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2010-01-27T18:56:00Z", "meta": {"time_listed": true}}
+{"date": "2010-06-26", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"kind": "lunar partial"}, "timestamp_ut": "2010-06-26T11:30:22Z", "meta": {"time_listed": true}}
+{"date": "2010-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2010-07-06T11:30:00Z", "meta": {"time_listed": true}}
+{"date": "2010-07-11", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"kind": "solar total"}, "timestamp_ut": "2010-07-11T19:40:27Z", "meta": {"time_listed": true}}
+{"date": "2010-09-20", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2010-09-20T21:19:00Z", "meta": {"time_listed": true}}
+{"date": "2010-12-21", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"kind": "lunar total"}, "timestamp_ut": "2010-12-21T08:13:27Z", "meta": {"time_listed": true}}
+{"date": "2011-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2011-01-03T18:30:00Z", "meta": {"time_listed": true}}
+{"date": "2011-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2011-03-20T23:20:43Z", "meta": {"time_listed": true}}
+{"date": "2011-06-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2011-06-01T21:02:36Z", "meta": {"time_listed": true}}
+{"date": "2011-06-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2011-06-15T20:13:35Z", "meta": {"time_listed": true}}
+{"date": "2011-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2011-06-21T17:16:30Z", "meta": {"time_listed": true}}
+{"date": "2011-07-01", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2011-07-01T08:53:55Z", "meta": {"time_listed": true}}
+{"date": "2011-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2011-07-04T14:54:00Z", "meta": {"time_listed": true}}
+{"date": "2011-09-15", "event_type": "perihelion", "subtype": "Comet C/2010 X1 (Elenin) passes perihelion", "details": {"object": "Comet C/2010 X1 (Elenin)"}, "timestamp_ut": "2012-01-05T00:32:00Z", "meta": {"time_listed": true}}
+{"date": "2011-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2011-09-23T09:04:38Z", "meta": {"time_listed": true}}
+{"date": "2011-10-27", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2011-10-27T18:41:00Z", "meta": {"time_listed": true}}
+{"date": "2011-11-25", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2011-11-25T06:09:41Z", "meta": {"time_listed": true}}
+{"date": "2011-12-10", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2011-12-10T14:36:23Z", "meta": {"time_listed": true}}
+{"date": "2011-12-19", "event_type": "perihelion", "subtype": "Comet C/2011 W3 (Lovejoy) passes perihelion", "details": {"object": "Comet C/2011 W3 (Lovejoy)"}, "timestamp_ut": "2012-01-05T00:32:00Z", "meta": {"time_listed": true}}
+{"date": "2011-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2011-12-22T05:30:02Z", "meta": {"time_listed": true}}
+{"date": "2011-12-26", "event_type": "perihelion", "subtype": "Comet C/2009 P1 (Garradd) passes perihelion", "details": {"object": "Comet C/2009 P1 (Garradd)"}, "timestamp_ut": "2012-01-05T00:32:00Z", "meta": {"time_listed": true}}
+{"date": "2012-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2012-01-05T00:32:00Z", "meta": {"time_listed": true}}
+{"date": "2012-03-05", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2012-03-05T16:55:00Z", "meta": {"time_listed": true}}
+{"date": "2012-03-19", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2012-03-20T05:14:25Z", "meta": {"time_listed": true}}
+{"date": "2012-05-20", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2012-05-20T23:47:01Z", "meta": {"time_listed": true}}
+{"date": "2012-06-04", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2012-06-04T11:11:34Z", "meta": {"time_listed": true}}
+{"date": "2012-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2012-06-20T23:08:48Z", "meta": {"time_listed": true}}
+{"date": "2012-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2012-07-05T03:32:00Z", "meta": {"time_listed": true}}
+{"date": "2012-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2012-09-22T14:48:58Z", "meta": {"time_listed": true}}
+{"date": "2012-11-13", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2012-11-13T22:08:00Z", "meta": {"time_listed": true}}
+{"date": "2012-11-28", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2012-11-28T14:45:56Z", "meta": {"time_listed": true}}
+{"date": "2012-12-01", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2012-12-01T14:50:00Z", "meta": {"time_listed": true}}
+{"date": "2012-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2012-12-21T11:11:37Z", "meta": {"time_listed": true}}
+{"date": "2013-01-01", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2013-01-02T04:38:00Z", "meta": {"time_listed": true}}
+{"date": "2013-02-21", "event_type": "perihelion", "subtype": "Comet C/2012 T5 (Bressi) passes perihelion", "details": {"object": "Comet C/2012 T5 (Bressi)"}, "timestamp_ut": "2013-01-02T04:38:00Z", "meta": {"time_listed": true}}
+{"date": "2013-03-08", "event_type": "perihelion", "subtype": "Comet C/2011 L4 (PANSTARRS) passes perihelion", "details": {"object": "Comet C/2011 L4 (PANSTARRS)"}, "timestamp_ut": "2013-01-02T04:38:00Z", "meta": {"time_listed": true}}
+{"date": "2013-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2013-03-20T11:01:55Z", "meta": {"time_listed": true}}
+{"date": "2013-03-23", "event_type": "perihelion", "subtype": "Comet C/2012 F6 (Lemmon) passes perihelion", "details": {"object": "Comet C/2012 F6 (Lemmon)"}, "timestamp_ut": "2013-01-02T04:38:00Z", "meta": {"time_listed": true}}
+{"date": "2013-04-25", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2013-04-25T19:57:07Z", "meta": {"time_listed": true}}
+{"date": "2013-05-09", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2013-05-10T00:28:23Z", "meta": {"time_listed": true}}
+{"date": "2013-05-24", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2013-05-25T04:24:56Z", "meta": {"time_listed": true}}
+{"date": "2013-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2013-06-21T05:03:57Z", "meta": {"time_listed": true}}
+{"date": "2013-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2013-07-05T14:44:00Z", "meta": {"time_listed": true}}
+{"date": "2013-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2013-09-22T20:44:08Z", "meta": {"time_listed": true}}
+{"date": "2013-10-18", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2013-10-18T23:37:40Z", "meta": {"time_listed": true}}
+{"date": "2013-11-03", "event_type": "eclipse", "subtype": "Hybrid solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2013-11-03T12:49:57Z", "meta": {"time_listed": true}}
+{"date": "2013-11-23", "event_type": "perihelion", "subtype": "Comet 2P/Encke passes perihelion", "details": {"object": "Comet 2P/Encke"}, "timestamp_ut": "2014-01-04T11:58:00Z", "meta": {"time_listed": true}}
+{"date": "2013-12-01", "event_type": "perihelion", "subtype": "Comet C/2012 S1 (ISON) passes perihelion", "details": {"object": "Comet C/2012 S1 (ISON)"}, "timestamp_ut": "2014-01-04T11:58:00Z", "meta": {"time_listed": true}}
+{"date": "2013-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2013-12-21T17:11:00Z", "meta": {"time_listed": true}}
+{"date": "2013-12-22", "event_type": "perihelion", "subtype": "Comet C/2013 R1 (Lovejoy) passes perihelion", "details": {"object": "Comet C/2013 R1 (Lovejoy)"}, "timestamp_ut": "2014-01-04T11:58:00Z", "meta": {"time_listed": true}}
+{"date": "2014-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2014-01-04T11:58:00Z", "meta": {"time_listed": true}}
+{"date": "2014-01-04", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2014-01-04T17:38:00Z", "meta": {"time_listed": true}}
+{"date": "2014-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2014-03-20T16:57:05Z", "meta": {"time_listed": true}}
+{"date": "2014-04-14", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2014-04-14T12:48:00Z", "meta": {"time_listed": true}}
+{"date": "2014-04-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2014-04-15T07:42:18Z", "meta": {"time_listed": true}}
+{"date": "2014-04-29", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2014-04-29T06:14:21Z", "meta": {"time_listed": true}}
+{"date": "2014-06-12", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2014-06-21T10:51:14Z", "meta": {"time_listed": true}}
+{"date": "2014-07-02", "event_type": "perihelion", "subtype": "Comet C/2014 E2 (Jacques) passes perihelion", "details": {"object": "Comet C/2014 E2 (Jacques)"}, "timestamp_ut": "2014-01-04T11:58:00Z", "meta": {"time_listed": true}}
+{"date": "2014-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2014-07-04T00:13:00Z", "meta": {"time_listed": true}}
+{"date": "2014-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2014-09-23T02:29:05Z", "meta": {"time_listed": true}}
+{"date": "2014-10-08", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2014-10-08T10:50:36Z", "meta": {"time_listed": true}}
+{"date": "2014-10-23", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2014-10-23T21:56:39Z", "meta": {"time_listed": true}}
+{"date": "2014-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2014-12-21T23:03:01Z", "meta": {"time_listed": true}}
+{"date": "2015-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2015-01-04T06:37:00Z", "meta": {"time_listed": true}}
+{"date": "2015-01-27", "event_type": "perihelion", "subtype": "Comet C/2014 Q2 (Lovejoy) passes perihelion", "details": {"object": "Comet C/2014 Q2 (Lovejoy)"}, "timestamp_ut": "2015-01-04T06:37:00Z", "meta": {"time_listed": true}}
+{"date": "2015-02-06", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2015-02-06T07:06:00Z", "meta": {"time_listed": true}}
+{"date": "2015-03-20", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2015-03-20T09:36:11Z", "meta": {"time_listed": true}}
+{"date": "2015-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2015-03-20T22:45:09Z", "meta": {"time_listed": true}}
+{"date": "2015-04-04", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2015-04-04T12:05:34Z", "meta": {"time_listed": true}}
+{"date": "2015-05-25", "event_type": "perihelion", "subtype": "Comet C/2015 G2 (MASTER) passes perihelion", "details": {"object": "Comet C/2015 G2 (MASTER)"}, "timestamp_ut": "2015-01-04T06:37:00Z", "meta": {"time_listed": true}}
+{"date": "2015-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2015-06-21T16:37:55Z", "meta": {"time_listed": true}}
+{"date": "2015-07-03", "event_type": "perihelion", "subtype": "Comet C/2014 Q1 (PANSTARRS) passes perihelion", "details": {"object": "Comet C/2014 Q1 (PANSTARRS)"}, "timestamp_ut": "2015-01-04T06:37:00Z", "meta": {"time_listed": true}}
+{"date": "2015-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2015-07-06T19:41:00Z", "meta": {"time_listed": true}}
+{"date": "2015-09-13", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2015-09-13T06:41:16Z", "meta": {"time_listed": true}}
+{"date": "2015-09-21", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2015-09-23T08:20:33Z", "meta": {"time_listed": true}}
+{"date": "2015-09-27", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2015-09-28T02:50:30Z", "meta": {"time_listed": true}}
+{"date": "2015-11-16", "event_type": "perihelion", "subtype": "Comet C/2013 US10 (Catalina) passes perihelion", "details": {"object": "Comet C/2013 US10 (Catalina)"}, "timestamp_ut": "2016-01-02T22:49:00Z", "meta": {"time_listed": true}}
+{"date": "2015-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2015-12-22T04:47:57Z", "meta": {"time_listed": true}}
+{"date": "2016-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2016-01-02T22:49:00Z", "meta": {"time_listed": true}}
+{"date": "2016-03-08", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2016-03-08T18:12:00Z", "meta": {"time_listed": true}}
+{"date": "2016-03-08", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2016-03-09T01:54:29Z", "meta": {"time_listed": true}}
+{"date": "2016-03-19", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2016-03-20T04:30:11Z", "meta": {"time_listed": true}}
+{"date": "2016-03-23", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2016-03-23T12:00:50Z", "meta": {"time_listed": true}}
+{"date": "2016-04-20", "event_type": "perihelion", "subtype": "Comet C/2013 X1 (PANSTARRS) passes perihelion", "details": {"object": "Comet C/2013 X1 (PANSTARRS)"}, "timestamp_ut": "2016-01-02T22:49:00Z", "meta": {"time_listed": true}}
+{"date": "2016-05-30", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2016-05-30T21:29:00Z", "meta": {"time_listed": true}}
+{"date": "2016-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2016-06-20T22:34:11Z", "meta": {"time_listed": true}}
+{"date": "2016-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2016-07-04T16:24:00Z", "meta": {"time_listed": true}}
+{"date": "2016-09-01", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2016-09-01T09:03:06Z", "meta": {"time_listed": true}}
+{"date": "2016-09-16", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2016-09-16T19:05:05Z", "meta": {"time_listed": true}}
+{"date": "2016-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2016-09-22T14:21:07Z", "meta": {"time_listed": true}}
+{"date": "2016-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2016-12-21T10:44:10Z", "meta": {"time_listed": true}}
+{"date": "2017-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2017-01-04T14:18:00Z", "meta": {"time_listed": true}}
+{"date": "2017-02-10", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2017-02-11T00:32:53Z", "meta": {"time_listed": true}}
+{"date": "2017-02-26", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2017-02-26T14:58:23Z", "meta": {"time_listed": true}}
+{"date": "2017-03-14", "event_type": "perihelion", "subtype": "Comet 2P/Encke passes perihelion", "details": {"object": "Comet 2P/Encke"}, "timestamp_ut": "2017-01-04T14:18:00Z", "meta": {"time_listed": true}}
+{"date": "2017-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2017-03-20T10:28:38Z", "meta": {"time_listed": true}}
+{"date": "2017-04-08", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2017-04-08T21:23:00Z", "meta": {"time_listed": true}}
+{"date": "2017-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2017-06-21T04:24:09Z", "meta": {"time_listed": true}}
+{"date": "2017-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2017-07-03T20:11:00Z", "meta": {"time_listed": true}}
+{"date": "2017-08-07", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2017-08-07T18:10:37Z", "meta": {"time_listed": true}}
+{"date": "2017-08-21", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2017-08-21T18:30:11Z", "meta": {"time_listed": true}}
+{"date": "2017-09-06", "event_type": "perihelion", "subtype": "Comet 1I/'Oumuamua passes perihelion", "details": {"object": "Comet 1I/'Oumuamua"}, "timestamp_ut": "2018-01-03T05:34:00Z", "meta": {"time_listed": true}}
+{"date": "2017-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2017-09-22T20:01:48Z", "meta": {"time_listed": true}}
+{"date": "2017-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2017-12-21T16:27:57Z", "meta": {"time_listed": true}}
+{"date": "2018-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2018-01-03T05:34:00Z", "meta": {"time_listed": true}}
+{"date": "2018-01-31", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2018-01-31T13:26:44Z", "meta": {"time_listed": true}}
+{"date": "2018-02-15", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2018-02-15T21:05:12Z", "meta": {"time_listed": true}}
+{"date": "2018-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2018-03-20T16:15:27Z", "meta": {"time_listed": true}}
+{"date": "2018-05-10", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2018-05-10T11:53:00Z", "meta": {"time_listed": true}}
+{"date": "2018-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2018-06-21T10:07:18Z", "meta": {"time_listed": true}}
+{"date": "2018-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2018-07-06T16:47:00Z", "meta": {"time_listed": true}}
+{"date": "2018-07-12", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2018-07-13T02:47:52Z", "meta": {"time_listed": true}}
+{"date": "2018-07-27", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2018-07-27T20:20:21Z", "meta": {"time_listed": true}}
+{"date": "2018-07-31", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2018-07-31T07:45:00Z", "meta": {"time_listed": true}}
+{"date": "2018-08-11", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2018-08-11T09:57:44Z", "meta": {"time_listed": true}}
+{"date": "2018-08-16", "event_type": "perihelion", "subtype": "Comet C/2017 S3 (PANSTARRS) passes perihelion", "details": {"object": "Comet C/2017 S3 (PANSTARRS)"}, "timestamp_ut": "2019-01-03T05:20:00Z", "meta": {"time_listed": true}}
+{"date": "2018-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2018-09-23T01:54:06Z", "meta": {"time_listed": true}}
+{"date": "2018-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2018-12-21T22:22:44Z", "meta": {"time_listed": true}}
+{"date": "2019-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2019-01-03T05:20:00Z", "meta": {"time_listed": true}}
+{"date": "2019-01-05", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2019-01-06T01:28:11Z", "meta": {"time_listed": true}}
+{"date": "2019-01-20", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2019-01-21T05:16:05Z", "meta": {"time_listed": true}}
+{"date": "2019-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2019-03-20T21:58:26Z", "meta": {"time_listed": true}}
+{"date": "2019-06-11", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2019-06-12T03:04:00Z", "meta": {"time_listed": true}}
+{"date": "2019-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2019-06-21T15:54:15Z", "meta": {"time_listed": true}}
+{"date": "2019-07-02", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2019-07-02T19:16:13Z", "meta": {"time_listed": true}}
+{"date": "2019-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2019-07-04T22:11:00Z", "meta": {"time_listed": true}}
+{"date": "2019-07-16", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2019-07-16T21:38:13Z", "meta": {"time_listed": true}}
+{"date": "2019-09-13", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2019-09-23T07:50:10Z", "meta": {"time_listed": true}}
+{"date": "2019-12-09", "event_type": "perihelion", "subtype": "Comet 2I/Borisov passes perihelion", "details": {"object": "Comet 2I/Borisov"}, "timestamp_ut": "2020-01-05T07:48:00Z", "meta": {"time_listed": true}}
+{"date": "2019-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2019-12-22T04:19:26Z", "meta": {"time_listed": true}}
+{"date": "2019-12-25", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2019-12-26T05:13:08Z", "meta": {"time_listed": true}}
+{"date": "2020-01-05", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2020-01-05T07:48:00Z", "meta": {"time_listed": true}}
+{"date": "2020-01-10", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2020-01-10T19:21:18Z", "meta": {"time_listed": true}}
+{"date": "2020-03-19", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2020-03-20T03:49:37Z", "meta": {"time_listed": true}}
+{"date": "2020-06-18", "event_type": "perihelion", "subtype": "Comet C/2019 U6 (Lemmon) passes perihelion", "details": {"object": "Comet C/2019 U6 (Lemmon)"}, "timestamp_ut": "2020-01-05T07:48:00Z", "meta": {"time_listed": true}}
+{"date": "2020-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2020-06-20T21:43:41Z", "meta": {"time_listed": true}}
+{"date": "2020-06-21", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2020-06-21T06:41:27Z", "meta": {"time_listed": true}}
+{"date": "2020-07-03", "event_type": "perihelion", "subtype": "Comet 2P/Encke passes perihelion", "details": {"object": "Comet 2P/Encke"}, "timestamp_ut": "2020-01-05T07:48:00Z", "meta": {"time_listed": true}}
+{"date": "2020-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2020-07-04T11:34:00Z", "meta": {"time_listed": true}}
+{"date": "2020-07-04", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2020-07-05T04:44:25Z", "meta": {"time_listed": true}}
+{"date": "2020-07-15", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2020-07-15T09:57:00Z", "meta": {"time_listed": true}}
+{"date": "2020-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2020-09-22T13:30:39Z", "meta": {"time_listed": true}}
+{"date": "2020-10-06", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2020-10-06T14:13:00Z", "meta": {"time_listed": true}}
+{"date": "2020-12-14", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2020-12-14T16:16:35Z", "meta": {"time_listed": true}}
+{"date": "2020-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2020-12-21T10:02:20Z", "meta": {"time_listed": true}}
+{"date": "2021-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2021-01-02T13:50:00Z", "meta": {"time_listed": true}}
+{"date": "2021-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2021-03-20T09:37:28Z", "meta": {"time_listed": true}}
+{"date": "2021-05-26", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2021-05-26T11:13:53Z", "meta": {"time_listed": true}}
+{"date": "2021-06-10", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2021-06-10T10:52:39Z", "meta": {"time_listed": true}}
+{"date": "2021-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2021-06-21T03:32:10Z", "meta": {"time_listed": true}}
+{"date": "2021-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2021-07-05T22:27:00Z", "meta": {"time_listed": true}}
+{"date": "2021-08-19", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2021-08-20T05:26:00Z", "meta": {"time_listed": true}}
+{"date": "2021-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2021-09-22T19:21:05Z", "meta": {"time_listed": true}}
+{"date": "2022-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2022-01-04T06:54:00Z", "meta": {"time_listed": true}}
+{"date": "2022-01-03", "event_type": "perihelion", "subtype": "Comet C/2021 A1 (Leonard) passes perihelion", "details": {"object": "Comet C/2021 A1 (Leonard)"}, "timestamp_ut": "2022-01-04T06:54:00Z", "meta": {"time_listed": true}}
+{"date": "2022-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2022-03-20T15:33:25Z", "meta": {"time_listed": true}}
+{"date": "2022-04-30", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2022-04-30T20:28:06Z", "meta": {"time_listed": true}}
+{"date": "2022-05-15", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2022-05-16T04:14:09Z", "meta": {"time_listed": true}}
+{"date": "2022-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2022-06-21T09:13:51Z", "meta": {"time_listed": true}}
+{"date": "2022-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2022-07-04T07:11:00Z", "meta": {"time_listed": true}}
+{"date": "2022-08-19", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2022-09-26T02:14:00Z", "meta": {"time_listed": true}}
+{"date": "2022-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2022-09-23T01:03:42Z", "meta": {"time_listed": true}}
+{"date": "2022-09-25", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2022-09-26T02:14:00Z", "meta": {"time_listed": true}}
+{"date": "2022-10-25", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2022-10-25T10:48:42Z", "meta": {"time_listed": true}}
+{"date": "2022-11-08", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2022-11-08T11:02:09Z", "meta": {"time_listed": true}}
+{"date": "2022-11-30", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2022-12-01T02:12:00Z", "meta": {"time_listed": true}}
+{"date": "2022-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2022-12-21T21:48:13Z", "meta": {"time_listed": true}}
+{"date": "2023-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2023-01-04T16:18:00Z", "meta": {"time_listed": true}}
+{"date": "2023-01-12", "event_type": "perihelion", "subtype": "Comet C/2022 E3 (ZTF) passes perihelion", "details": {"object": "Comet C/2022 E3 (ZTF)"}, "timestamp_ut": "2023-01-04T16:18:00Z", "meta": {"time_listed": true}}
+{"date": "2023-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2023-03-20T21:24:27Z", "meta": {"time_listed": true}}
+{"date": "2023-04-19", "event_type": "eclipse", "subtype": "Hybrid solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2023-04-20T04:12:32Z", "meta": {"time_listed": true}}
+{"date": "2023-05-05", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2023-05-05T17:34:03Z", "meta": {"time_listed": true}}
+{"date": "2023-06-03", "event_type": "perihelion", "subtype": "Venus at perihelion (approx. greatest elongation east)", "details": {"planet": "Venus"}, "timestamp_ut": "2023-01-04T16:18:00Z", "meta": {"time_listed": true}}
+{"date": "2023-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2023-06-21T14:57:50Z", "meta": {"time_listed": true}}
+{"date": "2023-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2023-07-06T20:07:00Z", "meta": {"time_listed": true}}
+{"date": "2023-09-23", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2023-09-23T06:50:00Z", "meta": {"time_listed": true}}
+{"date": "2023-10-14", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2023-10-14T17:55:09Z", "meta": {"time_listed": true}}
+{"date": "2023-10-22", "event_type": "perihelion", "subtype": "Comet 2P/Encke passes perihelion", "details": {"object": "Comet 2P/Encke"}, "timestamp_ut": "2024-01-03T00:38:00Z", "meta": {"time_listed": true}}
+{"date": "2023-10-28", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2023-10-28T20:24:03Z", "meta": {"time_listed": true}}
+{"date": "2023-11-01", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2023-11-01T21:01:00Z", "meta": {"time_listed": true}}
+{"date": "2023-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2023-12-22T03:27:22Z", "meta": {"time_listed": true}}
+{"date": "2024-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2024-01-03T00:38:00Z", "meta": {"time_listed": true}}
+{"date": "2024-03-19", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2024-03-20T03:06:24Z", "meta": {"time_listed": true}}
+{"date": "2024-03-25", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2024-03-25T07:00:20Z", "meta": {"time_listed": true}}
+{"date": "2024-04-08", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2024-04-08T18:20:52Z", "meta": {"time_listed": true}}
+{"date": "2024-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2024-06-20T20:51:00Z", "meta": {"time_listed": true}}
+{"date": "2024-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2024-07-05T05:06:00Z", "meta": {"time_listed": true}}
+{"date": "2024-09-17", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2024-09-18T02:34:28Z", "meta": {"time_listed": true}}
+{"date": "2024-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2024-09-22T12:43:40Z", "meta": {"time_listed": true}}
+{"date": "2024-10-02", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2024-10-02T18:49:17Z", "meta": {"time_listed": true}}
+{"date": "2024-12-06", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2024-12-06T10:00:00Z", "meta": {"time_listed": true}}
+{"date": "2024-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2024-12-21T09:20:34Z", "meta": {"time_listed": true}}
+{"date": "2025-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2025-01-04T13:29:00Z", "meta": {"time_listed": true}}
+{"date": "2025-01-12", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2025-01-12T13:32:00Z", "meta": {"time_listed": true}}
+{"date": "2025-03-14", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2025-03-14T06:54:39Z", "meta": {"time_listed": true}}
+{"date": "2025-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2025-03-20T09:01:29Z", "meta": {"time_listed": true}}
+{"date": "2025-03-29", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2025-03-29T10:57:50Z", "meta": {"time_listed": true}}
+{"date": "2025-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2025-06-21T02:42:16Z", "meta": {"time_listed": true}}
+{"date": "2025-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2025-07-03T19:55:00Z", "meta": {"time_listed": true}}
+{"date": "2025-09-07", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2025-09-07T18:08:54Z", "meta": {"time_listed": true}}
+{"date": "2025-09-21", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2025-09-21T19:54:08Z", "meta": {"time_listed": true}}
+{"date": "2025-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2025-09-22T18:19:21Z", "meta": {"time_listed": true}}
+{"date": "2025-10-29", "event_type": "perihelion", "subtype": "Comet 3I/ATLAS passes perihelion", "details": {"object": "Comet 3I/ATLAS"}, "timestamp_ut": "2026-01-03T17:17:00Z", "meta": {"time_listed": true}}
+{"date": "2025-11-08", "event_type": "perihelion", "subtype": "Comet C/2025 A6 (Lemmon) passes perihelion", "details": {"object": "Comet C/2025 A6 (Lemmon)"}, "timestamp_ut": "2026-01-03T17:17:00Z", "meta": {"time_listed": true}}
+{"date": "2025-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2025-12-21T15:03:05Z", "meta": {"time_listed": true}}
+{"date": "2026-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2026-01-03T17:17:00Z", "meta": {"time_listed": true}}
+{"date": "2026-01-09", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2026-01-09T08:06:00Z", "meta": {"time_listed": true}}
+{"date": "2026-02-17", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2026-02-17T12:01:09Z", "meta": {"time_listed": true}}
+{"date": "2026-03-03", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2026-03-03T11:37:54Z", "meta": {"time_listed": true}}
+{"date": "2026-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2026-03-20T14:45:58Z", "meta": {"time_listed": true}}
+{"date": "2026-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2026-06-21T08:24:31Z", "meta": {"time_listed": true}}
+{"date": "2026-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2026-07-06T17:31:00Z", "meta": {"time_listed": true}}
+{"date": "2026-08-12", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2026-08-12T17:36:45Z", "meta": {"time_listed": true}}
+{"date": "2026-08-27", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2026-08-28T04:18:32Z", "meta": {"time_listed": true}}
+{"date": "2026-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2026-09-23T00:05:14Z", "meta": {"time_listed": true}}
+{"date": "2026-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2026-12-21T20:50:15Z", "meta": {"time_listed": true}}
+{"date": "2027-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2027-01-03T02:33:00Z", "meta": {"time_listed": true}}
+{"date": "2027-02-06", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2027-02-06T15:56:08Z", "meta": {"time_listed": true}}
+{"date": "2027-02-10", "event_type": "perihelion", "subtype": "Comet 2P/Encke passes perihelion", "details": {"comet": "2P/Encke"}, "timestamp_ut": "2027-01-03T02:33:00Z", "meta": {"time_listed": true}}
+{"date": "2027-02-10", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2027-02-10T15:32:00Z", "meta": {"time_listed": true}}
+{"date": "2027-02-19", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2027-02-20T00:08:00Z", "meta": {"time_listed": true}}
+{"date": "2027-02-20", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2027-02-20T23:23:40Z", "meta": {"time_listed": true}}
+{"date": "2027-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2027-03-20T20:24:42Z", "meta": {"time_listed": true}}
+{"date": "2027-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2027-06-21T14:10:50Z", "meta": {"time_listed": true}}
+{"date": "2027-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2027-07-05T05:06:00Z", "meta": {"time_listed": true}}
+{"date": "2027-07-18", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2027-07-18T15:44:56Z", "meta": {"time_listed": true}}
+{"date": "2027-08-02", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2027-08-02T10:05:15Z", "meta": {"time_listed": true}}
+{"date": "2027-08-17", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2027-08-17T07:28:42Z", "meta": {"time_listed": true}}
+{"date": "2027-09-23", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2027-09-23T06:01:44Z", "meta": {"time_listed": true}}
+{"date": "2027-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2027-12-22T02:42:10Z", "meta": {"time_listed": true}}
+{"date": "2028-01-05", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2028-01-05T12:28:00Z", "meta": {"time_listed": true}}
+{"date": "2028-01-26", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2028-01-26T15:12:31Z", "meta": {"time_listed": true}}
+{"date": "2028-03-12", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2028-03-13T01:46:00Z", "meta": {"time_listed": true}}
+{"date": "2028-03-19", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2028-03-20T02:17:09Z", "meta": {"time_listed": true}}
+{"date": "2028-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2028-06-20T20:02:00Z", "meta": {"time_listed": true}}
+{"date": "2028-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2028-07-03T22:18:00Z", "meta": {"time_listed": true}}
+{"date": "2028-07-06", "event_type": "perihelion", "subtype": "Comet 22P/Kopff passes perihelion", "details": {"comet": "22P/Kopff"}, "timestamp_ut": "2029-01-02T18:13:00Z", "meta": {"time_listed": true}}
+{"date": "2028-07-06", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2028-07-06T18:10:50Z", "meta": {"time_listed": true}}
+{"date": "2028-07-21", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2028-07-22T03:01:43Z", "meta": {"time_listed": true}}
+{"date": "2028-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2028-09-22T11:45:19Z", "meta": {"time_listed": true}}
+{"date": "2028-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2028-12-21T08:19:40Z", "meta": {"time_listed": true}}
+{"date": "2028-12-31", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2028-12-31T16:48:32Z", "meta": {"time_listed": true}}
+{"date": "2029-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2029-01-02T18:13:00Z", "meta": {"time_listed": true}}
+{"date": "2029-01-14", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2029-01-14T17:24:32Z", "meta": {"time_listed": true}}
+{"date": "2029-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2029-03-20T08:01:59Z", "meta": {"time_listed": true}}
+{"date": "2029-03-29", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2029-03-29T12:50:00Z", "meta": {"time_listed": true}}
+{"date": "2029-04-12", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2029-04-13T06:00:00Z", "meta": {"time_listed": true}}
+{"date": "2029-06-11", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2029-06-12T03:50:33Z", "meta": {"time_listed": true}}
+{"date": "2029-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2029-06-21T01:48:18Z", "meta": {"time_listed": true}}
+{"date": "2029-06-25", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2029-06-26T03:22:21Z", "meta": {"time_listed": true}}
+{"date": "2029-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2029-07-06T05:12:00Z", "meta": {"time_listed": true}}
+{"date": "2029-07-11", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2029-07-11T15:51:04Z", "meta": {"time_listed": true}}
+{"date": "2029-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2029-09-22T17:38:30Z", "meta": {"time_listed": true}}
+{"date": "2029-12-05", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2029-12-05T14:52:08Z", "meta": {"time_listed": true}}
+{"date": "2029-12-20", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2029-12-20T22:46:31Z", "meta": {"time_listed": true}}
+{"date": "2029-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2029-12-21T14:14:06Z", "meta": {"time_listed": true}}
+{"date": "2030-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2030-01-03T10:14:00Z", "meta": {"time_listed": true}}
+{"date": "2030-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2030-03-20T13:52:06Z", "meta": {"time_listed": true}}
+{"date": "2030-05-14", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2030-05-14T22:40:00Z", "meta": {"time_listed": true}}
+{"date": "2030-06-01", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2030-06-01T06:21:21Z", "meta": {"time_listed": true}}
+{"date": "2030-06-15", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2030-06-15T18:41:01Z", "meta": {"time_listed": true}}
+{"date": "2030-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2030-06-21T07:31:19Z", "meta": {"time_listed": true}}
+{"date": "2030-07-04", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2030-07-04T12:57:00Z", "meta": {"time_listed": true}}
+{"date": "2030-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2030-09-22T23:26:53Z", "meta": {"time_listed": true}}
+{"date": "2030-11-24", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2030-11-25T06:46:30Z", "meta": {"time_listed": true}}
+{"date": "2030-12-09", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2030-12-09T22:40:28Z", "meta": {"time_listed": true}}
+{"date": "2030-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2030-12-21T20:09:38Z", "meta": {"time_listed": true}}
+{"date": "2031-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2031-01-04T20:48:00Z", "meta": {"time_listed": true}}
+{"date": "2031-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2031-03-20T19:40:58Z", "meta": {"time_listed": true}}
+{"date": "2031-05-07", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2031-05-07T03:39:53Z", "meta": {"time_listed": true}}
+{"date": "2031-05-11", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2031-05-12T03:44:00Z", "meta": {"time_listed": true}}
+{"date": "2031-05-21", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2031-05-21T07:17:13Z", "meta": {"time_listed": true}}
+{"date": "2031-06-05", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2031-06-05T11:58:33Z", "meta": {"time_listed": true}}
+{"date": "2031-06-16", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2031-06-16T20:35:00Z", "meta": {"time_listed": true}}
+{"date": "2031-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2031-06-21T13:17:08Z", "meta": {"time_listed": true}}
+{"date": "2031-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2031-07-06T07:10:00Z", "meta": {"time_listed": true}}
+{"date": "2031-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2031-09-23T05:15:18Z", "meta": {"time_listed": true}}
+{"date": "2031-10-30", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2031-10-30T07:32:43Z", "meta": {"time_listed": true}}
+{"date": "2033-01-04", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2033-01-04T11:50:00Z", "meta": {"time_listed": true}}
+{"date": "2033-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2033-03-20T07:22:43Z", "meta": {"time_listed": true}}
+{"date": "2033-03-30", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2033-03-30T17:51:39Z", "meta": {"time_listed": true}}
+{"date": "2033-04-14", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2033-04-14T19:17:24Z", "meta": {"time_listed": true}}
+{"date": "2033-06-20", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2033-06-21T01:01:08Z", "meta": {"time_listed": true}}
+{"date": "2033-07-03", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2033-07-03T20:52:00Z", "meta": {"time_listed": true}}
+{"date": "2033-07-05", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2033-07-05T11:13:00Z", "meta": {"time_listed": true}}
+{"date": "2033-08-25", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2033-08-25T07:41:00Z", "meta": {"time_listed": true}}
+{"date": "2033-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2033-09-22T16:51:40Z", "meta": {"time_listed": true}}
+{"date": "2033-09-23", "event_type": "eclipse", "subtype": "Partial solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2033-09-23T13:39:47Z", "meta": {"time_listed": true}}
+{"date": "2033-10-08", "event_type": "eclipse", "subtype": "Total lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2033-10-08T10:58:09Z", "meta": {"time_listed": true}}
+{"date": "2033-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2033-12-21T13:45:59Z", "meta": {"time_listed": true}}
+{"date": "2034-01-03", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2034-01-04T04:47:00Z", "meta": {"time_listed": true}}
+{"date": "2034-03-20", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2034-03-20T10:14:35Z", "meta": {"time_listed": true}}
+{"date": "2034-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2034-03-20T13:17:29Z", "meta": {"time_listed": true}}
+{"date": "2034-04-03", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2034-04-03T19:18:54Z", "meta": {"time_listed": true}}
+{"date": "2034-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2034-06-21T06:44:11Z", "meta": {"time_listed": true}}
+{"date": "2034-07-06", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2034-07-06T18:49:00Z", "meta": {"time_listed": true}}
+{"date": "2034-09-12", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2034-09-12T16:13:49Z", "meta": {"time_listed": true}}
+{"date": "2034-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2034-09-22T22:39:34Z", "meta": {"time_listed": true}}
+{"date": "2034-09-27", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2034-09-28T02:56:50Z", "meta": {"time_listed": true}}
+{"date": "2034-09-30", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2034-10-01T05:31:00Z", "meta": {"time_listed": true}}
+{"date": "2034-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2034-12-21T19:34:00Z", "meta": {"time_listed": true}}
+{"date": "2035-01-02", "event_type": "perihelion", "subtype": "Earth at perihelion", "details": {"body": "Earth"}, "timestamp_ut": "2035-01-03T00:55:00Z", "meta": {"time_listed": true}}
+{"date": "2035-02-22", "event_type": "eclipse", "subtype": "Penumbral lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2035-02-22T08:53:56Z", "meta": {"time_listed": true}}
+{"date": "2035-03-09", "event_type": "eclipse", "subtype": "Annular solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2035-03-09T23:09:29Z", "meta": {"time_listed": true}}
+{"date": "2035-03-20", "event_type": "seasonal", "subtype": "March equinox", "details": {}, "timestamp_ut": "2035-03-20T19:02:43Z", "meta": {"time_listed": true}}
+{"date": "2035-06-21", "event_type": "seasonal", "subtype": "June solstice", "details": {}, "timestamp_ut": "2035-06-21T12:33:07Z", "meta": {"time_listed": true}}
+{"date": "2035-07-05", "event_type": "aphelion", "subtype": "Earth at aphelion", "details": {"body": "Earth"}, "timestamp_ut": "2035-07-05T18:22:00Z", "meta": {"time_listed": true}}
+{"date": "2035-08-15", "event_type": "eclipse", "subtype": "Partial lunar eclipse", "details": {"type": "lunar"}, "timestamp_ut": "2035-08-19T01:00:19Z", "meta": {"time_listed": true}}
+{"date": "2035-09-01", "event_type": "eclipse", "subtype": "Total solar eclipse", "details": {"type": "solar"}, "timestamp_ut": "2035-09-02T01:59:33Z", "meta": {"time_listed": true}}
+{"date": "2035-09-11", "event_type": "perigee", "subtype": "Mars at perigee", "details": {"planet": "Mars"}, "timestamp_ut": "2035-09-11T14:15:00Z", "meta": {"time_listed": true}}
+{"date": "2035-09-22", "event_type": "seasonal", "subtype": "September equinox", "details": {}, "timestamp_ut": "2035-09-23T04:38:55Z", "meta": {"time_listed": true}}
+{"date": "2035-11-06", "event_type": "perigee", "subtype": "Jupiter at perigee", "details": {"planet": "Jupiter"}, "timestamp_ut": "2035-11-06T20:01:00Z", "meta": {"time_listed": true}}
+{"date": "2035-12-21", "event_type": "seasonal", "subtype": "December solstice", "details": {}, "timestamp_ut": "2035-12-22T01:30:52Z", "meta": {"time_listed": true}}

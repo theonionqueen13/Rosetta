@@ -11,6 +11,7 @@ import numpy as np
 import streamlit as st
 from patterns_v2 import detect_shapes, connected_components_from_edges
 from now_v2 import _moon_phase_label_emoji
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 try:  # Pandas is part of the calculation pipeline; import defensively.
     import pandas as pd
@@ -20,11 +21,6 @@ except Exception:  # pragma: no cover - pandas is expected to be present.
 # ---------------------------------------------------------------------------
 # Lookup tables (glyphs, aspect metadata, colours)
 # ---------------------------------------------------------------------------
-
-import os
-import matplotlib.image as mpimg
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from now_v2 import _moon_phase_label_emoji  # reuse your existing label+icon mapping
 
 def _import_lookup_attr(name: str, default: Any) -> Any:
     """Attempt to import ``name`` from lookup_v2, falling back to legacy data."""
@@ -159,11 +155,25 @@ def get_shapes(pos, patterns, major_edges_all):
 		_cache_shapes[key] = detect_shapes(pos, patterns, major_edges_all)
 	return _cache_shapes[key]
 
+GROUP_COLORS = [
+  	"#B80303", "#FF5100", "#FFAE00", "#53B800",
+    "#0071BD", "#1D1FC5", "#6321CE", "#440101",
+]
+GROUP_COLORS_LIGHT = [
+  	"#B8030375", "#FF510075", "#FFAE0075", "#53B80075",
+    "#0071BD75", "#1D20C575", "#6321CE75", "#44010175",
+]
 SUBSHAPE_COLORS = [
 	"#FF5214", "#FFA600", "#FBFF00", "#87DB00",
 	"#00B828", "#049167", "#006EFF", "#1100FF",
 	"#6320FF", "#9E0099", "#FF00EA", "#720022",
 	"#4B2C06", "#534546", "#C4A5A5", "#5F7066",
+]
+SUBSHAPE_COLORS_LIGHT = [
+    "#FF521475", "#FFA60075", "#FBFF0075", "#87DB0075",
+    "#00B82875", "#04916775", "#006EFF75", "#1100FF75",
+    "#6320FF75", "#9E009975", "#FF00EA75", "#72002275",
+    "#4B2C0675", "#53454675", "#C4A5A575", "#5F706675",
 ]
 
 def shape_color_for(shape_id: Any) -> str:
@@ -394,14 +404,6 @@ ASPECTS = _import_lookup_attr(
         "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
         "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
     },
-)
-
-GROUP_COLORS = _import_lookup_attr(
-    "GROUP_COLORS",
-    (
-        "crimson","teal","darkorange","slateblue","seagreen",
-        "hotpink","gold","deepskyblue","orchid",
-    ),
 )
 
 def group_color_for(idx: int) -> str:
@@ -1380,3 +1382,4 @@ __all__ = [
     "_selected_house_system",
     "reset_chart_state",
 ]
+
