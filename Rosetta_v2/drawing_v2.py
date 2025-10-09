@@ -6,6 +6,8 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.image as mpimg
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+from matplotlib.colors import to_rgba, to_hex
 import os, re, math
 import numpy as np
 import streamlit as st
@@ -160,8 +162,8 @@ GROUP_COLORS = [
     "#0071BD", "#1D1FC5", "#6321CE", "#440101",
 ]
 GROUP_COLORS_LIGHT = [
-  	"#B8030375", "#FF510075", "#FFAE0075", "#53B80075",
-    "#0071BD75", "#1D20C575", "#6321CE75", "#44010175",
+  	"#B8030349", "#FF510049", "#FFAE0049", "#53B80049",
+    "#0071BD49", "#1D20C549", "#6321CE49", "#44010149",
 ]
 SUBSHAPE_COLORS = [
 	"#FF5214", "#FFA600", "#FBFF00", "#87DB00",
@@ -170,11 +172,80 @@ SUBSHAPE_COLORS = [
 	"#4B2C06", "#534546", "#C4A5A5", "#5F7066",
 ]
 SUBSHAPE_COLORS_LIGHT = [
-    "#FF521475", "#FFA60075", "#FBFF0075", "#87DB0075",
-    "#00B82875", "#04916775", "#006EFF75", "#1100FF75",
-    "#6320FF75", "#9E009975", "#FF00EA75", "#72002275",
-    "#4B2C0675", "#53454675", "#C4A5A575", "#5F706675",
+    "#FF521449", "#FFA60049", "#FBFF0049", "#87DB0049",
+    "#00B82849", "#04916749", "#006EFF49", "#1100FF49",
+    "#6320FF49", "#9E009949", "#FF00EA49", "#72002249",
+    "#4B2C06495", "#53454675", "#C4A5A549", "#5F706649",
 ]
+
+LUMINARIES_AND_PLANETS = {
+    "sun", "moon", "mercury", "venus", "mars",
+    "jupiter", "saturn", "uranus", "neptune", "pluto",
+}
+
+
+def _is_luminary_or_planet(name: str) -> bool:
+    return _canonical_name(name) in LUMINARIES_AND_PLANETS
+
+
+def _light_variant_for(color: str) -> str:
+    """Return the matching transparent/light variant for a palette colour."""
+
+    try:
+        idx = GROUP_COLORS.index(color)
+        if idx < len(GROUP_COLORS_LIGHT):
+            return GROUP_COLORS_LIGHT[idx]
+    except ValueError:
+        pass
+
+    try:
+        idx = SUBSHAPE_COLORS.index(color)
+        if idx < len(SUBSHAPE_COLORS_LIGHT):
+            return SUBSHAPE_COLORS_LIGHT[idx]
+    except ValueError:
+        pass
+
+    r, g, b, a = to_rgba(color)
+    return to_hex((r, g, b, a * 0.4), keep_alpha=True)
+
+
+def _segment_points(theta1: float, theta2: float, radius: float = 1.0, steps: int = 48) -> tuple[np.ndarray, np.ndarray]:
+    """Return theta/r arrays describing the straight chord between two polar points."""
+
+    x1, y1 = radius * np.cos(theta1), radius * np.sin(theta1)
+    x2, y2 = radius * np.cos(theta2), radius * np.sin(theta2)
+    xs = np.linspace(x1, x2, steps)
+    ys = np.linspace(y1, y2, steps)
+    thetas = np.unwrap(np.arctan2(ys, xs))
+    radii = np.hypot(xs, ys)
+    return thetas, radii
+
+
+def _draw_gradient_line(
+    ax,
+    theta1: float,
+    theta2: float,
+    color_start: str,
+    color_end: str,
+    linewidth: float,
+    linestyle: str,
+    radius: float = 1.0,
+) -> None:
+    """Draw a gradient (or solid) line between two polar points on the chart."""
+
+    if color_start == color_end:
+        ax.plot([theta1, theta2], [radius, radius], linestyle=linestyle, color=color_start, linewidth=linewidth)
+        return
+
+    steps = max(8, int(64 * np.hypot(np.cos(theta1) - np.cos(theta2), np.sin(theta1) - np.sin(theta2))))
+    thetas, radii = _segment_points(theta1, theta2, radius=radius, steps=steps)
+    points = np.column_stack([thetas, radii])
+    segments = np.stack([points[:-1], points[1:]], axis=1)
+    color_vals = np.linspace(to_rgba(color_start), to_rgba(color_end), len(segments))
+    lc = LineCollection(segments, colors=color_vals, linewidth=linewidth, linestyle=linestyle)
+    lc.set_capstyle("round")
+    lc.set_joinstyle("round")
+    ax.add_collection(lc)
 
 def shape_color_for(shape_id: Any) -> str:
     """Return a stable solid colour for the given shape identifier."""
@@ -819,10 +890,15 @@ def draw_aspect_lines(ax, pos, edges, asc_deg, visible_canon=None, linewidth_maj
             continue
         r1 = deg_to_rad(d1, asc_deg); r2 = deg_to_rad(d2, asc_deg)
         spec = ASPECTS.get(aspect, {})
-        color = color_override or spec.get("color", "gray")
+        base_color = color_override or spec.get("color", "gray")
         style = spec.get("style", "solid")
         lw = linewidth_major if aspect not in ("Quincunx", "Sesquisquare") else 1.0
-        ax.plot([r1, r2], [1, 1], linestyle=style, color=color, linewidth=lw)
+
+        light_color = _light_variant_for(base_color)
+        start_color = base_color if _is_luminary_or_planet(a) else light_color
+        end_color = base_color if _is_luminary_or_planet(b) else light_color
+
+        _draw_gradient_line(ax, r1, r2, start_color, end_color, lw, style)
         drawn.append((a, b, aspect))
     return drawn
 
@@ -841,8 +917,12 @@ def draw_minor_edges(ax, pos, edges, asc_deg, visible_canon=None, linewidth_mino
         if d1 is None or d2 is None:
             continue
         r1 = deg_to_rad(d1, asc_deg); r2 = deg_to_rad(d2, asc_deg)
-        color = color_override or ASPECTS.get(aspect, {}).get("color", "gray")
-        ax.plot([r1, r2], [1, 1], linestyle="dotted", color=color, linewidth=linewidth_minor)
+        base_color = color_override or ASPECTS.get(aspect, {}).get("color", "gray")
+        light_color = _light_variant_for(base_color)
+        start_color = base_color if _is_luminary_or_planet(a) else light_color
+        end_color = base_color if _is_luminary_or_planet(b) else light_color
+
+        _draw_gradient_line(ax, r1, r2, start_color, end_color, linewidth_minor, "dotted")
         drawn.append((a, b, aspect))
     return drawn
 
