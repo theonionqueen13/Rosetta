@@ -735,9 +735,18 @@ if df_cached is not None:
 		st.caption("Calculate a chart to render the wheel.")
 
 	st.subheader("🤓 Nerdy Chart Specs for Astrologers 📋")
+	unknown_time_chart = bool(
+		st.session_state.get("chart_unknown_time")
+		or st.session_state.get("profile_unknown_time")
+	)
+
 	if sect_cached:
 		st.info(f"Sect: **{sect_cached}**")
+	elif unknown_time_chart:
+		# Your preferred wording and punctuation
+		st.warning("Sect unavailable; time unknown")
 	elif sect_err:
+		# Other errors (if any) keep their message
 		st.warning(f"Sect unavailable: {sect_err}")
 	else:
 		st.caption("No sect computed yet.")
