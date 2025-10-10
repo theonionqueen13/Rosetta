@@ -37,7 +37,35 @@ def render_circuit_toggles(
 	singleton_map = singleton_map or {}
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
+
+	# --- Handle pending "Hide All" (from previous run) safely ---
+	if st.session_state.get("__pending_hide_all__"):
+		updates = {}
+		for i in range(len(patterns)):
+			updates[f"toggle_pattern_{i}"] = False
+			for sh in [sh for sh in shapes if sh["parent"] == i]:
+				updates[f"shape_{i}_{sh['id']}"] = False
+		if singleton_map:
+			for planet in singleton_map.keys():
+				updates[f"singleton_{planet}"] = False
+		updates[COMPASS_KEY] = False  # safe now; checkbox not yet instantiated
+		st.session_state.update(updates)
+		st.session_state["__pending_hide_all__"] = False
+		st.rerun()
 	
+	# --- Handle pending "Show All" (from previous run) safely ---
+	if st.session_state.get("__pending_show_all__"):
+		updates = {}
+		for i in range(len(patterns)):
+			updates[f"toggle_pattern_{i}"] = True
+		if singleton_map:
+			for planet in singleton_map.keys():
+				updates[f"singleton_{planet}"] = True
+		updates[COMPASS_KEY] = True  # safe here, checkbox not yet instantiated
+		st.session_state.update(updates)
+		st.session_state["__pending_show_all__"] = False
+		st.rerun()
+
 	# ---------- Header + events panel ----------
 
 	header_col, events_col = st.columns([2, 8])
@@ -64,7 +92,7 @@ def render_circuit_toggles(
 				events_placeholder.empty()
 						
 	st.divider()
-	c1, c2, c3, c4 = st.columns([2, 1, 2, 2])
+	c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
 
 	with c1:
 		unknown_time = bool(
@@ -72,28 +100,43 @@ def render_circuit_toggles(
 			or st.session_state.get("profile_unknown_time")
 		)
 		label = "Compass Needle" if unknown_time else "Compass Rose"
-		st.checkbox(label, key=COMPASS_KEY)
+		new_value = st.checkbox(label, key=COMPASS_KEY)
+
+	# Track compass value change but do not rerun immediately
+	prev_value = st.session_state.get("_last_compass_value")
+	if new_value != prev_value:
+		st.session_state["_last_compass_value"] = new_value
+		st.session_state["_pending_compass_rerun"] = True
 
 	with c2:
 		if st.button("Show All", key="btn_show_all_main"):
-			for i in range(len(patterns)):
-				st.session_state[f"toggle_pattern_{i}"] = True
+			st.session_state["__pending_show_all__"] = True
 			st.rerun()
+
 	with c3:
 		if st.button("Hide All", key="btn_hide_all_main"):
-			for i in range(len(patterns)):
-				st.session_state[f"toggle_pattern_{i}"] = False
-				for sh in [sh for sh in shapes if sh["parent"] == i]:
-					st.session_state[f"shape_{i}_{sh['id']}"] = False
-			st.session_state[COMPASS_KEY] = False
-			if singleton_map:
-				for planet in singleton_map.keys():
-					st.session_state[f"singleton_{planet}"] = False
+			# store desired state for next run instead of mutating live widget state
+			st.session_state["__pending_hide_all__"] = True
 			st.rerun()
+
+	st.session_state.setdefault("label_style", "glyph")
 	with c4:
 		st.subheader("Single Placements")
-		label_style = st.session_state.get("label_style", "glyph")
+
+		# --- ensure label style is fully synced before rendering ---
+		old_style = st.session_state.get("label_style", "glyph")
+		# The radio button writes to this key; read its current choice
+		new_style = st.session_state.get("__label_style_choice", old_style)
+		if new_style.lower() != old_style:
+			st.session_state["label_style"] = new_style.lower()
+			st.rerun()  # force full refresh so both chart + singles update instantly
+		else:
+			st.session_state["label_style"] = new_style.lower()
+
+		# now use the up-to-date label style
+		label_style = st.session_state["label_style"]
 		want_glyphs = label_style == "glyph"
+
 		if singleton_map:
 			cols_per_row = min(8, max(1, len(singleton_map)))
 			cols = st.columns(cols_per_row)
@@ -107,6 +150,7 @@ def render_circuit_toggles(
 						st.checkbox(label_text, key=key)
 		else:
 			st.markdown("_(none)_")
+
 
 	circuits_col, options_col = st.columns([4, 2])
 	
@@ -203,22 +247,35 @@ def render_circuit_toggles(
 			from house_selector_v2 import render_house_system_selector
 			render_house_system_selector()
 
-			# Label style → write to session for the renderer
+			# --- Label Style (keep visual location, fix instant sync) ---
 			st.session_state.setdefault("label_style", "glyph")
-			label_default_is_glyph = st.session_state["label_style"] == "glyph"
+			old_style = st.session_state["label_style"]
+			label_default_is_glyph = old_style == "glyph"
+
 			label_choice = st.radio(
 				"Label Style",
 				["Text", "Glyph"],
 				index=(1 if label_default_is_glyph else 0),
 				horizontal=True,
-				key="__label_style_choice",
+				key="__label_style_choice_main",  # unique key
 			)
-			st.session_state["label_style"] = label_choice.lower()
+			new_style = label_choice.lower()
+
+			# Update session + rerun instantly if changed
+			if new_style != old_style:
+				st.session_state["label_style"] = new_style
+				st.rerun()
+			else:
+				st.session_state["label_style"] = new_style
 
 			# Dark mode → persist to session
 			st.session_state.setdefault("dark_mode", False)
 			st.checkbox("🌙 Dark Mode", key="dark_mode")
 
+	# If compass value changed, trigger a single safe rerun *after* all widgets exist
+	if st.session_state.get("_pending_compass_rerun"):
+		st.session_state["_pending_compass_rerun"] = False
+		st.rerun()
 
 	# return AFTER both columns render
 	return toggles, pattern_labels, saved_profiles
