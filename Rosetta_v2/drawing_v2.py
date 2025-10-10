@@ -158,12 +158,12 @@ def get_shapes(pos, patterns, major_edges_all):
 	return _cache_shapes[key]
 
 GROUP_COLORS = [
-  	"#B80303", "#FF5100", "#FFAE00", "#53B800",
-	"#0071BD", "#1D1FC5", "#6321CE", "#440101",
+  	"#008CFF", "#FFAE00", "#B80303","#6321CE",
+	"#FF5100", "#53B800", "#1D1FC5", "#440101",
 ]
 GROUP_COLORS_LIGHT = [
-  	"#B8030349", "#FF510049", "#FFAE0049", "#53B80049",
-	"#0071BD49", "#1D20C549", "#6321CE49", "#44010149",
+  	"#008Cff63", "#EED29463", "#C7717163", "#A98ED363",
+	"#F5A98658", "#9DD17263", "#9394EC63", "#85686863",
 ]
 SUBSHAPE_COLORS = [
 	"#FF5214", "#FFA600", "#FBFF00", "#87DB00",
