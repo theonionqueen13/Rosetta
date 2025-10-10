@@ -1,5 +1,6 @@
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
+from lookup_v2 import GLYPHS
 
 COMPASS_KEY = "ui_compass_overlay"
 
@@ -34,23 +35,51 @@ def render_circuit_toggles(
 	patterns = patterns or []
 	shapes = shapes or []
 	singleton_map = singleton_map or {}
-
-
-
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
 	
-	# ---------- Header + bulk actions ----------
-	
-	d1, d2, d3, d4 = st.columns([2, 1, 2, 4])
-	with d1:
+	# ---------- Header + events panel ----------
+
+	header_col, events_col = st.columns([2, 8])
+	with header_col:
 		st.subheader("🗺️Circuits")
-	with d2:
+	with events_col:
+		# Reserve a dedicated spot for the events block so we can reliably
+		# clear any prior render when a new chart is calculated.
+		events_placeholder = st.empty()
+
+		# Always compute and blank/overwrite first on every rerun
+		update_events_html_state(
+				st.session_state.get("chart_dt_utc"),
+				events_path="events.jsonl",
+				show_no_events=False,   # flip True if you want a soft message on no results
+		)
+
+		# Single, fixed render point. When there is no HTML, explicitly
+		# empty the placeholder so stale content never lingers.
+		html = st.session_state.get("events_lookup_html", "")
+		if html:
+				events_placeholder.markdown(html, unsafe_allow_html=True)
+		else:
+				events_placeholder.empty()
+						
+	st.divider()
+	c1, c2, c3, c4 = st.columns([2, 1, 2, 2])
+
+	with c1:
+		unknown_time = bool(
+			st.session_state.get("chart_unknown_time")
+			or st.session_state.get("profile_unknown_time")
+		)
+		label = "Compass Needle" if unknown_time else "Compass Rose"
+		st.checkbox(label, key=COMPASS_KEY)
+
+	with c2:
 		if st.button("Show All", key="btn_show_all_main"):
 			for i in range(len(patterns)):
 				st.session_state[f"toggle_pattern_{i}"] = True
 			st.rerun()
-	with d3:
+	with c3:
 		if st.button("Hide All", key="btn_hide_all_main"):
 			for i in range(len(patterns)):
 				st.session_state[f"toggle_pattern_{i}"] = False
@@ -61,47 +90,27 @@ def render_circuit_toggles(
 				for planet in singleton_map.keys():
 					st.session_state[f"singleton_{planet}"] = False
 			st.rerun()
+	with c4:
+		st.subheader("Single Placements")
+		label_style = st.session_state.get("label_style", "glyph")
+		want_glyphs = label_style == "glyph"
+		if singleton_map:
+			cols_per_row = min(8, max(1, len(singleton_map)))
+			cols = st.columns(cols_per_row)
+			for j, (planet, _) in enumerate(singleton_map.items()):
+				with cols[j % cols_per_row]:
+					key = f"singleton_{planet}"
+					label_text = GLYPHS.get(planet, planet) if want_glyphs else planet
+					if key not in st.session_state:
+						st.checkbox(label_text, value=False, key=key)
+					else:
+						st.checkbox(label_text, key=key)
+		else:
+			st.markdown("_(none)_")
 
-	with d4:
-			from event_lookup_v2 import update_events_html_state
-
-			# Reserve a dedicated spot for the events block so we can reliably
-			# clear any prior render when a new chart is calculated.
-			events_placeholder = st.empty()
-
-			# Always compute and blank/overwrite first on every rerun
-			update_events_html_state(
-					st.session_state.get("chart_dt_utc"),
-					events_path="events.jsonl",
-					show_no_events=False,   # flip True if you want a soft message on no results
-			)
-
-			# Single, fixed render point. When there is no HTML, explicitly
-			# empty the placeholder so stale content never lingers.
-			html = st.session_state.get("events_lookup_html", "")
-			if html:
-					events_placeholder.markdown(html, unsafe_allow_html=True)
-			else:
-					events_placeholder.empty()
-						
-	st.divider()
-	c1, c2 = st.columns([4, 2])
-
-	# ---------- LEFT: circuits & sub-shapes ----------
-	with c1:
-		# Compass overlay: show full rose when birth time known, needle otherwise
-		unknown_time = bool(
-				st.session_state.get("chart_unknown_time")
-				or st.session_state.get("profile_unknown_time")
-		)
-		# Compass overlay: single checkbox, label swaps by unknown_time
-		unknown_time = bool(
-			st.session_state.get("chart_unknown_time")
-			or st.session_state.get("profile_unknown_time")
-		)
-		label = "Compass Needle" if unknown_time else "Compass Rose"
-		st.checkbox(label, key=COMPASS_KEY)
-
+	circuits_col, options_col = st.columns([4, 2])
+	
+	with circuits_col:
 		# Pattern checkboxes + expanders
 		half = (len(patterns) + 1) // 2
 		left_patterns, right_patterns = st.columns(2)
@@ -187,7 +196,7 @@ def render_circuit_toggles(
 					st.session_state["saved_circuit_names"] = current.copy()
 
 	# ---------- RIGHT: house system / label style / dark mode ----------
-	with c2:
+	with options_col:
 		# Only show these after a chart exists
 		if st.session_state.get("last_df") is not None:
 			# House selector (this just updates session state; no run_chart)
