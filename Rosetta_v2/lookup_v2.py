@@ -209,8 +209,30 @@ DIGNITIES = {
 }
 
 GROUP_COLORS = [
-    "crimson", "teal", "darkorange", "slateblue", "seagreen",
-    "hotpink", "gold", "deepskyblue", "orchid"
+  	"#B80303", "#FF5100", "#FFAE00", "#53B800",
+    "#0071BD", "#1D1FC5", "#6321CE", "#440101",
+]
+GROUP_COLORS_LIGHT = [
+  	"#B8030375", "#FF510075", "#FFAE0075", "#53B80075",
+    "#0071BD75", "#1D20C575", "#6321CE75", "#44010175",
+]
+SUBSHAPE_COLORS_LIGHT = [
+    "#FF521475", "#FFA60075", "#FBFF0075", "#87DB0075",
+    "#00B82875", "#04916775", "#006EFF75", "#1100FF75",
+    "#6320FF75", "#9E009975", "#FF00EA75", "#72002275",
+    "#4B2C0675", "#53454675", "#C4A5A575", "#5F706675",
+]
+SYNASTRY_COLORS_1 = [
+	"#FF0000", "#FF5E00", "#FF9900", "#FFD000",
+	"#AA7D00", "#965500", "#5E2D00", "#440101",
+]
+SYNASTRY_COLORS_1 = [
+	"#FF000075", "#FF5E0075", "#FF990075", "#FFD00075",
+	"#AA7D0075", "#96550075", "#5E2D0075", "#44010175",
+]
+SYNASTRY_COLORS_2 = [
+	"#2D9E0075", "#01F50D75", "#00D49575", "#00E1FF75",
+	"#00A2FF75", "#0044FF75", "#46278F75", "#72529775",
 ]
 ZODIAC_SIGNS = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
 ZODIAC_COLORS = ["red", "green", "#DAA520", "blue"] * 3
@@ -222,6 +244,7 @@ ASPECTS = {
     "Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted"},
     "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
     "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
+    "Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
 }
 
 ALIASES_MEANINGS = {
