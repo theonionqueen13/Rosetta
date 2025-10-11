@@ -474,12 +474,23 @@ def calculate_chart(
 	return combined_df
 
 def chart_sect_from_df(df) -> str:
-	# exact object names from your DF: "Sun" and "AC"
-	sun = float(df.loc[df["Object"] == "Sun", "Longitude"].iloc[0]) % 360.0
-	ac  = float(df.loc[df["Object"] == "AC",  "Longitude"].iloc[0]) % 360.0
-	dc  = (ac + 180.0) % 360.0
-	# Above the horizon = DC → AC arc
-	return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
+    """
+    Return 'Diurnal' or 'Nocturnal' based on Sun relative to horizon.
+    Requires both 'Sun' and 'AC' rows. If either is missing (e.g., Unknown Time),
+    raise ValueError('time unknown') so the caller can present a friendly message.
+    """
+    sun_series = df.loc[df["Object"] == "Sun", "Longitude"]
+    ac_series  = df.loc[df["Object"] == "AC",  "Longitude"]
+
+    if sun_series.empty or ac_series.empty:
+        # Unknown time charts typically omit AC/DC (no house cusps)
+        raise ValueError("time unknown")
+
+    sun = float(sun_series.iloc[0]) % 360.0
+    ac  = float(ac_series.iloc[0])  % 360.0
+    dc  = (ac + 180.0) % 360.0
+
+    return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
 
 def _house_of_degree(deg: float, cusps: list[float]) -> int | None:
 	"""
@@ -804,8 +815,7 @@ _BISEPT   = 102 + 52/60
 _TRISEPT  = 154 + 17/60
 
 _ASPECTS_MAJOR = {
-	"Conjunction":   {"angle": 0,   "orb": 4},
-	"Semi-sextile":  {"angle": 30,  "orb": 2},   # minor, kept here for unified scan; we'll sort into minors later
+	"Conjunction":   {"angle": 0,   "orb": 4},  # minor, kept here for unified scan; we'll sort into minors later
 	"Sextile":       {"angle": 60,  "orb": 3},
 	"Square":        {"angle": 90,  "orb": 3},
 	"Trine":         {"angle": 120, "orb": 3},
@@ -822,6 +832,7 @@ _ASPECTS_MINOR = {
 	"Septile":       {"angle": _SEPTILE,  "orb": 2},
 	"Biseptile":     {"angle": _BISEPT,   "orb": 2},
 	"Triseptile":    {"angle": _TRISEPT,  "orb": 2},
+	"Semisextile":  {"angle": 30,  "orb": 2}, 
 }
 
 # One combined lookup for detection pass
