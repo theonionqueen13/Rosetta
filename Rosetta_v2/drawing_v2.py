@@ -175,7 +175,7 @@ SUBSHAPE_COLORS_LIGHT = [
 	"#FF521449", "#FFA60049", "#FBFF0049", "#87DB0049",
 	"#00B82849", "#04916749", "#006EFF49", "#1100FF49",
 	"#6320FF49", "#9E009949", "#FF00EA49", "#72002249",
-	"#4B2C06495", "#53454675", "#C4A5A549", "#5F706649",
+	"#4B2C0649", "#53454675", "#C4A5A549", "#5F706649",
 ]
 
 LUMINARIES_AND_PLANETS = {
@@ -189,8 +189,11 @@ def _is_luminary_or_planet(name: str) -> bool:
 
 
 def _light_variant_for(color: str) -> str:
-	"""Return the matching transparent/light variant for a palette colour."""
-
+	"""Return a lighter + less-opaque variant of `color`.
+	1) If `color` is in GROUP_COLORS or SUBSHAPE_COLORS, return the matching *_LIGHT entry.
+	2) Otherwise, blend the RGB toward white and scale alpha down.
+	"""
+	# 1) Exact palette matches first
 	try:
 		idx = GROUP_COLORS.index(color)
 		if idx < len(GROUP_COLORS_LIGHT):
@@ -205,8 +208,22 @@ def _light_variant_for(color: str) -> str:
 	except ValueError:
 		pass
 
+	# 2) Generic fallback: lighten + reduce opacity
+	# Tune these two knobs if you want a different feel:
+	BLEND_TOWARD_WHITE = 0.35  # 0..1 (higher = lighter)
+	ALPHA_SCALE = 0.6          # 0..1 (lower = more transparent)
+
 	r, g, b, a = to_rgba(color)
-	return to_hex((r, g, b, a * 0.4), keep_alpha=True)
+
+	# Lighten toward white
+	r = r + (1.0 - r) * BLEND_TOWARD_WHITE
+	g = g + (1.0 - g) * BLEND_TOWARD_WHITE
+	b = b + (1.0 - b) * BLEND_TOWARD_WHITE
+
+	# Reduce opacity (respect any existing alpha)
+	a = a * ALPHA_SCALE
+
+	return to_hex((r, g, b, a), keep_alpha=True)
 
 def _lighten_color(color: str, blend: float = 0.5) -> str:
 	"""Blend ``color`` toward white by ``blend`` (0..1)."""
