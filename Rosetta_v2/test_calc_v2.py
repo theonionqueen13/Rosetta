@@ -9,6 +9,16 @@ import datetime as dt
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytz
+from geopy.geocoders import OpenCage
+from timezonefinder import TimezoneFinder
+from profiles_v2 import format_object_profile_html, ordered_object_rows
+import os, importlib.util, streamlit as st
+st.set_page_config(layout="wide")
+from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
+from drawing_v2 import render_chart, render_chart_with_shapes
+from wizard_v2 import render_guided_wizard
+from toggles_v2 import render_circuit_toggles
+from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
 
 current_user_id = "test-user"
 
@@ -17,6 +27,111 @@ COMPASS_KEY = "ui_compass_overlay"
 # In-memory stores used by the stubs
 _TEST_PROFILES: Dict[str, Dict[str, Any]] = {}
 _TEST_COMMUNITY: Dict[str, Dict[str, Any]] = {}
+
+# --- Background image (base64, no external hosting) ---
+import base64
+from pathlib import Path
+import streamlit as st
+
+# --- Background image (base64, no external hosting) ---
+import base64
+from pathlib import Path
+import streamlit as st
+
+@st.cache_data(show_spinner=False)
+def _encode_image_base64(path_str: str) -> str:
+    """Read a local image and return a base64 data URI (jpeg/png/webp)."""
+    p = Path(path_str)
+    if not p.exists():
+        # Prefer a hard fail so you notice wrong paths fast.
+        raise FileNotFoundError(f"Background image not found: {p.resolve()}")
+    ext = p.suffix.lower()
+    if ext == ".png":
+        mime = "image/png"
+    elif ext == ".webp":
+        mime = "image/webp"
+    else:
+        mime = "image/jpeg"  # default to jpeg for jpg/jpeg/others
+    b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
+    return f"data:{mime};base64,{b64}"
+
+def apply_background_base64(image_path: str, overlay: float = 0.40) -> None:
+    """
+    Page-wide background using a LOCAL image (base64) + adjustable dark overlay.
+    Control overlay here in code (0.0 = none, 1.0 = black).
+    """
+    overlay = max(0.0, min(1.0, float(overlay)))
+    data_uri = _encode_image_base64(image_path)
+
+    st.markdown(
+        f"""
+        <style>
+        /* Main app view container background */
+        [data-testid="stAppViewContainer"] {{
+            background-image:
+                linear-gradient(rgba(0,0,0,{overlay}), rgba(0,0,0,{overlay})),
+                url('{data_uri}');
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+
+        /* Let the background show under the main content */
+        .block-container {{
+            background: transparent;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# --- Theme-aware background chooser (paste below apply_background_base64) ---
+def set_background_for_theme(
+    *,
+    light_image_path: str,
+    dark_image_path: str,
+    light_overlay: float = 0.25,
+    dark_overlay: float = 0.45,
+    dark_mode: bool | None = None,
+) -> bool:
+    """
+    Chooses the background based on dark_mode and applies it.
+    Returns the resolved dark_mode (so you can pass the same value to your drawing funcs).
+    """
+    # If caller didn't pass dark_mode, try to infer from session or theme:
+    if dark_mode is None:
+        # 1) Try your own app state, if you keep a toggle there:
+        dark_mode = bool(st.session_state.get("ui_dark_mode", False))
+        # 2) If you don't have a custom toggle, try Streamlit theme (light/dark):
+        try:
+            base_theme = st.get_option("theme.base")  # "light" or "dark" if configured
+            if base_theme in ("light", "dark"):
+                dark_mode = (base_theme == "dark")
+        except Exception:
+            pass  # fallback to whatever we already decided
+
+    if dark_mode:
+        apply_background_base64(dark_image_path, dark_overlay)
+    else:
+        apply_background_base64(light_image_path, light_overlay)
+
+    return dark_mode
+
+# --- Pick backgrounds for each theme and apply ---
+LIGHT_BG = "Rosetta_v2/pngs/nebula2.jpg"
+DARK_BG  = "Rosetta_v2/pngs/galaxies.jpg"
+LIGHT_OVERLAY = 0.20
+DARK_OVERLAY  = 0.45
+
+# Read the toggle value that toggles_v2.py writes
+resolved_dark_mode = set_background_for_theme(
+    light_image_path=LIGHT_BG,
+    dark_image_path=DARK_BG,
+    light_overlay=LIGHT_OVERLAY,
+    dark_overlay=DARK_OVERLAY,
+    dark_mode=st.session_state.get("dark_mode", False),  # <- wired to your checkbox
+)
 
 def save_user_profile_db(user_id: str, name: str, payload: Dict[str, Any]) -> None:
 	users = _TEST_PROFILES.setdefault(user_id, {})
@@ -58,18 +173,6 @@ def is_admin(user_id: str) -> bool:
 	# In tests, just say yes or no—doesn’t matter unless you assert on it.
 	return True
 # ---- End stubs ----
-
-from geopy.geocoders import OpenCage
-from timezonefinder import TimezoneFinder
-from profiles_v2 import format_object_profile_html, ordered_object_rows
-import os, importlib.util, streamlit as st
-st.set_page_config(layout="wide")
-from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
-from drawing_v2 import render_chart, render_chart_with_shapes
-from wizard_v2 import render_guided_wizard
-from toggles_v2 import render_circuit_toggles
-from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
-
 
 def _geocode_city_with_timezone(city_query: str) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
 	"""Return (lat, lon, tz_name, formatted_address) for the provided city query."""
@@ -189,7 +292,7 @@ def _refresh_chart_figure():
 			label_style=label_style,
 			singleton_map=singleton_map or {},
 			df=df,
-			dark_mode=dark_mode,
+			dark_mode=resolved_dark_mode,
 			shapes=shapes,
 			shape_toggles_by_parent=shape_toggles_by_parent,
 			singleton_toggles=singleton_toggles,
@@ -198,12 +301,12 @@ def _refresh_chart_figure():
 	except Exception:
 		rr = render_chart(
 			df,
+			dark_mode=resolved_dark_mode,
 			visible_toggle_state=None,
 			edges_major=edges_major,
 			edges_minor=edges_minor,
 			house_system=_selected_house_system(),
-			dark_mode=dark_mode,
-			label_style=label_style,
+			label_style=st.session_state.get("label_style", "glyph"),
 			compass_on=st.session_state.get("toggle_compass_rose", True),
 			degree_markers=True,
 			zodiac_labels=True,
