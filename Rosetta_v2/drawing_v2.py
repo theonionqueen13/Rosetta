@@ -599,12 +599,13 @@ ASPECTS = _import_lookup_attr(
 	"ASPECTS",
 	{
 		"Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
-		"Sextile": {"angle": 60, "orb": 3, "color": "purple",  "style": "solid"},
-		"Square": {"angle": 90, "orb": 3, "color": "red",     "style": "solid"},
-		"Trine": {"angle": 120, "orb": 3, "color": "blue",    "style": "solid"},
-		"Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted"},
-		"Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
-		"Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
+		"Sextile": {"angle": 60, "orb": 3, "color": "#6321CE", "style": "solid"},
+		"Square": {"angle": 90, "orb": 3, "color": "#F70000", "style": "solid"},
+		"Trine": {"angle": 120, "orb": 3, "color": "#0011FF", "style": "solid"},
+		"Sesquisquare": {"angle": 135, "orb": 2, "color": "#FF5100", "style": "dotted"},
+		"Quincunx": {"angle": 150, "orb": 3, "color": "#439400", "style": "dotted"},
+		"Opposition": {"angle": 180, "orb": 3, "color": "#F70000", "style": "solid"},
+		"Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
 	},
 )
 

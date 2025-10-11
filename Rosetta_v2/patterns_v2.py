@@ -47,7 +47,6 @@ def glyph_for(name: str) -> str:
     except Exception:
         return ""
 
-
 def _object_rows(df):
     """Return the object-only subset of the dataframe via calc_v2 helper."""
 
@@ -55,7 +54,6 @@ def _object_rows(df):
     if extractor is not None:
         return extractor(df)
     return df
-
 
 def positions_from_dataframe(df) -> dict[str, float]:
     """Build {name: longitude} from the already-curated calc_v2 dataframe."""
@@ -72,7 +70,6 @@ def positions_from_dataframe(df) -> dict[str, float]:
             continue
     return pos
 
-
 def edges_from_major_list(edges_major: Sequence[tuple]) -> list[tuple]:
     """Convert calc_v2 major edges (with metadata) into legacy ((p1,p2), aspect)."""
 
@@ -87,14 +84,12 @@ def edges_from_major_list(edges_major: Sequence[tuple]) -> list[tuple]:
             formatted.append(((p1, p2), aspect))
     return formatted
 
-
 def build_patterns_from_edges(pos: dict[str, float], edges_major: Sequence[tuple]) -> list[set[str]]:
     """Generate conjunction-aware patterns using calc_v2 major edges."""
 
     nodes = list(pos.keys())
     formatted_edges = edges_from_major_list(edges_major)
     return connected_components_from_edges(nodes, formatted_edges)
-
 
 def prepare_pattern_inputs(df, edges_major: Sequence[tuple] | None = None):
     """Return (pos, patterns, major_edges_all) ready for shape detection."""
@@ -109,7 +104,6 @@ def prepare_pattern_inputs(df, edges_major: Sequence[tuple] | None = None):
 # -------------------------------
 # Connected components from edges
 # -------------------------------
-
 def aspect_match(pos, p1, p2, target_aspect):
     """Check if planets form the given aspect within orb tolerance."""
     angle = abs(pos[p1] - pos[p2]) % 360
@@ -146,7 +140,6 @@ def connected_components_from_edges(nodes, edges):
 # -------------------------------
 # Conjunction clustering
 # -------------------------------
-
 def _cluster_conjunctions_for_detection(pos, members, orb=None):
     """
     Cluster members that are within the conjunction orb.
@@ -186,7 +179,6 @@ def _cluster_conjunctions_for_detection(pos, members, orb=None):
 # -------------------------------
 # Shape detection - FIXED VERSION
 # -------------------------------
-
 def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_all, widen_orb=False):
     """
     Detect shapes for this parent using ONLY the provided major edge list.
@@ -582,24 +574,6 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
 # -------------------------------
 # Detect shapes (public API)
 # -------------------------------
-
-# -------------------------------
-# Aspect helpers
-# -------------------------------
-
-def _aspect_match_wide(pos, p1, p2, target_aspect, widen=1.0):
-    """Looser orb check than strict aspect_match, for special cases."""
-    angle = abs(pos[p1] - pos[p2]) % 360
-    if angle > 180:
-        angle = 360 - angle
-    data = ASPECTS[target_aspect]
-    return abs(angle - data["angle"]) <= data["orb"] * widen
-
-
-# -------------------------------
-# Detect shapes (public API)
-# -------------------------------
-
 def detect_shapes(pos, patterns, major_edges_all):
     shapes = []
     sid = 0
@@ -873,7 +847,6 @@ def detect_shapes(pos, patterns, major_edges_all):
     shapes.sort(key=sort_key)
     return shapes
 
-
 def detect_shapes_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
     """High-level helper that plugs curated calc_v2 data into detect_shapes."""
 
@@ -881,21 +854,8 @@ def detect_shapes_from_dataframe(df, edges_major: Sequence[tuple] | None = None)
     return detect_shapes(pos, patterns, major_edges_all)
 
 # -------------------------------
-# Aspect helpers
-# -------------------------------
-
-def _aspect_match_wide(pos, p1, p2, target_aspect, widen=1.0):
-    """Looser orb check than strict aspect_match, for special cases."""
-    angle = abs(pos[p1] - pos[p2]) % 360
-    if angle > 180:
-        angle = 360 - angle
-    data = ASPECTS[target_aspect]
-    return abs(angle - data["angle"]) <= data["orb"] * widen
-
-# -------------------------------
 # Suppression
 # -------------------------------
-
 def apply_suppression(shapes):
     suppressed = set()
 
@@ -949,9 +909,8 @@ def apply_suppression(shapes):
 # -------------------------------
 # Minors (unchanged)
 # -------------------------------
-
 def detect_minor_links_with_singletons(pos, patterns):
-    minor_aspects = ["Quincunx", "Sesquisquare"]
+    minor_aspects = ["Quincunx", "Sesquisquare", "Semisextile"]
     connections = []
     pattern_map = {}
     for idx, pattern in enumerate(patterns):
@@ -977,7 +936,6 @@ def detect_minor_links_with_singletons(pos, patterns):
                 break
     return connections, singleton_map
 
-
 def detect_minor_links_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
     """Wrapper using calc_v2 dataframes to find filaments + singleton map."""
 
@@ -1000,7 +958,7 @@ def internal_minor_edges_for_pattern(pos, members):
             angle = abs(pos[p1] - pos[p2]) % 360
             if angle > 180:
                 angle = 360 - angle
-            for asp in ["Quincunx", "Sesquisquare"]:
+            for asp in ["Quincunx", "Sesquisquare", "Semisextile"]:
                 data = ASPECTS[asp]
                 if abs(angle - data["angle"]) <= data["orb"]:
                     minors.append(((p1, p2), asp))
