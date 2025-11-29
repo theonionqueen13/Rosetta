@@ -2,6 +2,7 @@ from zoneinfo import ZoneInfo
 import os, swisseph as swe
 import networkx as nx
 from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
+from lookup_v2 import SIGNS, PLANETARY_RULERS
 # Force path to the ephe folder in your repo
 EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
@@ -260,6 +261,7 @@ def calculate_chart(
 
 	rows = []
 	pos_for_dispositors = {}  # object -> longitude (exclude cusps)
+	print(pos_for_dispositors.keys())
 
 	# --- Main loop (object rows) ---
 	for name, ident in loop_objects:
@@ -467,30 +469,92 @@ def calculate_chart(
 	cusp_df = pd.DataFrame(all_cusp_rows)
 	combined_df = pd.concat([base_df, cusp_df], ignore_index=True)
 
+	# --- REMOVE redundant Sign: and House: columns ---
+	cols_to_keep = [
+		c for c in combined_df.columns
+		if not (
+			c.startswith("Sign:") or
+			re.match(r"^(Placidus|Equal|Whole Sign) House:", c)
+		)
+	]
+
+	combined_df = combined_df[cols_to_keep]
+
+	aspect_df = build_aspect_table(combined_df)
+
+	# --- Build ruler → children map from analyze_dispositors ---
+	ruler_map = {}
+	raw_chains_list = by_sign.get("chains", []) or []  # list of chains, each as ["A", "B", "C"]
+
+	for chain in raw_chains_list:
+		for i in range(len(chain)-1):
+			parent, child = chain[i], chain[i+1]
+			ruler_map.setdefault(parent, set()).add(child)
+		# ensure last node exists
+		ruler_map.setdefault(chain[-1], set())
+
+	# --- Generate all paths from every object down to final dispositors ---
+	def build_paths(node, path, visited):
+		if node in visited:
+			return []
+		visited.add(node)
+		paths = []
+		children = ruler_map.get(node, set())
+		if not children:  # leaf
+			paths.append(path + [node])
+		else:
+			for child in children:
+				# deduplicate children in the same branch
+				if child not in path:
+					paths.extend(build_paths(child, path + [node], visited.copy()))
+				else:
+					# add the final loop node once at the end
+					paths.append(path + [node, child])
+		return paths
+
+	all_paths = []
+	for obj in pos_for_dispositors.keys():
+		all_paths.extend(build_paths(obj, [], set()))
+
+	# --- Convert paths to strings for plotting ---
+	raw_chains = [" → ".join(p) for p in all_paths]
+
+	# --- Build plot_data dict ---
+	plot_data = {
+		"raw_chains": raw_chains,
+		"sovereigns": list(sign_sovereign)
+	}
+
+	# --- Return values ---
 	if include_aspects:
 		aspect_df = build_aspect_table(combined_df)
-		return combined_df, aspect_df  # two DFs when requested
+		return combined_df, aspect_df, plot_data
 
-	return combined_df
+	# If aspects not included, return combined_df and plot_data
+	return combined_df, None, plot_data
+
+
+import matplotlib.pyplot as plt
+import networkx as nx
 
 def chart_sect_from_df(df) -> str:
-    """
-    Return 'Diurnal' or 'Nocturnal' based on Sun relative to horizon.
-    Requires both 'Sun' and 'AC' rows. If either is missing (e.g., Unknown Time),
-    raise ValueError('time unknown') so the caller can present a friendly message.
-    """
-    sun_series = df.loc[df["Object"] == "Sun", "Longitude"]
-    ac_series  = df.loc[df["Object"] == "AC",  "Longitude"]
+	"""
+	Return 'Diurnal' or 'Nocturnal' based on Sun relative to horizon.
+	Requires both 'Sun' and 'AC' rows. If either is missing (e.g., Unknown Time),
+	raise ValueError('time unknown') so the caller can present a friendly message.
+	"""
+	sun_series = df.loc[df["Object"] == "Sun", "Longitude"]
+	ac_series  = df.loc[df["Object"] == "AC",  "Longitude"]
 
-    if sun_series.empty or ac_series.empty:
-        # Unknown time charts typically omit AC/DC (no house cusps)
-        raise ValueError("time unknown")
+	if sun_series.empty or ac_series.empty:
+		# Unknown time charts typically omit AC/DC (no house cusps)
+		raise ValueError("time unknown")
 
-    sun = float(sun_series.iloc[0]) % 360.0
-    ac  = float(ac_series.iloc[0])  % 360.0
-    dc  = (ac + 180.0) % 360.0
+	sun = float(sun_series.iloc[0]) % 360.0
+	ac  = float(ac_series.iloc[0])  % 360.0
+	dc  = (ac + 180.0) % 360.0
 
-    return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
+	return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
 
 def _house_of_degree(deg: float, cusps: list[float]) -> int | None:
 	"""
@@ -591,203 +655,394 @@ def house_rulers_across_systems(cusps_by_system, planetary_rulers, compute_cusp_
 		)
 	return out
 
-def analyze_dispositors(pos: dict, cusps: list[float]) -> dict:
-    """
-    Build rulership (dispositor) graphs in two scopes and return BOTH:
-      1) Raw, directional connections (edges) and chain listings
-      2) Summaries: dominant rulers, final dispositors, sovereigns (self-rulers), and loops
+def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
+	"""
+	Analyze planetary rulerships and return structured data for plotting.
+	
+	Output format (for each scope: by_sign/by_house):
+	{
+		"raw_links": [(parent, child), ...],
+		"sovereigns": [...],       # planets with no other ruler
+		"self_ruling": [...],      # planets that rule themselves (even if co-ruled)
+	}
+	"""
+	import networkx as nx
 
-    Input
-    -----
-    pos   : {object_name -> absolute longitude in degrees}
-    cusps : 12 house cusp longitudes for ONE house system (pass [] or None for sign-only)
+	def _ensure_list(x):
+		if x is None:
+			return []
+		if isinstance(x, (list, tuple, set)):
+			return list(x)
+		return [x]
 
-    Returns
-    -------
-    {
-      "by_sign": {
-        "edges": [(src, dst), ...],
-        "chains": ["A rules B rules C", ...],
-        "dominant_rulers": [...],
-        "final_dispositors": [...],
-        "sovereign": [...],
-        "loops": [[...], ...],
-      },
-      "by_house": { ...same keys... }
-    }
-    """
-    import networkx as nx
+	def _build_scope(cusps_scope=None):
+		edges = []
+		for obj, deg in pos.items():
+			# Use house rulership if cusps provided, else sign rulership
+			if cusps_scope:
+				h = _house_of_degree(deg, cusps_scope)
+				if h:
+					cusp_sign = SIGNS[_sign_index(cusps_scope[h - 1])]
+					rulers = _ensure_list(PLANETARY_RULERS.get(cusp_sign, []))
+				else:
+					rulers = []
+			else:
+				sign = SIGNS[_sign_index(deg)]
+				rulers = _ensure_list(PLANETARY_RULERS.get(sign, []))
 
-    def _ensure_list(x):
-        if x is None:
-            return []
-        if isinstance(x, (list, tuple, set)):
-            return list(x)
-        return [x]
+			# Add edges
+			if rulers:
+				for r in rulers:
+					if r in pos:
+						edges.append((r, obj))  # parent -> child
+			else:
+				edges.append((obj, obj))  # self-ruler
 
-    names = list(pos.keys())
-    name_set = set(names)
+		# Build graph
+		G = nx.DiGraph()
+		G.add_nodes_from(pos.keys())
+		G.add_edges_from(edges)
 
-    def _edges_sign() -> list[tuple[str, str]]:
-        edges = []
-        for obj, deg in pos.items():
-            sign = SIGNS[_sign_index(deg)]
-            rulers = _ensure_list(PLANETARY_RULERS.get(sign, []))
-            if rulers:
-                for r in rulers:
-                    if r in name_set:
-                        edges.append((obj, r))
-            else:
-                edges.append((obj, obj))  # self-node if no valid rulers
-        return edges
+		# Self-ruling
+		self_ruling = sorted([n for n in G.nodes if G.has_edge(n, n)])
 
-    def _edges_house() -> list[tuple[str, str]]:
-        if not cusps or len(cusps) < 12:
-            return []
-        edges = []
-        for obj, deg in pos.items():
-            h = _house_of_degree(deg, cusps)
-            if not h:
-                edges.append((obj, obj))
-                continue
-            cusp_sign = SIGNS[_sign_index(cusps[h - 1])]
-            rulers = _ensure_list(PLANETARY_RULERS.get(cusp_sign, []))
-            if rulers:
-                for r in rulers:
-                    if r in name_set:
-                        edges.append((obj, r))
-            else:
-                edges.append((obj, obj))
-        return edges
+		# Sovereigns = planets with no other ruler
+		sovereigns = sorted([n for n in G.nodes if not [u for u, v in G.in_edges(n) if u != n]])
 
-    def _summarize(edges: list[tuple[str, str]]) -> dict:
-        G = nx.DiGraph()
-        G.add_nodes_from(names)
-        G.add_edges_from(edges)
+		# Raw links = parent -> child ignoring self-loops
+		raw_links = [(u, v) for u, v in G.edges if u != v]
 
-        # Sovereign = self-rulers
-        sovereign = sorted([n for n in G.nodes if G.has_edge(n, n)])
+		return {
+			"raw_links": raw_links,
+			"sovereigns": sovereigns,
+			"self_ruling": self_ruling,
+		}
 
-        # Loops = cycles length >= 2
-        loops = [cycle for cycle in nx.simple_cycles(G) if len(cycle) >= 2]
+	return {
+		"by_sign": _build_scope(None),
+		"by_house": _build_scope(cusps if cusps and len(cusps) == 12 else None),
+	}
 
-        # Dominant = max in-degree from others
-        indeg = {n: 0 for n in G.nodes}
-        for u, v in G.edges:
-            if u != v:
-                indeg[v] += 1
-        max_in = max(indeg.values()) if indeg else 0
-        dominant = sorted([n for n, c in indeg.items() if c == max_in and c > 0])
+def plot_dispositor_graph(plot_data):
+	"""
+	Plot dispositor trees in a vertical family-tree style.
 
-        # Final dispositors = sovereign with no outgoing edges to others
-        finals = sorted([
-            n for n in sovereign
-            if set(G.successors(n)) - {n} == set()
-        ])
+	Rules:
+	- Sovereign planets are roots of their own trees.
+	- Each generation (distance from root) is a horizontal layer.
+	- A planet may appear multiple times under different rulers if dual-ruled.
+	- Never repeat the same parent->child edge.
+	"""
+	import matplotlib.pyplot as plt
+	import networkx as nx
+	from lookup_v2 import ABREVIATED_PLANET_NAMES
 
-        # Chains = readable rulership hierarchies
-        def _all_chains_from(start: str, max_depth: int = 16) -> list[list[str]]:
-            results = []
-            def dfs(node: str, path: list[str], seen: set[str]):
-                if len(path) >= max_depth:
-                    results.append(path[:])
-                    return
-                nexts = list(G.successors(node))
-                if not nexts:
-                    results.append(path[:])
-                    return
-                for nxt in nexts:
-                    if nxt in seen:
-                        # loop closure
-                        results.append(path + [nxt])
-                    else:
-                        dfs(nxt, path + [nxt], seen | {nxt})
-            dfs(start, [start], {start})
-            return results
+	raw_links = plot_data.get("raw_links", [])
+	sovereigns = plot_data.get("sovereigns", [])
+	self_ruling = plot_data.get("self_ruling", [])
+	
+	# Helper function to get abbreviated name if available
+	def get_display_name(name):
+		return ABREVIATED_PLANET_NAMES.get(name, name)
 
-        chain_strs = []
-        for n in G.nodes:
-            chains = _all_chains_from(n)
-            for path in chains:
-                chain_strs.append(" rules ".join(path))
+	if not raw_links or not sovereigns:
+		print("No dispositor graph to display.")
+		return None
 
-        # de-duplicate & sort
-        chain_strs = sorted(set(chain_strs))
+	# Convert raw_links to a lookup for children by parent (preserve order)
+	children_by_parent = {}
+	for parent, child in raw_links:
+		children_by_parent.setdefault(parent, []).append(child)
 
-        return {
-            "edges": edges,
-            "chains": chain_strs,
-            "dominant_rulers": dominant,
-            "final_dispositors": finals,
-            "sovereign": sovereign,
-            "loops": loops,
-        }
+	# Track edges drawn globally so each parent->child is drawn once
+	drawn_edges = set()
 
-    edges_s = _edges_sign()
-    by_sign = _summarize(edges_s)
+	# Create figure (one column per sovereign)
+	# --- Determine roots dynamically using a phased approach ---
+	all_nodes = set(children_by_parent.keys())
+	for v in children_by_parent.values():
+		all_nodes.update(v)
 
-    edges_h = _edges_house()
-    by_house = _summarize(edges_h) if edges_h else {
-        "edges": [],
-        "chains": [],
-        "dominant_rulers": [],
-        "final_dispositors": [],
-        "sovereign": [],
-        "loops": [],
-    }
+	roots = []
+	accounted_for = set()  # Track all nodes already included in a tree
 
-    return {"by_sign": by_sign, "by_house": by_house}
+	def collect_tree_downward(start_node):
+		"""Collect all nodes reachable downward from start_node."""
+		component = set()
+		queue = [start_node]
+		while queue:
+			n = queue.pop(0)
+			if n in component:
+				continue
+			component.add(n)
+			queue.extend(children_by_parent.get(n, []))
+		return component
+
+	# === PHASE 1: Sovereign trees ===
+	print("\n🔵 PHASE 1: Building sovereign trees...")
+	sovereign_parents = [s for s in sovereigns if s in children_by_parent and len(children_by_parent.get(s, [])) > 0]
+	
+	# Sort sovereigns by fewest children (then alphabetical)
+	sovereign_parents.sort(key=lambda s: (len(children_by_parent.get(s, [])), s))
+	
+	for sov in sovereign_parents:
+		if sov in accounted_for:
+			print(f"   ⏭️  Skipping {sov} (already in another tree)")
+			continue
+		
+		tree_nodes = collect_tree_downward(sov)
+		accounted_for.update(tree_nodes)
+		roots.append(sov)
+		print(f"   ✅ Sovereign root: {sov} → tree size: {len(tree_nodes)}")
+
+	# === PHASE 2: Self-ruling trees (not yet accounted for) ===
+	print("\n🟡 PHASE 2: Building self-ruling trees...")
+	self_ruling_parents = [s for s in self_ruling 
+	                       if s in children_by_parent 
+	                       and len(children_by_parent.get(s, [])) > 0
+	                       and s not in accounted_for]
+	
+	# Sort self-ruling by most children (most dominant), then alphabetical
+	self_ruling_parents.sort(key=lambda s: (-len(children_by_parent.get(s, [])), s))
+	
+	for sr in self_ruling_parents:
+		if sr in accounted_for:
+			print(f"   ⏭️  Skipping {sr} (already in another tree)")
+			continue
+		
+		tree_nodes = collect_tree_downward(sr)
+		accounted_for.update(tree_nodes)
+		roots.append(sr)
+		print(f"   ✅ Self-ruling root: {sr} → tree size: {len(tree_nodes)}")
+
+	# === PHASE 3: Fallback for any remaining unaccounted parent nodes ===
+	print("\n⚪ PHASE 3: Handling remaining nodes...")
+	remaining_parents = [n for n in all_nodes 
+	                     if n in children_by_parent 
+	                     and len(children_by_parent.get(n, [])) > 0
+	                     and n not in accounted_for]
+	
+	# Sort by most children (most dominant), then alphabetical
+	remaining_parents.sort(key=lambda n: (-len(children_by_parent.get(n, [])), n))
+	
+	for node in remaining_parents:
+		if node in accounted_for:
+			continue
+		
+		tree_nodes = collect_tree_downward(node)
+		accounted_for.update(tree_nodes)
+		roots.append(node)
+		print(f"   ✅ Fallback root: {node} → tree size: {len(tree_nodes)}")
+
+	# --- Guard in case no roots found ---
+	if not roots:
+		print("No roots found. Cannot plot trees.")
+		return None
+
+	n = len(roots)
+	fig, axes = plt.subplots(1, n, figsize=(6 * n, 8))
+	if n == 1:
+		axes = [axes]
+
+
+	vertical_gap = 2.0
+
+	for ax, root in zip(axes, roots):
+		nodes = []          # list of tuples (name, node_id)
+		edges = []          # list of tuples (parent_id, child_id)
+		level_nodes = {}    # level -> ordered list of node_ids (no duplicates)
+		queue = [(root, f"{root}_0", 0)]  # (name, unique_id, level)
+
+		visited_ids = set([f"{root}_0"])  # track unique occurrences so we don't repeat forever
+		processed_pairs = set()  # track (parent_name, child_name) pairs to prevent reprocessing
+
+		while queue:
+			parent_name, parent_id, level = queue.pop(0)
+
+			nodes.append((parent_name, parent_id))
+			level_nodes.setdefault(level, [])
+			if parent_id not in level_nodes[level]:
+				level_nodes[level].append(parent_id)
+
+			children = children_by_parent.get(parent_name, [])
+			for i, child in enumerate(children):
+				# Skip if we've already processed this parent->child relationship
+				if (parent_name, child) in processed_pairs:
+					continue
+				processed_pairs.add((parent_name, child))
+				
+				child_id = f"{child}_{level+1}_{i}"
+
+				# Prevent infinite recursion while still allowing repeats at different levels
+				if child_id in visited_ids:
+					continue
+				visited_ids.add(child_id)
+
+				edges.append((parent_id, child_id))
+				queue.append((child, child_id, level+1))
+				level_nodes.setdefault(level+1, [])
+				if child_id not in level_nodes[level+1]:
+					level_nodes[level+1].append(child_id)
+
+
+		if not nodes:
+			continue
+
+		max_width = max(len(v) for v in level_nodes.values()) if level_nodes else 1
+		horizontal_spacing = max(1.6, max_width * 0.9)
+
+		pos = {}
+		for level, ids in level_nodes.items():
+			n_nodes = len(ids)
+			if n_nodes == 0:
+				continue
+			for i, node_id in enumerate(ids):
+				x = (i - (n_nodes - 1) / 2.0) * horizontal_spacing
+				y = -level * vertical_gap
+				pos[node_id] = (x, y)
+
+		root_id = f"{root}_0"
+		if root_id not in pos:
+			pos[root_id] = (0.0, 0.0)
+
+		for name, node_id in nodes:
+			xy = pos.get(node_id)
+			if xy is None:
+				xy = (0.0, 0.0)
+				pos[node_id] = xy
+			color = "lightgreen" if name in sovereigns else ("orange" if name in self_ruling else "skyblue")
+			display_name = get_display_name(name)
+			ax.scatter(xy[0], xy[1], s=2500, c=color, zorder=2)
+			ax.text(xy[0], xy[1], display_name, ha='center', va='center', fontsize=13, fontweight="bold", zorder=3)
+			
+			# Add circular arrow symbol for self-ruling planets
+			if name in self_ruling or name in sovereigns:
+				ax.text(xy[0], xy[1] + 0.55, "↻", ha='center', va='center', 
+				        fontsize=24, color='black', zorder=3)
+
+		for parent_id, child_id in edges:
+			start = pos.get(parent_id)
+			end = pos.get(child_id)
+			if start is None or end is None:
+				continue
+			ax.annotate(
+				"",
+				xy=end,
+				xytext=start,
+				arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8),
+				zorder=1
+			)
+
+		display_root = get_display_name(root)
+		ax.set_title(f"Tree: {display_root}", fontsize=16)
+		ax.axis("off")
+
+	plt.tight_layout()
+	return fig
 
 def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
-    """
-    Returns two UI-ready tables:
-      chains_rows  : (unused, kept for API compatibility)
-      summary_rows : [{"Scope":"...", "Final":"...", "Dominant":"...", "Sovereign":"...", "Loops":"...", "Chains":"..."}, ...]
-    """
-    # objects → longitude (exclude cusps)
-    objs = df[~df["Object"].str.contains("cusp", case=False, na=False)]
-    pos = dict(zip(objs["Object"], objs["Longitude"]))
+	"""
+	Returns two UI-ready tables:
+	  chains_rows  : (unused, kept for API compatibility)
+	  summary_rows : [{"Scope":"...", "Final":"...", "Dominant":"...", "Sovereign":"...", "Loops":"...", "Chains":"..."}, ...]
+	"""
+	# objects → longitude (exclude cusps)
+	objs = df[~df["Object"].str.contains("cusp", case=False, na=False)]
+	pos = dict(zip(objs["Object"], objs["Longitude"]))
 
-    def _cusps(label: str) -> list[float]:
-        vals = []
-        for h in range(1, 13):
-            m = df.loc[df["Object"] == f"{label} {h}H cusp", "Longitude"]
-            if not m.empty:
-                vals.append(float(m.iloc[0]) % 360.0)
-        return vals if len(vals) == 12 else []
+	def _cusps(label: str) -> list[float]:
+		vals = []
+		for h in range(1, 13):
+			m = df.loc[df["Object"] == f"{label} {h}H cusp", "Longitude"]
+			if not m.empty:
+				vals.append(float(m.iloc[0]) % 360.0)
+		return vals if len(vals) == 12 else []
 
-    scopes = [
-        ("Sign", []),
-        ("Placidus", _cusps("Placidus")),
-        ("Equal", _cusps("Equal")),
-        ("Whole Sign", _cusps("Whole Sign")),
-    ]
+	scopes = [
+		("Sign", []),
+		("Placidus", _cusps("Placidus")),
+		("Equal", _cusps("Equal")),
+		("Whole Sign", _cusps("Whole Sign")),
+	]
 
-    chains_rows: list[dict] = []
-    summary_rows: list[dict] = []
+	chains_rows: list[dict] = []
+	summary_rows: list[dict] = []
 
-    for name, cusps in scopes:
-        res   = analyze_dispositors(pos, cusps)
-        scope = res["by_sign"] if name == "Sign" else res["by_house"]
+	for name, cusps in scopes:
+		res   = analyze_dispositors(pos, cusps)
+		scope = res["by_sign"] if name == "Sign" else res["by_house"]
 
-        # Loops: list[list[str]] → "A → B → C | X → Y"
-        loops_list = scope.get("loops", []) or []
-        loops_fmt  = " | ".join(" → ".join(loop) for loop in loops_list)
+		# Loops: list[list[str]] → "A → B → C | X → Y"
+		loops_list = scope.get("loops", []) or []
+		loops_fmt  = " | ".join(" → ".join(loop) for loop in loops_list)
 
-        # Chains: list[str] with "A rules B rules C" → "A → B → C | ..."
-        chains_list = scope.get("chains", []) or []
-        chains_fmt  = " | ".join(s.replace(" rules ", " → ") for s in chains_list)
+		# Chains: list[str] with "A rules B rules C" → "A → B → C | ..."
+		chains_list = scope.get("chains", []) or []
+		chains_fmt = " | ".join(" → ".join(s) for s in chains_list)
 
-        summary_rows.append({
-            "Scope": name,
-            "Final": ", ".join(scope.get("final_dispositors", []) or []),
-            "Dominant": ", ".join(scope.get("dominant_rulers", []) or []),
-            "Sovereign": ", ".join(scope.get("sovereign", []) or []),
-            "Loops": loops_fmt,
-            "Chains": chains_fmt,   # <-- NEW
-        })
+		summary_rows.append({
+			"Scope": name,
+			"Final": ", ".join(scope.get("final_dispositors", []) or []),
+			"Dominant": ", ".join(scope.get("dominant_rulers", []) or []),
+			"Sovereign": ", ".join(scope.get("sovereign", []) or []),
+			"Loops": loops_fmt,
+			"Chains": chains_fmt,   # <-- NEW
+		})
 
-    return chains_rows, summary_rows
+	return chains_rows, summary_rows
+
+import networkx as nx
+
+def build_dispositor_trees(disp_data):
+	"""
+	Build clean, deduped trees for each final dispositor.
+	disp_data: dict returned by analyze_dispositors(pos, cusps)
+	Returns: dict mapping final_dispositor name → networkx.DiGraph
+	"""
+
+	# Grab the final dispositors from the "by_sign" key
+	final_dispositors = disp_data.get("by_sign", {}).get("final_dispositors", [])
+	chains = disp_data.get("by_sign", {}).get("chains", [])
+
+	# Build a ruler → children mapping
+	ruler_map = {}
+	for chain in chains:
+		# convert "A rules B rules C" → ["A", "B", "C"]
+		nodes = [n.strip() for n in chain.split("rules")]
+		for i in range(len(nodes)-1):
+			parent, child = nodes[i], nodes[i+1]
+			ruler_map.setdefault(parent, set()).add(child)
+		# ensure last node exists in ruler_map
+		ruler_map.setdefault(nodes[-1], set())
+
+	# ---- DEBUG: Check the parent → children mapping ----
+	print("RULER MAP:", ruler_map)
+
+	trees = {}
+
+	def add_children(G, node, visited):
+		"""Recursively add children of node into graph G, following your rules"""
+		if node in visited:
+			return
+		visited.add(node)
+
+		children = ruler_map.get(node, set())
+		for child in children:
+			G.add_edge(node, child)
+			# recurse, but only iterate each child once per tree
+			add_children(G, child, visited)
+
+	# Build a tree per final dispositor
+	for root in final_dispositors:
+		G = nx.DiGraph()
+		G.add_node(root)
+		# self-loop if node rules itself
+		if root in ruler_map.get(root, set()):
+			G.add_edge(root, root)
+		add_children(G, root, visited=set())
+		trees[root] = G
+
+	return trees
 
 def _resolve_dignity(obj: str, sign_name: str):
 	"""
@@ -958,11 +1213,11 @@ def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
 	"""
 	Return (edges_major, edges_minor), each as a list of tuples:
 	  (obj1, obj2, {
-	      "aspect": <name>,
-	      "orb": <float>,                 # absolute orb (deg)
-	      "appsep": "Applying"|"Separating",
-	      "applying": bool,               # NEW: True if applying
-	      "decl_diff": <float|None>,      # NEW: |decl1 - decl2| in deg
+		  "aspect": <name>,
+		  "orb": <float>,                 # absolute orb (deg)
+		  "appsep": "Applying"|"Separating",
+		  "applying": bool,               # NEW: True if applying
+		  "decl_diff": <float|None>,      # NEW: |decl1 - decl2| in deg
 	  })
 	Pairs are de-duplicated (A,B) only once (A < B by index).
 	"""
@@ -1061,129 +1316,130 @@ def _sign_distance(i: int, j: int) -> int:
 	return d if d <= 6 else 12 - d
 
 def annotate_reception(df: pd.DataFrame, edges_major: list[tuple]) -> pd.DataFrame:
-    """
-    Sign-only Reception (no house reception).
-    Uses supplied edges_major (no aspect recalculation).
+	"""
+	Sign-only Reception (no house reception).
+	Uses supplied edges_major (no aspect recalculation).
 
-    Outputs all matching receptions to all rulers, e.g.:
-      "Opposite Mars, Conjunct Pluto"
-    For sign-distance fallback, appends " (by sign)" per item.
-    Suppresses self-conjunction (planet conjunct itself in domicile).
-    """
-    out = df.copy()
+	Outputs all matching receptions to all rulers, e.g.:
+	  "Opposite Mars, Conjunct Pluto"
+	For sign-distance fallback, appends " (by sign)" per item.
+	Suppresses self-conjunction (planet conjunct itself in domicile).
+	"""
+	out = df.copy()
 
-    # Objects only & quick lookups
-    objs_only = out[~out["Object"].str.contains("cusp", case=False, na=False)].copy()
-    name_to_sign = dict(zip(objs_only["Object"], objs_only["Sign"]))
-    name_set = set(name_to_sign.keys())
+	# Objects only & quick lookups
+	objs_only = out[~out["Object"].str.contains("cusp", case=False, na=False)].copy()
+	name_to_sign = dict(zip(objs_only["Object"], objs_only["Sign"]))
+	name_set = set(name_to_sign.keys())
 
-    # Aspect display mapping for wording tweaks
-    _DISPLAY = {"Conjunction": "Conjunct", "Opposition": "Opposite"}
-    def _disp(aspect_name: str) -> str:
-        return _DISPLAY.get(aspect_name, aspect_name)
+	# Aspect display mapping for wording tweaks
+	_DISPLAY = {"Conjunction": "Conjunct", "Opposition": "Opposite"}
+	def _disp(aspect_name: str) -> str:
+		return _DISPLAY.get(aspect_name, aspect_name)
 
-    # Build lookup from supplied edges_major
-    pair_to_aspect = {}
-    for a, b, meta in edges_major:
-        asp = meta.get("aspect")
-        if asp in _RECEPTION_ASPECT_NAMES:  # {"Conjunction","Sextile","Square","Trine","Opposition"}
-            pair_to_aspect[tuple(sorted((a, b)))] = asp
+	# Build lookup from supplied edges_major
+	pair_to_aspect = {}
+	for a, b, meta in edges_major:
+		asp = meta.get("aspect")
+		if asp in _RECEPTION_ASPECT_NAMES:  # {"Conjunction","Sextile","Square","Trine","Opposition"}
+			pair_to_aspect[tuple(sorted((a, b)))] = asp
 
-    results = []
-    for _, row in out.iterrows():
-        obj = row.get("Object", "")
-        if "cusp" in str(obj).lower():
-            results.append("")
-            continue
+	results = []
+	for _, row in out.iterrows():
+		obj = row.get("Object", "")
+		if "cusp" in str(obj).lower():
+			results.append("")
+			continue
 
-        sign = row.get("Sign", "")
-        rulers = lookup_sign_rulers(sign, PLANETARY_RULERS) or []
+		sign = row.get("Sign", "")
+		rulers = lookup_sign_rulers(sign, PLANETARY_RULERS) or []
 
-        # Collect *all* receptions across all rulers
-        found_items = []
-        for ruler in rulers:
-            if ruler not in name_set:
-                continue  # ruler not present among objects
+		# Collect *all* receptions across all rulers
+		found_items = []
+		for ruler in rulers:
+			if ruler not in name_set:
+				continue  # ruler not present among objects
 
-            # --- by ORB (preferred) using supplied edges ---
-            key = tuple(sorted((obj, ruler)))
-            aspname = pair_to_aspect.get(key)
-            if aspname in _RECEPTION_ASPECT_NAMES:
-                # suppress self-conjunction
-                if obj == ruler and aspname == "Conjunction":
-                    pass  # skip
-                else:
-                    found_items.append(f"{_disp(aspname)} {ruler}")
-                continue  # don't also add a by-sign fallback for this ruler
+			# --- by ORB (preferred) using supplied edges ---
+			key = tuple(sorted((obj, ruler)))
+			aspname = pair_to_aspect.get(key)
+			if aspname in _RECEPTION_ASPECT_NAMES:
+				# suppress self-conjunction
+				if obj == ruler and aspname == "Conjunction":
+					pass  # skip
+				else:
+					found_items.append(f"{_disp(aspname)} {ruler}")
+				continue  # don't also add a by-sign fallback for this ruler
 
-            # --- by SIGN (fallback) using modular sign distance ---
-            obj_si = _sign_to_index(sign)
-            ruler_sign = name_to_sign.get(ruler, "")
-            rul_si = _sign_to_index(ruler_sign)
-            if obj_si is None or rul_si is None:
-                continue
+			# --- by SIGN (fallback) using modular sign distance ---
+			obj_si = _sign_to_index(sign)
+			ruler_sign = name_to_sign.get(ruler, "")
+			rul_si = _sign_to_index(ruler_sign)
+			if obj_si is None or rul_si is None:
+				continue
 
-            dist = _sign_distance(obj_si, rul_si)  # 0..6
-            sign_aspect = _aspect_name_for_sign_distance(dist)
-            if sign_aspect is not None:
-                # suppress self-conjunction
-                if obj == ruler and sign_aspect == "Conjunction":
-                    pass  # skip
-                else:
-                    found_items.append(f"{_disp(sign_aspect)} {ruler} (by sign)")
+			dist = _sign_distance(obj_si, rul_si)  # 0..6
+			sign_aspect = _aspect_name_for_sign_distance(dist)
+			if sign_aspect is not None:
+				# suppress self-conjunction
+				if obj == ruler and sign_aspect == "Conjunction":
+					pass  # skip
+				else:
+					found_items.append(f"{_disp(sign_aspect)} {ruler} (by sign)")
 
-        results.append(", ".join(found_items) if found_items else "")
+		results.append(", ".join(found_items) if found_items else "")
 
-    out["Reception"] = results
-    return out
+	out["Reception"] = results
+	return out
 
 def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> list[dict]:
-    """
-    Build conjunction clusters using *existing* edges_major (no recomputation).
-    Returns a UI-ready list of rows: [{"Cluster": "Sun, South Node, IC"}, ...]
-    - Clusters are undirected connected components formed only by 'Conjunction' edges.
-    - Members are ordered by the objects' order in the DF (not by longitude).
-    - Singletons (size 1) are ignored.
-    """
-    # Objects in DF order
-    objs = _extract_object_rows(df)
-    names = list(objs["Object"])
-    order_ix = {name: i for i, name in enumerate(names)}
+	"""
+	Build conjunction clusters using *existing* edges_major (no recomputation).
+	Returns a UI-ready list of rows: [{"Cluster": "Sun, South Node, IC"}, ...]
+	- Clusters are undirected connected components formed only by 'Conjunction' edges.
+	- Members are ordered by the objects' order in the DF (not by longitude).
+	- Singletons (size 1) are ignored.
+	"""
+	# Objects in DF order
+	objs = _extract_object_rows(df)
+	names = list(objs["Object"])
+	order_ix = {name: i for i, name in enumerate(names)}
 
-    # Build undirected adjacency from conjunction pairs
-    from collections import defaultdict, deque
-    adj = defaultdict(set)
-    for a, b, meta in edges_major or []:
-        if meta.get("aspect") == "Conjunction":
-            adj[a].add(b)
-            adj[b].add(a)
+	# Build undirected adjacency from conjunction pairs
+	from collections import defaultdict, deque
+	adj = defaultdict(set)
+	for a, b, meta in edges_major or []:
+		if meta.get("aspect") == "Conjunction":
+			adj[a].add(b)
+			adj[b].add(a)
 
-    # Find connected components (size >= 2)
-    visited = set()
-    clusters = []
-    for n in list(adj.keys()):
-        if n in visited:
-            continue
-        comp = []
-        q = deque([n])
-        visited.add(n)
-        while q:
-            u = q.popleft()
-            comp.append(u)
-            for v in adj[u]:
-                if v not in visited:
-                    visited.add(v)
-                    q.append(v)
-        if len(comp) >= 2:
-            comp_sorted = sorted(comp, key=lambda x: order_ix.get(x, 10**9))
-            clusters.append({
-                "Cluster": ", ".join(comp_sorted),
-                "Members": comp_sorted,
-                "Size": len(comp_sorted),
-            })
+	# Find connected components (size >= 2)
+	visited = set()
+	clusters = []
+	for n in list(adj.keys()):
+		if n in visited:
+			continue
+		comp = []
+		q = deque([n])
+		visited.add(n)
+		while q:
+			u = q.popleft()
+			comp.append(u)
+			for v in adj[u]:
+				if v not in visited:
+					visited.add(v)
+					q.append(v)
 
-    # Sort clusters by the first member’s DF order (stable)
-    clusters.sort(
-        key=lambda row: order_ix.get(row["Members"][0], 10**9) if row.get("Members") else 10**9
-    )
-    return clusters
+		if len(comp) >= 2:
+			comp_sorted = sorted(comp, key=lambda x: order_ix.get(x, 10**9))
+			clusters.append({
+				"Cluster": ", ".join(comp_sorted),
+				"Size": len(comp_sorted),
+			})
+
+
+	# Sort clusters by the first member’s DF order (stable)
+	clusters.sort(
+		key=lambda row: order_ix.get(row["Members"][0], 10**9) if row.get("Members") else 10**9
+	)
+	return clusters

@@ -257,6 +257,18 @@ ALIASES_MEANINGS = {
     "Black Moon Lilith": "Lilith",
 }
 
+ABREVIATED_PLANET_NAMES = {
+    "Ascendant": "AC",
+    "Descendant": "DC",
+    "Midheaven": "MC",
+    "Imum Coeli": "IC",
+    "North Node": "NN",
+    "South Node": "SN",
+    "Part of Fortune": "PoF",
+    "Black Moon Lilith": "Lilith",
+    "Black Moon Lilith (Mean)": "Lilith",
+}
+
 OBJECT_MEANINGS = {
     # Axes & Points
     "Ascendant": "How you show up at first glance—your identity, appearance, vibe, posture, and approach to life.",
