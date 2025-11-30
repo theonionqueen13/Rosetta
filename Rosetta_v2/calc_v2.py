@@ -432,11 +432,18 @@ def calculate_chart(
 	# 2) HOUSE-based dispositor graphs for EACH system
 	#    Uses the cusps we already computed per system above: cusps_by_system
 	house_flags_by_system: dict[str, dict[str, set]] = {}
+	house_dispositor_data: dict[str, dict] = {}  # Store full dispositor analysis for plotting
 
 	for sys in systems:  # systems = ("placidus", "equal", "whole")
 		cusps = cusps_by_system.get(sys, [])  # 12 cusp degrees for this system
 		disp_sys = analyze_dispositors(pos_for_dispositors, cusps)
 		by_house = disp_sys.get("by_house", {})
+		
+		print(f"\n🔍 DEBUG house dispositor analysis for {sys}:")
+		print(f"   cusps count: {len(cusps)}")
+		print(f"   by_house keys: {list(by_house.keys())}")
+		print(f"   raw_links: {by_house.get('raw_links', [])}")
+		print(f"   sovereigns: {by_house.get('sovereigns', [])}")
 
 		dom   = set(by_house.get("dominant_rulers", []) or [])
 		final = set(by_house.get("final_dispositors", []) or [])
@@ -454,6 +461,8 @@ def calculate_chart(
 			"sov":   sov,
 			"loop":  loops_set,
 		}
+		# Store full dispositor data for plotting
+		house_dispositor_data[sys_lbl] = by_house
 
 	# Fill HOUSE flags per system on object rows
 	for r in rows:
@@ -519,11 +528,30 @@ def calculate_chart(
 	# --- Convert paths to strings for plotting ---
 	raw_chains = [" → ".join(p) for p in all_paths]
 
-	# --- Build plot_data dict ---
+	# --- Build plot_data dict with all scopes ---
+	# Store dispositor data for sign-based and each house system
 	plot_data = {
-		"raw_chains": raw_chains,
-		"sovereigns": list(sign_sovereign)
+		"by_sign": {
+			"raw_links": disp_sign_only.get("by_sign", {}).get("raw_links", []),
+			"sovereigns": list(sign_sovereign),
+			"self_ruling": disp_sign_only.get("by_sign", {}).get("self_ruling", [])
+		}
 	}
+	
+	# Add house-based dispositor data for each system (already calculated above)
+	for sys_lbl, by_house in house_dispositor_data.items():
+		plot_data[sys_lbl] = {
+			"raw_links": by_house.get("raw_links", []),
+			"sovereigns": by_house.get("sovereigns", []),
+			"self_ruling": by_house.get("self_ruling", [])
+		}
+	
+	print(f"\n🔍 DEBUG plot_data structure:")
+	for key, data in plot_data.items():
+		print(f"   [{key}]:")
+		print(f"      raw_links count: {len(data.get('raw_links', []))}")
+		print(f"      sovereigns: {data.get('sovereigns', [])}")
+		print(f"      self_ruling: {data.get('self_ruling', [])}")
 
 	# --- Return values ---
 	if include_aspects:
@@ -706,16 +734,33 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 		# Self-ruling
 		self_ruling = sorted([n for n in G.nodes if G.has_edge(n, n)])
 
-		# Sovereigns = planets with no other ruler
+		# Sovereigns = planets with no other ruler (including self-rulers)
 		sovereigns = sorted([n for n in G.nodes if not [u for u, v in G.in_edges(n) if u != n]])
 
 		# Raw links = parent -> child ignoring self-loops
 		raw_links = [(u, v) for u, v in G.edges if u != v]
 
+		# Find cycles for loops and sovereign
+		cycles = list(nx.simple_cycles(G))
+		loops = [c for c in cycles if len(c) >= 2]
+
+		# Dominant rulers: out-degree >= 3
+		dominant_rulers = sorted([n for n, outdeg in G.out_degree() if outdeg >= 3])
+
+		# Final dispositors: in-degree >= 1 and out-degree == 0
+		final_dispositors = sorted([
+			n for n in G.nodes
+			if G.out_degree(n) == 0 and G.in_degree(n) >= 1
+		])
+
 		return {
 			"raw_links": raw_links,
 			"sovereigns": sovereigns,
 			"self_ruling": self_ruling,
+			"dominant_rulers": dominant_rulers,
+			"final_dispositors": final_dispositors,
+			"sovereign": sovereigns,  # alias for compatibility
+			"loops": loops,
 		}
 
 	return {
@@ -745,10 +790,6 @@ def plot_dispositor_graph(plot_data):
 	def get_display_name(name):
 		return ABREVIATED_PLANET_NAMES.get(name, name)
 
-	if not raw_links or not sovereigns:
-		print("No dispositor graph to display.")
-		return None
-
 	# Convert raw_links to a lookup for children by parent (preserve order)
 	children_by_parent = {}
 	for parent, child in raw_links:
@@ -765,6 +806,7 @@ def plot_dispositor_graph(plot_data):
 
 	roots = []
 	accounted_for = set()  # Track all nodes already included in a tree
+	all_trees = []  # Track the actual node sets for each tree
 
 	def collect_tree_downward(start_node):
 		"""Collect all nodes reachable downward from start_node."""
@@ -777,23 +819,50 @@ def plot_dispositor_graph(plot_data):
 			component.add(n)
 			queue.extend(children_by_parent.get(n, []))
 		return component
+	
+	def collect_connected_component(start_node):
+		"""Collect all nodes connected to start_node (both upward and downward in the graph)."""
+		# Build a bidirectional graph from parent->child relationships
+		neighbors = {}
+		for parent, child in raw_links:
+			neighbors.setdefault(parent, []).append(child)
+			neighbors.setdefault(child, []).append(parent)
+		
+		# BFS to find all connected nodes
+		component = set()
+		queue = [start_node]
+		while queue:
+			n = queue.pop(0)
+			if n in component:
+				continue
+			component.add(n)
+			queue.extend(neighbors.get(n, []))
+		return component
 
 	# === PHASE 1: Sovereign trees ===
 	print("\n🔵 PHASE 1: Building sovereign trees...")
+	print(f"   All sovereigns: {sovereigns}")
 	sovereign_parents = [s for s in sovereigns if s in children_by_parent and len(children_by_parent.get(s, [])) > 0]
+	print(f"   Sovereign parents (have children): {sovereign_parents}")
+	print(f"   Children counts: {[(s, len(children_by_parent.get(s, []))) for s in sovereign_parents]}")
 	
-	# Sort sovereigns by fewest children (then alphabetical)
-	sovereign_parents.sort(key=lambda s: (len(children_by_parent.get(s, [])), s))
+	# Sort sovereigns by most children (most dominant first)
+	sovereign_parents.sort(key=lambda s: (-len(children_by_parent.get(s, [])), s))
+	print(f"   After sorting (most children first): {sovereign_parents}")
 	
 	for sov in sovereign_parents:
-		if sov in accounted_for:
+		# Check if this sovereign is already in any existing tree
+		if any(sov in tree for tree in all_trees):
 			print(f"   ⏭️  Skipping {sov} (already in another tree)")
 			continue
 		
 		tree_nodes = collect_tree_downward(sov)
+		print(f"   Tree nodes for {sov}: {tree_nodes}")
+		all_trees.append(tree_nodes)
 		accounted_for.update(tree_nodes)
 		roots.append(sov)
 		print(f"   ✅ Sovereign root: {sov} → tree size: {len(tree_nodes)}")
+		print(f"   Total accounted for so far: {len(accounted_for)} nodes")
 
 	# === PHASE 2: Self-ruling trees (not yet accounted for) ===
 	print("\n🟡 PHASE 2: Building self-ruling trees...")
@@ -806,33 +875,86 @@ def plot_dispositor_graph(plot_data):
 	self_ruling_parents.sort(key=lambda s: (-len(children_by_parent.get(s, [])), s))
 	
 	for sr in self_ruling_parents:
-		if sr in accounted_for:
+		# Check if this self-ruling planet is already in any existing tree
+		if any(sr in tree for tree in all_trees):
 			print(f"   ⏭️  Skipping {sr} (already in another tree)")
 			continue
 		
 		tree_nodes = collect_tree_downward(sr)
+		all_trees.append(tree_nodes)
 		accounted_for.update(tree_nodes)
 		roots.append(sr)
 		print(f"   ✅ Self-ruling root: {sr} → tree size: {len(tree_nodes)}")
 
-	# === PHASE 3: Fallback for any remaining unaccounted parent nodes ===
+	# === PHASE 3: Fallback for any remaining unaccounted nodes ===
 	print("\n⚪ PHASE 3: Handling remaining nodes...")
-	remaining_parents = [n for n in all_nodes 
-	                     if n in children_by_parent 
-	                     and len(children_by_parent.get(n, [])) > 0
-	                     and n not in accounted_for]
+	remaining_nodes = list(all_nodes - accounted_for)
 	
-	# Sort by most children (most dominant), then alphabetical
-	remaining_parents.sort(key=lambda n: (-len(children_by_parent.get(n, [])), n))
+	print(f"   Remaining nodes ({len(remaining_nodes)}): {remaining_nodes}")
 	
-	for node in remaining_parents:
-		if node in accounted_for:
+	# Group remaining nodes into connected components
+	processed_in_phase3 = set()
+	
+	while remaining_nodes:
+		# Pick the first unprocessed node as a starting point
+		start_node = remaining_nodes[0]
+		
+		if start_node in processed_in_phase3:
+			remaining_nodes.pop(0)
 			continue
 		
-		tree_nodes = collect_tree_downward(node)
-		accounted_for.update(tree_nodes)
-		roots.append(node)
-		print(f"   ✅ Fallback root: {node} → tree size: {len(tree_nodes)}")
+		# Find ALL nodes connected to this one (bidirectionally), not just unaccounted ones
+		full_component = collect_connected_component(start_node)
+		
+		# Filter to only unaccounted nodes
+		component_unaccounted = full_component - accounted_for
+		
+		if not component_unaccounted:
+			remaining_nodes.pop(0)
+			continue
+		
+		print(f"   Found connected component with {len(component_unaccounted)} unaccounted nodes: {component_unaccounted}")
+		
+		# Choose the best root for this component from the unaccounted nodes:
+		# 1. Prefer nodes with children (parents) over childless nodes
+		# 2. Among parents, prefer those with most children
+		# 3. Tie-break alphabetically
+		candidates = sorted(
+			component_unaccounted,
+			key=lambda n: (
+				0 if n in children_by_parent and len(children_by_parent.get(n, [])) > 0 else 1,
+				-len(children_by_parent.get(n, [])),
+				n
+			)
+		)
+		
+		best_root = candidates[0]
+		print(f"   Chose root: {best_root} (has {len(children_by_parent.get(best_root, []))} children)")
+		
+		# Store this tree with ALL unaccounted nodes in the component
+		all_trees.append(component_unaccounted)
+		accounted_for.update(component_unaccounted)
+		roots.append(best_root)
+		processed_in_phase3.update(component_unaccounted)
+		
+		# Remove all nodes in this component from remaining_nodes
+		remaining_nodes = [n for n in remaining_nodes if n not in component_unaccounted]
+		
+		print(f"   ✅ Fallback root: {best_root} → tree size: {len(component_unaccounted)}")
+		print(f"   Total accounted: {len(accounted_for)}/{len(all_nodes)}")
+
+	# === VALIDATION: Ensure all nodes are accounted for ===
+	missing_nodes = all_nodes - accounted_for
+	if missing_nodes:
+		print(f"\n⚠️  WARNING: {len(missing_nodes)} nodes not accounted for: {missing_nodes}")
+		print("   Adding them as individual trees...")
+		for node in sorted(missing_nodes):
+			roots.append(node)
+			all_trees.append({node})
+			accounted_for.add(node)
+	else:
+		print(f"\n✅ All {len(all_nodes)} nodes accounted for in {len(roots)} tree(s)")
+
 
 	# --- Guard in case no roots found ---
 	if not roots:
@@ -850,13 +972,29 @@ def plot_dispositor_graph(plot_data):
 
 	vertical_gap = 2.0
 
-	for ax, root in zip(axes, roots):
+	for ax, (tree_idx, root) in zip(axes, enumerate(roots)):
+		# Get the set of nodes that should be in this tree
+		tree_nodes = all_trees[tree_idx]
+		
+		# Build a parent->children map ONLY for nodes in this tree
+		tree_children_map = {}
+		for parent, child in raw_links:
+			if parent in tree_nodes and child in tree_nodes:
+				tree_children_map.setdefault(parent, []).append(child)
+		
+		# Also build a reverse map (child->parents) to handle mutual reception
+		tree_parents_map = {}
+		for parent, child in raw_links:
+			if parent in tree_nodes and child in tree_nodes:
+				tree_parents_map.setdefault(child, []).append(parent)
+		
 		nodes = []          # list of tuples (name, node_id)
 		edges = []          # list of tuples (parent_id, child_id)
 		level_nodes = {}    # level -> ordered list of node_ids (no duplicates)
 		queue = [(root, f"{root}_0", 0)]  # (name, unique_id, level)
 
-		visited_ids = set([f"{root}_0"])  # track unique occurrences so we don't repeat forever
+		visited_names = set([root])  # track which planet NAMES we've added
+		visited_ids = set([f"{root}_0"])  # track unique node IDs to prevent infinite loops
 		processed_pairs = set()  # track (parent_name, child_name) pairs to prevent reprocessing
 
 		while queue:
@@ -867,7 +1005,8 @@ def plot_dispositor_graph(plot_data):
 			if parent_id not in level_nodes[level]:
 				level_nodes[level].append(parent_id)
 
-			children = children_by_parent.get(parent_name, [])
+			# Process children (downward edges)
+			children = tree_children_map.get(parent_name, [])
 			for i, child in enumerate(children):
 				# Skip if we've already processed this parent->child relationship
 				if (parent_name, child) in processed_pairs:
@@ -880,13 +1019,48 @@ def plot_dispositor_graph(plot_data):
 				if child_id in visited_ids:
 					continue
 				visited_ids.add(child_id)
+				visited_names.add(child)
 
 				edges.append((parent_id, child_id))
 				queue.append((child, child_id, level+1))
 				level_nodes.setdefault(level+1, [])
 				if child_id not in level_nodes[level+1]:
 					level_nodes[level+1].append(child_id)
-
+			
+			# ALSO process parents (upward edges) - but place them at the same level or below
+			# This catches nodes in mutual reception loops
+			parents = tree_parents_map.get(parent_name, [])
+			for i, parent in enumerate(parents):
+				if parent in visited_names:
+					continue  # already added
+				
+				# Add as child at next level (will be positioned properly)
+				if (parent_name, parent) not in processed_pairs:
+					parent_id_new = f"{parent}_{level+1}_parent_{i}"
+					visited_ids.add(parent_id_new)
+					visited_names.add(parent)
+					edges.append((parent_id, parent_id_new))
+					queue.append((parent, parent_id_new, level+1))
+					level_nodes.setdefault(level+1, [])
+					if parent_id_new not in level_nodes[level+1]:
+						level_nodes[level+1].append(parent_id_new)
+		
+		# FINAL CHECK: If any nodes still missing, it means they're isolated in this component
+		# Add them as children of the root
+		missing_nodes = tree_nodes - visited_names
+		if missing_nodes:
+			print(f"   ⚠️  Tree {tree_idx} missing nodes after traversal: {missing_nodes}")
+			print(f"   Adding them as children of root...")
+			for idx, missed in enumerate(sorted(missing_nodes)):
+				node_id = f"{missed}_isolated_{idx}"
+				nodes.append((missed, node_id))
+				level_nodes.setdefault(1, [])
+				if node_id not in level_nodes[1]:
+					level_nodes[1].append(node_id)
+				# Connect to root
+				root_id = f"{root}_0"
+				edges.append((root_id, node_id))
+				visited_names.add(missed)
 
 		if not nodes:
 			continue
