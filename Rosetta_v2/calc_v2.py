@@ -844,6 +844,9 @@ def plot_dispositor_graph(plot_data):
 	if n == 1:
 		axes = [axes]
 
+	# Add legend key to the figure (top left corner)
+	fig.text(0.02, 0.98, "↻ = Self-Ruling", fontsize=14, ha='left', va='top', 
+	         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='gray', alpha=0.8))
 
 	vertical_gap = 2.0
 
@@ -888,22 +891,190 @@ def plot_dispositor_graph(plot_data):
 		if not nodes:
 			continue
 
-		max_width = max(len(v) for v in level_nodes.values()) if level_nodes else 1
-		horizontal_spacing = max(1.6, max_width * 0.9)
-
+		# Minimum horizontal spacing between sibling nodes
+		min_spacing = 30.0  # ADJUST THIS: minimum distance between adjacent nodes
+		subtree_gap = -25.0   # ADJUST THIS: extra spacing between different parent groups
+		
+		# Build parent->children map for this tree
+		tree_edges = {}
+		for parent_id, child_id in edges:
+			tree_edges.setdefault(parent_id, []).append(child_id)
+		
+		# Position nodes level by level, centering children under parents
 		pos = {}
-		for level, ids in level_nodes.items():
-			n_nodes = len(ids)
-			if n_nodes == 0:
-				continue
-			for i, node_id in enumerate(ids):
-				x = (i - (n_nodes - 1) / 2.0) * horizontal_spacing
-				y = -level * vertical_gap
-				pos[node_id] = (x, y)
+		next_x_by_level = {}  # track next available x position per level
+		
+		def position_subtree(node_id, parent_x=None):
+			"""Position node and its descendants, returning the node's final x position."""
+			level = next(lev for lev, ids in level_nodes.items() if node_id in ids)
+			children = tree_edges.get(node_id, [])
+			
+			if not children:
+				# Leaf node: place at next available position
+				x = next_x_by_level.get(level, 0.0)
+				pos[node_id] = (x, -level * vertical_gap)
+				next_x_by_level[level] = x + min_spacing
+				return x
+			else:
+				# Internal node: position children one by one
+				child_positions = []
+				for child in children:
+					# Position this child subtree
+					child_x = position_subtree(child, parent_x=None)
+					child_positions.append(child_x)
+					
+					# After positioning child, find rightmost node in its subtree and update tracker
+					def update_tracker_for_subtree(nid):
+						if nid in pos:
+							node_level = next(lev for lev, ids in level_nodes.items() if nid in ids)
+							node_x = pos[nid][0]
+							next_x_by_level[node_level] = max(
+								next_x_by_level.get(node_level, -float('inf')),
+								node_x + min_spacing
+							)
+						for c in tree_edges.get(nid, []):
+							update_tracker_for_subtree(c)
+					
+					# Update tracker based on final positions in this child's subtree
+					update_tracker_for_subtree(child)
+				
+				# Parent centers over its children's actual final positions
+				leftmost_child = min(child_positions)
+				rightmost_child = max(child_positions)
+				x = (leftmost_child + rightmost_child) / 2.0
+				
+				# Ensure parent doesn't collide with other nodes at its level
+				min_x = next_x_by_level.get(level, -float('inf'))
+				if x < min_x:
+					# Need to shift: calculate how much and shift the whole subtree
+					shift = min_x - x
+					x = min_x
+					
+					# Shift all descendants that were already positioned
+					def shift_subtree(nid, dx):
+						if nid in pos:
+							old_x, old_y = pos[nid]
+							pos[nid] = (old_x + dx, old_y)
+						for c in tree_edges.get(nid, []):
+							shift_subtree(c, dx)
+					
+					for child in children:
+						shift_subtree(child, shift)
+					
+					# After shifting, update tracker again for all children
+					for child in children:
+						update_tracker_for_subtree(child)
+				
+				pos[node_id] = (x, -level * vertical_gap)
+				
+				# Add extra spacing after parent nodes to separate subtree groups
+				next_x_by_level[level] = x + min_spacing + subtree_gap
+				return x
+		
+		# Start positioning from root
+		root_id = f"{root}_0"
+		position_subtree(root_id)
 
 		root_id = f"{root}_0"
 		if root_id not in pos:
 			pos[root_id] = (0.0, 0.0)
+		
+		# COMPACTION PHASE: Pack childless siblings into gaps between parent siblings
+		# For each parent node, compact its direct children
+		def compact_children(parent_id):
+			"""Reposition childless children to fill gaps between parent children."""
+			children = tree_edges.get(parent_id, [])
+			if len(children) <= 1:
+				return  # nothing to compact
+			
+			# Separate children into parents (have their own children) and leaves (no children)
+			parent_children = [cid for cid in children if tree_edges.get(cid)]
+			leaf_children = [cid for cid in children if not tree_edges.get(cid)]
+			
+			if not parent_children or not leaf_children:
+				return  # need both types to compact
+			
+			# Sort parent children by x position
+			parent_children.sort(key=lambda cid: pos[cid][0])
+			
+			# Sort leaf children by current x position to maintain relative order
+			leaf_children.sort(key=lambda cid: pos[cid][0])
+			
+			# Calculate total gap space between all parent children
+			gaps = []
+			total_gap_space = 0
+			for i in range(len(parent_children) - 1):
+				left_child = parent_children[i]
+				right_child = parent_children[i + 1]
+				left_x = pos[left_child][0]
+				right_x = pos[right_child][0]
+				gap_size = right_x - left_x - min_spacing
+				if gap_size >= min_spacing:
+					gaps.append({
+						'left_x': left_x,
+						'right_x': right_x,
+						'size': gap_size
+					})
+					total_gap_space += gap_size
+			
+			if not gaps:
+				return  # no gaps to fill
+			
+			# Distribute leaves evenly across all gaps
+			num_leaves = len(leaf_children)
+			leaf_idx = 0
+			
+			for gap in gaps:
+				# Calculate how many leaves should go in this gap (proportional to gap size)
+				gap_proportion = gap['size'] / total_gap_space
+				leaves_for_gap = max(1, round(num_leaves * gap_proportion))
+				
+				# Don't exceed remaining leaves
+				leaves_for_gap = min(leaves_for_gap, num_leaves - leaf_idx)
+				
+				if leaves_for_gap == 0:
+					continue
+				
+				# Evenly space the leaves in this gap
+				gap_start = gap['left_x'] + min_spacing
+				gap_end = gap['right_x']
+				available_space = gap_end - gap_start
+				spacing = available_space / (leaves_for_gap + 1)
+				
+				for i in range(leaves_for_gap):
+					if leaf_idx >= num_leaves:
+						break
+					leaf_id = leaf_children[leaf_idx]
+					x = gap_start + spacing * (i + 1)
+					old_x, y = pos[leaf_id]
+					pos[leaf_id] = (x, y)
+					leaf_idx += 1
+				
+				if leaf_idx >= num_leaves:
+					break
+		
+		# Apply compaction to all parent nodes
+		for node_id in pos.keys():
+			if tree_edges.get(node_id):  # is a parent
+				compact_children(node_id)
+
+		# Calculate dynamic font sizes based on tree complexity
+		num_nodes = len(nodes)
+		max_width = max(len(v) for v in level_nodes.values()) if level_nodes else 1
+		
+		# Scale fonts down for larger/wider trees
+		if num_nodes > 20 or max_width > 8:
+			label_fontsize = 6
+			symbol_fontsize = 12
+			circle_size = 900
+		elif num_nodes > 12 or max_width > 5:
+			label_fontsize = 9
+			symbol_fontsize = 14
+			circle_size = 1700
+		else:
+			label_fontsize = 13
+			symbol_fontsize = 16
+			circle_size = 2500
 
 		for name, node_id in nodes:
 			xy = pos.get(node_id)
@@ -912,13 +1083,14 @@ def plot_dispositor_graph(plot_data):
 				pos[node_id] = xy
 			color = "lightgreen" if name in sovereigns else ("orange" if name in self_ruling else "skyblue")
 			display_name = get_display_name(name)
-			ax.scatter(xy[0], xy[1], s=2500, c=color, zorder=2)
-			ax.text(xy[0], xy[1], display_name, ha='center', va='center', fontsize=13, fontweight="bold", zorder=3)
+			ax.scatter(xy[0], xy[1], s=circle_size, c=color, zorder=2)
+			ax.text(xy[0], xy[1], display_name, ha='center', va='center', fontsize=label_fontsize, fontweight="bold", zorder=3)
 			
-			# Add circular arrow symbol for self-ruling planets
+			# Add circular arrow symbol below the planet name for self-ruling planets
 			if name in self_ruling or name in sovereigns:
-				ax.text(xy[0], xy[1] + 0.55, "↻", ha='center', va='center', 
-				        fontsize=24, color='black', zorder=3)
+				# Position arrow directly below the text, tucked close
+				ax.text(xy[0], xy[1] - 0.08, "↻", ha='center', va='top', 
+				        fontsize=symbol_fontsize, color='black', zorder=3)
 
 		for parent_id, child_id in edges:
 			start = pos.get(parent_id)
@@ -934,7 +1106,6 @@ def plot_dispositor_graph(plot_data):
 			)
 
 		display_root = get_display_name(root)
-		ax.set_title(f"Tree: {display_root}", fontsize=16)
 		ax.axis("off")
 
 	plt.tight_layout()
