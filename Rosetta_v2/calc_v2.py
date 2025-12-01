@@ -907,12 +907,12 @@ def plot_dispositor_graph(plot_data):
 	
 	print(f"\n   Potential roots found: {sorted(potential_roots)}")
 	
-	# For each root, collect its full tree using bidirectional traversal
+	# For each root, collect its full tree using DOWNWARD traversal only (not bidirectional)
 	for root in sorted(potential_roots):
 		if root in accounted_for:
 			continue
 		
-		tree_nodes = collect_connected_component(root)
+		tree_nodes = collect_tree_downward(root)
 		all_trees.append(tree_nodes)
 		accounted_for.update(tree_nodes)
 		roots.append(root)
