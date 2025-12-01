@@ -409,7 +409,7 @@ def calculate_chart(
 	# --- Dispositor graphs & membership flags (SIGN + per-HOUSE-SYSTEM) ---
 
 	# 1) SIGN-based dispositor graph (no cusps)
-	disp_sign_only = analyze_dispositors(pos_for_dispositors, [])
+	disp_sign_only = analyze_dispositors(pos_for_dispositors, None)
 	by_sign = disp_sign_only.get("by_sign", {})
 
 	sign_dominant  = set(by_sign.get("dominant_rulers", []) or [])
@@ -436,6 +436,7 @@ def calculate_chart(
 
 	for sys in systems:  # systems = ("placidus", "equal", "whole")
 		cusps = cusps_by_system.get(sys, [])  # 12 cusp degrees for this system
+		print(f"\n🏠 Calculating dispositors for {sys.upper()} house system...")
 		disp_sys = analyze_dispositors(pos_for_dispositors, cusps)
 		by_house = disp_sys.get("by_house", {})
 		
@@ -703,8 +704,10 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 			return list(x)
 		return [x]
 
-	def _build_scope(cusps_scope=None):
+	def _build_scope(cusps_scope=None, debug_label=""):
 		edges = []
+		mode = "HOUSE-BASED" if cusps_scope else "SIGN-BASED"
+		print(f"\n🔍 _build_scope {debug_label} - Mode: {mode}")
 		for obj, deg in pos.items():
 			# Use house rulership if cusps provided, else sign rulership
 			if cusps_scope:
@@ -712,17 +715,22 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 				if h:
 					cusp_sign = SIGNS[_sign_index(cusps_scope[h - 1])]
 					rulers = _ensure_list(PLANETARY_RULERS.get(cusp_sign, []))
+					print(f"   {obj} @ {deg:.2f}° → House {h} → Cusp sign {cusp_sign} → Rulers: {rulers}")
 				else:
 					rulers = []
+					print(f"   {obj} @ {deg:.2f}° → No house found → No rulers")
 			else:
 				sign = SIGNS[_sign_index(deg)]
 				rulers = _ensure_list(PLANETARY_RULERS.get(sign, []))
+				print(f"   {obj} @ {deg:.2f}° → Sign {sign} → Rulers: {rulers}")
 
 			# Add edges
+			# Edge direction: (ruler, ruled) means "ruler -> ruled"
+			# In the graph: ruler is PARENT, ruled is CHILD
 			if rulers:
 				for r in rulers:
 					if r in pos:
-						edges.append((r, obj))  # parent -> child
+						edges.append((r, obj))  # ruler rules obj: ruler -> obj
 			else:
 				edges.append((obj, obj))  # self-ruler
 
@@ -763,9 +771,23 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 			"loops": loops,
 		}
 
+	by_sign_result = _build_scope(None, debug_label="[BY_SIGN]")
+	by_house_result = _build_scope(cusps if cusps and len(cusps) == 12 else None, 
+	                                debug_label=f"[BY_HOUSE - {len(cusps) if cusps else 0} cusps]")
+	
+	print(f"\n📊 analyze_dispositors returning:")
+	print(f"   by_sign raw_links count: {len(by_sign_result.get('raw_links', []))}")
+	print(f"   by_house raw_links count: {len(by_house_result.get('raw_links', []))}")
+	
+	# Check for any Saturn edges
+	saturn_edges_sign = [(p, c) for p, c in by_sign_result.get('raw_links', []) if 'Saturn' in (p, c)]
+	saturn_edges_house = [(p, c) for p, c in by_house_result.get('raw_links', []) if 'Saturn' in (p, c)]
+	print(f"   🔍 Saturn edges in by_sign: {saturn_edges_sign}")
+	print(f"   🔍 Saturn edges in by_house: {saturn_edges_house}")
+	
 	return {
-		"by_sign": _build_scope(None),
-		"by_house": _build_scope(cusps if cusps and len(cusps) == 12 else None),
+		"by_sign": by_sign_result,
+		"by_house": by_house_result,
 	}
 
 def plot_dispositor_graph(plot_data):
@@ -795,6 +817,11 @@ def plot_dispositor_graph(plot_data):
 	for parent, child in raw_links:
 		children_by_parent.setdefault(parent, []).append(child)
 
+	# Build parent lookup (child -> parents)
+	parents_by_child = {}
+	for parent, child in raw_links:
+		parents_by_child.setdefault(child, []).append(parent)
+
 	# Track edges drawn globally so each parent->child is drawn once
 	drawn_edges = set()
 
@@ -807,6 +834,37 @@ def plot_dispositor_graph(plot_data):
 	roots = []
 	accounted_for = set()  # Track all nodes already included in a tree
 	all_trees = []  # Track the actual node sets for each tree
+
+	def find_root_by_following_parents(start_node):
+		"""Follow parents upward until hitting a self-ruling node or cycle. Returns the root node."""
+		visited = set()
+		current = start_node
+		path = []
+		
+		while True:
+			if current in visited:
+				# Hit a cycle - return the node with most children in the cycle
+				cycle_start_idx = path.index(current)
+				cycle_nodes = path[cycle_start_idx:]
+				# Pick the node in the cycle with the most children
+				best = max(cycle_nodes, key=lambda n: len(children_by_parent.get(n, [])))
+				return best
+			
+			visited.add(current)
+			path.append(current)
+			
+			# Get parents (rulers) of current node
+			parents = parents_by_child.get(current, [])
+			
+			# Filter out self-loops
+			parents = [p for p in parents if p != current]
+			
+			if not parents:
+				# No parents - this is a self-ruling node or true root
+				return current
+			
+			# Continue following the first parent
+			current = parents[0]
 
 	def collect_tree_downward(start_node):
 		"""Collect all nodes reachable downward from start_node."""
@@ -839,8 +897,29 @@ def plot_dispositor_graph(plot_data):
 			queue.extend(neighbors.get(n, []))
 		return component
 
-	# === PHASE 1: Sovereign trees ===
-	print("\n🔵 PHASE 1: Building sovereign trees...")
+	# === PHASE 1: Find roots by following parents upward from all nodes ===
+	print("\n🔵 PHASE 1: Finding roots by following parents upward...")
+	potential_roots = set()
+	for node in all_nodes:
+		root = find_root_by_following_parents(node)
+		potential_roots.add(root)
+		print(f"   {node} → root: {root}")
+	
+	print(f"\n   Potential roots found: {sorted(potential_roots)}")
+	
+	# For each root, collect its full tree using bidirectional traversal
+	for root in sorted(potential_roots):
+		if root in accounted_for:
+			continue
+		
+		tree_nodes = collect_connected_component(root)
+		all_trees.append(tree_nodes)
+		accounted_for.update(tree_nodes)
+		roots.append(root)
+		print(f"   ✅ Root: {root} → tree size: {len(tree_nodes)}")
+
+	# === OLD PHASE 1: Sovereign trees ===
+	print("\n🔵 OLD PHASE 1: Building sovereign trees...")
 	print(f"   All sovereigns: {sovereigns}")
 	sovereign_parents = [s for s in sovereigns if s in children_by_parent and len(children_by_parent.get(s, [])) > 0]
 	print(f"   Sovereign parents (have children): {sovereign_parents}")
@@ -962,17 +1041,12 @@ def plot_dispositor_graph(plot_data):
 		return None
 
 	n = len(roots)
-	fig, axes = plt.subplots(1, n, figsize=(6 * n, 8))
-	if n == 1:
-		axes = [axes]
-
-	# Add legend key to the figure (top left corner)
-	fig.text(0.02, 0.98, "↻ = Self-Ruling", fontsize=14, ha='left', va='top', 
-	         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='gray', alpha=0.8))
-
 	vertical_gap = 2.0
-
-	for ax, (tree_idx, root) in zip(axes, enumerate(roots)):
+	
+	# PHASE 1: Position all trees and calculate their extents
+	all_tree_data = []
+	
+	for tree_idx, root in enumerate(roots):
 		# Get the set of nodes that should be in this tree
 		tree_nodes = all_trees[tree_idx]
 		
@@ -1026,48 +1100,21 @@ def plot_dispositor_graph(plot_data):
 				level_nodes.setdefault(level+1, [])
 				if child_id not in level_nodes[level+1]:
 					level_nodes[level+1].append(child_id)
-			
-			# ALSO process parents (upward edges) - but place them at the same level or below
-			# This catches nodes in mutual reception loops
-			parents = tree_parents_map.get(parent_name, [])
-			for i, parent in enumerate(parents):
-				if parent in visited_names:
-					continue  # already added
-				
-				# Add as child at next level (will be positioned properly)
-				if (parent_name, parent) not in processed_pairs:
-					parent_id_new = f"{parent}_{level+1}_parent_{i}"
-					visited_ids.add(parent_id_new)
-					visited_names.add(parent)
-					edges.append((parent_id, parent_id_new))
-					queue.append((parent, parent_id_new, level+1))
-					level_nodes.setdefault(level+1, [])
-					if parent_id_new not in level_nodes[level+1]:
-						level_nodes[level+1].append(parent_id_new)
-		
-		# FINAL CHECK: If any nodes still missing, it means they're isolated in this component
-		# Add them as children of the root
-		missing_nodes = tree_nodes - visited_names
-		if missing_nodes:
-			print(f"   ⚠️  Tree {tree_idx} missing nodes after traversal: {missing_nodes}")
-			print(f"   Adding them as children of root...")
-			for idx, missed in enumerate(sorted(missing_nodes)):
-				node_id = f"{missed}_isolated_{idx}"
-				nodes.append((missed, node_id))
-				level_nodes.setdefault(1, [])
-				if node_id not in level_nodes[1]:
-					level_nodes[1].append(node_id)
-				# Connect to root
-				root_id = f"{root}_0"
-				edges.append((root_id, node_id))
-				visited_names.add(missed)
 
 		if not nodes:
 			continue
 
-		# Minimum horizontal spacing between sibling nodes
-		min_spacing = 30.0  # ADJUST THIS: minimum distance between adjacent nodes
-		subtree_gap = -25.0   # ADJUST THIS: extra spacing between different parent groups
+		# Calculate dynamic spacing and font sizes based on tree complexity FIRST
+		num_nodes = len(nodes)
+		max_width = max(len(v) for v in level_nodes.values()) if level_nodes else 1
+		
+		# Scale spacing and fonts
+		min_spacing = 5.0
+		label_fontsize = 16
+		symbol_fontsize = 40
+		circle_size = 5000
+		
+		subtree_gap = -min_spacing * 1  # Negative gap to bring siblings closer
 		
 		# Build parent->children map for this tree
 		tree_edges = {}
@@ -1174,6 +1221,13 @@ def plot_dispositor_graph(plot_data):
 			# Sort leaf children by current x position to maintain relative order
 			leaf_children.sort(key=lambda cid: pos[cid][0])
 			
+			# Get the level of these children (all siblings are at same level)
+			child_level = next(lev for lev, ids in level_nodes.items() if children[0] in ids)
+			
+			# Collect ALL nodes at this level to check for collisions
+			all_nodes_at_level = [(nid, pos[nid][0]) for nid in level_nodes.get(child_level, []) if nid in pos]
+			all_nodes_at_level.sort(key=lambda x: x[1])  # sort by x position
+			
 			# Calculate total gap space between all parent children
 			gaps = []
 			total_gap_space = 0
@@ -1183,7 +1237,8 @@ def plot_dispositor_graph(plot_data):
 				left_x = pos[left_child][0]
 				right_x = pos[right_child][0]
 				gap_size = right_x - left_x - min_spacing
-				if gap_size >= min_spacing:
+				# Only use gaps that can fit at least one leaf with proper spacing
+				if gap_size >= min_spacing * 1.5:  # Relaxed threshold
 					gaps.append({
 						'left_x': left_x,
 						'right_x': right_x,
@@ -1213,43 +1268,89 @@ def plot_dispositor_graph(plot_data):
 				gap_start = gap['left_x'] + min_spacing
 				gap_end = gap['right_x']
 				available_space = gap_end - gap_start
+				
+				# Ensure we have enough space for the leaves with minimum spacing
+				required_space = leaves_for_gap * min_spacing
+				if available_space < required_space:
+					# Adjust number of leaves to fit
+					leaves_for_gap = max(1, int(available_space / min_spacing))
+				
 				spacing = available_space / (leaves_for_gap + 1)
+				# Don't let spacing go below min_spacing
+				spacing = max(spacing, min_spacing * 0.8)
 				
 				for i in range(leaves_for_gap):
 					if leaf_idx >= num_leaves:
 						break
 					leaf_id = leaf_children[leaf_idx]
-					x = gap_start + spacing * (i + 1)
-					old_x, y = pos[leaf_id]
-					pos[leaf_id] = (x, y)
+					new_x = gap_start + spacing * (i + 1)
+					
+					# CRITICAL: Check if this position would overlap with any existing node
+					collision = False
+					for other_id, other_x in all_nodes_at_level:
+						if other_id != leaf_id and abs(new_x - other_x) < min_spacing * 0.9:
+							collision = True
+							break
+					
+					if not collision:
+						old_x, y = pos[leaf_id]
+						pos[leaf_id] = (new_x, y)
+					# If collision, keep original position
+					
 					leaf_idx += 1
 				
 				if leaf_idx >= num_leaves:
 					break
 		
-		# Apply compaction to all parent nodes
+		# COMPACTION PHASE: Pack childless siblings into gaps between parent siblings
+		# Always apply compaction, but respect min_spacing
 		for node_id in pos.keys():
 			if tree_edges.get(node_id):  # is a parent
 				compact_children(node_id)
 
-		# Calculate dynamic font sizes based on tree complexity
-		num_nodes = len(nodes)
-		max_width = max(len(v) for v in level_nodes.values()) if level_nodes else 1
+		# Calculate tree extent
+		x_coords = [p[0] for p in pos.values()]
+		y_coords = [p[1] for p in pos.values()]
+		tree_width = max(x_coords) - min(x_coords) if x_coords else 0
+		tree_height = max(y_coords) - min(y_coords) if y_coords else 0
 		
-		# Scale fonts down for larger/wider trees
-		if num_nodes > 20 or max_width > 8:
-			label_fontsize = 6
-			symbol_fontsize = 12
-			circle_size = 900
-		elif num_nodes > 12 or max_width > 5:
-			label_fontsize = 9
-			symbol_fontsize = 14
-			circle_size = 1700
-		else:
-			label_fontsize = 13
-			symbol_fontsize = 16
-			circle_size = 2500
-
+		# Store all data for this tree
+		all_tree_data.append({
+			'root': root,
+			'nodes': nodes,
+			'edges': edges,
+			'pos': pos,
+			'label_fontsize': label_fontsize,
+			'symbol_fontsize': symbol_fontsize,
+			'circle_size': circle_size,
+			'width': tree_width,
+			'height': tree_height
+		})
+	
+	# PHASE 2: Create figure with proper size
+	# Simple fixed size that you can easily adjust
+	fig_width = 24 * n   # 24 inches per tree - INCREASE to make wider
+	fig_height = 16      # 16 inches tall - INCREASE to make taller
+	
+	print(f"\n📐 Figure size: {fig_width}\" × {fig_height}\" for {n} tree(s)")
+	
+	fig, axes = plt.subplots(1, n, figsize=(fig_width, fig_height))
+	if n == 1:
+		axes = [axes]
+	
+	# Add legend key to the figure (top left corner)
+	fig.text(0.02, 0.98, "↻ = Self-Ruling", fontsize=14, ha='left', va='top', 
+	         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='gray', alpha=0.8))
+	
+	# PHASE 3: Render all trees
+	for ax, tree_data in zip(axes, all_tree_data):
+		nodes = tree_data['nodes']
+		edges = tree_data['edges']
+		pos = tree_data['pos']
+		label_fontsize = tree_data['label_fontsize']
+		symbol_fontsize = tree_data['symbol_fontsize']
+		circle_size = tree_data['circle_size']
+		
 		for name, node_id in nodes:
 			xy = pos.get(node_id)
 			if xy is None:
@@ -1279,7 +1380,6 @@ def plot_dispositor_graph(plot_data):
 				zorder=1
 			)
 
-		display_root = get_display_name(root)
 		ax.axis("off")
 
 	plt.tight_layout()
