@@ -1158,6 +1158,9 @@ if df_cached is not None:
 		save_user_profile_db=save_user_profile_db,
 		load_user_profiles_db=load_user_profiles_db,
 	)
+	
+	# Store aspect toggles to session state so _refresh_chart_figure can access them
+	st.session_state["aspect_toggles"] = aspect_toggles
 
 	_refresh_chart_figure()
 

@@ -595,9 +595,11 @@ _COMPASS_ALIAS_MAP: dict[str, list[str]] = {
 	"South Node": ["South Node"],
 }
 
-ASPECTS = _import_lookup_attr(
-	"ASPECTS",
-	{
+# Import ASPECTS from lookup_v2 - use the same source as test_calc_v2.py
+try:
+	from lookup_v2 import ASPECTS
+except ImportError:
+	ASPECTS = {
 		"Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
 		"Sextile": {"angle": 60, "orb": 3, "color": "#6321CE", "style": "solid"},
 		"Square": {"angle": 90, "orb": 3, "color": "#F70000", "style": "solid"},
@@ -606,8 +608,7 @@ ASPECTS = _import_lookup_attr(
 		"Quincunx": {"angle": 150, "orb": 3, "color": "#439400", "style": "dotted"},
 		"Opposition": {"angle": 180, "orb": 3, "color": "#F70000", "style": "solid"},
 		"Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
-	},
-)
+	}
 
 def group_color_for(idx: int) -> str:
 	"""Return a deterministic colour for the given circuit index."""
@@ -1894,19 +1895,46 @@ def render_biwheel_chart(
 
 	# Draw inter-chart aspects (between inner and outer wheels)
 	if edges_inter_chart:
-		# Combine positions from both charts for aspect drawing
-		combined_pos = {**pos_inner, **pos_outer}
+		# DON'T combine positions - inner and outer planets have same names!
+		# We need to look them up separately based on which chart they're from
 		edge_keys: set[tuple[frozenset[str], str]] = set()
-		draw_aspect_lines(
-			ax,
-			combined_pos,
-			edges_inter_chart,
-			asc_deg_inner,
-			visible_canon=None,  # Don't filter - we want all inter-chart aspects
-			linewidth_major=2.0,
-			drawn_keys=edge_keys,
-			radius=INNER_CIRCLE_R,
-		)
+		
+		for record in edges_inter_chart:
+			if isinstance(record, (list, tuple)) and len(record) == 3:
+				p1, p2, aspect = record
+			else:
+				continue
+			
+			# p1 is from inner chart, p2 is from outer chart
+			d1 = pos_inner.get(p1)
+			d2 = pos_outer.get(p2)
+			
+			if d1 is None or d2 is None:
+				continue
+			
+			# Resolve aspect colors/styles
+			canon_aspect, is_approx, spec = _resolve_aspect(aspect)
+			if not canon_aspect:
+				continue
+			
+			r1 = deg_to_rad(d1, asc_deg_inner)
+			r2 = deg_to_rad(d2, asc_deg_inner)
+			
+			base_color = spec.get("color", "gray")
+			if is_approx:
+				base_color = _lighten_color(base_color, blend=0.35)
+			
+			style = spec.get("style", "solid")
+			lw = 2.0 if canon_aspect not in ("Quincunx", "Sesquisquare") else 1.0
+			
+			light_color = _light_variant_for(base_color)
+			if is_approx:
+				light_color = _lighten_color(light_color, blend=0.35)
+			
+			start_color = base_color if _is_luminary_or_planet(p1) else light_color
+			end_color   = base_color if _is_luminary_or_planet(p2) else light_color
+			
+			_draw_gradient_line(ax, r1, r2, start_color, end_color, lw, style, radius=INNER_CIRCLE_R)
 
 	# Draw center earth
 	draw_center_earth(ax, size=0.18)
