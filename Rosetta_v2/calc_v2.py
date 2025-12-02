@@ -1,13 +1,10 @@
+
 from zoneinfo import ZoneInfo
-import os, swisseph as swe
+import os
+import swisseph as swe
 import networkx as nx
 from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
 from lookup_v2 import SIGNS, PLANETARY_RULERS
-# Force path to the ephe folder in your repo
-EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
-EPHE_PATH = EPHE_PATH.replace("\\", "/")
-os.environ["SE_EPHE_PATH"] = EPHE_PATH
-swe.set_ephe_path(EPHE_PATH)
 
 import datetime
 import pandas as pd
@@ -790,7 +787,51 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 		"by_house": by_house_result,
 	}
 
-def plot_dispositor_graph(plot_data):
+def _draw_dispositor_header(fig, header_info):
+	"""
+	Draw a single-line header across the top of the dispositor graph.
+	Format: Name | Date | Time | City
+	"""
+	import matplotlib.patheffects as pe
+	
+	# Get header components
+	name = header_info.get('name', 'Untitled Chart')
+	date_line = header_info.get('date_line', '')
+	time_line = header_info.get('time_line', '')
+	city = header_info.get('city', '')
+	extra_line = header_info.get('extra_line', '')
+	
+	# Build single line: Name | Date | Time | City
+	# Handle unknown time format where date_line might be "AC = Aries 0° (default)"
+	parts = [name]
+	
+	if date_line:
+		parts.append(date_line)
+	if time_line:
+		parts.append(time_line)
+	if city:
+		parts.append(city)
+	if extra_line:
+		parts.append(extra_line)
+	
+	# Join with separator
+	header_text = "  |  ".join(parts)
+	
+	# Draw centered at top
+	color = "white"  # White text for dark background
+	stroke = "black"
+	effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+	
+	fig.text(
+		0.5, 0.98,  # Centered horizontally, near top
+		header_text,
+		ha="center", va="top",
+		fontsize=11,
+		color=color,
+		path_effects=effects
+	)
+
+def plot_dispositor_graph(plot_data, header_info=None):
 	"""
 	Plot dispositor trees in a vertical family-tree style.
 
@@ -799,10 +840,15 @@ def plot_dispositor_graph(plot_data):
 	- Each generation (distance from root) is a horizontal layer.
 	- A planet may appear multiple times under different rulers if dual-ruled.
 	- Never repeat the same parent->child edge.
+	
+	Args:
+		plot_data: Dispositor data structure with raw_links, sovereigns, self_ruling
+		header_info: Optional dict with keys: name, date_line, time_line, city, extra_line
 	"""
 	import matplotlib.pyplot as plt
 	import networkx as nx
 	from lookup_v2 import ABREVIATED_PLANET_NAMES
+	import matplotlib.patheffects as pe
 
 	raw_links = plot_data.get("raw_links", [])
 	sovereigns = plot_data.get("sovereigns", [])
@@ -1524,7 +1570,13 @@ def plot_dispositor_graph(plot_data):
 
 	# Remove tight_layout which creates excessive margins
 	# Use subplots_adjust to minimize whitespace
-	plt.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02, wspace=0.1)
+	# If header is present, leave more space at top
+	if header_info:
+		plt.subplots_adjust(left=0.02, right=0.98, top=0.94, bottom=0.02, wspace=0.1)
+		# Draw single-line header across the top
+		_draw_dispositor_header(fig, header_info)
+	else:
+		plt.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02, wspace=0.1)
 	return fig
 
 def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:

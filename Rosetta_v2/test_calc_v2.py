@@ -1,5 +1,13 @@
-import sys
+
 import os
+# --- Set Swiss Ephemeris path before any other imports ---
+import swisseph as swe
+EPHE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "ephe"))
+EPHE_PATH = EPHE_PATH.replace("\\", "/")
+os.environ["SE_EPHE_PATH"] = EPHE_PATH
+swe.set_ephe_path(EPHE_PATH)
+
+import sys
 
 # Add the Rosetta project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -201,9 +209,14 @@ def is_admin(user_id: str) -> bool:
 	return True
 # ---- End stubs ----
 
+
+# --- Create a single, reusable geocoder instance ---
+_OPENCAGE_KEY = st.secrets["opencage"]["api_key"]
+_geolocator = OpenCageGeocode(_OPENCAGE_KEY)
+
 def _geocode_city_with_timezone(
 	city_query: str,
-	opencage_key: str
+	opencage_key: str = None
 ) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
 	lat = lon = tz_name = None
 	formatted_address = None
@@ -211,9 +224,8 @@ def _geocode_city_with_timezone(
 	if not city_query:
 		return lat, lon, tz_name, formatted_address
 
-	geolocator = OpenCageGeocode(opencage_key)
-
-	results = geolocator.geocode(city_query, no_annotations='1', limit=1)
+	# Use the module-level geolocator to avoid too many open files
+	results = _geolocator.geocode(city_query, no_annotations='1', limit=1)
 
 	if results:
 		first_result = results[0]
@@ -1346,7 +1358,17 @@ if df_cached is not None:
 			scope_data = plot_data.get(plot_data_key)
 
 		if scope_data and scope_data.get("raw_links"):
-			disp_fig = plot_dispositor_graph(scope_data)
+			# Get header info from _current_chart_header_lines
+			from drawing_v2 import _current_chart_header_lines
+			name, date_line, time_line, city, extra_line = _current_chart_header_lines()
+			header_info = {
+				'name': name,
+				'date_line': date_line,
+				'time_line': time_line,
+				'city': city,
+				'extra_line': extra_line
+			}
+			disp_fig = plot_dispositor_graph(scope_data, header_info=header_info)
 			if disp_fig is not None:
 				# Create columns for legend and graph
 				legend_col, graph_col = st.columns([1, 5])

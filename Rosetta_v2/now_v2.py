@@ -1,8 +1,11 @@
 # now_v2.py
+
 import os
 import datetime as dt
 import pytz
 import streamlit as st
+
+
 
 # --- Moon icons directory (relative to this file) ---
 MOON_PNG_DIR = os.path.join(os.path.dirname(__file__), "pngs")
@@ -242,7 +245,8 @@ def render_now_widget(
 					st.session_state["profile_hour"]        = now.hour
 					st.session_state["profile_minute"]      = now.minute
 					st.session_state["profile_city"]        = city_name
-					st.session_state["profile_unknown_time"] = False
+					if "profile_unknown_time" not in st.session_state:
+						st.session_state["profile_unknown_time"] = False
 
 					# ensure current_* cache
 					st.session_state["current_lat"]     = stored_lat
@@ -286,6 +290,7 @@ def render_now_widget(
 				ut.year, ut.month, ut.day,
 				ut.hour + ut.minute/60.0 + ut.second/3600.0
 			)
+			# Use the same call signature as in calc_v2.py
 			sun_lon  = swe.calc_ut(jd_ut, swe.SUN)[0][0] % 360.0
 			moon_lon = swe.calc_ut(jd_ut, swe.MOON)[0][0] % 360.0
 		except Exception as e:
@@ -330,9 +335,11 @@ def render_now_widget(
 			if not city_str:
 				st.error("Please type a city.")
 			else:
+
 				try:
-					# NOTE: Fixed original NameError: use city_str here.
-					lat, lon, tz_name, formatted_address = geocode_city_with_timezone(city_str)
+					# Use OpenCage API key from Streamlit secrets
+					opencage_key = st.secrets["opencage"]["api_key"]
+					lat, lon, tz_name, formatted_address = geocode_city_with_timezone(city_str, opencage_key)
 
 					# Make the location visible to drawing_v2
 					if lat is not None and lon is not None:

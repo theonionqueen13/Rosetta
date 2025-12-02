@@ -179,18 +179,70 @@ def render_circuit_toggles(
 				st.markdown("_(none)_")
 	else:
 		# ---------- Standard Chart Mode UI ----------
-		unknown_time = bool(
-			st.session_state.get("chart_unknown_time")
-			or st.session_state.get("profile_unknown_time")
-		)
-		label = "Compass Needle" if unknown_time else "Compass Rose"
-		new_value = st.checkbox(label, key=COMPASS_KEY)
+		synastry_mode = st.session_state.get("synastry_mode", False)
+		
+		# Create columns for compass checkbox and swap button
+		compass_col, swap_col = st.columns([1, 1])
+		
+		with compass_col:
+			unknown_time = bool(
+				st.session_state.get("chart_unknown_time")
+				or st.session_state.get("profile_unknown_time")
+			)
+			label = "Compass Needle" if unknown_time else "Compass Rose"
+			new_value = st.checkbox(label, key=COMPASS_KEY)
 
-		# Track compass value change but do not rerun immediately
-		prev_value = st.session_state.get("_last_compass_value")
-		if new_value != prev_value:
-			st.session_state["_last_compass_value"] = new_value
-			st.session_state["_pending_compass_rerun"] = True
+			# Track compass value change but do not rerun immediately
+			prev_value = st.session_state.get("_last_compass_value")
+			if new_value != prev_value:
+				st.session_state["_last_compass_value"] = new_value
+				st.session_state["_pending_compass_rerun"] = True
+		
+		with swap_col:
+			if synastry_mode:
+				# Define swap function that runs in the on_click callback
+				def swap_charts_callback():
+					"""Swap all chart data between Chart 1 and Chart 2"""
+					# Swap radio button selections
+					test_chart_1 = st.session_state.get("test_chart_radio", "Custom")
+					test_chart_2 = st.session_state.get("test_chart_2", "Custom")
+					st.session_state["test_chart_radio"] = test_chart_2
+					st.session_state["test_chart_2"] = test_chart_1
+					
+					# Swap last_test_chart trackers
+					last_1 = st.session_state.get("last_test_chart")
+					last_2 = st.session_state.get("last_test_chart_2")
+					st.session_state["last_test_chart"] = last_2
+					st.session_state["last_test_chart_2"] = last_1
+					
+					# Define data keys to swap
+					swap_pairs = [
+						("year", "year_2"),
+						("month_name", "month_name_2"),
+						("day", "day_2"),
+						("hour_12", "hour_12_2"),
+						("minute_str", "minute_str_2"),
+						("ampm", "ampm_2"),
+						("city", "city_2"),
+						("last_df", "last_df_2"),
+						("plot_data", "plot_data_2"),
+						("chart_dt_utc", "chart_dt_utc_2"),
+						("chart_unknown_time", "chart_unknown_time_2"),
+					]
+					
+					# Perform the swap
+					for key1, key2 in swap_pairs:
+						val1 = st.session_state.get(key1)
+						val2 = st.session_state.get(key2)
+						st.session_state[key1] = val2
+						st.session_state[key2] = val1
+					
+					# Clear cached figures
+					st.session_state["render_fig"] = None
+					st.session_state["render_result"] = None
+				
+				# Button with on_click callback
+				st.button("Swap Chart Wheels", key="swap_chart_wheels", on_click=swap_charts_callback)
 		
 		st.markdown("---")
 
@@ -199,6 +251,33 @@ def render_circuit_toggles(
 	# Add Standard Chart aspect toggles in left column
 	if current_mode == "Standard Chart":
 		with circuits_col:
+			# Check if we're in synastry mode
+			synastry_mode = st.session_state.get("synastry_mode", False)
+			
+			if synastry_mode:
+				# Synastry mode: show aspect group toggles
+				st.subheader("Aspect Groups")
+				
+				# Get chart names
+				chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
+				if chart1_name == "Custom":
+					chart1_name = "Chart 1"
+				chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+				if chart2_name == "Custom":
+					chart2_name = "Chart 2"
+				
+				# Initialize synastry aspect group toggles
+				st.session_state.setdefault("synastry_aspects_inter", True)  # Default on
+				st.session_state.setdefault("synastry_aspects_chart1", False)  # Default off
+				st.session_state.setdefault("synastry_aspects_chart2", False)  # Default off
+				
+				# Aspect group toggles
+				st.checkbox(f"{chart1_name} ↔ {chart2_name}", key="synastry_aspects_inter")
+				st.checkbox(f"{chart1_name} Aspects", key="synastry_aspects_chart1")
+				st.checkbox(f"{chart2_name} Aspects", key="synastry_aspects_chart2")
+				
+				st.markdown("---")
+			
 			st.subheader("Additional Aspects")
 			
 			# Get current label style
