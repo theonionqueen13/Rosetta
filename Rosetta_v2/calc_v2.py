@@ -1041,7 +1041,16 @@ def plot_dispositor_graph(plot_data):
 		return None
 
 	n = len(roots)
-	vertical_gap = 2.0
+	
+	# PHASE 0: Count nodes in each tree to calculate scaling factors
+	print(f"\n📊 Counting nodes in {n} tree(s)...")
+	tree_node_counts = []
+	for tree_idx, root in enumerate(roots):
+		tree_nodes = all_trees[tree_idx]
+		tree_node_counts.append(len(tree_nodes))
+	
+	max_nodes = max(tree_node_counts) if tree_node_counts else 1
+	print(f"   Tree node counts: {tree_node_counts}, max: {max_nodes}")
 	
 	# PHASE 1: Position all trees and calculate their extents
 	all_tree_data = []
@@ -1104,15 +1113,41 @@ def plot_dispositor_graph(plot_data):
 		if not nodes:
 			continue
 
-		# Calculate dynamic spacing and font sizes based on tree complexity FIRST
-		num_nodes = len(nodes)
-		max_width = max(len(v) for v in level_nodes.values()) if level_nodes else 1
+		# Calculate dynamic spacing based on tree size relative to largest tree
+		num_nodes = len(tree_nodes)  # Use tree_nodes (actual count) not nodes (includes duplicates)
+		# Gentler scaling: interpolate between 0.85 and 1.0
+		raw_scale = num_nodes / max_nodes
+		scale_factor = 0.85 + (0.15 * raw_scale)  # Scale ranges from 0.85 to 1.0
 		
-		# Scale spacing and fonts
-		min_spacing = 5.0
-		label_fontsize = 16
-		symbol_fontsize = 40
-		circle_size = 5000
+		# Scale spacing
+		min_spacing = 5.0 * scale_factor
+		vertical_gap = 2.0 * scale_factor
+		
+		# Simple node-count-based sizing (like original code)
+		if num_nodes <= 5:
+			label_fontsize = 8
+			symbol_fontsize = 9
+			circle_size = 2000
+		elif num_nodes <= 15:
+			label_fontsize = 9
+			symbol_fontsize = 11
+			circle_size = 2000
+		elif num_nodes <= 20:
+			label_fontsize = 10
+			symbol_fontsize = 12
+			circle_size = 3000
+		elif num_nodes <= 25:
+			label_fontsize = 9
+			symbol_fontsize = 11
+			circle_size = 3000
+		else:
+			label_fontsize = 8
+			symbol_fontsize = 10
+			circle_size = 900
+		
+		print(f"   Tree {tree_idx} ({root}): {num_nodes} nodes, scale={scale_factor:.3f}")
+		print(f"      min_spacing={min_spacing:.3f}, vertical_gap={vertical_gap:.3f}")
+		print(f"      circle_size={circle_size:.0f}, label_fontsize={label_fontsize}")
 		
 		subtree_gap = -min_spacing * 1  # Negative gap to bring siblings closer
 		
@@ -1327,22 +1362,39 @@ def plot_dispositor_graph(plot_data):
 			'height': tree_height
 		})
 	
-	# PHASE 2: Create figure with proper size
-	# Simple fixed size that you can easily adjust
-	fig_width = 24 * n   # 24 inches per tree - INCREASE to make wider
-	fig_height = 16      # 16 inches tall - INCREASE to make taller
+	# PHASE 2: Create figure with proper size based on actual tree extents
+	tree_widths = [td['width'] for td in all_tree_data]
+	tree_heights = [td['height'] for td in all_tree_data]
 	
-	print(f"\n📐 Figure size: {fig_width}\" × {fig_height}\" for {n} tree(s)")
+	print(f"\n📐 Tree extents: widths={[f'{w:.1f}' for w in tree_widths]}, heights={[f'{h:.1f}' for h in tree_heights]}")
 	
-	fig, axes = plt.subplots(1, n, figsize=(fig_width, fig_height))
-	if n == 1:
-		axes = [axes]
+	# Use a fixed, reasonable figure size that's not based on data width
+	# Data widths can be large due to spacing, but we don't want huge figures
+	fig_width = 8 * n  # 8 inches per tree - reasonable and consistent
+	fig_height = 10     # 10 inches tall
+	
+	print(f"   Calculated figure size: {fig_width:.1f}\" × {fig_height:.1f}\"")
+	
+	# Use GridSpec to control subplot widths proportionally
+	import matplotlib.gridspec as gridspec
+	
+	# Calculate width ratios based on tree widths
+	max_width = max(tree_widths) if tree_widths else 1
+	width_ratios = [w / max_width for w in tree_widths]
+	print(f"   Width ratios: {[f'{w:.2f}' for w in width_ratios]}")
+	
+	fig = plt.figure(figsize=(fig_width, fig_height))
+	gs = gridspec.GridSpec(1, n, figure=fig, width_ratios=width_ratios, wspace=0.15)
+	axes = [fig.add_subplot(gs[0, i]) for i in range(n)]
 	
 	# Add legend key to the figure (top left corner)
 	fig.text(0.02, 0.98, "↻ = Self-Ruling", fontsize=14, ha='left', va='top', 
 	         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='gray', alpha=0.8))
 	
 	# PHASE 3: Render all trees
+	# First, calculate the maximum y-range needed across all trees
+	max_height = max(tree_heights) if tree_heights else 10
+	
 	for ax, tree_data in zip(axes, all_tree_data):
 		nodes = tree_data['nodes']
 		edges = tree_data['edges']
@@ -1379,6 +1431,22 @@ def plot_dispositor_graph(plot_data):
 				arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8),
 				zorder=1
 			)
+
+		# Set axis limits - shared y-scale for consistent sizing
+		if pos:
+			x_coords = [p[0] for p in pos.values()]
+			y_coords = [p[1] for p in pos.values()]
+			x_min, x_max = min(x_coords), max(x_coords)
+			y_min, y_max = min(y_coords), max(y_coords)
+			
+			# X-axis: use this tree's actual width
+			x_pad = (x_max - x_min) * 0.1 if x_max > x_min else 1.0
+			ax.set_xlim(x_min - x_pad, x_max + x_pad)
+			
+			# Y-axis: use SHARED scale based on largest tree
+			y_center = (y_min + y_max) / 2.0
+			y_range = max_height
+			ax.set_ylim(y_center - y_range/2 - 1, y_center + y_range/2 + 1)
 
 		ax.axis("off")
 
