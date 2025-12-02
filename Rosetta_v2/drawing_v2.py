@@ -1830,6 +1830,8 @@ def render_biwheel_chart(
 	df_outer: pd.DataFrame,
 	*,
 	edges_inter_chart: Sequence[Any] | None = None,
+	edges_chart1: Sequence[Any] | None = None,
+	edges_chart2: Sequence[Any] | None = None,
 	house_system: str = "placidus",
 	dark_mode: bool = False,
 	label_style: str = "glyph",
@@ -1841,6 +1843,8 @@ def render_biwheel_chart(
 	- Inner chart: df_inner (between the two degree circles)
 	- Outer chart: df_outer (outside the outer degree circle)
 	- edges_inter_chart: Aspects between inner and outer chart planets
+	- edges_chart1: Internal aspects within inner chart
+	- edges_chart2: Internal aspects within outer chart
 	"""
 	# Get ascendant for inner chart (rotation reference)
 	unknown_time_inner = bool(
@@ -1955,12 +1959,98 @@ def render_biwheel_chart(
 		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
 	)
 
-	# Draw inter-chart aspects (between inner and outer wheels)
-	if edges_inter_chart:
-		# DON'T combine positions - inner and outer planets have same names!
-		# We need to look them up separately based on which chart they're from
-		edge_keys: set[tuple[frozenset[str], str]] = set()
+	# Determine coloring mode based on how many aspect groups are enabled
+	show_inter = bool(edges_inter_chart)
+	show_chart1 = bool(edges_chart1)
+	show_chart2 = bool(edges_chart2)
+	num_groups_enabled = sum([show_inter, show_chart1, show_chart2])
+	use_group_colors = num_groups_enabled >= 2
+	
+	# Import synastry colors
+	try:
+		from lookup_v2 import SYNASTRY_COLORS_1, SYNASTRY_COLORS_2
+	except ImportError:
+		SYNASTRY_COLORS_1 = ["#FF0000"]
+		SYNASTRY_COLORS_2 = ["#00FF0075"]
+	
+	# Draw chart 1 internal aspects first (bottom layer)
+	if show_chart1:
+		# Use group color if multiple groups enabled, otherwise standard colors
+		chart1_color = SYNASTRY_COLORS_1[0] if use_group_colors else None
 		
+		for record in edges_chart1:
+			if isinstance(record, (list, tuple)) and len(record) == 3:
+				p1, p2, aspect = record
+			else:
+				continue
+			
+			d1 = pos_inner.get(p1)
+			d2 = pos_inner.get(p2)
+			
+			if d1 is None or d2 is None:
+				continue
+			
+			# Resolve aspect
+			canon_aspect, is_approx, spec = _resolve_aspect(aspect)
+			if not canon_aspect:
+				continue
+			
+			r1 = deg_to_rad(d1, asc_deg_inner)
+			r2 = deg_to_rad(d2, asc_deg_inner)
+			
+			# Use group color or standard color
+			if chart1_color:
+				base_color = chart1_color
+			else:
+				base_color = spec.get("color", "gray")
+				if is_approx:
+					base_color = _lighten_color(base_color, blend=0.35)
+			
+			style = spec.get("style", "solid")
+			lw = 2.0 if canon_aspect not in ("Quincunx", "Sesquisquare") else 1.0
+			
+			_draw_gradient_line(ax, r1, r2, base_color, base_color, lw, style, radius=INNER_CIRCLE_R)
+	
+	# Draw chart 2 internal aspects
+	if show_chart2:
+		# Use group color if multiple groups enabled, otherwise standard colors
+		chart2_color = SYNASTRY_COLORS_2[0] if use_group_colors else None
+		
+		for record in edges_chart2:
+			if isinstance(record, (list, tuple)) and len(record) == 3:
+				p1, p2, aspect = record
+			else:
+				continue
+			
+			d1 = pos_outer.get(p1)
+			d2 = pos_outer.get(p2)
+			
+			if d1 is None or d2 is None:
+				continue
+			
+			# Resolve aspect
+			canon_aspect, is_approx, spec = _resolve_aspect(aspect)
+			if not canon_aspect:
+				continue
+			
+			r1 = deg_to_rad(d1, asc_deg_inner)
+			r2 = deg_to_rad(d2, asc_deg_inner)
+			
+			# Use group color or standard color
+			if chart2_color:
+				base_color = chart2_color
+			else:
+				base_color = spec.get("color", "gray")
+				if is_approx:
+					base_color = _lighten_color(base_color, blend=0.35)
+			
+			style = spec.get("style", "solid")
+			lw = 2.0 if canon_aspect not in ("Quincunx", "Sesquisquare") else 1.0
+			
+			_draw_gradient_line(ax, r1, r2, base_color, base_color, lw, style, radius=INNER_CIRCLE_R)
+	
+	# Draw inter-chart aspects last (top layer - foreground)
+	if show_inter:
 		for record in edges_inter_chart:
 			if isinstance(record, (list, tuple)) and len(record) == 3:
 				p1, p2, aspect = record
@@ -2002,9 +2092,26 @@ def render_biwheel_chart(
 	draw_center_earth(ax, size=0.18)
 
 	# Draw chart headers for both charts
-	# Chart 1 (inner) - top left
-	name1, date_line1, time_line1, city1, extra_line1 = _current_chart_header_lines()
-	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, extra_line1, dark_mode)
+	# Chart 1 (inner) - top left - use test_chart_radio to get the correct name
+	name1 = st.session_state.get("test_chart_radio", "Chart 1")
+	if name1 == "Custom":
+		name1 = "Chart 1"
+	
+	month1 = st.session_state.get("month_name", "")
+	day1 = st.session_state.get("day", "")
+	year1 = st.session_state.get("year", "")
+	hour_12_1 = st.session_state.get("hour_12")
+	minute_str_1 = st.session_state.get("minute_str")
+	ampm_1 = st.session_state.get("ampm")
+	city1 = st.session_state.get("city", "")
+	
+	# Build Chart 1 header lines
+	date_line1 = f"{month1} {day1}, {year1}".strip()
+	time_line1 = ""
+	if hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--":
+		time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}"
+	
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
 
 	# Chart 2 (outer) - top right in maroon
 	# Get chart 2 data from session state (using _2 suffix keys)

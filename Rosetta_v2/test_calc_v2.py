@@ -258,8 +258,88 @@ MONTH_NAMES = [
 	"July","August","September","October","November","December"
 ]
 
-# Synastry mode toggle
-st.session_state.setdefault("synastry_mode", False)
+# --- Handle pending chart swap BEFORE any widgets are created ---
+# Track the most recent chart figure so the wheel column can always render.
+st.session_state.setdefault("render_fig", None)
+
+if st.session_state.get("__pending_swap_charts__"):
+	
+	# Preserve widget states that shouldn't be affected by swap
+	preserved_synastry_mode = st.session_state.get("synastry_mode", False)
+	preserved_chart_mode = st.session_state.get("chart_mode", "Circuits")
+	preserved_house_system = st.session_state.get("house_system", "placidus")
+	
+	# Swap the test chart radio button selections
+	test_chart_1 = st.session_state.get("test_chart_radio", "Custom")
+	test_chart_2 = st.session_state.get("test_chart_2", "Custom")
+	st.session_state["test_chart_radio"] = test_chart_2
+	st.session_state["test_chart_2"] = test_chart_1
+	
+	# Also swap the last_test_chart trackers
+	last_1 = st.session_state.get("last_test_chart")
+	last_2 = st.session_state.get("last_test_chart_2")
+	st.session_state["last_test_chart"] = last_2
+	st.session_state["last_test_chart_2"] = last_1
+	
+	# Define keys to swap (excluding widget keys that haven't been created yet)
+	swap_pairs = [
+		("year", "year_2"),
+		("month_name", "month_name_2"),
+		("day", "day_2"),
+		("hour_12", "hour_12_2"),
+		("minute_str", "minute_str_2"),
+		("ampm", "ampm_2"),
+		("city", "city_2"),
+		("last_df", "last_df_2"),
+		("plot_data", "plot_data_2"),
+		("chart_dt_utc", "chart_dt_utc_2"),
+		("chart_unknown_time", "chart_unknown_time_2"),
+		("dispositor_summary_rows", "dispositor_summary_rows_2"),
+		("dispositor_chains_rows", "dispositor_chains_rows_2"),
+		("chart_positions", "chart_positions_2"),
+		("edges_major", "edges_major_2"),
+		("edges_minor", "edges_minor_2"),
+		("patterns", "patterns_2"),
+		("shapes", "shapes_2"),
+		("filaments", "filaments_2"),
+		("combos", "combos_2"),
+		("singleton_map", "singleton_map_2"),
+		("major_edges_all", "major_edges_all_2"),
+	]
+	
+	# Perform the swap
+	for key1, key2 in swap_pairs:
+		val1 = st.session_state.get(key1)
+		val2 = st.session_state.get(key2)
+		st.session_state[key1] = val2
+		st.session_state[key2] = val1
+	
+	# Restore preserved widget states
+	st.session_state["synastry_mode"] = preserved_synastry_mode
+	st.session_state["chart_mode"] = preserved_chart_mode
+	st.session_state["house_system"] = preserved_house_system
+	
+	# Clear the cached figure so it will be regenerated with swapped data
+	st.session_state["render_fig"] = None
+	st.session_state["render_result"] = None
+	
+	# Clear Streamlit's cache to ensure fresh render
+	try:
+		st.cache_data.clear()
+	except:
+		pass
+	
+	# Force matplotlib to clear any cached figures
+	import matplotlib.pyplot as plt
+	plt.close('all')
+	
+	# Clear the flag and force a full refresh
+	del st.session_state["__pending_swap_charts__"]
+	st.rerun()
+
+# Synastry mode toggle - ONLY setdefault if key doesn't exist
+if "synastry_mode" not in st.session_state:
+	st.session_state["synastry_mode"] = False
 synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
 
 # Initialize test_chart_2 default before creating the widget
@@ -484,8 +564,11 @@ def _refresh_chart_figure():
 		dark_mode = st.session_state.get("dark_mode", False)
 		chart_mode = st.session_state.get("chart_mode", "Circuits")
 		
-		# Compute inter-chart aspects for Standard Chart mode
+		# Compute aspects for Standard Chart mode
 		edges_inter_chart = []
+		edges_chart1 = []
+		edges_chart2 = []
+		
 		if chart_mode == "Standard Chart":
 			# Get positions for both charts
 			pos_inner = extract_positions(df_inner)
@@ -507,26 +590,68 @@ def _refresh_chart_figure():
 			inner_pos_filtered = {name: deg for name, deg in pos_inner.items() if name in aspect_bodies_inner}
 			outer_pos_filtered = {name: deg for name, deg in pos_outer.items() if name in aspect_bodies_outer}
 			
-			# Compute aspects ONLY between inner and outer charts (not within each chart)
-			for p1 in inner_pos_filtered:
-				for p2 in outer_pos_filtered:
-					d1 = inner_pos_filtered[p1]
-					d2 = outer_pos_filtered[p2]
-					angle = abs(d1 - d2) % 360
-					if angle > 180:
-						angle = 360 - angle
-					
-					# Check all aspect types
-					for aspect_name, aspect_data in ASPECTS.items():
-						if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
-							edges_inter_chart.append((p1, p2, aspect_name))
-							break  # Only one aspect per pair
+			# Get synastry aspect group toggles
+			show_inter = st.session_state.get("synastry_aspects_inter", True)
+			show_chart1 = st.session_state.get("synastry_aspects_chart1", False)
+			show_chart2 = st.session_state.get("synastry_aspects_chart2", False)
+			
+			# Compute inter-chart aspects (chart 1 to chart 2)
+			if show_inter:
+				for p1 in inner_pos_filtered:
+					for p2 in outer_pos_filtered:
+						d1 = inner_pos_filtered[p1]
+						d2 = outer_pos_filtered[p2]
+						angle = abs(d1 - d2) % 360
+						if angle > 180:
+							angle = 360 - angle
+						
+						# Check all aspect types
+						for aspect_name, aspect_data in ASPECTS.items():
+							if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+								edges_inter_chart.append((p1, p2, aspect_name))
+								break  # Only one aspect per pair
+			
+			# Compute chart 1 internal aspects
+			if show_chart1:
+				planets_chart1 = list(inner_pos_filtered.keys())
+				for i in range(len(planets_chart1)):
+					for j in range(i + 1, len(planets_chart1)):
+						p1, p2 = planets_chart1[i], planets_chart1[j]
+						d1 = inner_pos_filtered[p1]
+						d2 = inner_pos_filtered[p2]
+						angle = abs(d1 - d2) % 360
+						if angle > 180:
+							angle = 360 - angle
+						
+						for aspect_name, aspect_data in ASPECTS.items():
+							if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+								edges_chart1.append((p1, p2, aspect_name))
+								break
+			
+			# Compute chart 2 internal aspects
+			if show_chart2:
+				planets_chart2 = list(outer_pos_filtered.keys())
+				for i in range(len(planets_chart2)):
+					for j in range(i + 1, len(planets_chart2)):
+						p1, p2 = planets_chart2[i], planets_chart2[j]
+						d1 = outer_pos_filtered[p1]
+						d2 = outer_pos_filtered[p2]
+						angle = abs(d1 - d2) % 360
+						if angle > 180:
+							angle = 360 - angle
+						
+						for aspect_name, aspect_data in ASPECTS.items():
+							if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+								edges_chart2.append((p1, p2, aspect_name))
+								break
 		
 		try:
 			rr = render_biwheel_chart(
 				df_inner,
 				df_outer,
 				edges_inter_chart=edges_inter_chart,
+				edges_chart1=edges_chart1,
+				edges_chart2=edges_chart2,
 				house_system=house_system,
 				dark_mode=dark_mode,
 				label_style=label_style,
@@ -1149,6 +1274,12 @@ if df_cached is not None:
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
 	saved_profiles = load_user_profiles_db(current_user_id)
+	
+	# Safety check: ensure patterns, shapes, singleton_map exist
+	patterns = patterns or []
+	shapes = shapes or []
+	singleton_map = singleton_map or {}
+	
 	toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles = render_circuit_toggles(
 		patterns=patterns,
 		shapes=shapes,
@@ -1166,7 +1297,7 @@ if df_cached is not None:
 
 	fig = st.session_state.get("render_fig")
 	if fig is not None:
-		st.pyplot(fig, clear_figure=False)
+		st.pyplot(fig, clear_figure=True, use_container_width=True)
 	else:
 		st.caption("Calculate a chart to render the wheel.")
 
