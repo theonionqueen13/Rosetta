@@ -205,6 +205,18 @@ def render_circuit_toggles(
 			label_style = st.session_state.get("label_style", "glyph")
 			want_glyphs = label_style == "glyph"
 			
+			# Select All checkbox
+			select_all_key = "aspect_toggle_select_all"
+			st.session_state.setdefault(select_all_key, False)
+			select_all = st.checkbox("Select All", key=select_all_key)
+			
+			# If select all state changed, update all toggles
+			if select_all != st.session_state.get("_last_select_all_state", False):
+				for body_name in TOGGLE_ASPECTS.keys():
+					st.session_state[f"aspect_toggle_{body_name}"] = select_all
+				st.session_state["_last_select_all_state"] = select_all
+				st.rerun()
+			
 			# Create checkboxes for TOGGLE_ASPECTS in a grid
 			toggle_bodies = list(TOGGLE_ASPECTS.keys())
 			cols_per_row = 4

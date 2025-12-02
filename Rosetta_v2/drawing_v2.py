@@ -783,7 +783,7 @@ def draw_house_cusps(
 	house_system: str = "placidus",
 	dark_mode: bool = False,
 	label_r: float = 0.32,
-	label_frac: float = 0.50,
+	label_frac: float = 0.9,
 	*,
 	draw_lines: bool = True,
 	draw_labels: bool = True,
@@ -1865,7 +1865,7 @@ def render_biwheel_chart(
 	if not unknown_time_inner:
 		cusps_inner = draw_house_cusps_biwheel(
 			ax, df_inner, asc_deg_inner, house_system, dark_mode,
-			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=False
+			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
 		)
 	else:
 		cusps_inner = []
@@ -1876,7 +1876,7 @@ def render_biwheel_chart(
 	if not unknown_time_outer:
 		cusps_outer = draw_house_cusps_biwheel(
 			ax, df_outer, asc_deg_inner, house_system, dark_mode,
-			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=False
+			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
 		)
 	else:
 		cusps_outer = []
@@ -1953,7 +1953,7 @@ def render_biwheel_chart(
 
 def draw_house_cusps_biwheel(
 	ax, df, asc_deg, house_system, dark_mode,
-	r_inner, r_outer, draw_labels=False
+	r_inner, r_outer, draw_labels=False, label_frac=0.50
 ):
 	"""Draw house cusps between two radii for biwheel charts."""
 	system_map = {
@@ -1995,6 +1995,31 @@ def draw_house_cusps_biwheel(
 			solid_capstyle="butt",
 			antialiased=True,
 		)
+
+	# Draw house number labels if requested
+	if draw_labels:
+		# Use gray color matching house cusp lines for biwheel
+		lbl_color = "#A0A0A0" if not dark_mode else "#333333"
+		# Position labels just inside the outer radius, closer to cusp lines
+		label_r = r_outer - 0.05
+		# Angle offset in degrees - adjust this to rotate labels around the circle
+		angle_offset = -13  # positive = clockwise, negative = counter-clockwise
+		for i in range(12):
+			a = cusps[i]
+			b = cusps[(i + 1) % 12]
+			span = (b - a) % 360.0
+			label_deg = (a + span * label_frac + angle_offset) % 360.0
+			label_rad = deg_to_rad(label_deg, asc_deg)
+			ax.text(
+				label_rad,
+				label_r,
+				str(i + 1),
+				ha="center",
+				va="center",
+				fontsize=8,
+				color=lbl_color,
+				zorder=0.5,
+			)
 
 	return cusps
 
