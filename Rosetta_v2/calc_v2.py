@@ -1444,13 +1444,15 @@ def plot_dispositor_graph(plot_data):
 			ax.set_xlim(x_min - x_pad, x_max + x_pad)
 			
 			# Y-axis: use SHARED scale based on largest tree
-			y_center = (y_min + y_max) / 2.0
+			# Align all trees to the top (max y) instead of centering
 			y_range = max_height
-			ax.set_ylim(y_center - y_range/2 - 1, y_center + y_range/2 + 1)
+			ax.set_ylim(y_max - y_range - 1, y_max + 1)
 
 		ax.axis("off")
 
-	plt.tight_layout()
+	# Remove tight_layout which creates excessive margins
+	# Use subplots_adjust to minimize whitespace
+	plt.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02, wspace=0.1)
 	return fig
 
 def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
