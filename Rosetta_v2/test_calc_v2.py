@@ -258,17 +258,38 @@ MONTH_NAMES = [
 	"July","August","September","October","November","December"
 ]
 
+# Synastry mode toggle
+st.session_state.setdefault("synastry_mode", False)
+synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
+
+# Primary chart selector
 test_chart = st.radio(
-	"Test Charts",
+	"Test Charts" if not synastry_mode else "Chart 1 (Inner)",
 	["Custom", "Wildhorse", "Joylin", "Terra", "Jessica"],
 	horizontal=True,
 	key="test_chart_radio",
 	label_visibility="collapsed"
 )
 
+# Secondary chart selector (only visible in synastry mode)
+if synastry_mode:
+	st.session_state.setdefault("test_chart_2", "Custom")
+	test_chart_2 = st.radio(
+		"Chart 2 (Outer)",
+		["Custom", "Wildhorse", "Joylin", "Terra", "Jessica"],
+		horizontal=True,
+		key="test_chart_2_radio",
+		label_visibility="collapsed"
+	)
+	st.session_state["test_chart_2"] = test_chart_2
+else:
+	st.session_state["test_chart_2"] = None
+
 # Track the last selected test chart to detect changes
 if "last_test_chart" not in st.session_state:
 	st.session_state["last_test_chart"] = None
+if "last_test_chart_2" not in st.session_state:
+	st.session_state["last_test_chart_2"] = None
 
 # Only apply test chart data if the selection changed (not on every rerun)
 if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
@@ -317,6 +338,51 @@ if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
 elif test_chart == "Custom":
 	# Update the last_test_chart when Custom is selected too
 	st.session_state["last_test_chart"] = "Custom"
+
+# Handle second chart selection (for synastry mode)
+if synastry_mode and st.session_state.get("test_chart_2"):
+	test_chart_2 = st.session_state["test_chart_2"]
+	if test_chart_2 != st.session_state["last_test_chart_2"] and test_chart_2 != "Custom":
+		st.session_state["last_test_chart_2"] = test_chart_2
+		
+		# Store Chart 2 data with "_2" suffix
+		if test_chart_2 == "Wildhorse":
+			st.session_state["year_2"] = 1983
+			st.session_state["month_name_2"] = "January"
+			st.session_state["day_2"] = 15
+			st.session_state["hour_12_2"] = "11"
+			st.session_state["minute_str_2"] = "27"
+			st.session_state["ampm_2"] = "AM"
+			st.session_state["city_2"] = "Red Bank, NJ"
+
+		if test_chart_2 == "Joylin":
+			st.session_state["year_2"] = 1990
+			st.session_state["month_name_2"] = "July"
+			st.session_state["day_2"] = 29
+			st.session_state["hour_12_2"] = "1"
+			st.session_state["minute_str_2"] = "39"
+			st.session_state["ampm_2"] = "AM"
+			st.session_state["city_2"] = "Newton, KS"
+
+		if test_chart_2 == "Terra":
+			st.session_state["year_2"] = 1992
+			st.session_state["month_name_2"] = "January"
+			st.session_state["day_2"] = 28
+			st.session_state["hour_12_2"] = "2"
+			st.session_state["minute_str_2"] = "54"
+			st.session_state["ampm_2"] = "PM"
+			st.session_state["city_2"] = "Newton, KS"
+
+		if test_chart_2 == "Jessica":
+			st.session_state["year_2"] = 1990
+			st.session_state["month_name_2"] = "November"
+			st.session_state["day_2"] = 20
+			st.session_state["hour_12_2"] = "4"
+			st.session_state["minute_str_2"] = "29"
+			st.session_state["ampm_2"] = "PM"
+			st.session_state["city_2"] = "Wichita, KS"
+	elif test_chart_2 == "Custom":
+		st.session_state["last_test_chart_2"] = "Custom"
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)

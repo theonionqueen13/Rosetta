@@ -1,11 +1,12 @@
 # now_v2.py
-# --- Moon icons directory (ABSOLUTE) ---
-MOON_PNG_DIR = r"C:\Users\imcur\Desktop\Rosetta Back-End\Rosetta\Rosetta_v2\pngs"
-COMPASS_KEY = "ui_compass_overlay"
-
+import os
 import datetime as dt
 import pytz
 import streamlit as st
+
+# --- Moon icons directory (relative to this file) ---
+MOON_PNG_DIR = os.path.join(os.path.dirname(__file__), "pngs")
+COMPASS_KEY = "ui_compass_overlay"
 
 def _format_time_12h(dt_obj: dt.datetime) -> str:
 	h = dt_obj.hour
