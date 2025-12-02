@@ -277,36 +277,35 @@ def render_circuit_toggles(
 				st.checkbox(f"{chart2_name} Aspects", key="synastry_aspects_chart2")
 				
 				st.markdown("---")
-			
-			st.subheader("Additional Aspects")
-			
-			# Get current label style
-			label_style = st.session_state.get("label_style", "glyph")
-			want_glyphs = label_style == "glyph"
-			
-			# Select All checkbox
-			select_all_key = "aspect_toggle_select_all"
-			st.session_state.setdefault(select_all_key, False)
-			select_all = st.checkbox("Select All", key=select_all_key)
-			
-			# If select all state changed, update all toggles
-			if select_all != st.session_state.get("_last_select_all_state", False):
-				for body_name in TOGGLE_ASPECTS.keys():
-					st.session_state[f"aspect_toggle_{body_name}"] = select_all
-				st.session_state["_last_select_all_state"] = select_all
-				st.rerun()
-			
-			# Create checkboxes for TOGGLE_ASPECTS in a grid
-			toggle_bodies = list(TOGGLE_ASPECTS.keys())
-			cols_per_row = 4
-			cols = st.columns(cols_per_row)
-			
-			for j, body_name in enumerate(toggle_bodies):
-				with cols[j % cols_per_row]:
-					key = f"aspect_toggle_{body_name}"
-					label_text = GLYPHS.get(body_name, body_name) if want_glyphs else body_name
-					st.session_state.setdefault(key, False)
-					st.checkbox(label_text, key=key)
+			with st.expander("Additional Aspects"):
+				
+				# Get current label style
+				label_style = st.session_state.get("label_style", "glyph")
+				want_glyphs = label_style == "glyph"
+				
+				# Select All checkbox
+				select_all_key = "aspect_toggle_select_all"
+				st.session_state.setdefault(select_all_key, False)
+				select_all = st.checkbox("Select All", key=select_all_key)
+				
+				# If select all state changed, update all toggles
+				if select_all != st.session_state.get("_last_select_all_state", False):
+					for body_name in TOGGLE_ASPECTS.keys():
+						st.session_state[f"aspect_toggle_{body_name}"] = select_all
+					st.session_state["_last_select_all_state"] = select_all
+					st.rerun()
+				
+				# Create checkboxes for TOGGLE_ASPECTS in a grid
+				toggle_bodies = list(TOGGLE_ASPECTS.keys())
+				cols_per_row = 4
+				cols = st.columns(cols_per_row)
+				
+				for j, body_name in enumerate(toggle_bodies):
+					with cols[j % cols_per_row]:
+						key = f"aspect_toggle_{body_name}"
+						label_text = GLYPHS.get(body_name, body_name) if want_glyphs else body_name
+						st.session_state.setdefault(key, False)
+						st.checkbox(label_text, key=key)
 
 	with spacer_col:
 		st.write("")  # just a spacer

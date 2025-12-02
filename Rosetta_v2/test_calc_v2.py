@@ -1301,9 +1301,66 @@ if df_cached is not None:
 		save_user_profile_db=save_user_profile_db,
 		load_user_profiles_db=load_user_profiles_db,
 	)
-	
+
 	# Store aspect toggles to session state so _refresh_chart_figure can access them
 	st.session_state["aspect_toggles"] = aspect_toggles
+	col_1, col_2 = st.columns([2, 1])
+	with col_1:
+		st.write("")  # just a spacer
+	with col_2:
+		# --- Transits Checkbox and Controls (Standard Chart mode only) ---
+		if chart_mode == "Standard Chart":
+			st.session_state.setdefault("transit_mode", False)
+			transit_mode = st.checkbox("Transits", key="transit_mode")
+
+			if transit_mode:
+				st.markdown("**Transits Controls**")
+				tcol1, tcol2 = st.columns([1, 1])
+				with tcol1:
+					if st.button("Previous", key="transit_prev"):
+						st.session_state["transit_date_offset"] = st.session_state.get("transit_date_offset", 0) - 1
+				with tcol2:
+					if st.button("Next", key="transit_next"):
+						st.session_state["transit_date_offset"] = st.session_state.get("transit_date_offset", 0) + 1
+
+				with st.expander("Transit Date"):
+					st.session_state.setdefault("transit_year", st.session_state.get("year", 2025))
+					st.session_state.setdefault("transit_month_name", st.session_state.get("month_name", "December"))
+					st.session_state.setdefault("transit_day", st.session_state.get("day", 2))
+					st.session_state.setdefault("transit_hour_12", "12")
+					st.session_state.setdefault("transit_minute_str", "00")
+					st.session_state.setdefault("transit_ampm", "AM")
+
+					t_year = st.number_input(
+						"Year",
+						min_value=1000,
+						max_value=3000,
+						step=1,
+						key="transit_year",
+					)
+					import calendar
+					t_month_name = st.selectbox(
+						"Month",
+						MONTH_NAMES,
+						key="transit_month_name",
+					)
+					t_month = MONTH_NAMES.index(t_month_name) + 1
+					t_days_in_month = calendar.monthrange(t_year, t_month)[1]
+					t_day = st.selectbox(
+						"Day",
+						list(range(1, t_days_in_month + 1)),
+						key="transit_day",
+					)
+					HOURS   = ["--"] + [f"{h:02d}" for h in range(1, 13)]
+					MINUTES = ["--"] + [f"{m:02d}" for m in range(0, 60)]
+					AMPMS   = ["--", "AM", "PM"]
+					tcol1, tcol2, tcol3 = st.columns(3)
+					with tcol1:
+						st.selectbox("Transit Time", options=HOURS,   key="transit_hour_12")
+					with tcol2:
+						st.selectbox(" ",          options=MINUTES, key="transit_minute_str")
+					with tcol3:
+						st.selectbox(" ",          options=AMPMS,   key="transit_ampm")
 
 	_refresh_chart_figure()
 
