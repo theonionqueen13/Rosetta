@@ -1,6 +1,6 @@
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
-from lookup_v2 import GLYPHS
+from lookup_v2 import GLYPHS, TOGGLE_ASPECTS
 
 COMPASS_KEY = "ui_compass_overlay"
 
@@ -38,6 +38,21 @@ def render_circuit_toggles(
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
 
+	# --- Chart Mode Selector ---
+	st.session_state.setdefault("chart_mode", "Circuits")
+	mode_col1, mode_col2 = st.columns([1, 5])
+	with mode_col1:
+		chart_mode = st.radio(
+			"Chart Mode",
+			["Standard Chart", "Circuits"],
+			index=0 if st.session_state.get("chart_mode") == "Standard Chart" else 1,
+			key="__chart_mode_radio",
+			horizontal=False,
+		)
+		if chart_mode != st.session_state.get("chart_mode"):
+			st.session_state["chart_mode"] = chart_mode
+			st.rerun()
+
 	# --- Handle pending "Hide All" (from previous run) safely ---
 	if st.session_state.get("__pending_hide_all__"):
 		updates = {}
@@ -67,10 +82,14 @@ def render_circuit_toggles(
 		st.rerun()
 
 	# ---------- Header + events panel ----------
+	
+	# Adjust header based on chart mode
+	current_mode = st.session_state.get("chart_mode", "Circuits")
+	header_text = "🗺️Circuits" if current_mode == "Circuits" else "Standard Chart"
 
 	header_col, events_col, jump_col = st.columns([1, 6, 2])
 	with header_col:
-		st.subheader("🗺️Circuits")
+		st.subheader(header_text)
 	with jump_col:
 		st.markdown(
 			'<a href="#ruler-hierarchies" style="display:inline-block;padding:0.25rem 0.75rem;background-color:#ff4b4b;color:white;text-decoration:none;border-radius:0.25rem;text-align:center;width:100%;">Jump to Houses & Rulers</a>',
@@ -97,9 +116,69 @@ def render_circuit_toggles(
 				events_placeholder.empty()
 						
 	st.divider()
-	c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
+	
+	# ---------- Circuits Mode-Specific UI ----------
+	if current_mode == "Circuits":
+		c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
 
-	with c1:
+		with c1:
+			unknown_time = bool(
+				st.session_state.get("chart_unknown_time")
+				or st.session_state.get("profile_unknown_time")
+			)
+			label = "Compass Needle" if unknown_time else "Compass Rose"
+			new_value = st.checkbox(label, key=COMPASS_KEY)
+
+		# Track compass value change but do not rerun immediately
+		prev_value = st.session_state.get("_last_compass_value")
+		if new_value != prev_value:
+			st.session_state["_last_compass_value"] = new_value
+			st.session_state["_pending_compass_rerun"] = True
+
+		with c2:
+			if st.button("Show All", key="btn_show_all_main"):
+				st.session_state["__pending_show_all__"] = True
+				st.rerun()
+
+		with c3:
+			if st.button("Hide All", key="btn_hide_all_main"):
+				# store desired state for next run instead of mutating live widget state
+				st.session_state["__pending_hide_all__"] = True
+				st.rerun()
+
+		st.session_state.setdefault("label_style", "glyph")
+		with c4:
+			st.subheader("Single Placements")
+
+			# --- ensure label style is fully synced before rendering ---
+			old_style = st.session_state.get("label_style", "glyph")
+			# The radio button writes to this key; read its current choice
+			new_style = st.session_state.get("__label_style_choice", old_style)
+			if new_style.lower() != old_style:
+				st.session_state["label_style"] = new_style.lower()
+				st.rerun()  # force full refresh so both chart + singles update instantly
+			else:
+				st.session_state["label_style"] = new_style.lower()
+
+			# now use the up-to-date label style
+			label_style = st.session_state["label_style"]
+			want_glyphs = label_style == "glyph"
+
+			if singleton_map:
+				cols_per_row = min(8, max(1, len(singleton_map)))
+				cols = st.columns(cols_per_row)
+				for j, (planet, _) in enumerate(singleton_map.items()):
+					with cols[j % cols_per_row]:
+						key = f"singleton_{planet}"
+						label_text = GLYPHS.get(planet, planet) if want_glyphs else planet
+						if key not in st.session_state:
+							st.checkbox(label_text, value=False, key=key)
+						else:
+							st.checkbox(label_text, key=key)
+			else:
+				st.markdown("_(none)_")
+	else:
+		# ---------- Standard Chart Mode UI ----------
 		unknown_time = bool(
 			st.session_state.get("chart_unknown_time")
 			or st.session_state.get("profile_unknown_time")
@@ -107,150 +186,134 @@ def render_circuit_toggles(
 		label = "Compass Needle" if unknown_time else "Compass Rose"
 		new_value = st.checkbox(label, key=COMPASS_KEY)
 
-	# Track compass value change but do not rerun immediately
-	prev_value = st.session_state.get("_last_compass_value")
-	if new_value != prev_value:
-		st.session_state["_last_compass_value"] = new_value
-		st.session_state["_pending_compass_rerun"] = True
+		# Track compass value change but do not rerun immediately
+		prev_value = st.session_state.get("_last_compass_value")
+		if new_value != prev_value:
+			st.session_state["_last_compass_value"] = new_value
+			st.session_state["_pending_compass_rerun"] = True
+		
+		st.markdown("---")
 
-	with c2:
-		if st.button("Show All", key="btn_show_all_main"):
-			st.session_state["__pending_show_all__"] = True
-			st.rerun()
-
-	with c3:
-		if st.button("Hide All", key="btn_hide_all_main"):
-			# store desired state for next run instead of mutating live widget state
-			st.session_state["__pending_hide_all__"] = True
-			st.rerun()
-
-	st.session_state.setdefault("label_style", "glyph")
-	with c4:
-		st.subheader("Single Placements")
-
-		# --- ensure label style is fully synced before rendering ---
-		old_style = st.session_state.get("label_style", "glyph")
-		# The radio button writes to this key; read its current choice
-		new_style = st.session_state.get("__label_style_choice", old_style)
-		if new_style.lower() != old_style:
-			st.session_state["label_style"] = new_style.lower()
-			st.rerun()  # force full refresh so both chart + singles update instantly
-		else:
-			st.session_state["label_style"] = new_style.lower()
-
-		# now use the up-to-date label style
-		label_style = st.session_state["label_style"]
-		want_glyphs = label_style == "glyph"
-
-		if singleton_map:
-			cols_per_row = min(8, max(1, len(singleton_map)))
-			cols = st.columns(cols_per_row)
-			for j, (planet, _) in enumerate(singleton_map.items()):
-				with cols[j % cols_per_row]:
-					key = f"singleton_{planet}"
-					label_text = GLYPHS.get(planet, planet) if want_glyphs else planet
-					if key not in st.session_state:
-						st.checkbox(label_text, value=False, key=key)
-					else:
-						st.checkbox(label_text, key=key)
-		else:
-			st.markdown("_(none)_")
-
-
-	circuits_col, options_col = st.columns([4, 2])
+	circuits_col, spacer_col, options_col = st.columns([3, 1, 2])
 	
+	# Add Standard Chart aspect toggles in left column
+	if current_mode == "Standard Chart":
+		with circuits_col:
+			st.subheader("Additional Aspects")
+			
+			# Get current label style
+			label_style = st.session_state.get("label_style", "glyph")
+			want_glyphs = label_style == "glyph"
+			
+			# Create checkboxes for TOGGLE_ASPECTS in a grid
+			toggle_bodies = list(TOGGLE_ASPECTS.keys())
+			cols_per_row = 4
+			cols = st.columns(cols_per_row)
+			
+			for j, body_name in enumerate(toggle_bodies):
+				with cols[j % cols_per_row]:
+					key = f"aspect_toggle_{body_name}"
+					label_text = GLYPHS.get(body_name, body_name) if want_glyphs else body_name
+					st.session_state.setdefault(key, False)
+					st.checkbox(label_text, key=key)
+
+	with spacer_col:
+		st.write("")  # just a spacer
+
 	with circuits_col:
-		# Pattern checkboxes + expanders
-		half = (len(patterns) + 1) // 2
-		left_patterns, right_patterns = st.columns(2)
+		# Only show circuit patterns in Circuits mode
+		if current_mode == "Circuits":
+			# Pattern checkboxes + expanders
+			half = (len(patterns) + 1) // 2
+			left_patterns, right_patterns = st.columns(2)
 
-		# Get current label style
-		label_style = st.session_state.get("label_style", "glyph")
-		want_glyphs = label_style == "glyph"
+			# Get current label style
+			label_style = st.session_state.get("label_style", "glyph")
+			want_glyphs = label_style == "glyph"
 
-		for i, component in enumerate(patterns):
-			target_col = left_patterns if i < half else right_patterns
-			checkbox_key = f"toggle_pattern_{i}"
+			for i, component in enumerate(patterns):
+				target_col = left_patterns if i < half else right_patterns
+				checkbox_key = f"toggle_pattern_{i}"
 
-			# circuit name session key
-			circuit_name_key = f"circuit_name_{i}"
-			default_label = f"Circuit {i+1}"
-			st.session_state.setdefault(circuit_name_key, default_label)
+				# circuit name session key
+				circuit_name_key = f"circuit_name_{i}"
+				default_label = f"Circuit {i+1}"
+				st.session_state.setdefault(circuit_name_key, default_label)
 
-			circuit_title = st.session_state[circuit_name_key]  # shown on checkbox row
-			# Apply glyph/text style to planet names in expander header
-			if want_glyphs:
-				members_label = ", ".join(GLYPHS.get(planet, planet) for planet in component)
-			else:
-				members_label = ", ".join(component)
+				circuit_title = st.session_state[circuit_name_key]  # shown on checkbox row
+				# Apply glyph/text style to planet names in expander header
+				if want_glyphs:
+					members_label = ", ".join(GLYPHS.get(planet, planet) for planet in component)
+				else:
+					members_label = ", ".join(component)
 
-			with target_col:
-				cbox = st.checkbox(f"{circuit_title}", key=checkbox_key)
-				toggles.append(cbox)
-				pattern_labels.append(circuit_title)
+				with target_col:
+					cbox = st.checkbox(f"{circuit_title}", key=checkbox_key)
+					toggles.append(cbox)
+					pattern_labels.append(circuit_title)
 
-				with st.expander(members_label, expanded=False):
-					st.text_input("Circuit name", key=circuit_name_key)
+					with st.expander(members_label, expanded=False):
+						st.text_input("Circuit name", key=circuit_name_key)
 
-					# Auto-save when circuit name changes
-					if st.session_state.get("current_profile"):
-						saved = st.session_state.get("saved_circuit_names", {})
-						current_name = st.session_state[circuit_name_key]
-						last_saved = saved.get(circuit_name_key, default_label)
-						if current_name != last_saved:
-							current = {
-								f"circuit_name_{j}": st.session_state.get(
-									f"circuit_name_{j}", f"Circuit {j+1}"
+						# Auto-save when circuit name changes
+						if st.session_state.get("current_profile"):
+							saved = st.session_state.get("saved_circuit_names", {})
+							current_name = st.session_state[circuit_name_key]
+							last_saved = saved.get(circuit_name_key, default_label)
+							if current_name != last_saved:
+								current = {
+									f"circuit_name_{j}": st.session_state.get(
+										f"circuit_name_{j}", f"Circuit {j+1}"
+									)
+									for j in range(len(patterns))
+								}
+								profile_name = st.session_state["current_profile"]
+								payload = saved_profiles.get(profile_name, {}).copy()
+								payload["circuit_names"] = current
+								save_user_profile_db(current_user_id, profile_name, payload)
+								saved_profiles = load_user_profiles_db(current_user_id)
+								st.session_state["saved_circuit_names"] = current.copy()
+
+						# Sub-shapes
+						parent_shapes = [sh for sh in shapes if sh["parent"] == i]
+						shape_entries = []
+						if parent_shapes:
+							st.markdown("**Sub-shapes detected:**")
+							for sh in parent_shapes:
+								label_text = f"{sh['type']}: {', '.join(str(m) for m in sh['members'])}"
+								unique_key = f"shape_{i}_{sh['id']}"
+								on = st.checkbox(
+									label_text,
+									key=unique_key,
+									value=st.session_state.get(unique_key, False),
 								)
-								for j in range(len(patterns))
-							}
-							profile_name = st.session_state["current_profile"]
-							payload = saved_profiles.get(profile_name, {}).copy()
-							payload["circuit_names"] = current
-							save_user_profile_db(current_user_id, profile_name, payload)
-							saved_profiles = load_user_profiles_db(current_user_id)
-							st.session_state["saved_circuit_names"] = current.copy()
+								shape_entries.append({"id": sh["id"], "on": on})
+						else:
+							st.markdown("_(no sub-shapes found)_")
 
-					# Sub-shapes
-					parent_shapes = [sh for sh in shapes if sh["parent"] == i]
-					shape_entries = []
-					if parent_shapes:
-						st.markdown("**Sub-shapes detected:**")
-						for sh in parent_shapes:
-							label_text = f"{sh['type']}: {', '.join(str(m) for m in sh['members'])}"
-							unique_key = f"shape_{i}_{sh['id']}"
-							on = st.checkbox(
-								label_text,
-								key=unique_key,
-								value=st.session_state.get(unique_key, False),
-							)
-							shape_entries.append({"id": sh["id"], "on": on})
-					else:
-						st.markdown("_(no sub-shapes found)_")
+						shape_toggle_map = st.session_state.setdefault(
+							"shape_toggles_by_parent", {}
+						)
+						shape_toggle_map[i] = shape_entries
 
-					shape_toggle_map = st.session_state.setdefault(
-						"shape_toggles_by_parent", {}
+			# Save Circuit Names (only if edits exist)
+			if st.session_state.get("current_profile"):
+				saved = st.session_state.get("saved_circuit_names", {})
+				current = {
+					f"circuit_name_{i}": st.session_state.get(
+						f"circuit_name_{i}", f"Circuit {i+1}"
 					)
-					shape_toggle_map[i] = shape_entries
-
-		# Save Circuit Names (only if edits exist)
-		if st.session_state.get("current_profile"):
-			saved = st.session_state.get("saved_circuit_names", {})
-			current = {
-				f"circuit_name_{i}": st.session_state.get(
-					f"circuit_name_{i}", f"Circuit {i+1}"
-				)
-				for i in range(len(patterns))
-			}
-			if current != saved:
-				st.markdown("---")
-				if st.button("💾 Save Circuit Names"):
-					profile_name = st.session_state["current_profile"]
-					payload = saved_profiles.get(profile_name, {}).copy()
-					payload["circuit_names"] = current
-					save_user_profile_db(current_user_id, profile_name, payload)
-					saved_profiles = load_user_profiles_db(current_user_id)
-					st.session_state["saved_circuit_names"] = current.copy()
+					for i in range(len(patterns))
+				}
+				if current != saved:
+					st.markdown("---")
+					if st.button("💾 Save Circuit Names"):
+						profile_name = st.session_state["current_profile"]
+						payload = saved_profiles.get(profile_name, {}).copy()
+						payload["circuit_names"] = current
+						save_user_profile_db(current_user_id, profile_name, payload)
+						saved_profiles = load_user_profiles_db(current_user_id)
+						st.session_state["saved_circuit_names"] = current.copy()
 
 	# ---------- RIGHT: house system / label style / dark mode ----------
 	with options_col:
@@ -291,5 +354,14 @@ def render_circuit_toggles(
 		st.rerun()
 
 	# return AFTER both columns render
-	return toggles, pattern_labels, saved_profiles
+	chart_mode = st.session_state.get("chart_mode", "Circuits")
+	
+	# Collect aspect toggles for Standard Chart mode
+	aspect_toggles = {}
+	if chart_mode == "Standard Chart":
+		for body_name in TOGGLE_ASPECTS.keys():
+			key = f"aspect_toggle_{body_name}"
+			aspect_toggles[body_name] = st.session_state.get(key, False)
+	
+	return toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles
 

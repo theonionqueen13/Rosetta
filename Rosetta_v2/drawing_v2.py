@@ -631,7 +631,7 @@ ZODIAC_COLORS = _import_lookup_attr(
 	(
 		"#E57373", "#F06292", "#BA68C8", "#9575CD",
 		"#64B5F6", "#4FC3F7", "#4DD0E1", "#81C784",
-		"#AED581", "#FFD54F", "#FFB74D", "#A1887F",
+		"#AED581", "#FFD54F", "#C77700", "#A1887F",
 	),
 )
 
@@ -797,6 +797,8 @@ def draw_house_cusps(
 	sys_key = (house_system or "placidus").strip().lower()
 	sys_label = system_map.get(sys_key, system_map["placidus"])
 
+	print("HOUSE CUSPS:", "dark_mode =", dark_mode, "draw_lines =", draw_lines)
+
 	cusps: list[float] = []
 	if df is not None and "Object" in df and "Longitude" in df:
 		obj_series = df["Object"].astype("string")
@@ -813,10 +815,19 @@ def draw_house_cusps(
 		cusps = [(start + i * 30.0) % 360.0 for i in range(12)]
 
 	if draw_lines:
-		line_color = "lightgray"
+		line_color = "#A0A0A0" if not dark_mode else "#333333"
 		for deg in cusps:
 			rad = deg_to_rad(deg, asc_deg)
-			ax.plot([rad, rad], [0, 1.45], color=line_color, linestyle="solid", linewidth=1, zorder=1)
+			ax.plot(
+				[rad, rad],
+				[0, 1.45],  # full radius of the wheel
+				color=line_color,
+				linestyle="solid",
+				linewidth=1.2,
+				zorder=0.5,  # slightly above background, but below zodiac bars (which are zorder=0)
+				solid_capstyle="butt",
+				antialiased=True,
+			)
 
 	if draw_labels:
 		lbl_color = "white" if dark_mode else "black"
@@ -862,56 +873,69 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
 		ax.plot([r, r], [circle_r, circle_r + 0.05],
 				color=base_color, linewidth=1.2)
 
-def draw_zodiac_signs(ax, asc_deg):
-	"""Zodiac ring with pastel element bands and black dividers."""
-	PASTEL_BLUE   = "#D9EAF7"  # blue
-	PASTEL_GREEN  = "#D9EAD3"  # green
-	PASTEL_ORANGE = "#FFD1B3"  # orange
-	PASTEL_RED    = "#EAD1DC"  # soft red/pink
+def draw_zodiac_signs(ax, asc_deg, dark_mode):
+    """Draw zodiac wheel with colored element bands and zodiac glyphs."""
 
-	element_color = {
-		"fire":  PASTEL_BLUE,   # remapped per your note
-		"earth": PASTEL_RED,
-		"air":   PASTEL_GREEN,
-		"water": PASTEL_ORANGE,
-	}
-	elements = ["fire", "earth", "air", "water"] * 3
-	sector_width = np.deg2rad(30)
+    # --- Define element colors based on dark_mode ---
+    if dark_mode:
+        PASTEL_BLUE   = "#1567A5FF"  # blue
+        PASTEL_GREEN  = "#366E21FF"  # green
+        PASTEL_ORANGE = "#946D19FF"  # orange
+        PASTEL_RED    = "#6D2424FF"  # soft red/pink
+    else:
+        PASTEL_BLUE   = "#6D9EC4FF"  # blue
+        PASTEL_GREEN  = "#7CAF6AFF"  # green
+        PASTEL_ORANGE = "#D8B873FF"  # orange
+        PASTEL_RED    = "#CE7878FF"  # soft red/pink
 
-	ring_inner, ring_outer = 1.45, 1.58
-	divider_inner, divider_outer = 1.457, 1.573
+    # --- Constants that are always needed ---
+    element_color = {
+        "fire":  PASTEL_BLUE,
+        "earth": PASTEL_RED,
+        "air":   PASTEL_GREEN,
+        "water": PASTEL_ORANGE,
+    }
+    elements = ["fire", "earth", "air", "water"] * 3
+    sector_width = np.deg2rad(30)  # each zodiac occupies 30 degrees
 
-	for i in range(12):
-		theta_left = deg_to_rad(i * 30, asc_deg)
-		ax.bar(
-			theta_left,
-			ring_outer - ring_inner,
-			width=sector_width,
-			bottom=ring_inner,
-			align="edge",
-			color=element_color[elements[i]],
-			edgecolor=None,
-			linewidth=0,
-			alpha=0.85,
-			zorder=0,
-		)
+    ring_inner, ring_outer = 1.45, 1.58
+    divider_inner, divider_outer = 1.457, 1.573
 
-	for i, base_deg in enumerate(range(0, 360, 30)):
-		rad = deg_to_rad(base_deg + 15, asc_deg)
-		ax.text(
-			rad, 1.50, ZODIAC_SIGNS[i],
-			ha="center", va="center",
-			fontsize=16, fontweight="bold",
-			color=ZODIAC_COLORS[i],
-			zorder=1,
-		)
+    # --- Draw colored element bands ---
+    for i in range(12):
+        theta_left = deg_to_rad(i * 30, asc_deg)
+        ax.bar(
+            theta_left,
+            ring_outer - ring_inner,
+            width=sector_width,
+            bottom=ring_inner,
+            align="edge",
+            color=element_color[elements[i]],
+            edgecolor=None,
+            linewidth=0,
+            alpha=0.85,
+            zorder=0,
+        )
 
-	asc_sign_start = int(asc_deg // 30) * 30.0
-	cusps = [(asc_sign_start + i * 30.0) % 360.0 for i in range(12)]
-	for deg in cusps:
-		rad = deg_to_rad(deg, asc_deg)
-		ax.plot([rad, rad], [divider_inner, divider_outer],
-				color="black", linestyle="solid", linewidth=1, zorder=5)
+    # --- Draw zodiac glyphs ---
+    for i, base_deg in enumerate(range(0, 360, 30)):
+        rad = deg_to_rad(base_deg + 15, asc_deg)
+        ax.text(
+            rad, 1.50, ZODIAC_SIGNS[i],
+            ha="center", va="center",
+            fontsize=16, fontweight="bold",
+            color=ZODIAC_COLORS[i],
+            zorder=1,
+        )
+
+    # --- Draw dividers for each house cusp ---
+    asc_sign_start = int(asc_deg // 30) * 30.0
+    cusps = [(asc_sign_start + i * 30.0) % 360.0 for i in range(12)]
+    for deg in cusps:
+        rad = deg_to_rad(deg, asc_deg)
+        ax.plot([rad, rad], [divider_inner, divider_outer],
+                color="black", linestyle="solid", linewidth=1, zorder=5)
+
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
 	"""Planet glyphs/names with degree (no sign), cluster fan-out + global spacing."""
@@ -1420,12 +1444,21 @@ def render_chart(
 
 	ax.set_theta_zero_location("N")
 	ax.set_theta_direction(-1)
-	ax.set_rlim(0, 1.25)
+	ax.set_rlim(0, 1.60)  # Match render_chart_with_shapes
 	ax.axis("off")
 
-	fig.subplots_adjust(top=0.95, bottom=0.05, left=0.05, right=0.95)
+	# Center and fill - match render_chart_with_shapes
+	ax.set_anchor("C")
+	ax.set_aspect("equal", adjustable="box")
+	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
 
-	_draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
+	# Header and moon phase
+	try:
+		name, date_line, time_line, city, extra_line = _current_chart_header_lines()
+		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
+		_draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
+	except Exception:
+		pass
 
 	cusps: list[float] = []
 	if not unknown_time_chart:
@@ -1433,7 +1466,7 @@ def render_chart(
 	if degree_markers:
 		draw_degree_markers(ax, asc_deg, dark_mode)
 	if zodiac_labels:
-		draw_zodiac_signs(ax, asc_deg)
+		draw_zodiac_signs(ax, asc_deg, dark_mode)
 
 	draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode)
 
@@ -1521,7 +1554,7 @@ def render_chart_with_shapes(
 	if not unknown_time_chart:
 		cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
 	draw_degree_markers(ax, asc_deg, dark_mode)
-	draw_zodiac_signs(ax, asc_deg)
+	draw_zodiac_signs(ax, asc_deg, dark_mode)
 	draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
 
 	active_parents = set(i for i, show in enumerate(toggles) if show)

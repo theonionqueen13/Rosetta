@@ -25,7 +25,7 @@ from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
 from calc_v2 import calculate_chart, plot_dispositor_graph, analyze_dispositors
-from lookup_v2 import SIGNS, PLANETARY_RULERS
+from lookup_v2 import SIGNS, PLANETARY_RULERS, PLANETS_PLUS, ASPECTS, MAJOR_OBJECTS, TOGGLE_ASPECTS
 current_user_id = "test-user"
 
 COMPASS_KEY = "ui_compass_overlay"
@@ -358,52 +358,119 @@ def _refresh_chart_figure():
 	edges_major = st.session_state.get("edges_major") or []
 	edges_minor = st.session_state.get("edges_minor") or []
 
-	try:
-		fig, visible_objects, active_shapes, cusps, out_text = render_chart_with_shapes(
-			pos=pos,
-			patterns=patterns,
-			pattern_labels=pattern_labels,
-			toggles=toggles,
-			filaments=filaments,
-			house_system=_selected_house_system(),
-			combo_toggles=combo_toggles,
-			label_style=label_style,
-			singleton_map=singleton_map or {},
-			df=df,
-			dark_mode=resolved_dark_mode,
-			shapes=shapes,
-			shape_toggles_by_parent=shape_toggles_by_parent,
-			singleton_toggles=singleton_toggles,
-			major_edges_all=major_edges_all,
-		)
-	except Exception:
-		rr = render_chart(
-			df,
-			dark_mode=resolved_dark_mode,
-			visible_toggle_state=None,
-			edges_major=edges_major,
-			edges_minor=edges_minor,
-			house_system=_selected_house_system(),
-			label_style=st.session_state.get("label_style", "glyph"),
-			compass_on=st.session_state.get("toggle_compass_rose", True),
-			degree_markers=True,
-			zodiac_labels=True,
-			figsize=(6.0, 6.0),
-			dpi=144,
-		)
-		st.session_state["render_fig"] = rr.fig
-		st.session_state["render_result"] = rr
-		st.session_state["visible_objects"] = rr.visible_objects
-		st.session_state["active_shapes"] = []
-		st.session_state["last_cusps"] = rr.cusps
-		st.session_state["ai_text"] = None
+	# Check if we're in Standard Chart mode
+	chart_mode = st.session_state.get("chart_mode", "Circuits")
+	
+	if chart_mode == "Standard Chart":
+		# Standard Chart mode: compute aspects for PLANETS_PLUS only
+		
+		# Build list of bodies to compute aspects for: PLANETS_PLUS + selected TOGGLE_ASPECTS
+		aspect_bodies = dict(PLANETS_PLUS)
+		
+		# Add any TOGGLE_ASPECTS bodies that are enabled
+		for body_name, enabled in aspect_toggles.items():
+			if enabled and body_name in TOGGLE_ASPECTS:
+				aspect_bodies[body_name] = TOGGLE_ASPECTS[body_name]
+		
+		# Filter positions to only include aspect-enabled bodies
+		standard_pos = {name: deg for name, deg in pos.items() if name in aspect_bodies}
+		
+		# Get all MAJOR_OBJECTS that exist in the chart for display
+		major_pos = {name: deg for name, deg in pos.items() if name in MAJOR_OBJECTS}
+		
+		# Compute all aspects between aspect-enabled bodies
+		standard_edges = []
+		planets_list = list(standard_pos.keys())
+		for i in range(len(planets_list)):
+			for j in range(i + 1, len(planets_list)):
+				p1, p2 = planets_list[i], planets_list[j]
+				d1, d2 = standard_pos[p1], standard_pos[p2]
+				angle = abs(d1 - d2) % 360
+				if angle > 180:
+					angle = 360 - angle
+				
+				# Check all aspect types
+				for aspect_name, aspect_data in ASPECTS.items():
+					if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+						standard_edges.append((p1, p2, aspect_name))
+						break  # Only one aspect per pair
+		
+		# Use render_chart for standard mode with all MAJOR_OBJECTS visible
+		try:
+			compass_on = st.session_state.get(COMPASS_KEY, True)
+			# Show all MAJOR_OBJECTS that actually exist in the chart
+			visible_objects = list(major_pos.keys())
+			rr = render_chart(
+				df,
+				dark_mode=resolved_dark_mode,
+				visible_toggle_state=visible_objects,  # Show all MAJOR_OBJECTS
+				edges_major=standard_edges,
+				edges_minor=[],
+				house_system=_selected_house_system(),
+				label_style=st.session_state.get("label_style", "glyph"),
+				compass_on=compass_on,
+				degree_markers=True,
+				zodiac_labels=True,
+				figsize=(6.0, 6.0),
+				dpi=144,
+			)
+			st.session_state["render_fig"] = rr.fig
+			st.session_state["render_result"] = rr
+			st.session_state["visible_objects"] = rr.visible_objects
+			st.session_state["active_shapes"] = []
+			st.session_state["last_cusps"] = rr.cusps
+			st.session_state["ai_text"] = None
+		except Exception as e:
+			st.error(f"Standard chart rendering failed: {e}")
+			return
 	else:
-		st.session_state["render_fig"] = fig
-		st.session_state["visible_objects"] = sorted(visible_objects)
-		st.session_state["active_shapes"] = active_shapes
-		st.session_state["last_cusps"] = cusps
-		st.session_state["ai_text"] = out_text
-		st.session_state["render_result"] = None
+		# Circuits mode: use existing logic
+		try:
+			fig, visible_objects, active_shapes, cusps, out_text = render_chart_with_shapes(
+				pos=pos,
+				patterns=patterns,
+				pattern_labels=pattern_labels,
+				toggles=toggles,
+				filaments=filaments,
+				house_system=_selected_house_system(),
+				combo_toggles=combo_toggles,
+				label_style=label_style,
+				singleton_map=singleton_map or {},
+				df=df,
+				dark_mode=resolved_dark_mode,
+				shapes=shapes,
+				shape_toggles_by_parent=shape_toggles_by_parent,
+				singleton_toggles=singleton_toggles,
+				major_edges_all=major_edges_all,
+			)
+		except Exception:
+			rr = render_chart(
+				df,
+				dark_mode=resolved_dark_mode,
+				visible_toggle_state=None,
+				edges_major=edges_major,
+				edges_minor=edges_minor,
+				house_system=_selected_house_system(),
+				label_style=st.session_state.get("label_style", "glyph"),
+				compass_on=st.session_state.get("toggle_compass_rose", True),
+				degree_markers=True,
+				zodiac_labels=True,
+				figsize=(6.0, 6.0),
+				dpi=144,
+			)
+			st.session_state["render_fig"] = rr.fig
+			st.session_state["render_result"] = rr
+			st.session_state["visible_objects"] = rr.visible_objects
+			st.session_state["active_shapes"] = []
+			st.session_state["last_cusps"] = rr.cusps
+			st.session_state["ai_text"] = None
+		else:
+			st.session_state["render_fig"] = fig
+			st.session_state["visible_objects"] = sorted(visible_objects)
+			st.session_state["active_shapes"] = active_shapes
+			st.session_state["last_cusps"] = cusps
+			st.session_state["ai_text"] = out_text
+			st.session_state["render_result"] = None
 
 def run_chart(lat, lon, tz_name):
 	"""
@@ -857,7 +924,7 @@ if df_cached is not None:
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
 	saved_profiles = load_user_profiles_db(current_user_id)
-	toggles, pattern_labels, saved_profiles = render_circuit_toggles(
+	toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles = render_circuit_toggles(
 		patterns=patterns,
 		shapes=shapes,
 		singleton_map=singleton_map,
