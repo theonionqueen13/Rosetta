@@ -164,6 +164,10 @@ def render_circuit_toggles(
 		half = (len(patterns) + 1) // 2
 		left_patterns, right_patterns = st.columns(2)
 
+		# Get current label style
+		label_style = st.session_state.get("label_style", "glyph")
+		want_glyphs = label_style == "glyph"
+
 		for i, component in enumerate(patterns):
 			target_col = left_patterns if i < half else right_patterns
 			checkbox_key = f"toggle_pattern_{i}"
@@ -174,7 +178,11 @@ def render_circuit_toggles(
 			st.session_state.setdefault(circuit_name_key, default_label)
 
 			circuit_title = st.session_state[circuit_name_key]  # shown on checkbox row
-			members_label = ", ".join(component)                # shown in expander header
+			# Apply glyph/text style to planet names in expander header
+			if want_glyphs:
+				members_label = ", ".join(GLYPHS.get(planet, planet) for planet in component)
+			else:
+				members_label = ", ".join(component)
 
 			with target_col:
 				cbox = st.checkbox(f"{circuit_title}", key=checkbox_key)
