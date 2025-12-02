@@ -14,30 +14,39 @@ def render_house_system_selector(container=None) -> str:
     Only marks cusps as needing redraw. Returns the normalized key.
     """
     options = ["Equal", "Whole Sign", "Placidus"]
+    # Map lowercase keys to display names
+    key_to_display = {
+        "equal": "Equal",
+        "whole": "Whole Sign",
+        "placidus": "Placidus"
+    }
+    display_to_key = {
+        "Equal": "equal",
+        "Whole Sign": "whole",
+        "Placidus": "placidus"
+    }
+    
+    # Callback to update session state when selectbox changes
+    def on_change():
+        choice = st.session_state.get("house_system_main")
+        new_key = display_to_key.get(choice, "equal")
+        prev_key = st.session_state.get("house_system", "equal")
+        st.session_state["house_system"] = new_key
+        if new_key != prev_key:
+            st.session_state["last_house_system"] = new_key
+            st.session_state["__cusps_dirty__"] = True
+    
     # Use the existing value if present; otherwise default to Equal
     current_key = st.session_state.get("house_system", "equal")
-    try:
-        current_index = options.index(current_key.title().replace(" Sign", ""))
-    except ValueError:
-        current_index = 0
+    current_display = key_to_display.get(current_key, "Equal")
 
     ctx = container if container is not None else st
-    choice = ctx.selectbox(
+    ctx.selectbox(
         "House System",
         options,
-        index=current_index,
+        index=options.index(current_display),
         key="house_system_main",
+        on_change=on_change
     )
 
-    new_key = choice.lower().replace(" sign", "")  # "Equal"->"equal", "Whole Sign"->"whole", "Placidus"->"placidus"
-    prev_key = st.session_state.get("house_system", "equal")
-
-    # Update the chosen system (no run_chart; no planet recompute)
-    st.session_state["house_system"] = new_key
-
-    # If it changed, just mark cusps dirty so your next render uses the new system
-    if new_key != prev_key:
-        st.session_state["last_house_system"] = new_key
-        st.session_state["__cusps_dirty__"] = True  # your renderer can read this if needed
-
-    return new_key
+    return current_key

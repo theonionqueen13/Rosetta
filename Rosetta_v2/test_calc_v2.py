@@ -875,6 +875,101 @@ if df_cached is not None:
 	else:
 		st.caption("Calculate a chart to render the wheel.")
 
+	# --- Dispositor Graph (moved from popover) ---
+	import matplotlib.pyplot as plt
+	import networkx as nx
+	from house_selector_v2 import render_house_system_selector
+	
+	# Add anchor for jump button
+	st.markdown('<div id="ruler-hierarchies"></div>', unsafe_allow_html=True)
+	
+	header_col, toggle_col, house_col = st.columns([2, 2, 1])
+	
+	with header_col:
+		st.subheader("Ruler Hierarchies")
+	
+	with house_col:
+		render_house_system_selector()
+	
+	with toggle_col:
+		# House system selector (always render, but only relevant for "By House")
+		# Dispositor scope toggle
+		st.session_state.setdefault("dispositor_scope", "By Sign")
+		disp_scope = st.radio(
+			"Scope",
+			["By Sign", "By House"],
+			horizontal=True,
+			key="dispositor_scope",
+			label_visibility="collapsed"
+		)
+	
+	plot_data = st.session_state.get("plot_data")
+	if plot_data is not None:
+		# Determine which scope to use
+		if disp_scope == "By Sign":
+			scope_data = plot_data.get("by_sign")
+		else:  # By House
+			# Map lowercase session state keys to plot_data keys
+			house_key_map = {
+				"placidus": "Placidus",
+				"equal": "Equal",
+				"whole": "Whole Sign"
+			}
+			selected_house = st.session_state.get("house_system", "placidus")
+			plot_data_key = house_key_map.get(selected_house, "Placidus")
+			scope_data = plot_data.get(plot_data_key)
+
+		if scope_data and scope_data.get("raw_links"):
+			disp_fig = plot_dispositor_graph(scope_data)
+			if disp_fig is not None:
+				# Create columns for legend and graph
+				legend_col, graph_col = st.columns([1, 5])
+				
+			with legend_col:
+				import os
+				import base64
+				png_dir = os.path.join(os.path.dirname(__file__), "pngs")
+				
+				# Load and encode images as base64
+				def img_to_b64(filename):
+					path = os.path.join(png_dir, filename)
+					if os.path.exists(path):
+						with open(path, "rb") as f:
+							return base64.b64encode(f.read()).decode()
+					return ""
+				
+				# Create legend with dark background
+				st.markdown("""
+					<div style="background-color: #262730; padding: 15px; border-radius: 8px;">
+						<strong style="color: white;">Legend</strong>
+					</div>
+				""", unsafe_allow_html=True)
+				
+				legend_items = [
+					("green.png", "Sovereign"),
+					("orange.png", "Dual rulership"),
+					("purple.png", "Loop"),
+					("purpleorange.png", "Dual + Loop"),
+					("blue.png", "Standard"),
+				]
+				
+				# Wrap all legend items in the dark background
+				legend_html = '<div style="background-color: #262730; padding: 15px; border-radius: 8px; margin-top: -15px;">'
+				for img_file, label in legend_items:
+					b64 = img_to_b64(img_file)
+					if b64:
+						legend_html += f'<div style="margin-bottom: 8px;"><img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:5px"/><span style="color: white;">{label}</span></div>'
+				legend_html += '<div style="color: white; margin-top: 8px;">↻ Self-Ruling</div>'
+				legend_html += '</div>'
+				st.markdown(legend_html, unsafe_allow_html=True)
+				
+			with graph_col:
+				st.pyplot(disp_fig, use_container_width=True)
+		else:
+			st.info("No dispositor graph to display.")
+	else:
+		st.info("Calculate a chart first.")
+
 	st.subheader("🤓 Nerdy Chart Specs 📋")
 	unknown_time_chart = bool(
 		st.session_state.get("chart_unknown_time")
@@ -895,104 +990,27 @@ if df_cached is not None:
 	with st.popover("Objects", use_container_width=True):
 		st.subheader("Calculated Chart")
 		st.dataframe(df_cached, use_container_width=True)
-	import matplotlib.pyplot as plt
-	import networkx as nx
 
-	# --- Inside your existing popover ---
-	with st.popover("Dispositors", use_container_width=True):
-		header_col, toggle_col = st.columns([3, 1])
-		
-		with header_col:
-			st.subheader("Ruler Hierarchies")
-		
-		with toggle_col:
-			# Dispositor scope toggle
-			st.session_state.setdefault("dispositor_scope", "By Sign")
-			disp_scope = st.radio(
-				"Scope",
-				["By Sign", "By House"],
-				horizontal=True,
-				key="dispositor_scope",
-				label_visibility="collapsed"
-			)
-		
-		plot_data = st.session_state.get("plot_data")
-		if plot_data is not None:
-			# Debug: show what's in plot_data
-			
-			# Determine which scope to use
-			if disp_scope == "By Sign":
-				scope_data = plot_data.get("by_sign")
-			else:  # By House
-				# Use selected house system from session state (capitalize to match plot_data keys)
-				selected_house = st.session_state.get("house_system", "Placidus")
-				# Capitalize first letter of each word to match plot_data keys
-				selected_house_key = selected_house.title()
-				scope_data = plot_data.get(selected_house_key)
+	with st.popover("Conjunctions", use_container_width=True):
+		st.subheader("Conjunction Clusters")
+		st.dataframe(st.session_state.get("conj_clusters_rows") or [], use_container_width=True)
 
-			if scope_data and scope_data.get("raw_links"):
-				fig = plot_dispositor_graph(scope_data)
-				if fig is not None:
-					# Create columns for legend and graph
-					legend_col, graph_col = st.columns([1, 5])
-					
-					with legend_col:
-						import os
-						import base64
-						png_dir = os.path.join(os.path.dirname(__file__), "pngs")
-						
-						# Load and encode images as base64
-						def img_to_b64(filename):
-							path = os.path.join(png_dir, filename)
-							if os.path.exists(path):
-								with open(path, "rb") as f:
-									return base64.b64encode(f.read()).decode()
-							return ""
-						
-						# Create legend with icons
-						st.markdown("**Legend**")
-						legend_items = [
-							("green.png", "Sovereign"),
-							("orange.png", "Dual rulership"),
-							("purple.png", "Loop"),
-							("purpleorange.png", "Dual + Loop"),
-							("blue.png", "Standard"),
-						]
-						
-						for img_file, label in legend_items:
-							b64 = img_to_b64(img_file)
-							if b64:
-								st.markdown(
-									f'<img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:5px"/>{label}',
-									unsafe_allow_html=True
-								)
-						st.markdown("↻ Self-Ruling")
-					
-					with graph_col:
-						st.pyplot(fig, use_container_width=True)
-			else:
-				st.info("No dispositor graph to display.")
+	with st.popover("Aspects Graph", use_container_width=True):
+		if aspect_cached is not None:
+			st.subheader("Aspect Graph")
+			st.dataframe(aspect_cached, use_container_width=True)
 		else:
-			st.info("Calculate a chart first.")
+			st.caption("No aspect table available yet.")
 
-with st.popover("Conjunctions", use_container_width=True):
-	st.subheader("Conjunction Clusters")
-	st.dataframe(st.session_state.get("conj_clusters_rows") or [], use_container_width=True)
-
-with st.popover("Aspects Graph", use_container_width=True):
-	if aspect_cached is not None:
-		st.subheader("Aspect Graph")
-		st.dataframe(aspect_cached, use_container_width=True)
-	else:
-		st.caption("No aspect table available yet.")
-
-with st.popover("Aspects List", use_container_width=True):
-	st.subheader("Aspect Lists")
-	edges_major = st.session_state.get("edges_major") or []
-	edges_minor = st.session_state.get("edges_minor") or []
-	rows = ([{"Kind":"Major","A":a,"B":b, **meta} for a,b,meta in edges_major] +
-			[{"Kind":"Minor","A":a,"B":b, **meta} for a,b,meta in edges_minor])
-	st.dataframe(rows, use_container_width=True)# --- Left sidebar: Planet Profiles ---
+	with st.popover("Aspects List", use_container_width=True):
+		st.subheader("Aspect Lists")
+		edges_major = st.session_state.get("edges_major") or []
+		edges_minor = st.session_state.get("edges_minor") or []
+		rows = ([{"Kind":"Major","A":a,"B":b, **meta} for a,b,meta in edges_major] +
+				[{"Kind":"Minor","A":a,"B":b, **meta} for a,b,meta in edges_minor])
+		st.dataframe(rows, use_container_width=True)
+		
+# --- Left sidebar: Planet Profiles ---
 with st.sidebar:
 	st.subheader("🪐 Planet Profiles in View")
 

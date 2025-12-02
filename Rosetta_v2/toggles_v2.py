@@ -68,9 +68,14 @@ def render_circuit_toggles(
 
 	# ---------- Header + events panel ----------
 
-	header_col, events_col = st.columns([2, 8])
+	header_col, events_col, jump_col = st.columns([1, 6, 2])
 	with header_col:
 		st.subheader("🗺️Circuits")
+	with jump_col:
+		st.markdown(
+			'<a href="#ruler-hierarchies" style="display:inline-block;padding:0.25rem 0.75rem;background-color:#ff4b4b;color:white;text-decoration:none;border-radius:0.25rem;text-align:center;width:100%;">Jump to Houses & Rulers</a>',
+			unsafe_allow_html=True
+		)
 	with events_col:
 		# Reserve a dedicated spot for the events block so we can reliably
 		# clear any prior render when a new chart is calculated.
@@ -243,9 +248,9 @@ def render_circuit_toggles(
 	with options_col:
 		# Only show these after a chart exists
 		if st.session_state.get("last_df") is not None:
-			# House selector (this just updates session state; no run_chart)
-			from house_selector_v2 import render_house_system_selector
-			render_house_system_selector()
+			# House selector moved to dispositor graph section
+			# from house_selector_v2 import render_house_system_selector
+			# render_house_system_selector()
 
 			# --- Label Style (keep visual location, fix instant sync) ---
 			st.session_state.setdefault("label_style", "glyph")
