@@ -505,6 +505,68 @@ def _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, da
 			path_effects=effects,
 		)
 
+def _draw_header_on_figure_right(fig, name, date_line, time_line, city, extra_line, dark_mode):
+	"""Paint header in the figure margin (top-right), with maroon color for chart 2."""
+	import matplotlib.patheffects as pe
+
+	color  = "#6D0000"  # Maroon color for chart 2
+	stroke = "black" if dark_mode else "white"
+	effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
+
+	y0 = 0.99   # top margin in figure coords
+	x0 = 0.98   # right side positioning (closer to edge but within bounds)
+
+	# 1) Bold chart name (right-aligned)
+	name_text = fig.text(
+		x0, y0, name,
+		ha="right", va="top",
+		fontsize=12, fontweight="bold",
+		color=color, path_effects=effects
+	)
+
+	# 2) Optional extra line on SAME TOP LINE, normal size, before name
+	if extra_line:
+		# Force a draw so we can measure the name's pixel width reliably
+		fig.canvas.draw()
+		renderer = fig.canvas.get_renderer()
+
+		name_bbox = name_text.get_window_extent(renderer=renderer)
+		fig_bbox  = fig.get_window_extent(renderer=renderer)
+
+		# Convert the name's pixel width to figure-coordinate width
+		dx = name_bbox.width / fig_bbox.width
+
+		# Small horizontal padding in figure coords
+		pad = 0.01
+
+		fig.text(
+			x0 - dx - pad, y0, extra_line,
+			ha="right", va="top",
+			fontsize=9, fontweight=None,
+			color=color, path_effects=effects
+		)
+
+	# 3) Stack the remaining lines below
+	lines = []
+	if date_line:
+		lines.append(date_line)
+	if time_line:
+		lines.append(time_line)
+	if city:
+		lines.append(city)
+
+	for idx, line in enumerate(lines, start=1):
+		fig.text(
+			x0,
+			y0 - 0.035 * idx,
+			line,
+			ha="right",
+			va="top",
+			fontsize=9,
+			color=color,
+			path_effects=effects,
+		)
+
 
 def _draw_moon_phase_on_axes(ax, df, dark_mode: bool, icon_frac: float = 0.10) -> None:
 	"""
@@ -1805,7 +1867,7 @@ def render_biwheel_chart(
 	ax.axis("off")
 	ax.set_anchor("C")
 	ax.set_aspect("equal", adjustable="box")
-	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
+	fig.subplots_adjust(left=0, right=1.0, top=0.95, bottom=0.05)
 
 	# Draw zodiac signs (outermost ring - unchanged)
 	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
@@ -1884,13 +1946,13 @@ def render_biwheel_chart(
 	# Draw planet labels for inner chart (between the circles)
 	draw_planet_labels_biwheel(
 		ax, pos_inner, asc_deg_inner, label_style, dark_mode, df_inner,
-		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R
+		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
 	)
 
 	# Draw planet labels for outer chart (outside outer circle)
 	draw_planet_labels_biwheel(
 		ax, pos_outer, asc_deg_inner, label_style, dark_mode, df_outer,
-		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R
+		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
 	)
 
 	# Draw inter-chart aspects (between inner and outer wheels)
@@ -1938,6 +2000,39 @@ def render_biwheel_chart(
 
 	# Draw center earth
 	draw_center_earth(ax, size=0.18)
+
+	# Draw chart headers for both charts
+	# Chart 1 (inner) - top left
+	name1, date_line1, time_line1, city1, extra_line1 = _current_chart_header_lines()
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, extra_line1, dark_mode)
+
+	# Chart 2 (outer) - top right in maroon
+	# Get chart 2 data from session state (using _2 suffix keys)
+	name2 = st.session_state.get("test_chart_2", "Chart 2")
+	if name2 == "Custom":
+		name2 = "Chart 2"
+	
+	month2 = st.session_state.get("month_name_2", "")
+	day2 = st.session_state.get("day_2", "")
+	year2 = st.session_state.get("year_2", "")
+	hour_12_2 = st.session_state.get("hour_12_2")
+	minute_str_2 = st.session_state.get("minute_str_2")
+	ampm_2 = st.session_state.get("ampm_2")
+	city2 = st.session_state.get("city_2", "")
+	
+	# Build date line
+	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
+	
+	# Build time line
+	time_line2 = ""
+	if hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--":
+		try:
+			time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}"
+		except (ValueError, TypeError):
+			pass
+	
+	extra_line2 = ""
+	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, extra_line2, dark_mode)
 
 	return RenderResult(
 		fig=fig,
@@ -2025,7 +2120,7 @@ def draw_house_cusps_biwheel(
 
 def draw_planet_labels_biwheel(
 	ax, pos, asc_deg, label_style, dark_mode, df,
-	label_r, degree_r
+	label_r, degree_r, is_outer_chart=False
 ):
 	"""Draw planet labels at specified radius for biwheel charts."""
 	if not pos:
@@ -2054,7 +2149,11 @@ def draw_planet_labels_biwheel(
 		(cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing):
 		cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
 
-	color = "white" if dark_mode else "black"
+	# Use maroon color for outer chart labels, black/white for inner chart
+	if is_outer_chart:
+		color = "#6D0000"
+	else:
+		color = "white" if dark_mode else "black"
 	want_glyphs = str(label_style).lower() == "glyph"
 
 	# Retrograde checker
