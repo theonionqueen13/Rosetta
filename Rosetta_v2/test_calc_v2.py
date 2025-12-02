@@ -20,7 +20,7 @@ from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, importlib.util, streamlit as st
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
-from drawing_v2 import render_chart, render_chart_with_shapes
+from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
@@ -262,6 +262,10 @@ MONTH_NAMES = [
 st.session_state.setdefault("synastry_mode", False)
 synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
 
+# Initialize test_chart_2 default before creating the widget
+if synastry_mode:
+	st.session_state.setdefault("test_chart_2", "Custom")
+
 # Primary chart selector
 test_chart = st.radio(
 	"Test Charts" if not synastry_mode else "Chart 1 (Inner)",
@@ -273,17 +277,18 @@ test_chart = st.radio(
 
 # Secondary chart selector (only visible in synastry mode)
 if synastry_mode:
-	st.session_state.setdefault("test_chart_2", "Custom")
 	test_chart_2 = st.radio(
 		"Chart 2 (Outer)",
 		["Custom", "Wildhorse", "Joylin", "Terra", "Jessica"],
 		horizontal=True,
-		key="test_chart_2_radio",
+		key="test_chart_2",
 		label_visibility="collapsed"
 	)
-	st.session_state["test_chart_2"] = test_chart_2
+	# Show what charts are currently loaded
+	df2_city = st.session_state.get("city_2", "Not set")
+	st.caption(f"Chart 2 data: {df2_city}, DF exists: {st.session_state.get('last_df_2') is not None}")
 else:
-	st.session_state["test_chart_2"] = None
+	test_chart_2 = None
 
 # Track the last selected test chart to detect changes
 if "last_test_chart" not in st.session_state:
@@ -339,10 +344,74 @@ elif test_chart == "Custom":
 	# Update the last_test_chart when Custom is selected too
 	st.session_state["last_test_chart"] = "Custom"
 
+# Helper to calculate second chart for synastry
+def _calculate_chart_2():
+	"""Calculate chart 2 using _2 suffixed session state data."""
+	try:
+		year = int(st.session_state.get("year_2", 2000))
+		month_name = st.session_state.get("month_name_2", "January")
+		month = MONTH_NAMES.index(month_name) + 1
+		day = int(st.session_state.get("day_2", 1))
+		
+		hour_12 = st.session_state.get("hour_12_2", "12")
+		minute_str = st.session_state.get("minute_str_2", "00")
+		ampm = st.session_state.get("ampm_2", "AM")
+		
+		# Convert to 24-hour
+		if hour_12 == "--" or minute_str == "--" or ampm == "--":
+			hour_24 = 12
+			minute = 0
+		else:
+			h12 = int(hour_12)
+			minute = int(minute_str)
+			if ampm == "AM":
+				hour_24 = 0 if h12 == 12 else h12
+			else:
+				hour_24 = 12 if h12 == 12 else h12 + 12
+		
+		city = st.session_state.get("city_2", "")
+		
+		# Geocode if we have a city
+		if city:
+			lat, lon, tz_name, _ = _geocode_city_with_timezone(city, st.secrets["opencage"]["api_key"])
+			if lat and lon and tz_name:
+				# Calculate the chart
+				combined_df, aspect_df, raw_plot_data = calculate_chart(
+					year=year, month=month, day=day, hour=hour_24, minute=minute,
+					tz_offset=0, lat=lat, lon=lon, input_is_ut=False,
+					tz_name=tz_name, include_aspects=True, unknown_time=False
+				)
+				st.session_state["last_df_2"] = combined_df
+				st.session_state["last_aspect_df_2"] = aspect_df
+				st.session_state["plot_data_2"] = raw_plot_data
+				return True
+			else:
+				st.error(f"Could not geocode city for Chart 2: {city}")
+				st.session_state["last_df_2"] = None
+				return False
+		else:
+			st.warning("No city specified for Chart 2")
+			st.session_state["last_df_2"] = None
+			return False
+	except Exception as e:
+		st.error(f"Failed to calculate chart 2: {e}")
+		import traceback
+		st.error(traceback.format_exc())
+		st.session_state["last_df_2"] = None
+		return False
+
 # Handle second chart selection (for synastry mode)
-if synastry_mode and st.session_state.get("test_chart_2"):
-	test_chart_2 = st.session_state["test_chart_2"]
-	if test_chart_2 != st.session_state["last_test_chart_2"] and test_chart_2 != "Custom":
+if synastry_mode and test_chart_2:
+	# Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
+	chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
+	df_missing = st.session_state.get("last_df_2") is None
+	should_calculate = chart_changed and test_chart_2 != "Custom"
+	
+	# Also calculate if a non-Custom chart is selected but no data exists yet
+	if test_chart_2 != "Custom" and df_missing:
+		should_calculate = True
+	
+	if should_calculate:
 		st.session_state["last_test_chart_2"] = test_chart_2
 		
 		# Store Chart 2 data with "_2" suffix
@@ -381,6 +450,13 @@ if synastry_mode and st.session_state.get("test_chart_2"):
 			st.session_state["minute_str_2"] = "29"
 			st.session_state["ampm_2"] = "PM"
 			st.session_state["city_2"] = "Wichita, KS"
+		
+		# Auto-calculate the second chart when test chart is selected
+		success = _calculate_chart_2()
+		if success:
+			st.success(f"Chart 2 calculated: {st.session_state.get('city_2')}")
+		else:
+			st.error(f"Failed to calculate Chart 2")
 	elif test_chart_2 == "Custom":
 		st.session_state["last_test_chart_2"] = "Custom"
 
@@ -389,6 +465,86 @@ st.session_state.setdefault("render_fig", None)
 
 def _refresh_chart_figure():
 	"""Rebuild the chart figure using the current session-state toggles."""
+	# Check if we're in synastry mode
+	synastry_mode = st.session_state.get("synastry_mode", False)
+	
+	if synastry_mode:
+		# Synastry/biwheel mode: need both charts
+		df_inner = st.session_state.get("last_df")
+		df_outer = st.session_state.get("last_df_2")
+		
+		if df_inner is None or df_outer is None:
+			# If we don't have both charts yet, fall back to single chart
+			if df_inner is None:
+				return
+			df_outer = df_inner  # Use same chart for both rings as fallback
+		
+		house_system = st.session_state.get("house_system", "placidus")
+		label_style = st.session_state.get("label_style", "glyph")
+		dark_mode = st.session_state.get("dark_mode", False)
+		chart_mode = st.session_state.get("chart_mode", "Circuits")
+		
+		# Compute inter-chart aspects for Standard Chart mode
+		edges_inter_chart = []
+		if chart_mode == "Standard Chart":
+			# Get positions for both charts
+			pos_inner = extract_positions(df_inner)
+			pos_outer = extract_positions(df_outer)
+			
+			# Get aspect toggles
+			aspect_toggles = st.session_state.get("aspect_toggles", {})
+			
+			# Build list of bodies for aspects: PLANETS_PLUS + enabled TOGGLE_ASPECTS
+			aspect_bodies_inner = dict(PLANETS_PLUS)
+			aspect_bodies_outer = dict(PLANETS_PLUS)
+			
+			for body_name, enabled in aspect_toggles.items():
+				if enabled and body_name in TOGGLE_ASPECTS:
+					aspect_bodies_inner[body_name] = TOGGLE_ASPECTS[body_name]
+					aspect_bodies_outer[body_name] = TOGGLE_ASPECTS[body_name]
+			
+			# Filter positions to aspect-enabled bodies
+			inner_pos_filtered = {name: deg for name, deg in pos_inner.items() if name in aspect_bodies_inner}
+			outer_pos_filtered = {name: deg for name, deg in pos_outer.items() if name in aspect_bodies_outer}
+			
+			# Compute aspects ONLY between inner and outer charts (not within each chart)
+			for p1 in inner_pos_filtered:
+				for p2 in outer_pos_filtered:
+					d1 = inner_pos_filtered[p1]
+					d2 = outer_pos_filtered[p2]
+					angle = abs(d1 - d2) % 360
+					if angle > 180:
+						angle = 360 - angle
+					
+					# Check all aspect types
+					for aspect_name, aspect_data in ASPECTS.items():
+						if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+							edges_inter_chart.append((p1, p2, aspect_name))
+							break  # Only one aspect per pair
+		
+		try:
+			rr = render_biwheel_chart(
+				df_inner,
+				df_outer,
+				edges_inter_chart=edges_inter_chart,
+				house_system=house_system,
+				dark_mode=dark_mode,
+				label_style=label_style,
+				figsize=(6.0, 6.0),
+				dpi=144,
+			)
+			st.session_state["render_fig"] = rr.fig
+			st.session_state["render_result"] = rr
+			st.session_state["visible_objects"] = rr.visible_objects
+			st.session_state["active_shapes"] = []
+			st.session_state["last_cusps"] = rr.cusps
+			st.session_state["ai_text"] = None
+			return
+		except Exception as e:
+			st.error(f"Biwheel chart rendering failed: {e}")
+			# Fall through to regular chart rendering
+	
+	# Regular single-chart mode
 	df = st.session_state.get("last_df")
 	pos = st.session_state.get("chart_positions")
 
@@ -432,6 +588,9 @@ def _refresh_chart_figure():
 		
 		# Build list of bodies to compute aspects for: PLANETS_PLUS + selected TOGGLE_ASPECTS
 		aspect_bodies = dict(PLANETS_PLUS)
+		
+		# Get aspect_toggles from session state (will be set by render_circuit_toggles later)
+		aspect_toggles = st.session_state.get("aspect_toggles", {})
 		
 		# Add any TOGGLE_ASPECTS bodies that are enabled
 		for body_name, enabled in aspect_toggles.items():

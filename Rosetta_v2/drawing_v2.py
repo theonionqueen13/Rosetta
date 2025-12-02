@@ -937,7 +937,7 @@ def draw_zodiac_signs(ax, asc_deg, dark_mode):
                 color="black", linestyle="solid", linewidth=1, zorder=5)
 
 
-def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
+def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=None):
 	"""Planet glyphs/names with degree (no sign), cluster fan-out + global spacing."""
 	if not pos:
 		return
@@ -968,6 +968,22 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
 	color = "white" if dark_mode else "black"
 	want_glyphs = str(label_style).lower() == "glyph"
 
+	# Helper to check retrograde status
+	def is_retrograde(obj_name):
+		if df is None or "Object" not in df or "Speed" not in df:
+			return False
+		try:
+			canon_name = _canonical_name(obj_name)
+			for _, row in df.iterrows():
+				row_canon = _canonical_name(str(row.get("Object", "")))
+				if row_canon == canon_name:
+					speed = row.get("Speed")
+					if speed is not None and float(speed) < 0:
+						return True
+			return False
+		except Exception:
+			return False
+
 	for cluster, base_degree in zip(clusters, cluster_degrees):
 		n = len(cluster)
 		if n == 1:
@@ -987,6 +1003,10 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode):
 
 			deg_int = int(deg_true % 30)
 			deg_label = f"{deg_int}°"
+			
+			# Add retrograde indicator
+			if is_retrograde(name):
+				deg_label += " Rx"
 
 			ax.text(rad_true, 1.35, label, ha="center", va="center", fontsize=9, color=color)
 			ax.text(rad_true, 1.27, deg_label, ha="center", va="center", fontsize=6, color=color)
@@ -1074,6 +1094,7 @@ def draw_aspect_lines(
 	linewidth_major=2.0,
 	color_override: str | None = None,
 	drawn_keys: set[tuple[frozenset[str], str]] | None = None,
+	radius: float = 1.0,
 ):    
 	drawn = []
 	if not edges:
@@ -1119,7 +1140,7 @@ def draw_aspect_lines(
 		start_color = base_color if _is_luminary_or_planet(a) else light_color
 		end_color   = base_color if _is_luminary_or_planet(b) else light_color
 
-		_draw_gradient_line(ax, r1, r2, start_color, end_color, lw, style)
+		_draw_gradient_line(ax, r1, r2, start_color, end_color, lw, style, radius=radius)
 		drawn_keys.add(key)
 		drawn.append((a, b, str(canon_aspect) + ("_approx" if is_approx else "")))
 
@@ -1135,6 +1156,7 @@ def draw_minor_edges(
 	linewidth_minor=1.0,
 	color_override: str | None = None,
 	drawn_keys: set[tuple[frozenset[str], str]] | None = None,
+	radius: float = 1.0,
 ):
 	drawn: list[tuple[str, str, str]] = []
 	if not edges:
@@ -1169,7 +1191,7 @@ def draw_minor_edges(
 		start_color = base_color if _is_luminary_or_planet(a) else light_color
 		end_color   = base_color if _is_luminary_or_planet(b) else light_color
 
-		_draw_gradient_line(ax, r1, r2, start_color, end_color, linewidth_minor, "dotted")
+		_draw_gradient_line(ax, r1, r2, start_color, end_color, linewidth_minor, "dotted", radius=radius)
 		drawn_keys.add(key)
 		drawn.append((a, b, canon_aspect))
 
@@ -1468,7 +1490,7 @@ def render_chart(
 	if zodiac_labels:
 		draw_zodiac_signs(ax, asc_deg, dark_mode)
 
-	draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode)
+	draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode, df=df)
 
 	edge_keys: set[tuple[frozenset[str], str]] = set()
 
@@ -1555,7 +1577,7 @@ def render_chart_with_shapes(
 		cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
 	draw_degree_markers(ax, asc_deg, dark_mode)
 	draw_zodiac_signs(ax, asc_deg, dark_mode)
-	draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode)
+	draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=df)
 
 	active_parents = set(i for i, show in enumerate(toggles) if show)
 	active_shape_ids = [
@@ -1736,10 +1758,299 @@ def render_chart_with_shapes(
 
 	return fig, visible_objects, active_shapes, cusps, out_text
 
+# ---------------------------------------------------------------------------
+# Bi-wheel (synastry/transit) renderer
+# ---------------------------------------------------------------------------
+
+def render_biwheel_chart(
+	df_inner: pd.DataFrame,
+	df_outer: pd.DataFrame,
+	*,
+	edges_inter_chart: Sequence[Any] | None = None,
+	house_system: str = "placidus",
+	dark_mode: bool = False,
+	label_style: str = "glyph",
+	figsize: tuple[float, float] = (6.0, 6.0),
+	dpi: int = 144,
+):
+	"""
+	Render a bi-wheel chart with two concentric rings:
+	- Inner chart: df_inner (between the two degree circles)
+	- Outer chart: df_outer (outside the outer degree circle)
+	- edges_inter_chart: Aspects between inner and outer chart planets
+	"""
+	# Get ascendant for inner chart (rotation reference)
+	unknown_time_inner = bool(
+		st.session_state.get("chart_unknown_time")
+		or st.session_state.get("profile_unknown_time")
+	)
+	asc_deg_inner = get_ascendant_degree(df_inner)
+	if unknown_time_inner:
+		asc_deg_inner = 0.0
+
+	# Extract positions for both charts
+	pos_inner = extract_positions(df_inner)
+	pos_outer = extract_positions(df_outer)
+
+	# Setup figure
+	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
+	if dark_mode:
+		ax.set_facecolor("black")
+		fig.patch.set_facecolor("black")
+
+	ax.set_theta_zero_location("N")
+	ax.set_theta_direction(-1)
+	ax.set_rlim(0, 1.70)  # Slightly larger to accommodate outer ring
+	ax.axis("off")
+	ax.set_anchor("C")
+	ax.set_aspect("equal", adjustable="box")
+	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
+
+	# Draw zodiac signs (outermost ring - unchanged)
+	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
+
+	# --- KEY RADIUS CONTROLS FOR BIWHEEL LAYOUT ---
+	# Adjust these values independently to control spacing:
+	
+	# Degree circles (the black rings with tick marks):
+	INNER_CIRCLE_R = 0.9     # Inner degree circle (fixed)
+	OUTER_CIRCLE_R = 1.2     # Outer degree circle (move this to adjust circle position)
+	
+	# Planet label positions (independent from circles):
+	INNER_LABEL_R = 1.1      # Inner chart planet glyphs
+	INNER_DEGREE_R = 1.0     # Inner chart degree numbers
+	OUTER_LABEL_R = 1.4      # Outer chart planet glyphs (adjust if overlapping circle)
+	OUTER_DEGREE_R = 1.31     # Outer chart degree numbers
+	
+	# House cusp zones:
+	OUTER_CUSP_R = 1.45       # Where outer house cusps end (before zodiac)
+
+	# Draw TWO degree marker circles
+	base_color = "white" if dark_mode else "black"
+	
+	# Inner degree circle
+	circle_inner = plt.Circle((0, 0), INNER_CIRCLE_R, transform=ax.transData._b,
+							  fill=False, color=base_color, linewidth=1.5)
+	ax.add_artist(circle_inner)
+	
+	# Draw ticks on inner circle
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
+
+	# Outer degree circle
+	circle_outer = plt.Circle((0, 0), OUTER_CIRCLE_R, transform=ax.transData._b,
+							  fill=False, color=base_color, linewidth=1.5)
+	ax.add_artist(circle_outer)
+	
+	# Draw ticks on outer circle
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
+
+	# Draw inner chart house cusps (between inner and outer circles)
+	if not unknown_time_inner:
+		cusps_inner = draw_house_cusps_biwheel(
+			ax, df_inner, asc_deg_inner, house_system, dark_mode,
+			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=False
+		)
+	else:
+		cusps_inner = []
+
+	# Draw outer chart house cusps (between outer circle and zodiac)
+	unknown_time_outer = False  # For now, assume outer chart has time
+	asc_deg_outer = get_ascendant_degree(df_outer)
+	if not unknown_time_outer:
+		cusps_outer = draw_house_cusps_biwheel(
+			ax, df_outer, asc_deg_inner, house_system, dark_mode,
+			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=False
+		)
+	else:
+		cusps_outer = []
+
+	# Draw planet labels for inner chart (between the circles)
+	draw_planet_labels_biwheel(
+		ax, pos_inner, asc_deg_inner, label_style, dark_mode, df_inner,
+		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R
+	)
+
+	# Draw planet labels for outer chart (outside outer circle)
+	draw_planet_labels_biwheel(
+		ax, pos_outer, asc_deg_inner, label_style, dark_mode, df_outer,
+		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R
+	)
+
+	# Draw inter-chart aspects (between inner and outer wheels)
+	if edges_inter_chart:
+		# Combine positions from both charts for aspect drawing
+		combined_pos = {**pos_inner, **pos_outer}
+		edge_keys: set[tuple[frozenset[str], str]] = set()
+		draw_aspect_lines(
+			ax,
+			combined_pos,
+			edges_inter_chart,
+			asc_deg_inner,
+			visible_canon=None,  # Don't filter - we want all inter-chart aspects
+			linewidth_major=2.0,
+			drawn_keys=edge_keys,
+			radius=INNER_CIRCLE_R,
+		)
+
+	# Draw center earth
+	draw_center_earth(ax, size=0.18)
+
+	return RenderResult(
+		fig=fig,
+		ax=ax,
+		positions=pos_inner,  # Return inner positions as primary
+		cusps=cusps_inner,
+		visible_objects=sorted(pos_inner.keys()),
+		drawn_major_edges=[],
+		drawn_minor_edges=[],
+	)
+
+# Helper functions for biwheel
+
+def draw_house_cusps_biwheel(
+	ax, df, asc_deg, house_system, dark_mode,
+	r_inner, r_outer, draw_labels=False
+):
+	"""Draw house cusps between two radii for biwheel charts."""
+	system_map = {
+		"placidus": "Placidus",
+		"equal": "Equal",
+		"equal house": "Equal",
+		"whole": "Whole Sign",
+		"wholesign": "Whole Sign",
+	}
+	sys_key = (house_system or "placidus").strip().lower()
+	sys_label = system_map.get(sys_key, system_map["placidus"])
+
+	cusps: list[float] = []
+	if df is not None and "Object" in df and "Longitude" in df:
+		obj_series = df["Object"].astype("string")
+		pattern = rf"^\s*{re.escape(sys_label)}\s*(\d+)H\s*cusp\s*$"
+		mask = obj_series.str.match(pattern, case=False, na=False)
+		cusp_rows = df.loc[mask].copy()
+		if not cusp_rows.empty:
+			cusp_rows["__H"] = cusp_rows["Object"].astype("string").str.extract(r"(\d+)").astype(int)
+			cusp_rows = cusp_rows.sort_values("__H")
+			cusps = [float(v) for v in cusp_rows.get("Longitude", []) if not pd.isna(v)]
+
+	if len(cusps) != 12:
+		start = asc_deg % 360.0
+		cusps = [(start + i * 30.0) % 360.0 for i in range(12)]
+
+	# Draw cusp lines
+	line_color = "#A0A0A0" if not dark_mode else "#333333"
+	for deg in cusps:
+		rad = deg_to_rad(deg, asc_deg)
+		ax.plot(
+			[rad, rad],
+			[r_inner, r_outer],
+			color=line_color,
+			linestyle="solid",
+			linewidth=1.0,
+			zorder=0.5,
+			solid_capstyle="butt",
+			antialiased=True,
+		)
+
+	return cusps
+
+def draw_planet_labels_biwheel(
+	ax, pos, asc_deg, label_style, dark_mode, df,
+	label_r, degree_r
+):
+	"""Draw planet labels at specified radius for biwheel charts."""
+	if not pos:
+		return
+
+	degree_threshold = 3
+	min_spacing = 7
+
+	sorted_pos = sorted(pos.items(), key=lambda x: x[1])
+	clusters: list[list[tuple[str, float]]] = []
+	for name, degree in sorted_pos:
+		for cluster in clusters:
+			if abs(degree - cluster[0][1]) <= degree_threshold:
+				cluster.append((name, degree))
+				break
+		else:
+			clusters.append([(name, degree)])
+
+	cluster_degrees = [sum(d for _, d in c) / len(c) for c in clusters]
+
+	for i in range(1, len(cluster_degrees)):
+		if cluster_degrees[i] - cluster_degrees[i - 1] < min_spacing:
+			cluster_degrees[i] = cluster_degrees[i - 1] + min_spacing
+
+	if (cluster_degrees and
+		(cluster_degrees[0] + 360.0) - cluster_degrees[-1] < min_spacing):
+		cluster_degrees[-1] = cluster_degrees[0] + 360.0 - min_spacing
+
+	color = "white" if dark_mode else "black"
+	want_glyphs = str(label_style).lower() == "glyph"
+
+	# Retrograde checker
+	def is_retrograde(obj_name):
+		if df is None or "Object" not in df or "Speed" not in df:
+			return False
+		try:
+			canon_name = _canonical_name(obj_name)
+			for _, row in df.iterrows():
+				row_canon = _canonical_name(str(row.get("Object", "")))
+				if row_canon == canon_name:
+					speed = row.get("Speed")
+					if speed is not None and float(speed) < 0:
+						return True
+			return False
+		except Exception:
+			return False
+
+	for cluster, base_degree in zip(clusters, cluster_degrees):
+		n = len(cluster)
+		if n == 1:
+			items = [(cluster[0][0], cluster[0][1])]
+		else:
+			spread = 3
+			start = base_degree - (spread * (n - 1) / 2)
+			items = [(name, start + i * spread) for i, (name, _) in enumerate(cluster)]
+
+		for (name, display_degree), (_, true_degree) in zip(items, cluster):
+			deg_true = true_degree % 360.0
+			rad_true = deg_to_rad(display_degree % 360.0, asc_deg)
+
+			label = (glyph_for(name) if glyph_for else GLYPHS.get(name)) if want_glyphs else name
+			if not label:
+				label = name
+
+			deg_int = int(deg_true % 30)
+			deg_label = f"{deg_int}°"
+			
+			if is_retrograde(name):
+				deg_label += " Rx"
+
+			ax.text(rad_true, label_r, label, ha="center", va="center", fontsize=9, color=color)
+			ax.text(rad_true, degree_r, deg_label, ha="center", va="center", fontsize=6, color=color)
+
 __all__ = [
 	"RenderResult",
 	"render_chart",
 	"render_chart_with_shapes",
+	"render_biwheel_chart",
 	"group_color_for",
 	"draw_house_cusps",
 	"draw_degree_markers",
