@@ -1,5 +1,10 @@
-# ---- Test stubs to satisfy UI/backend imports ----
-# Keep these ABOVE imports of your app modules.
+import sys
+import os
+
+# Add the Rosetta project root to sys.path
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(PROJECT_ROOT)
+
 from typing import Dict, Any, List, Optional, Tuple
 from house_selector_v2 import _selected_house_system
 from donate_v2 import donate_chart
@@ -9,7 +14,7 @@ import datetime as dt
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytz
-from geopy.geocoders import OpenCage
+from opencage.geocoder import OpenCageGeocode
 from timezonefinder import TimezoneFinder
 from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, importlib.util, streamlit as st
@@ -19,7 +24,8 @@ from drawing_v2 import render_chart, render_chart_with_shapes
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
-
+from calc_v2 import calculate_chart, plot_dispositor_graph, analyze_dispositors
+from lookup_v2 import SIGNS, PLANETARY_RULERS
 current_user_id = "test-user"
 
 COMPASS_KEY = "ui_compass_overlay"
@@ -33,90 +39,111 @@ import base64
 from pathlib import Path
 import streamlit as st
 
-# --- Background image (base64, no external hosting) ---
-import base64
-from pathlib import Path
-import streamlit as st
+st.markdown("""
+<style>
+/* Full expander container */
+[data-testid="stExpander"] {
+	background-color: #333333 !important; /* dark gray */
+	color: white !important;
+	background-image: none !important;
+	border-radius: 10px !important;  /* rounded corners */
+	overflow: hidden !important;      /* prevents header/body corners showing square */
+}
 
-@st.cache_data(show_spinner=False)
+/* Expander header */
+[data-testid="stExpander"] > summary {
+	background-color: #333333 !important;
+	color: white !important;
+	border-radius: 10px !important;  /* same rounding */
+}
+
+/* Inner content area */
+[data-testid="stExpander"] .st-expander-content {
+	background-color: #333333 !important;
+	color: white !important;
+	border-radius: 0 0 10px 10px !important; /* rounded bottom corners */
+}
+</style>
+""", unsafe_allow_html=True)
+
 def _encode_image_base64(path_str: str) -> str:
-    """Read a local image and return a base64 data URI (jpeg/png/webp)."""
-    p = Path(path_str)
-    if not p.exists():
-        # Prefer a hard fail so you notice wrong paths fast.
-        raise FileNotFoundError(f"Background image not found: {p.resolve()}")
-    ext = p.suffix.lower()
-    if ext == ".png":
-        mime = "image/png"
-    elif ext == ".webp":
-        mime = "image/webp"
-    else:
-        mime = "image/jpeg"  # default to jpeg for jpg/jpeg/others
-    b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
-    return f"data:{mime};base64,{b64}"
+	"""Read a local image and return a base64 data URI (jpeg/png/webp)."""
+	p = Path(path_str)
+	if not p.exists():
+		# Prefer a hard fail so you notice wrong paths fast.
+		raise FileNotFoundError(f"Background image not found: {p.resolve()}")
+	ext = p.suffix.lower()
+	if ext == ".png":
+		mime = "image/png"
+	elif ext == ".webp":
+		mime = "image/webp"
+	else:
+		mime = "image/jpeg"  # default to jpeg for jpg/jpeg/others
+	b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
+	return f"data:{mime};base64,{b64}"
 
 def apply_background_base64(image_path: str, overlay: float = 0.40) -> None:
-    """
-    Page-wide background using a LOCAL image (base64) + adjustable dark overlay.
-    Control overlay here in code (0.0 = none, 1.0 = black).
-    """
-    overlay = max(0.0, min(1.0, float(overlay)))
-    data_uri = _encode_image_base64(image_path)
+	"""
+	Page-wide background using a LOCAL image (base64) + adjustable dark overlay.
+	Control overlay here in code (0.0 = none, 1.0 = black).
+	"""
+	overlay = max(0.0, min(1.0, float(overlay)))
+	data_uri = _encode_image_base64(image_path)
 
-    st.markdown(
-        f"""
-        <style>
-        /* Main app view container background */
-        [data-testid="stAppViewContainer"] {{
-            background-image:
-                linear-gradient(rgba(0,0,0,{overlay}), rgba(0,0,0,{overlay})),
-                url('{data_uri}');
-            background-size: cover;
-            background-position: center center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
+	st.markdown(
+		f"""
+		<style>
+		/* Main app view container background */
+		[data-testid="stAppViewContainer"] {{
+			background-image:
+				linear-gradient(rgba(0,0,0,{overlay}), rgba(0,0,0,{overlay})),
+				url('{data_uri}');
+			background-size: cover;
+			background-position: center center;
+			background-repeat: no-repeat;
+			background-attachment: fixed;
+		}}
 
-        /* Let the background show under the main content */
-        .block-container {{
-            background: transparent;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+		/* Let the background show under the main content */
+		.block-container {{
+			background: transparent;
+		}}
+		</style>
+		""",
+		unsafe_allow_html=True,
+	)
 
 # --- Theme-aware background chooser (paste below apply_background_base64) ---
 def set_background_for_theme(
-    *,
-    light_image_path: str,
-    dark_image_path: str,
-    light_overlay: float = 0.25,
-    dark_overlay: float = 0.45,
-    dark_mode: bool | None = None,
+	*,
+	light_image_path: str,
+	dark_image_path: str,
+	light_overlay: float = 0.25,
+	dark_overlay: float = 0.45,
+	dark_mode: bool | None = None,
 ) -> bool:
-    """
-    Chooses the background based on dark_mode and applies it.
-    Returns the resolved dark_mode (so you can pass the same value to your drawing funcs).
-    """
-    # If caller didn't pass dark_mode, try to infer from session or theme:
-    if dark_mode is None:
-        # 1) Try your own app state, if you keep a toggle there:
-        dark_mode = bool(st.session_state.get("ui_dark_mode", False))
-        # 2) If you don't have a custom toggle, try Streamlit theme (light/dark):
-        try:
-            base_theme = st.get_option("theme.base")  # "light" or "dark" if configured
-            if base_theme in ("light", "dark"):
-                dark_mode = (base_theme == "dark")
-        except Exception:
-            pass  # fallback to whatever we already decided
+	"""
+	Chooses the background based on dark_mode and applies it.
+	Returns the resolved dark_mode (so you can pass the same value to your drawing funcs).
+	"""
+	# If caller didn't pass dark_mode, try to infer from session or theme:
+	if dark_mode is None:
+		# 1) Try your own app state, if you keep a toggle there:
+		dark_mode = bool(st.session_state.get("ui_dark_mode", False))
+		# 2) If you don't have a custom toggle, try Streamlit theme (light/dark):
+		try:
+			base_theme = st.get_option("theme.base")  # "light" or "dark" if configured
+			if base_theme in ("light", "dark"):
+				dark_mode = (base_theme == "dark")
+		except Exception:
+			pass  # fallback to whatever we already decided
 
-    if dark_mode:
-        apply_background_base64(dark_image_path, dark_overlay)
-    else:
-        apply_background_base64(light_image_path, light_overlay)
+	if dark_mode:
+		apply_background_base64(dark_image_path, dark_overlay)
+	else:
+		apply_background_base64(light_image_path, light_overlay)
 
-    return dark_mode
+	return dark_mode
 
 # --- Pick backgrounds for each theme and apply ---
 LIGHT_BG = "Rosetta_v2/pngs/nebula2.jpg"
@@ -126,11 +153,11 @@ DARK_OVERLAY  = 0.45
 
 # Read the toggle value that toggles_v2.py writes
 resolved_dark_mode = set_background_for_theme(
-    light_image_path=LIGHT_BG,
-    dark_image_path=DARK_BG,
-    light_overlay=LIGHT_OVERLAY,
-    dark_overlay=DARK_OVERLAY,
-    dark_mode=st.session_state.get("dark_mode", False),  # <- wired to your checkbox
+	light_image_path=LIGHT_BG,
+	dark_image_path=DARK_BG,
+	light_overlay=LIGHT_OVERLAY,
+	dark_overlay=DARK_OVERLAY,
+	dark_mode=st.session_state.get("dark_mode", False),  # <- wired to your checkbox
 )
 
 def save_user_profile_db(user_id: str, name: str, payload: Dict[str, Any]) -> None:
@@ -174,24 +201,25 @@ def is_admin(user_id: str) -> bool:
 	return True
 # ---- End stubs ----
 
-def _geocode_city_with_timezone(city_query: str) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
-	"""Return (lat, lon, tz_name, formatted_address) for the provided city query."""
+def _geocode_city_with_timezone(
+	city_query: str,
+	opencage_key: str
+) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
 	lat = lon = tz_name = None
 	formatted_address = None
 
 	if not city_query:
 		return lat, lon, tz_name, formatted_address
 
-	try:
-		opencage_key = st.secrets["OPENCAGE_API_KEY"]
-	except Exception as exc:
-		raise RuntimeError("OpenCage API key missing from Streamlit secrets") from exc
+	geolocator = OpenCageGeocode(opencage_key)
 
-	geolocator = OpenCage(api_key=opencage_key)
-	location = geolocator.geocode(city_query, timeout=20)
-	if location:
-		lat, lon = location.latitude, location.longitude
-		formatted_address = location.address
+	results = geolocator.geocode(city_query, no_annotations='1', limit=1)
+
+	if results:
+		first_result = results[0]
+		lat = first_result['geometry']['lat']
+		lon = first_result['geometry']['lng']
+		formatted_address = first_result['formatted']
 		tz_name = TimezoneFinder().timezone_at(lng=lon, lat=lat)
 
 	return lat, lon, tz_name, formatted_address
@@ -223,22 +251,72 @@ build_aspect_edges = calc_mod.build_aspect_edges
 annotate_reception = calc_mod.annotate_reception
 build_dispositor_tables = calc_mod.build_dispositor_tables
 build_conjunction_clusters = calc_mod.build_conjunction_clusters
+plot_dispositor_graph = calc_mod.plot_dispositor_graph  # <-- RELOAD THIS TOO
 
 MONTH_NAMES = [
 	"January","February","March","April","May","June",
 	"July","August","September","October","November","December"
 ]
 
-# --- Default birth data (only set once per app session) ---
-if "defaults_loaded" not in st.session_state:
-	st.session_state["year"] = 1990
-	st.session_state["month_name"] = "July"
-	st.session_state["day"] = 29
-	st.session_state["hour_12"] = "01"
-	st.session_state["minute_str"] = "39"
-	st.session_state["ampm"] = "AM"
-	st.session_state["city"] = "Newton, KS"
-	st.session_state["defaults_loaded"] = True
+test_chart = st.radio(
+	"Test Charts",
+	["Custom", "Wildhorse", "Joylin", "Terra", "Jessica"],
+	horizontal=True,
+	key="test_chart_radio",
+	label_visibility="collapsed"
+)
+
+# Track the last selected test chart to detect changes
+if "last_test_chart" not in st.session_state:
+	st.session_state["last_test_chart"] = None
+
+# Only apply test chart data if the selection changed (not on every rerun)
+if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
+	st.session_state["last_test_chart"] = test_chart
+	
+	# --- Default birth data (only set when test chart selection changes) ---
+	if test_chart == "Wildhorse":
+		st.session_state["year"] = 1983
+		st.session_state["month_name"] = "January"
+		st.session_state["day"] = 15
+		st.session_state["hour_12"] = "11"
+		st.session_state["minute_str"] = "27"
+		st.session_state["ampm"] = "AM"
+		st.session_state["city"] = "Red Bank, NJ"
+		st.session_state["defaults_loaded"] = True
+
+	if test_chart == "Joylin":
+		st.session_state["year"] = 1990
+		st.session_state["month_name"] = "July"
+		st.session_state["day"] = 29
+		st.session_state["hour_12"] = "1"
+		st.session_state["minute_str"] = "39"
+		st.session_state["ampm"] = "AM"
+		st.session_state["city"] = "Newton, KS"
+		st.session_state["defaults_loaded"] = True
+
+	if test_chart == "Terra":
+		st.session_state["year"] = 1992
+		st.session_state["month_name"] = "January"
+		st.session_state["day"] = 28
+		st.session_state["hour_12"] = "2"
+		st.session_state["minute_str"] = "54"
+		st.session_state["ampm"] = "PM"
+		st.session_state["city"] = "Newton, KS"
+		st.session_state["defaults_loaded"] = True
+
+	if test_chart == "Jessica":
+		st.session_state["year"] = 1990
+		st.session_state["month_name"] = "November"
+		st.session_state["day"] = 20
+		st.session_state["hour_12"] = "4"
+		st.session_state["minute_str"] = "29"
+		st.session_state["ampm"] = "PM"
+		st.session_state["city"] = "Wichita, KS"
+		st.session_state["defaults_loaded"] = True
+elif test_chart == "Custom":
+	# Update the last_test_chart when Custom is selected too
+	st.session_state["last_test_chart"] = "Custom"
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
@@ -329,25 +407,24 @@ def _refresh_chart_figure():
 
 def run_chart(lat, lon, tz_name):
 	"""
-	Build chart DF, aspects, dispositors, clusters, circuits/shapes—then render
-	via drawing_v2.render_chart_with_shapes (fallback to render_chart).
+	Build chart DF, aspects, dispositors, clusters, circuits/shapes—then render.
 	"""
 	# --- Inputs from session ---
 	year   = int(st.session_state["profile_year"])
 	month  = MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1
 	day    = int(st.session_state["profile_day"])
-	hour   = int(st.session_state["profile_hour"])   # already 24h
+	hour   = int(st.session_state["profile_hour"])
 	minute = int(st.session_state["profile_minute"])
 	unknown_time = bool(st.session_state.get("profile_unknown_time"))
 
-	# --- Determine the chart datetime (UTC) for downstream consumers ---
+	# --- Determine UTC chart datetime ---
 	new_chart_dt_utc = None
 	try:
 		tzinfo = ZoneInfo(tz_name) if tz_name else None
 	except Exception:
 		tzinfo = None
 
-	if tzinfo is not None:
+	if tzinfo:
 		try:
 			chart_dt_local = datetime(year, month, day, hour, minute, tzinfo=tzinfo)
 			new_chart_dt_utc = chart_dt_local.astimezone(ZoneInfo("UTC"))
@@ -356,41 +433,31 @@ def run_chart(lat, lon, tz_name):
 
 	st.session_state["chart_dt_utc"] = new_chart_dt_utc
 	st.session_state[COMPASS_KEY] = True
-
-	# Always clear/recompute the events panel whenever a new chart is requested.
 	update_events_html_state(new_chart_dt_utc)
 
-	# --- Calculate chart (no tz_offset when tz_name is provided) ---
-	result = calculate_chart(
-		year=year,
-		month=month,
-		day=day,
-		hour=hour,
-		minute=minute,
-		tz_offset=0,
-		lat=lat,
-		lon=lon,
-		input_is_ut=False,
-		tz_name=tz_name,
-        include_aspects=True,
-        unknown_time=unknown_time,
+	# --- Calculate chart ---
+	combined_df, aspect_df, raw_plot_data = calculate_chart(
+		year=year, month=month, day=day, hour=hour, minute=minute,
+		tz_offset=0, lat=lat, lon=lon, input_is_ut=False,
+		tz_name=tz_name, include_aspects=True, unknown_time=unknown_time
 	)
-	
+
 	st.session_state["chart_unknown_time"] = unknown_time
+	df = combined_df
+	st.session_state["dispositor_summary_rows"] = df.to_dict("records")
 
-	# Unpack DF(s)
-	if isinstance(result, tuple):
-		df, aspect_df = result
-	else:
-		df, aspect_df = result, None
+	# --- Use the plot_data returned from calculate_chart ---
+	st.session_state["plot_data"] = raw_plot_data
 
-	# --- Aspects (build once) ---
+	# Optional: keep summary tables for UI
+	chains_rows, summary_rows = build_dispositor_tables(df)
+	st.session_state["dispositor_summary_rows"] = summary_rows
+	st.session_state["dispositor_chains_rows"] = chains_rows
+
+	# --- Build aspects / reception / clusters / patterns ---
 	edges_major, edges_minor = build_aspect_edges(df)
-
-	# --- Reception (uses supplied edges; no recalculation) ---
 	df = annotate_reception(df, edges_major)
 
-	# --- Sect (store or error) ---
 	try:
 		st.session_state["last_sect"] = chart_sect_from_df(df)
 		st.session_state["last_sect_error"] = None
@@ -398,82 +465,52 @@ def run_chart(lat, lon, tz_name):
 		st.session_state["last_sect"] = None
 		st.session_state["last_sect_error"] = str(e)
 
-	# --- Dispositors (summary + chains) ---
-	chains_rows, summary_rows = build_dispositor_tables(df)
-	st.session_state["dispositor_summary_rows"] = summary_rows
-	st.session_state["dispositor_chains_rows"] = chains_rows
-
-	# --- Conjunction clusters (from existing edges) ---
 	clusters_rows = build_conjunction_clusters(df, edges_major)
 	st.session_state["conj_clusters_rows"] = clusters_rows
 
-	# --- Circuits / patterns + shapes (STRICTLY from precomputed edges) ---
-	# prepare_pattern_inputs will reuse edges_major if passed
-	pos, patterns_sets, major_edges_all = prepare_pattern_inputs(df, edges_major)
-	patterns = [sorted(list(s)) for s in patterns_sets]  # UI-friendly lists
-	shapes   = detect_shapes(pos, patterns_sets, major_edges_all)
-
+	pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(df, edges_major)
+	patterns = [sorted(list(s)) for s in patterns_sets]
+	shapes   = detect_shapes(pos_chart, patterns_sets, major_edges_all)
 	filaments, singleton_map = detect_minor_links_from_dataframe(df, edges_major)
 	combos = generate_combo_groups(filaments)
 
-	# --- Cache everything for UI/popovers ---
-	st.session_state["last_df"] = df
-	st.session_state["last_aspect_df"] = aspect_df
-	st.session_state["edges_major"] = edges_major
-	st.session_state["edges_minor"] = edges_minor
-	st.session_state["patterns"] = patterns
-	st.session_state["shapes"] = shapes
-	st.session_state["filaments"] = filaments
-	st.session_state["singleton_map"] = singleton_map
-	st.session_state["combos"] = combos
-	st.session_state["chart_positions"] = pos
-	st.session_state["major_edges_all"] = major_edges_all
+	st.session_state.update({
+		"last_df": df,
+		"last_aspect_df": aspect_df,
+		"edges_major": edges_major,
+		"edges_minor": edges_minor,
+		"patterns": patterns,
+		"shapes": shapes,
+		"filaments": filaments,
+		"singleton_map": singleton_map,
+		"combos": combos,
+		"chart_positions": pos_chart,
+		"major_edges_all": major_edges_all
+	})
 
-	# Build the initial wheel immediately so the chart column updates on this run.
+	# --- Build chart figure ---
 	_refresh_chart_figure()
+	st.session_state.update({
+		"calc_lat": lat,
+		"calc_lon": lon,
+		"calc_tz": tz_name
+	})
 
-	# Also cache location so render_chart_with_shapes can auto-heal house cusps
-	st.session_state["calc_lat"] = lat
-	st.session_state["calc_lon"] = lon
-	st.session_state["calc_tz"]  = tz_name
-
-	# ---- UI state defaults for the renderer ----
-	# Pattern toggles (checkboxes are created later; default False so planets draw but edges/shapes obey UI)
-	toggles = []
+	# --- UI state defaults ---
 	for i in range(len(patterns)):
 		st.session_state.setdefault(f"toggle_pattern_{i}", False)
-		toggles.append(st.session_state[f"toggle_pattern_{i}"])
+		st.session_state.setdefault(f"circuit_name_{i}", f"Circuit {i+1}")
 
-	# Sub-shape toggles container (your UI fills this later)
-	shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
-
-	# Singleton toggles map
-	singleton_toggles = {}
 	if singleton_map:
 		for planet in singleton_map.keys():
 			st.session_state.setdefault(f"singleton_{planet}", False)
-			singleton_toggles[planet] = st.session_state[f"singleton_{planet}"]
-
-	# Pattern labels (respect editable names if present)
-	pattern_labels = []
-	for i in range(len(patterns)):
-		st.session_state.setdefault(f"circuit_name_{i}", f"Circuit {i+1}")
-		pattern_labels.append(st.session_state[f"circuit_name_{i}"])
-
-	# Combo toggles placeholder (your UI can wire these later)
-	combo_toggles = st.session_state.get("combo_toggles", {})
-
-	# UI knobs
-	house_system = st.session_state.get("house_system", "placidus")
-	label_style  = st.session_state.get("label_style", "glyph")  # "glyph" | "text"
-	dark_mode    = st.session_state.get("dark_mode", False)
 
 col_left, col_mid, col_right = st.columns([3, 2, 3])
 # -------------------------
 # Left column: Birth Data (FORM)
 # -------------------------
 with col_left:
-	with st.expander("📆 Enter Birth Data"):
+	with st.expander("📆 Enter Birth Data", expanded=True):
 		# --- Unknown Time (live) OUTSIDE the form ---
 		# Model/state keys used by the rest of your app
 		st.session_state.setdefault("profile_unknown_time", False)
@@ -607,8 +644,10 @@ with col_left:
 				st.session_state["city_query"] = city_query
 
 				try:
-					lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(city_query)
-
+					lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(
+						city_query, 
+						st.secrets["opencage"]["api_key"]  # <- pass the key here
+					)
 					# Make the location visible to drawing_v2
 					if lat is not None and lon is not None:
 						st.session_state["chart_lat"] = float(lat)
@@ -684,12 +723,11 @@ with col_left:
 					st.success(f"Found: {st.session_state['last_location']}")
 					if st.session_state.get("last_timezone"):
 						st.write(f"Timezone: {st.session_state['last_timezone']}")
-				elif st.session_state.get("last_timezone"):
-					st.error(st.session_state["last_timezone"])
+			elif st.session_state.get("last_timezone"):
+				st.error(st.session_state["last_timezone"])
 
-df_cached     = st.session_state.get("last_df")
 
-# --- Quick city UI state defaults & safe-clear ---
+df_cached     = st.session_state.get("last_df")# --- Quick city UI state defaults & safe-clear ---
 st.session_state.setdefault("show_now_city_field", False)
 st.session_state.setdefault("now_city_temp", "")
 st.session_state.setdefault("__clear_now_city_temp__", False)
@@ -712,13 +750,13 @@ except NameError:
 	geocode_city = None
 
 with col_mid:
-    with st.container():
-        render_now_widget(
-            col_mid,
-            MONTH_NAMES,
-            run_chart,
-            _geocode_city_with_timezone,
-        )
+	with st.container():
+		render_now_widget(
+			col_mid,
+			MONTH_NAMES,
+			run_chart,
+			_geocode_city_with_timezone,
+		)
 
 
 with col_right:
@@ -776,17 +814,17 @@ sect_cached   = st.session_state.get("last_sect")
 sect_err      = st.session_state.get("last_sect_error")
 
 st.markdown(
-    """
-    <style>
-    .thick-divider {
-        border-top: 5px solid #333; /* Adjust thickness and color as needed */
-        margin-top: 20px; /* Adjust spacing above the line */
-        margin-bottom: 20px; /* Adjust spacing below the line */
-    }
-    </style>
-    <div class="thick-divider"></div>
-    """,
-    unsafe_allow_html=True
+	"""
+	<style>
+	.thick-divider {
+		border-top: 5px solid #333; /* Adjust thickness and color as needed */
+		margin-top: 20px; /* Adjust spacing above the line */
+		margin-bottom: 20px; /* Adjust spacing below the line */
+	}
+	</style>
+	<div class="thick-divider"></div>
+	""",
+	unsafe_allow_html=True
 )
 
 # Only show the bottom bar after a chart is calculated
@@ -837,7 +875,7 @@ if df_cached is not None:
 	else:
 		st.caption("Calculate a chart to render the wheel.")
 
-	st.subheader("🤓 Nerdy Chart Specs for Astrologers 📋")
+	st.subheader("🤓 Nerdy Chart Specs 📋")
 	unknown_time_chart = bool(
 		st.session_state.get("chart_unknown_time")
 		or st.session_state.get("profile_unknown_time")
@@ -857,31 +895,104 @@ if df_cached is not None:
 	with st.popover("Objects", use_container_width=True):
 		st.subheader("Calculated Chart")
 		st.dataframe(df_cached, use_container_width=True)
-		
+	import matplotlib.pyplot as plt
+	import networkx as nx
+
+	# --- Inside your existing popover ---
 	with st.popover("Dispositors", use_container_width=True):
-		st.subheader("Dispositor Hierarchies")
-		st.dataframe(st.session_state.get("dispositor_summary_rows") or [], use_container_width=True)
+		header_col, toggle_col = st.columns([3, 1])
 		
-	with st.popover("Conjunctions", use_container_width=True):
-		st.subheader("Conjunction Clusters")
-		st.dataframe(st.session_state.get("conj_clusters_rows") or [], use_container_width=True)
+		with header_col:
+			st.subheader("Ruler Hierarchies")
+		
+		with toggle_col:
+			# Dispositor scope toggle
+			st.session_state.setdefault("dispositor_scope", "By Sign")
+			disp_scope = st.radio(
+				"Scope",
+				["By Sign", "By House"],
+				horizontal=True,
+				key="dispositor_scope",
+				label_visibility="collapsed"
+			)
+		
+		plot_data = st.session_state.get("plot_data")
+		if plot_data is not None:
+			# Debug: show what's in plot_data
+			
+			# Determine which scope to use
+			if disp_scope == "By Sign":
+				scope_data = plot_data.get("by_sign")
+			else:  # By House
+				# Use selected house system from session state (capitalize to match plot_data keys)
+				selected_house = st.session_state.get("house_system", "Placidus")
+				# Capitalize first letter of each word to match plot_data keys
+				selected_house_key = selected_house.title()
+				scope_data = plot_data.get(selected_house_key)
 
-	with st.popover("Aspects Graph", use_container_width=True):
-		if aspect_cached is not None:
-			st.subheader("Aspect Graph")
-			st.dataframe(aspect_cached, use_container_width=True)
+			if scope_data and scope_data.get("raw_links"):
+				fig = plot_dispositor_graph(scope_data)
+				if fig is not None:
+					# Create columns for legend and graph
+					legend_col, graph_col = st.columns([1, 5])
+					
+					with legend_col:
+						import os
+						import base64
+						png_dir = os.path.join(os.path.dirname(__file__), "pngs")
+						
+						# Load and encode images as base64
+						def img_to_b64(filename):
+							path = os.path.join(png_dir, filename)
+							if os.path.exists(path):
+								with open(path, "rb") as f:
+									return base64.b64encode(f.read()).decode()
+							return ""
+						
+						# Create legend with icons
+						st.markdown("**Legend**")
+						legend_items = [
+							("green.png", "Sovereign"),
+							("orange.png", "Dual rulership"),
+							("purple.png", "Loop"),
+							("purpleorange.png", "Dual + Loop"),
+							("blue.png", "Standard"),
+						]
+						
+						for img_file, label in legend_items:
+							b64 = img_to_b64(img_file)
+							if b64:
+								st.markdown(
+									f'<img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:5px"/>{label}',
+									unsafe_allow_html=True
+								)
+						st.markdown("↻ Self-Ruling")
+					
+					with graph_col:
+						st.pyplot(fig, use_container_width=True)
+			else:
+				st.info("No dispositor graph to display.")
 		else:
-			st.caption("No aspect table available yet.")
+			st.info("Calculate a chart first.")
 
-	with st.popover("Aspects List", use_container_width=True):
-		st.subheader("Aspect Lists")
-		edges_major = st.session_state.get("edges_major") or []
-		edges_minor = st.session_state.get("edges_minor") or []
-		rows = ([{"Kind":"Major","A":a,"B":b, **meta} for a,b,meta in edges_major] +
-				[{"Kind":"Minor","A":a,"B":b, **meta} for a,b,meta in edges_minor])
-		st.dataframe(rows, use_container_width=True)
+with st.popover("Conjunctions", use_container_width=True):
+	st.subheader("Conjunction Clusters")
+	st.dataframe(st.session_state.get("conj_clusters_rows") or [], use_container_width=True)
 
-# --- Left sidebar: Planet Profiles ---
+with st.popover("Aspects Graph", use_container_width=True):
+	if aspect_cached is not None:
+		st.subheader("Aspect Graph")
+		st.dataframe(aspect_cached, use_container_width=True)
+	else:
+		st.caption("No aspect table available yet.")
+
+with st.popover("Aspects List", use_container_width=True):
+	st.subheader("Aspect Lists")
+	edges_major = st.session_state.get("edges_major") or []
+	edges_minor = st.session_state.get("edges_minor") or []
+	rows = ([{"Kind":"Major","A":a,"B":b, **meta} for a,b,meta in edges_major] +
+			[{"Kind":"Minor","A":a,"B":b, **meta} for a,b,meta in edges_minor])
+	st.dataframe(rows, use_container_width=True)# --- Left sidebar: Planet Profiles ---
 with st.sidebar:
 	st.subheader("🪐 Planet Profiles in View")
 

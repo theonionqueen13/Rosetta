@@ -808,6 +808,49 @@ def plot_dispositor_graph(plot_data):
 	sovereigns = plot_data.get("sovereigns", [])
 	self_ruling = plot_data.get("self_ruling", [])
 	
+	# Detect mutual reception loops (2+ planets in a rulership cycle)
+	def find_mutual_reception_loops(links):
+		"""Find all planets involved in mutual reception loops of 2 or more."""
+		# Build adjacency list
+		graph = {}
+		for parent, child in links:
+			if parent != child:  # Exclude self-ruling
+				graph.setdefault(parent, []).append(child)
+		
+		# Find all cycles using DFS
+		loop_members = set()
+		
+		def dfs_find_cycles(node, path, visited_in_path):
+			if node in visited_in_path:
+				# Found a cycle - add all nodes from cycle start to current
+				cycle_start = path.index(node)
+				cycle = path[cycle_start:]
+				if len(cycle) >= 2:  # Only loops of 2+
+					loop_members.update(cycle)
+				return
+			
+			if node not in graph:
+				return
+			
+			visited_in_path.add(node)
+			path.append(node)
+			
+			for neighbor in graph[node]:
+				dfs_find_cycles(neighbor, path[:], visited_in_path.copy())
+		
+		# Start DFS from each node
+		for node in graph:
+			dfs_find_cycles(node, [], set())
+		
+		return loop_members
+	
+	mutual_reception_loops = find_mutual_reception_loops(raw_links)
+	print(f"🔮 Mutual reception loops detected: {sorted(mutual_reception_loops)}")
+	
+	# Detect planets that appear multiple times (dual rulership)
+	# We'll count occurrences as we build the trees, then identify duplicates
+	planet_occurrences = {}  # planet_name -> count
+	
 	# Helper function to get abbreviated name if available
 	def get_display_name(name):
 		return ABREVIATED_PLANET_NAMES.get(name, name)
@@ -1125,20 +1168,20 @@ def plot_dispositor_graph(plot_data):
 		
 		# Simple node-count-based sizing (like original code)
 		if num_nodes <= 5:
-			label_fontsize = 8
-			symbol_fontsize = 9
+			label_fontsize = 9
+			symbol_fontsize = 12
 			circle_size = 2000
 		elif num_nodes <= 15:
-			label_fontsize = 9
-			symbol_fontsize = 11
+			label_fontsize = 11
+			symbol_fontsize = 13
 			circle_size = 2000
 		elif num_nodes <= 20:
-			label_fontsize = 10
-			symbol_fontsize = 12
+			label_fontsize = 12
+			symbol_fontsize = 14
 			circle_size = 3000
 		elif num_nodes <= 25:
-			label_fontsize = 9
-			symbol_fontsize = 11
+			label_fontsize = 11
+			symbol_fontsize = 13
 			circle_size = 3000
 		else:
 			label_fontsize = 8
@@ -1362,6 +1405,15 @@ def plot_dispositor_graph(plot_data):
 			'height': tree_height
 		})
 	
+	# Count planet occurrences across all trees to detect duplicates (dual rulership)
+	for tree_data in all_tree_data:
+		for name, node_id in tree_data['nodes']:
+			planet_occurrences[name] = planet_occurrences.get(name, 0) + 1
+	
+	# Identify planets that appear more than once
+	duplicated_planets = {name for name, count in planet_occurrences.items() if count > 1}
+	print(f"🔶 Duplicated planets (dual rulership): {sorted(duplicated_planets)}")
+	
 	# PHASE 2: Create figure with proper size based on actual tree extents
 	tree_widths = [td['width'] for td in all_tree_data]
 	tree_heights = [td['height'] for td in all_tree_data]
@@ -1387,10 +1439,6 @@ def plot_dispositor_graph(plot_data):
 	gs = gridspec.GridSpec(1, n, figure=fig, width_ratios=width_ratios, wspace=0.15)
 	axes = [fig.add_subplot(gs[0, i]) for i in range(n)]
 	
-	# Add legend key to the figure (top left corner)
-	fig.text(0.02, 0.98, "↻ = Self-Ruling", fontsize=14, ha='left', va='top', 
-	         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='gray', alpha=0.8))
-	
 	# PHASE 3: Render all trees
 	# First, calculate the maximum y-range needed across all trees
 	max_height = max(tree_heights) if tree_heights else 10
@@ -1408,10 +1456,34 @@ def plot_dispositor_graph(plot_data):
 			if xy is None:
 				xy = (0.0, 0.0)
 				pos[node_id] = xy
-			color = "lightgreen" if name in sovereigns else ("orange" if name in self_ruling else "skyblue")
+			
+			# Color logic with support for dual colors (orange + purple)
+			is_sovereign = name in sovereigns
+			is_duplicated = name in duplicated_planets
+			is_in_loop = name in mutual_reception_loops
+			
+			# Determine color(s)
+			if is_sovereign:
+				color = "#59A54A"
+				ax.scatter(xy[0], xy[1], s=circle_size, c=color, zorder=2)
+			elif is_duplicated and is_in_loop:
+				# Both orange and purple - draw concentric circles
+				# Outer circle (orange) at full size
+				ax.scatter(xy[0], xy[1], s=circle_size, c="#FF8656", zorder=2)
+				# Inner circle (purple) at 60% size
+				ax.scatter(xy[0], xy[1], s=circle_size * 0.6, c="#B386D8", zorder=3)
+			elif is_duplicated:
+				color = "#FF8656"
+				ax.scatter(xy[0], xy[1], s=circle_size, c=color, zorder=2)
+			elif is_in_loop:
+				color = "#B386D8"
+				ax.scatter(xy[0], xy[1], s=circle_size, c=color, zorder=2)
+			else:
+				color = "#5F6FFF"
+				ax.scatter(xy[0], xy[1], s=circle_size, c=color, zorder=2)
+			
 			display_name = get_display_name(name)
-			ax.scatter(xy[0], xy[1], s=circle_size, c=color, zorder=2)
-			ax.text(xy[0], xy[1], display_name, ha='center', va='center', fontsize=label_fontsize, fontweight="bold", zorder=3)
+			ax.text(xy[0], xy[1], display_name, ha='center', va='center', fontsize=label_fontsize, fontweight="bold", zorder=4)
 			
 			# Add circular arrow symbol below the planet name for self-ruling planets
 			if name in self_ruling or name in sovereigns:
