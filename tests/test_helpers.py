@@ -1,4 +1,8 @@
 import math
+import os
+import tempfile
+
+import pytest
 
 from rosetta.helpers import build_aspect_graph, format_dms, load_star_df, initialize_swisseph
 
@@ -65,7 +69,6 @@ def test_initialize_swisseph_is_cached():
 
 def test_initialize_swisseph_default_path():
     """Test that default ephemeris path is used when none is provided."""
-    import os
     swe = initialize_swisseph()
     # Just verify it returns a module without error
     assert swe is not None
@@ -74,9 +77,6 @@ def test_initialize_swisseph_default_path():
 
 def test_initialize_swisseph_path_immutable():
     """Test that ephemeris path cannot be changed after initialization."""
-    import pytest
-    import tempfile
-    
     # Initialize with default path (or already initialized)
     initialize_swisseph()
     
