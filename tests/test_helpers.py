@@ -1,10 +1,17 @@
 import math
-import os
 import tempfile
 
 import pytest
 
 from rosetta.helpers import build_aspect_graph, format_dms, load_star_df, initialize_swisseph
+
+
+@pytest.fixture(autouse=True)
+def reset_swisseph_state():
+    """Reset swisseph state before each test."""
+    import rosetta.helpers
+    rosetta.helpers._swe = None
+    rosetta.helpers._swe_path = None
 
 
 def _normalize_components(components):

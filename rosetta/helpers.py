@@ -48,6 +48,7 @@ def initialize_swisseph(ephemeris_path: str | None = None):
 
             if ephemeris_path is None:
                 ephemeris_path = os.path.join(os.path.dirname(__file__), "ephe")
+            ephemeris_path = os.path.normpath(ephemeris_path)
 
             swe.set_ephe_path(ephemeris_path)
             _swe = swe
@@ -62,7 +63,11 @@ def initialize_swisseph(ephemeris_path: str | None = None):
 
 
 def _get_swisseph():
-    """Lazy Swiss Ephemeris accessor used internally by helper functions."""
+    """Lazy Swiss Ephemeris accessor used internally by helper functions.
+
+    This is a convenience wrapper around initialize_swisseph() that uses
+    the default ephemeris path. Returns the cached swisseph module instance.
+    """
 
     return initialize_swisseph()
 
