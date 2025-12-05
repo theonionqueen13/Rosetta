@@ -1,23 +1,36 @@
-# rosetta/db.py
-import os
+"""Supabase client creation with typed settings."""
+
 import httpx
-import streamlit as st
-from supabase import create_client, ClientOptions  # type: ignore
+from supabase import ClientOptions, create_client  # type: ignore
+
+from rosetta.settings import get_settings
+
 try:
+    import streamlit as st
+
     _cache_resource = st.cache_resource  # Streamlit >= 1.18
-except Exception:
-    def _cache_resource(func):
+except Exception:  # pragma: no cover - streamlit not always installed
+    st = None
+
+    def _cache_resource(func):  # type: ignore[return-type]
         return func
+
 
 @_cache_resource
 def _get_supabase_keys() -> tuple[str, str]:
-    # Hard-wire to your nested secrets format. No env, no flat names.
-    blk = st.secrets["supabase"]           # raises clearly if the block is missing
-    url = blk["url"]                       # raises clearly if missing
-    key = blk.get("service_role") or blk["key"]  # prefer service_role, else key
+    settings = get_settings()
+    url = settings.supabase_url
+    key = settings.supabase_auth_key
+
     if not url or not key:
-        raise RuntimeError("Missing [supabase].url and key/service_role in secrets.toml")
+        raise RuntimeError(
+            "Supabase configuration missing. Set SUPABASE_URL and "
+            "SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_KEY) as environment variables "
+            "or provide them under a [supabase] block in .streamlit/secrets.toml."
+        )
+
     return url, key
+
 
 @_cache_resource
 def supa():  # -> Client
