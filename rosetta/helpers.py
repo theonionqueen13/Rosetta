@@ -43,6 +43,15 @@ def parse_declination(decl_str):
         return None, None
 
     decl_str = str(decl_str).strip()
+
+    # Fast path: allow plain decimals (including negatives) without symbols
+    try:
+        decimal_deg = float(decl_str)
+        direction = "S" if decimal_deg < 0 else "N"
+        return decimal_deg, direction
+    except ValueError:
+        pass
+
     pattern = (
         r'([+-]?\d+)'                       # degrees
         r'(?:[°d]\s*(\d+))?'                # optional minutes
@@ -64,12 +73,7 @@ def parse_declination(decl_str):
             direction = "N"
         return decimal_deg, direction
 
-    try:
-        decimal_deg = float(decl_str)
-        direction = "S" if decimal_deg < 0 else "N"
-        return decimal_deg, direction
-    except:
-        return None, None
+    return None, None
 
 # -------------------------
 # Fixed star loader (lazy cache)
