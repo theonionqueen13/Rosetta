@@ -8,7 +8,7 @@ annotated to describe the columns expected when reading chart data produced by
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Dict, List, Mapping
 
 import pandas as pd
 
@@ -41,7 +41,7 @@ def _sign_index(longitude_deg: float) -> int:
 def _deg_in_sign(longitude_deg: float) -> int:
     """Return the 0..29 integer degrees within a sign."""
 
-    return int(round(longitude_deg % 30.0))
+    return int(longitude_deg % 30.0)
 
 
 def _degree_for(name: str, pos: Dict[str, float]) -> float | None:

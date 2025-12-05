@@ -19,7 +19,6 @@ from rosetta.brain_helpers import (
     _deg_in_sign,
     _extract_cusps_from_df,
     _house_of_degree,
-    _in_forward_arc,
     _norm_name,
     _sign_index,
 )
