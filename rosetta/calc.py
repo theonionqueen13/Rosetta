@@ -10,12 +10,9 @@ from rosetta.lookup import SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS
 # Force path to the ephe folder in your repo
 EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
-TESTFILE = os.path.join(EPHE_PATH, "se01181s.se1")
 
 
 def _get_swe():
-    # Always set the environment variable to ensure consistency with the path used by initialize_swisseph
-    os.environ["SE_EPHE_PATH"] = EPHE_PATH
     return initialize_swisseph(EPHE_PATH)
 
 SIGNS = [
