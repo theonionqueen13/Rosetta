@@ -14,7 +14,8 @@ TESTFILE = os.path.join(EPHE_PATH, "se01181s.se1")
 
 
 def _get_swe():
-    os.environ.setdefault("SE_EPHE_PATH", EPHE_PATH)
+    # Always set the environment variable to ensure consistency with the path used by initialize_swisseph
+    os.environ["SE_EPHE_PATH"] = EPHE_PATH
     return initialize_swisseph(EPHE_PATH)
 
 SIGNS = [

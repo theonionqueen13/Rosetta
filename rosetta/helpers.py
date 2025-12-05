@@ -1,6 +1,7 @@
 # rosetta/helpers.py
 import os
 import re
+import threading
 from functools import lru_cache
 from itertools import combinations
 
@@ -8,12 +9,14 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
-from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
+from rosetta.lookup import ASPECTS
 
 # -------------------------
 # Core math + chart helpers
 # -------------------------
 _swe = None
+_swe_lock = threading.Lock()
+_swe_path = None
 
 
 def initialize_swisseph(ephemeris_path: str | None = None):
@@ -22,22 +25,40 @@ def initialize_swisseph(ephemeris_path: str | None = None):
     Heavy imports and path configuration are deferred until this function is
     explicitly called. The configured module is returned and reused on
     subsequent calls.
+    
+    Once initialized, the ephemeris path cannot be changed. If a different
+    path is provided after initialization, a ValueError is raised.
+    
+    Args:
+        ephemeris_path: Path to ephemeris data files. If None, uses default
+                       path in the 'ephe' subdirectory.
+    
+    Returns:
+        The swisseph module instance.
+        
+    Raises:
+        ValueError: If attempting to change the ephemeris path after initialization.
     """
 
-    global _swe
+    global _swe, _swe_path
 
-    if _swe is None:
-        import swisseph as swe  # type: ignore
+    with _swe_lock:
+        if _swe is None:
+            import swisseph as swe  # type: ignore
 
-        if ephemeris_path is None:
-            ephemeris_path = os.path.join(os.path.dirname(__file__), "ephe")
+            if ephemeris_path is None:
+                ephemeris_path = os.path.join(os.path.dirname(__file__), "ephe")
 
-        swe.set_ephe_path(ephemeris_path)
-        _swe = swe
-    elif ephemeris_path:
-        _swe.set_ephe_path(ephemeris_path)
+            swe.set_ephe_path(ephemeris_path)
+            _swe = swe
+            _swe_path = ephemeris_path
+        elif ephemeris_path is not None and ephemeris_path != _swe_path:
+            raise ValueError(
+                f"Cannot change ephemeris path after initialization. "
+                f"Current path: {_swe_path}, requested: {ephemeris_path}"
+            )
 
-    return _swe
+        return _swe
 
 
 def _get_swisseph():

@@ -1,6 +1,6 @@
 import math
 
-from rosetta.helpers import build_aspect_graph, format_dms, load_star_df
+from rosetta.helpers import build_aspect_graph, format_dms, load_star_df, initialize_swisseph
 
 
 def _normalize_components(components):
@@ -44,3 +44,43 @@ def test_load_star_df_is_cached():
 
     assert first is second
     assert not math.isnan(first["Degree"].iloc[0])
+
+
+def test_load_star_df_cache_clearing():
+    """Test that cache can be cleared and rebuilt."""
+    first = load_star_df()
+    load_star_df.cache_clear()
+    second = load_star_df()
+    
+    assert first is not second  # Different instances after clear
+    assert first.equals(second)  # But same data
+
+
+def test_initialize_swisseph_is_cached():
+    """Test that initialize_swisseph returns the same module instance on subsequent calls."""
+    first = initialize_swisseph()
+    second = initialize_swisseph()
+    assert first is second
+
+
+def test_initialize_swisseph_default_path():
+    """Test that default ephemeris path is used when none is provided."""
+    import os
+    swe = initialize_swisseph()
+    # Just verify it returns a module without error
+    assert swe is not None
+    assert hasattr(swe, 'set_ephe_path')
+
+
+def test_initialize_swisseph_path_immutable():
+    """Test that ephemeris path cannot be changed after initialization."""
+    import pytest
+    import tempfile
+    
+    # Initialize with default path (or already initialized)
+    initialize_swisseph()
+    
+    # Try to change the path - should raise ValueError
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with pytest.raises(ValueError, match="Cannot change ephemeris path"):
+            initialize_swisseph(tmpdir)
