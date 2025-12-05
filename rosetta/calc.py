@@ -1,21 +1,21 @@
-
+import datetime
+import os
 from zoneinfo import ZoneInfo
-import os, swisseph as swe
 
-import os, swisseph as swe
+import pandas as pd
 
-import os, swisseph as swe
+from rosetta.helpers import initialize_swisseph
+from rosetta.lookup import SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS
 
 # Force path to the ephe folder in your repo
 EPHE_PATH = os.path.join(os.path.dirname(__file__), "ephe")
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
-os.environ["SE_EPHE_PATH"] = EPHE_PATH
-swe.set_ephe_path(EPHE_PATH)
-testfile = os.path.join(EPHE_PATH, "se01181s.se1")
+TESTFILE = os.path.join(EPHE_PATH, "se01181s.se1")
 
-import datetime
-import pandas as pd
-from rosetta.lookup import SABIAN_SYMBOLS, DIGNITIES, PLANETARY_RULERS
+
+def _get_swe():
+    os.environ.setdefault("SE_EPHE_PATH", EPHE_PATH)
+    return initialize_swisseph(EPHE_PATH)
 
 SIGNS = [
     "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
@@ -39,13 +39,15 @@ def deg_to_sign(lon):
     return sign, f"{d}°{m:02d}'{s:02d}\"", sabian_index
 
 def _calc_vertex(jd, lat, lon):
+    swe = _get_swe()
     cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
-    if cusps is None or ascmc is None:      
+    if cusps is None or ascmc is None:
         raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
 
     return ascmc[3], 0.0, 0.0, 0.0  # lon, lat, dist, speed
 
 def _calc_pof(jd, lat, lon):
+    swe = _get_swe()
     # Asc & Desc from Swiss Ephemeris
     cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
     asc = ascmc[0] % 360.0
@@ -79,13 +81,15 @@ def calculate_chart(
     tz_offset, lat, lon,
     input_is_ut: bool = False,
     tz_name: str | None = None,
-    house_system: str = "equal", 
+    house_system: str = "equal",
 ):
 
     """
     Build the chart using Swiss Ephemeris.
     Adds Descendant, house cusps, and Liliths.
     """
+
+    swe = _get_swe()
 
     # -------- Time -> UTC --------
     if input_is_ut:

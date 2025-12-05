@@ -1,28 +1,57 @@
 # rosetta/helpers.py
-import sys
 import os
 import re
+from functools import lru_cache
+from itertools import combinations
+
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-from itertools import combinations
-from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
 
-print("HELPERS FILE LOADED:", __file__)
-sys.stdout.flush()
+from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
 
 # -------------------------
 # Core math + chart helpers
 # -------------------------
-import swisseph as swe
+_swe = None
+
+
+def initialize_swisseph(ephemeris_path: str | None = None):
+    """Initialize and cache the Swiss Ephemeris module.
+
+    Heavy imports and path configuration are deferred until this function is
+    explicitly called. The configured module is returned and reused on
+    subsequent calls.
+    """
+
+    global _swe
+
+    if _swe is None:
+        import swisseph as swe  # type: ignore
+
+        if ephemeris_path is None:
+            ephemeris_path = os.path.join(os.path.dirname(__file__), "ephe")
+
+        swe.set_ephe_path(ephemeris_path)
+        _swe = swe
+    elif ephemeris_path:
+        _swe.set_ephe_path(ephemeris_path)
+
+    return _swe
+
+
+def _get_swisseph():
+    """Lazy Swiss Ephemeris accessor used internally by helper functions."""
+
+    return initialize_swisseph()
 
 def calculate_houses(jd_ut, lat, lon, use_placidus=True):
     if use_placidus:
         # swe.HOUSES_PLACIDUS is default (b'A' or 'P')
-        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'P')
+        cusps, ascmc = _get_swisseph().houses_ex(jd_ut, lat, lon, b'P')
     else:
         # Equal houses
-        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'E')
+        cusps, ascmc = _get_swisseph().houses_ex(jd_ut, lat, lon, b'E')
     return cusps, ascmc
 
 def deg_to_rad(deg, asc_shift=0):
@@ -75,20 +104,17 @@ def parse_declination(decl_str):
 # Fixed star loader (lazy cache)
 # -------------------------
 
-_STAR_DF_CACHE = None
-
+@lru_cache(maxsize=1)
 def load_star_df():
     """Load and cache the fixed star lookup table once."""
-    global _STAR_DF_CACHE
-    if _STAR_DF_CACHE is None:
-        path = os.path.join(os.path.dirname(__file__), "..", "2b) Fixed Star Lookup.xlsx")
-        df = pd.read_excel(path, sheet_name="Sheet1")
-        df.columns = df.columns.str.strip()
-        df = df.rename(columns={"Absolute Degree Decimal": "Degree"})
-        df = df.dropna(subset=["Degree"])
-        df["Degree"] = df["Degree"].astype(float)
-        _STAR_DF_CACHE = df
-    return _STAR_DF_CACHE
+
+    path = os.path.join(os.path.dirname(__file__), "..", "2b) Fixed Star Lookup.xlsx")
+    df = pd.read_excel(path, sheet_name="Sheet1")
+    df.columns = df.columns.str.strip()
+    df = df.rename(columns={"Absolute Degree Decimal": "Degree"})
+    df = df.dropna(subset=["Degree"])
+    df["Degree"] = df["Degree"].astype(float)
+    return df
 
 def annotate_fixed_stars(df, orb=1.0):
     star_df = load_star_df()
