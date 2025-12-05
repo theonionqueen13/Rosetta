@@ -53,11 +53,13 @@ def initialize_swisseph(ephemeris_path: str | None = None):
             swe.set_ephe_path(ephemeris_path)
             _swe = swe
             _swe_path = ephemeris_path
-        elif ephemeris_path is not None and ephemeris_path != _swe_path:
-            raise ValueError(
-                f"Cannot change ephemeris path after initialization. "
-                f"Current path: {_swe_path}, requested: {ephemeris_path}"
-            )
+        elif ephemeris_path is not None:
+            ephemeris_path = os.path.normpath(ephemeris_path)
+            if ephemeris_path != _swe_path:
+                raise ValueError(
+                    f"Cannot change ephemeris path after initialization. "
+                    f"Current path: {_swe_path}, requested: {ephemeris_path}"
+                )
 
         return _swe
 
