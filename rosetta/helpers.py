@@ -1,28 +1,85 @@
 # rosetta/helpers.py
-import sys
 import os
 import re
+import threading
+from functools import lru_cache
+from itertools import combinations
+
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-from itertools import combinations
-from rosetta.lookup import GLYPHS, ASPECTS, ZODIAC_SIGNS, ZODIAC_COLORS, MODALITIES, GROUP_COLORS
 
-print("HELPERS FILE LOADED:", __file__)
-sys.stdout.flush()
+from rosetta.lookup import ASPECTS
 
 # -------------------------
 # Core math + chart helpers
 # -------------------------
-import swisseph as swe
+_swe = None
+_swe_lock = threading.Lock()
+_swe_path = None
+
+
+def initialize_swisseph(ephemeris_path: str | None = None):
+    """Initialize and cache the Swiss Ephemeris module.
+
+    Heavy imports and path configuration are deferred until this function is
+    explicitly called. The configured module is returned and reused on
+    subsequent calls.
+
+    Once initialized, the ephemeris path cannot be changed. If a different
+    path is provided after initialization, a ValueError is raised.
+
+    Args:
+        ephemeris_path: Path to ephemeris data files. If None, uses default
+                       path in the 'ephe' subdirectory.
+
+    Returns:
+        The swisseph module instance.
+
+    Raises:
+        ValueError: If attempting to change the ephemeris path after initialization.
+    """
+
+    global _swe, _swe_path
+
+    with _swe_lock:
+        if _swe is None:
+            import swisseph as swe  # type: ignore
+
+            if ephemeris_path is None:
+                ephemeris_path = os.path.join(os.path.dirname(__file__), "ephe")
+            ephemeris_path = os.path.normpath(ephemeris_path)
+
+            swe.set_ephe_path(ephemeris_path)
+            _swe = swe
+            _swe_path = ephemeris_path
+        elif ephemeris_path is not None:
+            ephemeris_path = os.path.normpath(ephemeris_path)
+            if ephemeris_path != _swe_path:
+                raise ValueError(
+                    f"Cannot change ephemeris path after initialization. "
+                    f"Current path: {_swe_path}, requested: {ephemeris_path}"
+                )
+
+        return _swe
+
+
+def _get_swisseph():
+    """Lazy Swiss Ephemeris accessor used internally by helper functions.
+
+    This is a convenience wrapper around initialize_swisseph() that uses
+    the default ephemeris path. Returns the cached swisseph module instance.
+    """
+
+    return initialize_swisseph()
 
 def calculate_houses(jd_ut, lat, lon, use_placidus=True):
     if use_placidus:
         # swe.HOUSES_PLACIDUS is default (b'A' or 'P')
-        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'P')
+        cusps, ascmc = _get_swisseph().houses_ex(jd_ut, lat, lon, b'P')
     else:
         # Equal houses
-        cusps, ascmc = swe.houses_ex(jd_ut, lat, lon, b'E')
+        cusps, ascmc = _get_swisseph().houses_ex(jd_ut, lat, lon, b'E')
     return cusps, ascmc
 
 def deg_to_rad(deg, asc_shift=0):
@@ -75,20 +132,17 @@ def parse_declination(decl_str):
 # Fixed star loader (lazy cache)
 # -------------------------
 
-_STAR_DF_CACHE = None
-
+@lru_cache(maxsize=1)
 def load_star_df():
     """Load and cache the fixed star lookup table once."""
-    global _STAR_DF_CACHE
-    if _STAR_DF_CACHE is None:
-        path = os.path.join(os.path.dirname(__file__), "..", "2b) Fixed Star Lookup.xlsx")
-        df = pd.read_excel(path, sheet_name="Sheet1")
-        df.columns = df.columns.str.strip()
-        df = df.rename(columns={"Absolute Degree Decimal": "Degree"})
-        df = df.dropna(subset=["Degree"])
-        df["Degree"] = df["Degree"].astype(float)
-        _STAR_DF_CACHE = df
-    return _STAR_DF_CACHE
+
+    path = os.path.join(os.path.dirname(__file__), "..", "2b) Fixed Star Lookup.xlsx")
+    df = pd.read_excel(path, sheet_name="Sheet1")
+    df.columns = df.columns.str.strip()
+    df = df.rename(columns={"Absolute Degree Decimal": "Degree"})
+    df = df.dropna(subset=["Degree"])
+    df["Degree"] = df["Degree"].astype(float)
+    return df
 
 def annotate_fixed_stars(df, orb=1.0):
     star_df = load_star_df()
