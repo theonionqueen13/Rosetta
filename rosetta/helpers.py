@@ -25,17 +25,17 @@ def initialize_swisseph(ephemeris_path: str | None = None):
     Heavy imports and path configuration are deferred until this function is
     explicitly called. The configured module is returned and reused on
     subsequent calls.
-    
+
     Once initialized, the ephemeris path cannot be changed. If a different
     path is provided after initialization, a ValueError is raised.
-    
+
     Args:
         ephemeris_path: Path to ephemeris data files. If None, uses default
                        path in the 'ephe' subdirectory.
-    
+
     Returns:
         The swisseph module instance.
-        
+
     Raises:
         ValueError: If attempting to change the ephemeris path after initialization.
     """
