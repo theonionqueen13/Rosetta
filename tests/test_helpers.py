@@ -55,7 +55,7 @@ def test_load_star_df_cache_clearing():
     first = load_star_df()
     load_star_df.cache_clear()
     second = load_star_df()
-    
+
     assert first is not second  # Different instances after clear
     assert first.equals(second)  # But same data
 
