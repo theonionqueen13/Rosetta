@@ -585,8 +585,51 @@ def ordered_object_rows(
 ) -> pd.DataFrame:
     """Return object rows ordered according to visibility and pattern rules."""
 
+
     if df is None or "Object" not in df:
         return pd.DataFrame()
+    # Ensure all AC/DC are renamed to Ascendant/Descendant for canonical filtering
+    df["Object"] = df["Object"].replace({"AC": "Ascendant", "DC": "Descendant"})
+
+
+    # Fallback: If Compass Rose is toggled and AC/DC missing, inject from Equal House cusps BEFORE any filtering
+    compass_rose_on = False
+    if visible_objects:
+        compass_rose_on = any(
+            _canon(name) in {"compassrose", "compass rose"}
+            for name in visible_objects
+        )
+        ac_aliases = {"ac", "ascendant", "asc"}
+        dc_aliases = {"dc", "descendant", "dsc"}
+        obj_series_pre = df["Object"].astype("string")
+        missing_ac = not any(_canon(name) in ac_aliases for name in obj_series_pre)
+        missing_dc = not any(_canon(name) in dc_aliases for name in obj_series_pre)
+        rows_to_add = []
+        if compass_rose_on and (missing_ac or missing_dc):
+            eq1 = df[df["Object"].astype(str).str.fullmatch(r"Equal 1H cusp", case=False)]
+            eq7 = df[df["Object"].astype(str).str.fullmatch(r"Equal 7H cusp", case=False)]
+            if missing_ac and not eq1.empty:
+                ac_row = eq1.iloc[0].copy()
+                ac_row["Object"] = "Ascendant"
+                rows_to_add.append(ac_row)
+            if missing_dc and not eq7.empty:
+                dc_row = eq7.iloc[0].copy()
+                dc_row["Object"] = "Descendant"
+                rows_to_add.append(dc_row)
+        if rows_to_add:
+            print("[ordered_object_rows] Injecting AC/DC rows:", [r["Object"] for r in rows_to_add])
+            add_df = pd.DataFrame(rows_to_add)
+            df = pd.concat([df, add_df], ignore_index=True)
+
+    # If Compass Rose is on, ensure all AC/DC canonical variants are in visible_objects
+    if compass_rose_on:
+        ac_variants = ["Ascendant", "AC", "Asc"]
+        dc_variants = ["Descendant", "DC"]
+        # Add to visible_objects if not present
+        if visible_objects is not None:
+            for v in ac_variants + dc_variants:
+                if v not in visible_objects:
+                    visible_objects.append(v)
 
     obj_series = df["Object"].astype("string")
     mask = ~obj_series.str.contains("cusp", case=False, na=False)
@@ -597,12 +640,17 @@ def ordered_object_rows(
     objs_only["Object"] = objs_only["Object"].astype("string")
     objs_only["__canon"] = objs_only["Object"].map(_canon)
 
+    print("[ordered_object_rows] Canonical names after filtering:", objs_only["Object"].tolist(), objs_only["__canon"].tolist())
+
     if visible_objects:
         visible_canon = {_canon(name) for name in visible_objects if name}
+        print("[ordered_object_rows] Filtering for visible_canon:", visible_canon)
         if visible_canon:
             objs_only = objs_only[objs_only["__canon"].isin(visible_canon)]
+            print("[ordered_object_rows] After visible_canon filter:", objs_only["Object"].tolist(), objs_only["__canon"].tolist())
 
     if objs_only.empty:
+        print("[ordered_object_rows] Final sidebar DataFrame is EMPTY after filtering.")
         return objs_only.drop(columns=["__canon"], errors="ignore")
 
     order_names = _determine_visible_order(objs_only, edges_major or [])
@@ -624,6 +672,7 @@ def ordered_object_rows(
             seen_indices.add(idx)
 
     ordered_df = objs_only.loc[ordered_indices]
+    print(f"[ordered_object_rows] Final sidebar DataFrame length: {len(ordered_df)}; objects: {ordered_df['Object'].tolist() if not ordered_df.empty else 'EMPTY'}")
     return ordered_df.drop(columns=["__canon"], errors="ignore")
 
 __all__ = [

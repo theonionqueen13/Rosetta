@@ -1,4 +1,3 @@
-
 from zoneinfo import ZoneInfo
 import os
 import swisseph as swe
@@ -1103,7 +1102,6 @@ def plot_dispositor_graph(plot_data, header_info=None):
 		all_trees.append(component_unaccounted)
 		accounted_for.update(component_unaccounted)
 		roots.append(best_root)
-		processed_in_phase3.update(component_unaccounted)
 		
 		# Remove all nodes in this component from remaining_nodes
 		remaining_nodes = [n for n in remaining_nodes if n not in component_unaccounted]
@@ -1848,7 +1846,7 @@ def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
 
 	return pd.DataFrame(data, index=names, columns=names)
 
-def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
+def build_aspect_edges(df: pd.DataFrame, compass_rose: bool = False) -> tuple[list[tuple], list[tuple]]:
 	"""
 	Return (edges_major, edges_minor), each as a list of tuples:
 	  (obj1, obj2, {
@@ -1862,6 +1860,13 @@ def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
 	"""
 	objs  = _extract_object_rows(df)
 	names = list(objs["Object"])
+	# Ensure AC and DC are present in names if their canonical forms exist in the DataFrame
+	ac_candidates = [x for x in objs["Object"] if x.lower() in ("ac", "asc", "ascendant")]
+	dc_candidates = [x for x in objs["Object"] if x.lower() in ("dc", "dsc", "descendant")]
+	if ac_candidates and "AC" not in names:
+		names.append("AC")
+	if dc_candidates and "DC" not in names:
+		names.append("DC")
 	lons  = dict(zip(objs["Object"], objs["Longitude"]))
 	spds  = dict(zip(objs["Object"], objs["Speed"]))
 	decls = dict(zip(objs["Object"], objs["Declination"]))  # for decl_diff
@@ -1911,6 +1916,31 @@ def build_aspect_edges(df: pd.DataFrame) -> tuple[list[tuple], list[tuple]]:
 			else:
 				edges_minor.append(record)
 
+	# Add AC-DC opposition if compass_rose is toggled on
+	if compass_rose:
+		ac_names = [x for x in names if x.lower() in ("ac", "asc", "ascendant")]
+		dc_names = [x for x in names if x.lower() in ("dc", "dsc", "descendant")]
+		if ac_names and dc_names:
+			ac = ac_names[0]
+			dc = dc_names[0]
+			# Check if already present
+			if not any(
+				(edge[0] in (ac, dc) and edge[1] in (ac, dc) and edge[2]["aspect"] == "Opposition")
+				for edge in edges_major
+			):
+				# Compose meta for opposition
+				A, B = lons[ac], lons[dc]
+				sA, sB = spds[ac], spds[dc]
+				dA = decls.get(ac); dB = decls.get(dc)
+				decl_diff = float(f"{abs(float(dA) - float(dB)):.3f}") if dA is not None and dB is not None else None
+				meta = {
+					"aspect": "Opposition",
+					"orb": float(f"{abs((A - B + 180) % 360 - 180):.3f}"),
+					"appsep": _applying_or_separating(A, sA, B, sB, 180),
+					"applying": (_applying_or_separating(A, sA, B, sB, 180) == "Applying"),
+					"decl_diff": decl_diff,
+				}
+				edges_major.append((ac, dc, meta))
 	return edges_major, edges_minor
 
 def _sign_to_index(sign_name: str) -> int | None:
@@ -2038,6 +2068,7 @@ def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> li
 	- Clusters are undirected connected components formed only by 'Conjunction' edges.
 	- Members are ordered by the objects' order in the DF (not by longitude).
 	- Singletons (size 1) are ignored.
+	Also returns a mapping: object_name → cluster_id, and a list of clusters (each as a set of names).
 	"""
 	# Objects in DF order
 	objs = _extract_object_rows(df)
@@ -2055,6 +2086,8 @@ def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> li
 	# Find connected components (size >= 2)
 	visited = set()
 	clusters = []
+	cluster_map = {}  # object_name → cluster_id
+	cluster_sets = [] # list of sets of names
 	for n in list(adj.keys()):
 		if n in visited:
 			continue
@@ -2074,11 +2107,104 @@ def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> li
 			clusters.append({
 				"Cluster": ", ".join(comp_sorted),
 				"Size": len(comp_sorted),
+				"Members": comp_sorted,
 			})
-
+			cid = len(cluster_sets)
+			for obj in comp_sorted:
+				cluster_map[obj] = cid
+			cluster_sets.append(set(comp_sorted))
 
 	# Sort clusters by the first member’s DF order (stable)
 	clusters.sort(
 		key=lambda row: order_ix.get(row["Members"][0], 10**9) if row.get("Members") else 10**9
 	)
-	return clusters
+	return clusters, cluster_map, cluster_sets
+
+def oxford_join(lst):
+    lst = list(lst)
+    if len(lst) == 1:
+        return lst[0]
+    elif len(lst) == 2:
+        return f"{lst[0]} and {lst[1]}"
+    else:
+        return ", ".join(lst[:-1]) + f", and {lst[-1]}"
+	
+def build_clustered_aspect_edges(df: pd.DataFrame, edges_major: list[tuple]) -> list[tuple]:
+	"""
+	Returns a list of aspects between conjunction clusters and singletons, avoiding redundant listings.
+	Each aspect is only listed once between any two clusters (or singleton and cluster).
+	Output: list of tuples (A, B, meta), where A and B are either cluster names (comma-joined) or singleton names.
+	"""
+	clusters, cluster_map, cluster_sets = build_conjunction_clusters(df, edges_major)
+	objs = _extract_object_rows(df)
+	names = list(objs["Object"])
+	# Build reverse: cluster_id → list of members
+	cluster_id_to_members = {}
+	for obj, cid in cluster_map.items():
+		cluster_id_to_members.setdefault(cid, []).append(obj)
+	# Build a mapping from object to display name (cluster or singleton)
+	obj_to_display = {}
+	cluster_display_names = {}
+	missing_members = set()
+	for cid, members in cluster_id_to_members.items():
+		# Always sort by DF order
+		for m in members:
+			if m not in names:
+				print(f"[build_clustered_aspect_edges] PATCH: adding missing member '{m}' to names list and all_sets.")
+				names.append(m)
+				missing_members.add(m)
+		cluster_display_names[cid] = ", ".join(sorted(members, key=lambda x: names.index(x)))
+	for obj in names:
+		if obj in cluster_map:
+			cid = cluster_map[obj]
+			obj_to_display[obj] = cluster_display_names[cid]
+		else:
+			obj_to_display[obj] = obj
+
+	# Build sets: each cluster as a set, and each singleton as a set
+	all_sets = []
+	used_objs = set()
+	for cid, members in cluster_id_to_members.items():
+		all_sets.append(set(members))
+		used_objs.update(members)
+	# After building all_sets, add singleton sets for any missing members
+	for m in missing_members:
+		all_sets.append({m})
+	
+	# Build sorted name lists for each set for display
+	set_sorted_names = [sorted(s, key=lambda x: names.index(x)) for s in all_sets]
+
+	# For each unique unordered pair of sets, find all aspects between their members
+	from collections import defaultdict
+	aspect_map = defaultdict(list)  # (setA, setB, aspect) -> list of (a, b, meta)
+	# Build a lookup for quick member-to-set index
+	obj_to_setidx = {}
+	for idx, s in enumerate(all_sets):
+		for obj in s:
+			obj_to_setidx[obj] = idx
+
+	for a, b, meta in edges_major:
+		aspect = meta.get("aspect")
+		if aspect == "Conjunction":
+			continue
+		if a not in obj_to_setidx or b not in obj_to_setidx:
+			print(f"[build_clustered_aspect_edges] WARNING: skipping edge ({a}, {b}) -- missing in obj_to_setidx")
+			continue
+		set_a = obj_to_setidx[a]
+		set_b = obj_to_setidx[b]
+		if set_a == set_b:
+			continue  # skip intra-cluster
+		# Always sort for uniqueness
+		key = tuple(sorted([set_a, set_b])) + (aspect,)
+		aspect_map[key].append((a, b, meta))
+
+	# For each unique set pair and aspect, pick the closest orb (smallest)
+	result = []
+	for key, abm_list in aspect_map.items():
+		set_a, set_b, aspect = key
+		# Pick the pair with the smallest orb
+		best = min(abm_list, key=lambda x: abs(x[2].get("orb", 999)))
+		disp_a = oxford_join(set_sorted_names[set_a])
+		disp_b = oxford_join(set_sorted_names[set_b])
+		result.append((disp_a, disp_b, best[2]))
+	return result

@@ -119,34 +119,7 @@ _COMPASS_ALIAS_MAP: dict[str, list[str]] = {
 	"South Node": ["South Node"],
 }
 
-_cache_major_edges = {}
 _cache_shapes = {}
-
-def get_major_edges_and_patterns(pos):
-	"""
-	Build master list of major edges from positions, then cluster into patterns.
-	"""
-	pos_items_tuple = tuple(sorted(pos.items()))
-	if pos_items_tuple not in _cache_major_edges:
-		temp_edges = []
-		planets = list(pos.keys())
-		for i in range(len(planets)):
-			for j in range(i + 1, len(planets)):
-				p1, p2 = planets[i], planets[j]
-				d1, d2 = pos.get(p1), pos.get(p2)
-				if d1 is None or d2 is None:
-					continue
-				angle = abs(d1 - d2) % 360
-				if angle > 180:
-					angle = 360 - angle
-				for aspect in ("Conjunction", "Sextile", "Square", "Trine", "Opposition"):
-					data = ASPECTS[aspect]
-					if abs(angle - data["angle"]) <= data["orb"]:
-						temp_edges.append(((p1, p2), aspect))
-						break
-		patterns = connected_components_from_edges(list(pos.keys()), temp_edges)
-		_cache_major_edges[pos_items_tuple] = (tuple(temp_edges), patterns)
-	return _cache_major_edges[pos_items_tuple]
 
 def get_shapes(pos, patterns, major_edges_all):
 	pos_items_tuple = tuple(sorted(pos.items()))
@@ -648,15 +621,6 @@ def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | Non
 			return deg
 	return None
 
-_COMPASS_ALIAS_MAP: dict[str, list[str]] = {
-	"Ascendant": ["AC", "Ascendant"],
-	"Descendant": ["DC", "Descendant"],
-	"MC": ["MC", "Midheaven"],
-	"IC": ["IC", "Imum Coeli"],
-	"North Node": ["North Node", "True Node"],
-	"South Node": ["South Node"],
-}
-
 # Import ASPECTS from lookup_v2 - use the same source as test_calc_v2.py
 try:
 	from lookup_v2 import ASPECTS
@@ -785,16 +749,33 @@ def _resolve_visible_from_patterns(toggle_state: Any, df: pd.DataFrame | None) -
 	return None
 
 def resolve_visible_objects(toggle_state: Any = None, df: pd.DataFrame | None = None) -> set[str] | None:
+	print("[DEBUG] resolve_visible_objects called with toggle_state:", toggle_state)
 	via_patterns = _resolve_visible_from_patterns(toggle_state, df)
 	if via_patterns:
 		return via_patterns
 	if toggle_state is None:
 		return None
+	compass_points = {"AC", "DC", "MC", "IC", "Ascendant", "Descendant", "Midheaven", "Imum Coeli"}
+	compass_rose_on = False
+	# Check for Compass Rose toggle in Mapping
 	if isinstance(toggle_state, Mapping):
 		names = {str(name) for name, enabled in toggle_state.items() if enabled}
+		# Try to detect Compass Rose toggle
+		if "Compass Rose" in toggle_state and toggle_state["Compass Rose"]:
+			compass_rose_on = True
+		if compass_rose_on:
+			names.update(compass_points)
+			print("[DEBUG] Compass Rose ON - visible_names:", names)
 		return names or None
 	if isinstance(toggle_state, Collection) and not isinstance(toggle_state, (str, bytes)):
-		return {str(name) for name in toggle_state}
+		names = {str(name) for name in toggle_state}
+		# Try to detect Compass Rose toggle
+		if "Compass Rose" in names:
+			compass_rose_on = True
+		if compass_rose_on:
+			names.update(compass_points)
+			print("[DEBUG] Compass Rose ON - visible_names:", names)
+		return names
 	return None
 
 def extract_positions(df: pd.DataFrame, visible_names: Collection[str] | None = None) -> dict[str, float]:
@@ -1584,7 +1565,29 @@ def render_chart(
 			asc_deg,
 			include_axes=not unknown_time_chart,
 		)
-	
+		# Add compass edges to major_edges_drawn if both endpoints exist
+		compass_edges = []
+		ac = compass_positions.get("Ascendant")
+		dc = compass_positions.get("Descendant")
+		if ac is not None and dc is not None:
+			compass_edges.append(("Ascendant", "Descendant", "Opposition"))
+		mc = compass_positions.get("MC")
+		ic = compass_positions.get("IC")
+		if mc is not None and ic is not None:
+			compass_edges.append(("MC", "IC", "Opposition"))
+		nn = compass_positions.get("North Node")
+		sn = compass_positions.get("South Node")
+		if nn is not None and sn is not None:
+			compass_edges.append(("North Node", "South Node", "Opposition"))
+		# Add to major_edges_drawn if not already present
+		for edge in compass_edges:
+			if edge not in major_edges_drawn:
+				major_edges_drawn.append(edge)
+		# Also add to visible_objects if not present
+		for obj in ["Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"]:
+			if obj in compass_positions and obj not in positions:
+				positions[obj] = compass_positions[obj]
+    
 	draw_center_earth(ax)
 
 	return RenderResult(

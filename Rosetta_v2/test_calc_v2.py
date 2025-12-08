@@ -26,6 +26,7 @@ from opencage.geocoder import OpenCageGeocode
 from timezonefinder import TimezoneFinder
 from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, importlib.util, streamlit as st
+from interp import Interp
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
 from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
@@ -672,7 +673,11 @@ def _refresh_chart_figure():
 			)
 			st.session_state["render_fig"] = rr.fig
 			st.session_state["render_result"] = rr
-			st.session_state["visible_objects"] = rr.visible_objects
+			# If Compass Rose is toggled, ensure all AC/DC canonical variants are present
+			visible_objects = set(rr.visible_objects)
+			if st.session_state.get("toggle_compass_rose", False):
+				visible_objects.update(["Ascendant", "AC", "Asc", "Descendant", "DC"])
+			st.session_state["visible_objects"] = sorted(visible_objects)
 			st.session_state["active_shapes"] = []
 			st.session_state["last_cusps"] = rr.cusps
 			st.session_state["ai_text"] = None
@@ -762,6 +767,11 @@ def _refresh_chart_figure():
 			compass_on = st.session_state.get(COMPASS_KEY, True)
 			# Show all MAJOR_OBJECTS that actually exist in the chart
 			visible_objects = list(major_pos.keys())
+			# Ensure AC and DC are always included when compass rose is toggled
+			if compass_on:
+				for axis in ["Ascendant", "Descendant", "AC", "DC"]:
+					if axis in df["Object"].values and axis not in visible_objects:
+						visible_objects.append(axis)
 			rr = render_chart(
 				df,
 				dark_mode=resolved_dark_mode,
@@ -884,7 +894,8 @@ def run_chart(lat, lon, tz_name):
 	st.session_state["dispositor_chains_rows"] = chains_rows
 
 	# --- Build aspects / reception / clusters / patterns ---
-	edges_major, edges_minor = build_aspect_edges(df)
+	compass_rose = st.session_state.get("ui_compass_overlay", False)
+	edges_major, edges_minor = build_aspect_edges(df, compass_rose=compass_rose)
 	df = annotate_reception(df, edges_major)
 
 	try:
@@ -1364,11 +1375,68 @@ if df_cached is not None:
 
 	_refresh_chart_figure()
 
+
 	fig = st.session_state.get("render_fig")
 	if fig is not None:
 		st.pyplot(fig, clear_figure=True, use_container_width=True)
 	else:
 		st.caption("Calculate a chart to render the wheel.")
+
+	# --- MCP Interpretation Output Section ---
+	st.markdown("<div id='mcp-interpretation'></div>", unsafe_allow_html=True)
+	st.markdown("**Interpretation**", unsafe_allow_html=True)
+	interp_mode = st.radio(
+		"Interpretation Mode",
+		["poetic", "technical"],
+		horizontal=True,
+		key="interp_mode_radio",
+		index=0
+	)
+	# Prepare chart state for MCP
+	# Filter objects and aspects to only those currently visible
+	visible_objects = st.session_state.get('visible_objects', [])
+	last_df = st.session_state.get('last_df')
+	edges_major = st.session_state.get('edges_major', [])
+	# Filter DataFrame rows to visible objects
+	if last_df is not None and not last_df.empty and visible_objects:
+		from profiles_v2 import ordered_object_rows
+		filtered_df = ordered_object_rows(last_df, visible_objects=visible_objects, edges_major=edges_major)
+	else:
+		filtered_df = last_df
+	# Filter aspects to only those between visible objects
+	visible_set = set(visible_objects)
+	filtered_edges_major = [e for e in edges_major if e[0] in visible_set and e[1] in visible_set]
+	# Import all needed lookups from lookup_v2 and profiles_v2
+	import lookup_v2
+	import profiles_v2
+	try:
+		from Rosetta_v2.profiles_v2 import STAR_CATALOG, find_fixed_star_conjunctions
+	except ImportError:
+		STAR_CATALOG = None
+		find_fixed_star_conjunctions = None
+
+	chart_state = {
+		'ordered_df': filtered_df,
+		'edges_major': filtered_edges_major,
+		'edges_minor': st.session_state.get('edges_minor', []),
+		'mode': interp_mode,
+		'raw_links': st.session_state.get('plot_data', {}),
+		'lookup': {
+			'GLYPHS': getattr(lookup_v2, 'GLYPHS', {}),
+			'OBJECT_MEANINGS': getattr(lookup_v2, 'OBJECT_MEANINGS', {}),
+			'SIGN_MEANINGS': getattr(lookup_v2, 'SIGN_MEANINGS', {}),
+			'HOUSE_MEANINGS': getattr(lookup_v2, 'HOUSE_MEANINGS', {}),
+			'INTERP_FLAGS': getattr(lookup_v2, 'INTERP_FLAGS', {}),
+			'SABIAN_SYMBOLS': getattr(lookup_v2, 'SABIAN_SYMBOLS', {}),
+			'ASPECT_INTERP': getattr(lookup_v2, 'ASPECT_INTERP', {}),
+			'FIXED_STAR_CATALOG': STAR_CATALOG,
+			'find_fixed_star_conjunctions': find_fixed_star_conjunctions,
+		},
+		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
+	}
+	interp = Interp(chart_state)
+	interp_output = interp.generate()
+	st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
 
 	# --- Dispositor Graph (moved from popover) ---
 	import matplotlib.pyplot as plt
@@ -1511,9 +1579,22 @@ if df_cached is not None:
 		st.subheader("Aspect Lists")
 		edges_major = st.session_state.get("edges_major") or []
 		edges_minor = st.session_state.get("edges_minor") or []
-		rows = ([{"Kind":"Major","A":a,"B":b, **meta} for a,b,meta in edges_major] +
-				[{"Kind":"Minor","A":a,"B":b, **meta} for a,b,meta in edges_minor])
-		st.dataframe(rows, use_container_width=True)
+		df_cached = st.session_state.get("last_df")
+		# Use the new clustered aspect edge builder
+		from calc_v2 import build_clustered_aspect_edges
+		if df_cached is not None:
+			clustered_edges = build_clustered_aspect_edges(df_cached, edges_major)
+			# For debugging, show both the cluster names and the original A/B
+			rows = []
+			for a, b, meta in clustered_edges:
+				row = {"Kind": "Major", "Cluster A": a, "Cluster B": b, **meta}
+				rows.append(row)
+			for a, b, meta in edges_minor:
+				row = {"Kind": "Minor", "A": a, "B": b, **meta}
+				rows.append(row)
+			st.dataframe(rows, use_container_width=True)
+		else:
+			st.caption("No aspect data available.")
 		
 # --- Left sidebar: Planet Profiles ---
 with st.sidebar:
@@ -1554,6 +1635,8 @@ with st.sidebar:
 			visible_objects=visible_objects,
 			edges_major=edges_major,
 		)
+		print("[DEBUG] Sidebar visible_objects:", visible_objects)
+		print("[DEBUG] Sidebar ordered_rows objects:", list(ordered_rows["Object"]) if not ordered_rows.empty else [])
 		if not ordered_rows.empty:
 			blocks = [
 				format_object_profile_html(

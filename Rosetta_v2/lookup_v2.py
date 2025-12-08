@@ -239,6 +239,13 @@ DIGNITIES = {
   }
 }
 
+DIGNITY_MEANINGS = {
+  "domicile": [""],
+  "detriment": [""],
+  "exaltation": [""],
+  "fall": [""],
+  },
+
 GROUP_COLORS = [
   	"#B80303", "#FF5100", "#FFAE00", "#53B800",
     "#0071BD", "#1D1FC5", "#6321CE", "#440101",
@@ -437,6 +444,83 @@ OBJECT_MEANINGS_SHORT = {
     "Eris": "Disruption, truth, and empowerment.",
 }
 
+INTERP_FLAGS = {
+    "Out of Bounds": (
+        "Out of Bounds: This planet/object's energy is operating beyond typical solar influence, "
+        "leading to an expression that is unconventional, extreme, potentially limitless, and can "
+        "manifest as either extraordinary genius or volatile, out-of-character behavior."
+    ),
+    "Retrograde": (
+        "Retrograde: Periods when a planet appears to move backward, revisiting recently learned "
+        "lessons. Retrograde planets prompt introspection, reflection, and integration, preparing "
+        "for a refined 'do-over' once the planet goes direct."
+    ),
+    "Station Point": (
+        "Station Point: A planet at its station is intensified, frozen in place. Its energy becomes "
+        "amplified and highly emphasized, often marking pivotal transition points."
+    ),
+    "Fixed Star": (
+        "Fixed Star Conjunctions: Any fixed stars conjunct a planet lend their meaning and qualities "
+        "to the placement. If a ruled body part is listed in the fixed star meaning, include it in "
+        "the Character Profile output for that placement."
+    ),
+}
+
+ORDERED_OBJECTS_FOCUS = [
+    # Compass coordinates
+    "Ascendant","Descendant","MC","IC",
+    # Compass needle (use canonical node names; True Node is alias)
+    "North Node","South Node",
+    # Characters (+ Pluto, Eris)
+    "Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune","Pluto","Eris",
+    # Moved up
+    "Ceres","Pallas","Juno","Vesta",
+    # Chiron before BML (Mean)
+    "Chiron","Black Moon Lilith (Mean)",
+    # Switches (before Personal Initiations)
+    "Part of Fortune","Vertex","Anti-Vertex","East Point",
+    # Personal Initiations (minus Chiron)
+    "Nessus","Ixion",
+    # Mythic Journeys (minus Pluto/Eris)
+    "Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Makemake",
+    # Instruments (remaining; “Lilith (Asteroid 1181)” → “Lilith (Asteroid)”)
+    "Iris","Hygiea","Psyche","Thalia","Euterpe","Pomona","Polyhymnia",
+    "Harmonia","Isis","Ariadne","Mnemosyne","Echo","Niobe","Eurydike","Freia","Terpsichore","Minerva",
+    "Hekate","Zephyr","Kassandra","Lachesis","Nemesis","Medusa","Aletheia","Magdalena","Arachne","Fama",
+    "Eros","Veritas","Sirene","Siva","Lilith (Asteroid)","Copernicus","Icarus","Toro","Apollo",
+    "Koussevitzky","Osiris","Lucifer","Anteros","Tezcatlipoca","West","Bacchus","Hephaistos","Panacea",
+    "Orpheus","Kafka","Pamela","Dionysus","Kaali","Asclepius","Singer","Angel",
+]
+
+CATEGORY_MAP = {
+    "Character Profiles": {"Sun","Moon","Mercury","Venus","Mars","Jupiter","Saturn","Uranus","Neptune"},
+    "Instruments": {
+        "Ceres","Pallas","Juno","Vesta","Iris","Hygiea","Psyche","Thalia","Euterpe","Pomona","Polyhymnia",
+        "Harmonia","Isis","Ariadne","Mnemosyne","Echo","Niobe","Eurydike","Freia","Terpsichore","Minerva",
+        "Hekate","Zephyr","Kassandra","Lachesis","Nemesis","Medusa","Aletheia","Magdalena","Arachne","Fama",
+        "Eros","Veritas","Sirene","Siva","Lilith (Asteroid 1181)","Copernicus","Icarus","Toro","Apollo",
+        "Koussevitzky","Osiris","Lucifer","Anteros","Tezcatlipoca","West","Bacchus","Hephaistos","Panacea",
+        "Orpheus","Kafka","Pamela","Dionysus","Kaali","Asclepius","Singer","Angel"
+    },
+    "Personal Initiations": {"Chiron","Nessus","Ixion"},
+    "Mythic Journeys": {"Pluto","Hidalgo","Varuna","Typhon","Quaoar","Sedna","Orcus","Haumea","Eris","Makemake"},
+    "Compass Coordinates": {"Ascendant","Descendant","MC","IC"},
+    "Compass Needle": {"True Node","North Node","South Node"},
+    "Switches": {"Black Moon Lilith (Mean)","Part of Fortune","Vertex","Anti-Vertex","East Point"},
+    "Imprints": {"Fixed Stars"}
+} 
+
+CATEGORY_INSTRUCTIONS = {
+    "Character Profiles": "Treat these as the primary agents. They have will, drive, and personality. Write their profiles as if they are characters acting within the chart’s system. They initiate, choose, and embody functions.",
+    "Instruments": "Treat these as auxiliary tools or implements. They do not act on their own but modify, equip, or flavor the Characters they are attached to. Interpret them as specialized add-ons that enhance or qualify expression.",
+    "Personal Initiations": "Treat these as threshold trials and initiatory guides. They mark points of personal wounding, apprenticeship, or rites of passage. Interpret them as initiations the native must undergo, often in embodied or psychological crisis form.",
+    "Mythic Journeys": "Treat these as terrains or landscapes. They are collective-scale mythic journeys that reshape the native’s environment. Interpret them as deep fields of transformation that one must endure or traverse, not agents that act.",
+    "Compass Coordinates": "Treat these as orienting coordinate markers for the whole chart. They provide direction, aim, and framing. Interpret them as the chart’s compass points, describing location, presentation, public face, and roots.",
+    "Compass Needle": "Treat these as the chart’s directional polarity. They mark the karmic vector between where the native has come from and where they are growing toward. Interpret them as the navigational axis of soul trajectory.",
+    "Switches": "Treat these as sensitive toggles or thresholds. They activate, invert, or flip circuits. Interpret them as switches that trigger growth arcs, release conditions, or polarity shifts.",
+    "Imprints": "Treat these as permanent marks from the heavens. They stamp the chart with mythic inheritance, often conferring unusual talents or fated qualities. Interpret them as imprints that ‘hard-code’ certain powers or vulnerabilities into the native’s system.",
+}
+
 
 SIGN_MEANINGS = {
     "Aries": "Sign of Action & Initiation",
@@ -466,6 +550,103 @@ HOUSE_MEANINGS = {
     10: "House of Career, Legacy & Public Life",
     11: "House of Community & Friends",
     12: "House of Spirituality, Institutions, & the Subconscious",
+}
+
+
+ASPECT_INTERP = {
+    "Trine": (
+        "Complete, automatic connection and collaboration. "
+        "What happens to one happens to the other – these two planets are attached at the hip, "
+        "total besties, zero resistance, zero interference. Full mutual signal transfer."
+    ),
+    "Sextile": (
+        "Potential for strong harmonious connection, much like the trine, but not automatic. "
+        "Sextiles are opportunities for two planets to work together and develop a latent talent. "
+        "They require choice and active participation under normal circumstances – "
+        "but can be automatically activated by transits."
+    ),
+    "Square": (
+        "Work. Square does not necessarily mean conflict, but it always means work; "
+        "two planets that must work to reconcile their differences because they both feel "
+        "like the other is shoving them from the side and totally interfering with their trajectory. "
+        "They can be reconciled, and need to be – the keys are in the other two points "
+        "that complete the grand cross."
+    ),
+    "Conjunction": (
+        "Planets/placements that share the same perspective and location, approaching life from the same place. "
+        "They combine their powers to form one node in the circuit together. If they are planets that"
+        "naturally have a tense relationship, such as Saturn and Uranus, then they can sometimes be tough"
+        "roommates until the two archetypes are resolved into a working friendship."
+        "When creating profile paragraphs, list the profiles for all placements within one conjunction cluster consecutively, even if that means repeating headers."
+    ),
+    "Opposition": (
+        "The balance of opposites, like Yin and Yang. Each set of polarities is complementary, "
+        "but the tendency is for them to compete when ungrounded. "
+        "The dichotomy in a classic heterosexual marriage diagram explains the opposite polarities well: "
+        "either the man and woman recognize that they have different but complementary poles "
+        "and honor their differences, creating symbiotic balance, "
+        "or they compete, trying to dominate or control one another out of competition, superiority, or insecurity. "
+        "All major oppositions in a natal chart represent the major over-arching themes of the native’s life. "
+        "They are polarities that the native is always working to keep in balance, or their life goes out of balance."
+        "List them first when present with other aspects, and explain that the oppositions are the biggest life themes. "
+    ),
+    "Sesquisquare": (
+        "Activation overflow. This is an aspect of momentum, compulsion, and often service. "
+        "One planet reaches full activation, and the sesquisquare acts like a surge line — "
+        "it pushes energy into the other planet, activating it in a new capacity. "
+        "It’s not smooth like a trine, nor tense like a square — it’s quick, sometimes surprising, "
+        "and highly energetic. These are often 'helper circuits' or 'gift-wired compulsions,' "
+        "where someone finds themselves acting or serving without even planning to, simply because "
+        "the conditions are right for them to be 'in their element.' "
+        "They can be hijacked or manipulated without good boundaries, but when integrated, "
+        "sesquisquares unlock multidimensional creativity and functional genius. "
+        "Example: a teacher who cannot help but passionately teach when her area of expertise is mentioned. "
+    ),
+    "Quincunx": (
+        "Hard misalignment—treat as a red-wire/black-wire hazard. Do NOT connect directly. "
+        "These are two points that feel extremely tempted to connect directly, like an itch that can't be directly scratched."
+        "Forcing contact causes arc, blowouts, symptom cascades, heartbreak, betrayal, failure, and general regrets. "
+        "Protocol: GO AROUND. Design an indirect route through non-quincunx links "
+        "(trine/sextile/square/sesquisquare/semisextile or a conjunction chain) that converts A’s output into "
+        "B’s input via adapters—clear skills, environments, or intermediaries. "
+        "The urgency you feel is noise; slow down, build the adapter, then pass the signal. "
+        "If the current placements and aspects shown do not provide resolution to re-route the quincunx, "
+        "tell the user that other placements not included in this interpretation will be needed to bridge the disconnect."
+        "Quincunxes mark injury loops and chronic misfires when hotwired; used correctly, they enforce sound system design."
+    )
+}
+
+COMPASS_ASPECT_INTERP = {
+    "ACDC": ("AC/DC Axis placeholder text"),
+    "MCIC": ("MC/IC Axis placeholder text"),
+    "Nodes": ("Nodal Axis placeholder text"),
+}
+
+HOUSE_SYSTEM_INTERP = {
+    "equal": "Interpret Equal House as the Structural Schematic Layer—the body’s architectural blueprint and energetic grid.",
+    "placidus": "Interpret Placidus as the Narrative + Trauma Pattern Layer—the psychological time–body interface where memory scripts and emotional timelines run.",
+    "whole": "Interpret Whole Sign as the Archetypal + Mythic Layer—the symbolic field that immerses perception in prophecy, dream logic, and mythic meaning.",
+    "campanus": "Interpret Campanus as the Spatial Orientation + Visual Field Layer—the horizon-sphere translator that calibrates visual geometry and room-positioning.",
+    "koch": "Interpret Koch as the Causal Loop + Psychological Chronology Layer—the personalized clock of formative events and cause-effect echo loops.",
+    "regiomontanus": "Interpret Regiomontanus as the Ritual Orientation + Perceptual Direction Layer—the inner compass aligning perception to sacred vectors and cardinal points.",
+    "porphyry": "Interpret Porphyry as the Threshold Awareness + Gatekeeping Layer—the initiatory map of inner gates, liminal passages, and decision thresholds.",
+    "topocentric": "Interpret Topocentric as the Observer Body + Presence Field Layer—the live-feed interface of being seen/witnessed and arriving in the now-body.",
+    "alcabitius": "Interpret Alcabitius as the Status Identity + Role Projection Layer—the social scaffolding where external roles and masks are performed against mirrors."
+}
+
+HOUSE_INTERP = {
+    1: "Interpret the 1st House as the Identity Interface & body-OS bootloader.",
+    2: "Treat the 2nd House as the Resource Engine (value, stability, fuel routing).",
+    3: "View the 3rd House as the Local I/O Bus (nervous-system messaging, skill acquisition, neighborhood nodes).",
+    4: "Read the 4th House as the Root System & memory vault (home base, attachment roots, inner foundation).",
+    5: "Interpret the 5th House as the Creative Kernel & joy engine (self-expression, play, risk, generativity).",
+    6: "Treat the 6th House as the Service Lab & maintenance stack (craft, routines, soma-systems).",
+    7: "View the 7th House as the Mirror Port (one-to-one bonds, co-regulation, contracts).",
+    8: "Read the 8th House as the Deep-Merge Transformer (shared power, taboos, regeneration).",
+    9: "Interpret the 9th House as the Meaning-Making Array (exploration, worldview architecture, transmission).",
+    10: "Treat the 10th House as the Public Interface & executive panel (role, reputation, mission delivery).",
+    11: "View the 11th House as the Network Grid & future lab (alliances, movements, systems innovation).",
+    12: "Read the 12th House as the Subconscious Field & sanctuary (dreamwork, dissolution, hidden labs).",
 }
 
 # Sabian Symbol Lookup Dictionary
