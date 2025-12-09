@@ -26,7 +26,7 @@ from opencage.geocoder import OpenCageGeocode
 from timezonefinder import TimezoneFinder
 from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, importlib.util, streamlit as st
-from interp import Interp
+from interp import ChartInterpreter
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
 from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
@@ -1434,7 +1434,7 @@ if df_cached is not None:
 		},
 		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
 	}
-	interp = Interp(chart_state)
+	interp = ChartInterpreter(chart_state)
 	interp_output = interp.generate()
 	st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
 

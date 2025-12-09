@@ -4,7 +4,7 @@ GLYPHS = {
     "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇",
     "Chiron": "⚷", "Ceres": "⚳", "Pallas": "⚴", "Juno": "⚵", "Vesta": "⚶",
     "North Node": "☊", "South Node": "☋", "Part of Fortune": "⊗", "Black Moon Lilith (Mean)": "⚸",
-    "Vertex": "☩", "North Node": "☊", "Ascendant": "AC", "Descendant": "DC", "Psyche": "Ψ", "Eros": "♡", 
+    "Vertex": "☩", "Ascendant": "AC", "Descendant": "DC", "Psyche": "Ψ", "Eros": "♡", 
     "Midheaven": "MC", "Imum Coeli": "IC"
 }
 
@@ -614,6 +614,24 @@ ASPECT_INTERP = {
         "tell the user that other placements not included in this interpretation will be needed to bridge the disconnect."
         "Quincunxes mark injury loops and chronic misfires when hotwired; used correctly, they enforce sound system design."
     )
+}
+
+SIGN_AXIS_INTERP = {
+    "Aries-Libra": "Interpret the Aries-Libra Axis as the Self-Other Dynamics Layer—the relational interface where identity meets partnership and balance is sought.",
+    "Taurus-Scorpio": "Interpret the Taurus-Scorpio Axis as the Resource Transformation Layer—the energetic exchange system governing value, possession, and deep shared power.",
+    "Gemini-Sagittarius": "Interpret the Gemini-Sagittarius Axis as the Knowledge-Meaning Layer—the cognitive framework where information is gathered, synthesized, and expanded into worldview.",
+    "Cancer-Capricorn": "Interpret the Cancer-Capricorn Axis as the Emotional-Structural Layer—the foundational matrix where feelings shape form and security is built.",
+    "Leo-Aquarius": "Interpret the Leo-Aquarius Axis as the Individual-Collective Expression Layer—the creative nexus where personal brilliance meets communal innovation.",
+    "Virgo-Pisces": "Interpret the Virgo-Pisces Axis as the Service-Spiritual Synthesis Layer—the healing conduit where practical care integrates with transcendent compassion.",
+}
+
+HOUSE_AXIS_INTERP = {
+    "1-7": "Interpret the 1st-7th House Axis as the Identity-Relationship Layer—the dynamic interplay between self-presentation and partnership.",
+    "2-8": "Interpret the 2nd-8th House Axis as the Resource-Transformation Layer—the cycle of personal value and shared power dynamics.",
+    "3-9": "Interpret the 3rd-9th House Axis as the Knowledge-Exploration Layer—the bridge between local understanding and expansive worldview.",
+    "4-10": "Interpret the 4th-10th House Axis as the Foundation-Career Layer—the balance between inner roots and public ambition.",
+    "5-11": "Interpret the 5th-11th House Axis as the Creativity-Community Layer—the fusion of personal expression and collective innovation.",
+    "6-12": "Interpret the 6th-12th House Axis as the Service-Spirituality Layer—the integration of daily care and transcendent connection.",
 }
 
 COMPASS_ASPECT_INTERP = {
