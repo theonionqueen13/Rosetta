@@ -1,4 +1,3 @@
-
 import os
 # --- Set Swiss Ephemeris path before any other imports ---
 import swisseph as swe
@@ -7,6 +6,17 @@ EPHE_PATH = EPHE_PATH.replace("\\", "/")
 os.environ["SE_EPHE_PATH"] = EPHE_PATH
 swe.set_ephe_path(EPHE_PATH)
 
+from typing import Dict, Any, List, Optional, Tuple
+from src.data_stubs import (
+	current_user_id, save_user_profile_db, load_user_profiles_db, 
+	delete_user_profile_db, community_save, community_list, 
+	community_get, community_load, community_delete, is_admin
+)
+from src.ui_utils import apply_custom_css, set_background_for_theme
+from src.test_data import apply_test_chart_to_session, MONTH_NAMES
+from src.geocoding import geocode_city_with_timezone
+from src.chart_core import calculate_chart_from_session
+from src.state_manager import swap_primary_and_secondary_charts
 import sys
 
 # Add the Rosetta project root to sys.path
@@ -22,8 +32,6 @@ import datetime as dt
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytz
-from opencage.geocoder import OpenCageGeocode
-from timezonefinder import TimezoneFinder
 from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, importlib.util, streamlit as st
 from interp import ChartInterpreter
@@ -33,126 +41,36 @@ from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_ch
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
-from calc_v2 import calculate_chart, plot_dispositor_graph, analyze_dispositors
+from calc_v2 import (
+    calculate_chart, chart_sect_from_df, build_aspect_edges, 
+    annotate_reception, build_dispositor_tables, 
+    build_conjunction_clusters, plot_dispositor_graph, analyze_dispositors
+)
 from lookup_v2 import SIGNS, PLANETARY_RULERS, PLANETS_PLUS, ASPECTS, MAJOR_OBJECTS, TOGGLE_ASPECTS
+
+# Key initialization:
+st.session_state.setdefault("last_test_chart", None)
+st.session_state.setdefault("last_test_chart_2", None)
+
+# Initialize birth data defaults for Chart 1
+st.session_state.setdefault("year", datetime.now().year)
+st.session_state.setdefault("month_name", "January")
+st.session_state.setdefault("day", 1)
+st.session_state.setdefault("hour_12", "12")
+st.session_state.setdefault("minute_str", "00")
+st.session_state.setdefault("ampm", "PM")
+st.session_state.setdefault("city", "New York, NY")
+st.session_state.setdefault("chart_dt_utc", None)
+st.session_state.setdefault("defaults_loaded", False)
+
+# Initialize birth data defaults for Chart 2 (if synastry is on)
+st.session_state.setdefault("test_chart_2", "Custom")
+
+apply_custom_css() # Call the imported CSS function
+
 current_user_id = "test-user"
 
 COMPASS_KEY = "ui_compass_overlay"
-
-# In-memory stores used by the stubs
-_TEST_PROFILES: Dict[str, Dict[str, Any]] = {}
-_TEST_COMMUNITY: Dict[str, Dict[str, Any]] = {}
-
-# --- Background image (base64, no external hosting) ---
-import base64
-from pathlib import Path
-import streamlit as st
-
-st.markdown("""
-<style>
-/* Full expander container */
-[data-testid="stExpander"] {
-	background-color: #333333 !important; /* dark gray */
-	color: white !important;
-	background-image: none !important;
-	border-radius: 10px !important;  /* rounded corners */
-	overflow: hidden !important;      /* prevents header/body corners showing square */
-}
-
-/* Expander header */
-[data-testid="stExpander"] > summary {
-	background-color: #333333 !important;
-	color: white !important;
-	border-radius: 10px !important;  /* same rounding */
-}
-
-/* Inner content area */
-[data-testid="stExpander"] .st-expander-content {
-	background-color: #333333 !important;
-	color: white !important;
-	border-radius: 0 0 10px 10px !important; /* rounded bottom corners */
-}
-</style>
-""", unsafe_allow_html=True)
-
-def _encode_image_base64(path_str: str) -> str:
-	"""Read a local image and return a base64 data URI (jpeg/png/webp)."""
-	p = Path(path_str)
-	if not p.exists():
-		# Prefer a hard fail so you notice wrong paths fast.
-		raise FileNotFoundError(f"Background image not found: {p.resolve()}")
-	ext = p.suffix.lower()
-	if ext == ".png":
-		mime = "image/png"
-	elif ext == ".webp":
-		mime = "image/webp"
-	else:
-		mime = "image/jpeg"  # default to jpeg for jpg/jpeg/others
-	b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
-	return f"data:{mime};base64,{b64}"
-
-def apply_background_base64(image_path: str, overlay: float = 0.40) -> None:
-	"""
-	Page-wide background using a LOCAL image (base64) + adjustable dark overlay.
-	Control overlay here in code (0.0 = none, 1.0 = black).
-	"""
-	overlay = max(0.0, min(1.0, float(overlay)))
-	data_uri = _encode_image_base64(image_path)
-
-	st.markdown(
-		f"""
-		<style>
-		/* Main app view container background */
-		[data-testid="stAppViewContainer"] {{
-			background-image:
-				linear-gradient(rgba(0,0,0,{overlay}), rgba(0,0,0,{overlay})),
-				url('{data_uri}');
-			background-size: cover;
-			background-position: center center;
-			background-repeat: no-repeat;
-			background-attachment: fixed;
-		}}
-
-		/* Let the background show under the main content */
-		.block-container {{
-			background: transparent;
-		}}
-		</style>
-		""",
-		unsafe_allow_html=True,
-	)
-
-# --- Theme-aware background chooser (paste below apply_background_base64) ---
-def set_background_for_theme(
-	*,
-	light_image_path: str,
-	dark_image_path: str,
-	light_overlay: float = 0.25,
-	dark_overlay: float = 0.45,
-	dark_mode: bool | None = None,
-) -> bool:
-	"""
-	Chooses the background based on dark_mode and applies it.
-	Returns the resolved dark_mode (so you can pass the same value to your drawing funcs).
-	"""
-	# If caller didn't pass dark_mode, try to infer from session or theme:
-	if dark_mode is None:
-		# 1) Try your own app state, if you keep a toggle there:
-		dark_mode = bool(st.session_state.get("ui_dark_mode", False))
-		# 2) If you don't have a custom toggle, try Streamlit theme (light/dark):
-		try:
-			base_theme = st.get_option("theme.base")  # "light" or "dark" if configured
-			if base_theme in ("light", "dark"):
-				dark_mode = (base_theme == "dark")
-		except Exception:
-			pass  # fallback to whatever we already decided
-
-	if dark_mode:
-		apply_background_base64(dark_image_path, dark_overlay)
-	else:
-		apply_background_base64(light_image_path, light_overlay)
-
-	return dark_mode
 
 # --- Pick backgrounds for each theme and apply ---
 LIGHT_BG = "Rosetta_v2/pngs/nebula2.jpg"
@@ -160,82 +78,13 @@ DARK_BG  = "Rosetta_v2/pngs/galaxies.jpg"
 LIGHT_OVERLAY = 0.20
 DARK_OVERLAY  = 0.45
 
-# Read the toggle value that toggles_v2.py writes
 resolved_dark_mode = set_background_for_theme(
 	light_image_path=LIGHT_BG,
 	dark_image_path=DARK_BG,
 	light_overlay=LIGHT_OVERLAY,
 	dark_overlay=DARK_OVERLAY,
-	dark_mode=st.session_state.get("dark_mode", False),  # <- wired to your checkbox
+	dark_mode=st.session_state.get("dark_mode", False),
 )
-
-def save_user_profile_db(user_id: str, name: str, payload: Dict[str, Any]) -> None:
-	users = _TEST_PROFILES.setdefault(user_id, {})
-	users[name] = payload.copy()
-
-def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
-	return _TEST_PROFILES.get(user_id, {}).copy()
-
-def delete_user_profile_db(user_id: str, name: str) -> None:
-	if user_id in _TEST_PROFILES and name in _TEST_PROFILES[user_id]:
-		del _TEST_PROFILES[user_id][name]
-
-def community_save(profile_name: str, payload: Dict[str, Any], submitted_by: Optional[str] = None) -> str:
-	# Return a fake ID like a DB would
-	new_id = f"comm_{len(_TEST_COMMUNITY)+1}"
-	_TEST_COMMUNITY[new_id] = {
-		"id": new_id,
-		"profile_name": profile_name,
-		"payload": payload.copy(),
-		"submitted_by": submitted_by or current_user_id,
-	}
-	return new_id
-
-def community_list(limit: int = 100) -> List[Dict[str, Any]]:
-	return list(_TEST_COMMUNITY.values())[:limit]
-
-# Some parts of your code use community_get; others say community_load.
-# Provide both so either name works.
-def community_get(comm_id: str) -> Optional[Dict[str, Any]]:
-	return _TEST_COMMUNITY.get(comm_id)
-
-def community_delete(comm_id: str) -> None:
-	_TEST_COMMUNITY.pop(comm_id, None)
-
-# Back-compat alias if something imports 'community_load'
-community_load = community_get
-
-def is_admin(user_id: str) -> bool:
-	# In tests, just say yes or no—doesn’t matter unless you assert on it.
-	return True
-# ---- End stubs ----
-
-
-# --- Create a single, reusable geocoder instance ---
-_OPENCAGE_KEY = st.secrets["opencage"]["api_key"]
-_geolocator = OpenCageGeocode(_OPENCAGE_KEY)
-
-def _geocode_city_with_timezone(
-	city_query: str,
-	opencage_key: str = None
-) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
-	lat = lon = tz_name = None
-	formatted_address = None
-
-	if not city_query:
-		return lat, lon, tz_name, formatted_address
-
-	# Use the module-level geolocator to avoid too many open files
-	results = _geolocator.geocode(city_query, no_annotations='1', limit=1)
-
-	if results:
-		first_result = results[0]
-		lat = first_result['geometry']['lat']
-		lon = first_result['geometry']['lng']
-		formatted_address = first_result['formatted']
-		tz_name = TimezoneFinder().timezone_at(lng=lon, lat=lat)
-
-	return lat, lon, tz_name, formatted_address
 
 # --- Sidebar profile styling (single-space lines + thin separators) ---
 st.sidebar.markdown("""
@@ -252,112 +101,18 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load calc_v2.py from this folder explicitly
-CALC_PATH = os.path.join(os.path.dirname(__file__), "calc_v2.py")
-spec = importlib.util.spec_from_file_location("calc_v2", CALC_PATH)
-calc_mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(calc_mod)
-
-calculate_chart = calc_mod.calculate_chart  # <-- use this below
-chart_sect_from_df = calc_mod.chart_sect_from_df
-build_aspect_edges = calc_mod.build_aspect_edges
-annotate_reception = calc_mod.annotate_reception
-build_dispositor_tables = calc_mod.build_dispositor_tables
-build_conjunction_clusters = calc_mod.build_conjunction_clusters
-plot_dispositor_graph = calc_mod.plot_dispositor_graph  # <-- RELOAD THIS TOO
-
-MONTH_NAMES = [
-	"January","February","March","April","May","June",
-	"July","August","September","October","November","December"
-]
-
 # --- Handle pending chart swap BEFORE any widgets are created ---
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
 
+# Track the most recent chart figure so the wheel column can always render.
+st.session_state.setdefault("render_fig", None)
+
+# --- Handle pending chart swap BEFORE any widgets are created ---
 if st.session_state.get("__pending_swap_charts__"):
-	
-	# Preserve widget states that shouldn't be affected by swap
-	preserved_synastry_mode = st.session_state.get("synastry_mode", False)
-	preserved_chart_mode = st.session_state.get("chart_mode", "Circuits")
-	preserved_house_system = st.session_state.get("house_system", "placidus")
-	
-	# Swap the test chart radio button selections
-	test_chart_1 = st.session_state.get("test_chart_radio", "Custom")
-	test_chart_2 = st.session_state.get("test_chart_2", "Custom")
-	st.session_state["test_chart_radio"] = test_chart_2
-	st.session_state["test_chart_2"] = test_chart_1
-	
-	# Also swap the last_test_chart trackers
-	last_1 = st.session_state.get("last_test_chart")
-	last_2 = st.session_state.get("last_test_chart_2")
-	st.session_state["last_test_chart"] = last_2
-	st.session_state["last_test_chart_2"] = last_1
-	
-	# Define keys to swap (excluding widget keys that haven't been created yet)
-	swap_pairs = [
-		("year", "year_2"),
-		("month_name", "month_name_2"),
-		("day", "day_2"),
-		("hour_12", "hour_12_2"),
-		("minute_str", "minute_str_2"),
-		("ampm", "ampm_2"),
-		("city", "city_2"),
-		("last_df", "last_df_2"),
-		("plot_data", "plot_data_2"),
-		("chart_dt_utc", "chart_dt_utc_2"),
-		("chart_unknown_time", "chart_unknown_time_2"),
-		("dispositor_summary_rows", "dispositor_summary_rows_2"),
-		("dispositor_chains_rows", "dispositor_chains_rows_2"),
-		("chart_positions", "chart_positions_2"),
-		("edges_major", "edges_major_2"),
-		("edges_minor", "edges_minor_2"),
-		("patterns", "patterns_2"),
-		("shapes", "shapes_2"),
-		("filaments", "filaments_2"),
-		("combos", "combos_2"),
-		("singleton_map", "singleton_map_2"),
-		("major_edges_all", "major_edges_all_2"),
-	]
-	
-	# Perform the swap
-	for key1, key2 in swap_pairs:
-		val1 = st.session_state.get(key1)
-		val2 = st.session_state.get(key2)
-		st.session_state[key1] = val2
-		st.session_state[key2] = val1
-	
-	# Restore preserved widget states
-	st.session_state["synastry_mode"] = preserved_synastry_mode
-	st.session_state["chart_mode"] = preserved_chart_mode
-	st.session_state["house_system"] = preserved_house_system
-	
-	# Clear the cached figure so it will be regenerated with swapped data
-	st.session_state["render_fig"] = None
-	st.session_state["render_result"] = None
-	
-	# Clear Streamlit's cache to ensure fresh render
-	try:
-		st.cache_data.clear()
-	except:
-		pass
-	
-	# Force matplotlib to clear any cached figures
-	import matplotlib.pyplot as plt
-	plt.close('all')
-	
-	# Clear the flag and force a full refresh
-	del st.session_state["__pending_swap_charts__"]
-	st.rerun()
+    swap_primary_and_secondary_charts()
 
-# Synastry mode toggle - ONLY setdefault if key doesn't exist
-if "synastry_mode" not in st.session_state:
-	st.session_state["synastry_mode"] = False
 synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
-
-# Initialize test_chart_2 default before creating the widget
-if synastry_mode:
-	st.session_state.setdefault("test_chart_2", "Custom")
 
 # Primary chart selector
 test_chart = st.radio(
@@ -367,6 +122,22 @@ test_chart = st.radio(
 	key="test_chart_radio",
 	label_visibility="collapsed"
 )
+
+# Only apply test chart data if the selection changed (not on every rerun)
+if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
+    st.session_state["last_test_chart"] = test_chart
+
+    # 1. Apply data
+    apply_test_chart_to_session(test_chart)
+
+    # 2. Trigger calculation for Chart 1 (no suffix)
+    if calculate_chart_from_session():
+        st.success(f"Chart 1 loaded: {st.session_state.get('city')}")
+    else:
+        st.error(f"Failed to calculate Chart 1. Check date/time/location inputs.")
+
+elif test_chart == "Custom":
+    st.session_state["last_test_chart"] = "Custom"
 
 # Secondary chart selector (only visible in synastry mode)
 if synastry_mode:
@@ -383,175 +154,35 @@ if synastry_mode:
 else:
 	test_chart_2 = None
 
-# Track the last selected test chart to detect changes
-if "last_test_chart" not in st.session_state:
-	st.session_state["last_test_chart"] = None
-if "last_test_chart_2" not in st.session_state:
-	st.session_state["last_test_chart_2"] = None
-
-# Only apply test chart data if the selection changed (not on every rerun)
-if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
-	st.session_state["last_test_chart"] = test_chart
-	
-	# --- Default birth data (only set when test chart selection changes) ---
-	if test_chart == "Wildhorse":
-		st.session_state["year"] = 1983
-		st.session_state["month_name"] = "January"
-		st.session_state["day"] = 15
-		st.session_state["hour_12"] = "11"
-		st.session_state["minute_str"] = "27"
-		st.session_state["ampm"] = "AM"
-		st.session_state["city"] = "Red Bank, NJ"
-		st.session_state["defaults_loaded"] = True
-
-	if test_chart == "Joylin":
-		st.session_state["year"] = 1990
-		st.session_state["month_name"] = "July"
-		st.session_state["day"] = 29
-		st.session_state["hour_12"] = "1"
-		st.session_state["minute_str"] = "39"
-		st.session_state["ampm"] = "AM"
-		st.session_state["city"] = "Newton, KS"
-		st.session_state["defaults_loaded"] = True
-
-	if test_chart == "Terra":
-		st.session_state["year"] = 1992
-		st.session_state["month_name"] = "January"
-		st.session_state["day"] = 28
-		st.session_state["hour_12"] = "2"
-		st.session_state["minute_str"] = "54"
-		st.session_state["ampm"] = "PM"
-		st.session_state["city"] = "Newton, KS"
-		st.session_state["defaults_loaded"] = True
-
-	if test_chart == "Jessica":
-		st.session_state["year"] = 1990
-		st.session_state["month_name"] = "November"
-		st.session_state["day"] = 20
-		st.session_state["hour_12"] = "4"
-		st.session_state["minute_str"] = "29"
-		st.session_state["ampm"] = "PM"
-		st.session_state["city"] = "Wichita, KS"
-		st.session_state["defaults_loaded"] = True
-elif test_chart == "Custom":
-	# Update the last_test_chart when Custom is selected too
-	st.session_state["last_test_chart"] = "Custom"
-
-# Helper to calculate second chart for synastry
-def _calculate_chart_2():
-	"""Calculate chart 2 using _2 suffixed session state data."""
-	try:
-		year = int(st.session_state.get("year_2", 2000))
-		month_name = st.session_state.get("month_name_2", "January")
-		month = MONTH_NAMES.index(month_name) + 1
-		day = int(st.session_state.get("day_2", 1))
-		
-		hour_12 = st.session_state.get("hour_12_2", "12")
-		minute_str = st.session_state.get("minute_str_2", "00")
-		ampm = st.session_state.get("ampm_2", "AM")
-		
-		# Convert to 24-hour
-		if hour_12 == "--" or minute_str == "--" or ampm == "--":
-			hour_24 = 12
-			minute = 0
-		else:
-			h12 = int(hour_12)
-			minute = int(minute_str)
-			if ampm == "AM":
-				hour_24 = 0 if h12 == 12 else h12
-			else:
-				hour_24 = 12 if h12 == 12 else h12 + 12
-		
-		city = st.session_state.get("city_2", "")
-		
-		# Geocode if we have a city
-		if city:
-			lat, lon, tz_name, _ = _geocode_city_with_timezone(city, st.secrets["opencage"]["api_key"])
-			if lat and lon and tz_name:
-				# Calculate the chart
-				combined_df, aspect_df, raw_plot_data = calculate_chart(
-					year=year, month=month, day=day, hour=hour_24, minute=minute,
-					tz_offset=0, lat=lat, lon=lon, input_is_ut=False,
-					tz_name=tz_name, include_aspects=True, unknown_time=False
-				)
-				st.session_state["last_df_2"] = combined_df
-				st.session_state["last_aspect_df_2"] = aspect_df
-				st.session_state["plot_data_2"] = raw_plot_data
-				return True
-			else:
-				st.error(f"Could not geocode city for Chart 2: {city}")
-				st.session_state["last_df_2"] = None
-				return False
-		else:
-			st.warning("No city specified for Chart 2")
-			st.session_state["last_df_2"] = None
-			return False
-	except Exception as e:
-		st.error(f"Failed to calculate chart 2: {e}")
-		import traceback
-		st.error(traceback.format_exc())
-		st.session_state["last_df_2"] = None
-		return False
-
 # Handle second chart selection (for synastry mode)
 if synastry_mode and test_chart_2:
-	# Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
-	chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
-	df_missing = st.session_state.get("last_df_2") is None
-	should_calculate = chart_changed and test_chart_2 != "Custom"
-	
-	# Also calculate if a non-Custom chart is selected but no data exists yet
-	if test_chart_2 != "Custom" and df_missing:
-		should_calculate = True
-	
-	if should_calculate:
-		st.session_state["last_test_chart_2"] = test_chart_2
-		
-		# Store Chart 2 data with "_2" suffix
-		if test_chart_2 == "Wildhorse":
-			st.session_state["year_2"] = 1983
-			st.session_state["month_name_2"] = "January"
-			st.session_state["day_2"] = 15
-			st.session_state["hour_12_2"] = "11"
-			st.session_state["minute_str_2"] = "27"
-			st.session_state["ampm_2"] = "AM"
-			st.session_state["city_2"] = "Red Bank, NJ"
+    # Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
+    chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
+    df_missing = st.session_state.get("last_df_2") is None
 
-		if test_chart_2 == "Joylin":
-			st.session_state["year_2"] = 1990
-			st.session_state["month_name_2"] = "July"
-			st.session_state["day_2"] = 29
-			st.session_state["hour_12_2"] = "1"
-			st.session_state["minute_str_2"] = "39"
-			st.session_state["ampm_2"] = "AM"
-			st.session_state["city_2"] = "Newton, KS"
+    should_calculate = chart_changed and test_chart_2 != "Custom"
 
-		if test_chart_2 == "Terra":
-			st.session_state["year_2"] = 1992
-			st.session_state["month_name_2"] = "January"
-			st.session_state["day_2"] = 28
-			st.session_state["hour_12_2"] = "2"
-			st.session_state["minute_str_2"] = "54"
-			st.session_state["ampm_2"] = "PM"
-			st.session_state["city_2"] = "Newton, KS"
+    # Also calculate if a non-Custom chart is selected but no data exists yet
+    if test_chart_2 != "Custom" and df_missing:
+        should_calculate = True
 
-		if test_chart_2 == "Jessica":
-			st.session_state["year_2"] = 1990
-			st.session_state["month_name_2"] = "November"
-			st.session_state["day_2"] = 20
-			st.session_state["hour_12_2"] = "4"
-			st.session_state["minute_str_2"] = "29"
-			st.session_state["ampm_2"] = "PM"
-			st.session_state["city_2"] = "Wichita, KS"
-		
-		# Auto-calculate the second chart when test chart is selected
-		success = _calculate_chart_2()
-		if success:
-			st.success(f"Chart 2 calculated: {st.session_state.get('city_2')}")
-		else:
-			st.error(f"Failed to calculate Chart 2")
-	elif test_chart_2 == "Custom":
-		st.session_state["last_test_chart_2"] = "Custom"
+    if should_calculate:
+        st.session_state["last_test_chart_2"] = test_chart_2
+
+        # 1. Apply data for Chart 2
+        success_apply = apply_test_chart_to_session(test_chart_2, suffix="_2")
+
+        if success_apply:
+            # 2. Trigger calculation for Chart 2 (with suffix)
+            if calculate_chart_from_session(suffix="_2"):
+                st.success(f"Chart 2 loaded: {st.session_state.get('city_2')}")
+            else:
+                st.error(f"Failed to calculate Chart 2. Check date/time/location inputs.")
+        else:
+            st.error(f"Error: Could not find test chart data for {test_chart_2}")
+
+    elif test_chart_2 == "Custom":
+        st.session_state["last_test_chart_2"] = "Custom"
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
@@ -1063,10 +694,25 @@ with col_left:
 			# Persist normalized values if you need them elsewhere
 			st.session_state["profile_birth_hour_24"] = birth_hour_24
 			st.session_state["profile_birth_minute"]  = birth_minute
-
-			# Submit button: only on click do we geocode + calculate
+			
 			submitted = st.form_submit_button("Calculate Chart")
 
+			if submitted:
+				# Trigger the calculation for Chart 1 (no suffix).
+				# This reads all inputs from st.session_state (which were populated by the form's key values).
+				success = calculate_chart_from_session(suffix="")
+				
+				if success:
+					st.success(f"Chart successfully calculated for {st.session_state.get('city')}.")
+					# Clear the render_fig state to force the chart to be redrawn
+					st.session_state["render_fig"] = None
+					# Use st.rerun() to immediately display the chart if needed, 
+					# otherwise the chart will display on the next Streamlit run.
+					# st.rerun() 
+				else:
+					# This message appears if geocoding failed or date/time parsing failed
+					st.error(f"Calculation failed! Please ensure all date/time fields are valid and the city lookup succeeds.")
+			
 			if submitted:
 				if unknown_time:
 					# Your policy for unknown time (noon chart is common)
@@ -1084,9 +730,8 @@ with col_left:
 				st.session_state["city_query"] = city_query
 
 				try:
-					lat, lon, tz_name, formatted_address = _geocode_city_with_timezone(
-						city_query, 
-						st.secrets["opencage"]["api_key"]  # <- pass the key here
+					lat, lon, tz_name, formatted_address = geocode_city_with_timezone(
+						city_query
 					)
 					# Make the location visible to drawing_v2
 					if lat is not None and lon is not None:
@@ -1195,7 +840,7 @@ with col_mid:
 			col_mid,
 			MONTH_NAMES,
 			run_chart,
-			_geocode_city_with_timezone,
+			geocode_city_with_timezone,
 		)
 
 

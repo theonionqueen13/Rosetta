@@ -18,3 +18,4 @@ email-validator
 pytz
 plotly>=5.0.0
 google-generativeai
+opencage
