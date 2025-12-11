@@ -15,8 +15,9 @@ from src.data_stubs import (
 from src.ui_utils import apply_custom_css, set_background_for_theme
 from src.test_data import apply_test_chart_to_session, MONTH_NAMES
 from src.geocoding import geocode_city_with_timezone
-from src.chart_core import calculate_chart_from_session
+from src.chart_core import calculate_chart_from_session, _refresh_chart_figure
 from src.state_manager import swap_primary_and_secondary_charts
+from src.dispositor_graph import render_dispositor_section
 import sys
 
 # Add the Rosetta project root to sys.path
@@ -28,7 +29,6 @@ from house_selector_v2 import _selected_house_system
 from donate_v2 import donate_chart
 from now_v2 import render_now_widget
 from event_lookup_v2 import update_events_html_state
-import datetime as dt
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytz
@@ -37,14 +37,13 @@ import os, importlib.util, streamlit as st
 from interp import ChartInterpreter
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
-from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
 from calc_v2 import (
-    calculate_chart, chart_sect_from_df, build_aspect_edges, 
-    annotate_reception, build_dispositor_tables, 
-    build_conjunction_clusters, plot_dispositor_graph, analyze_dispositors
+	calculate_chart, chart_sect_from_df, build_aspect_edges, 
+	annotate_reception, build_dispositor_tables, 
+	build_conjunction_clusters
 )
 from lookup_v2 import SIGNS, PLANETARY_RULERS, PLANETS_PLUS, ASPECTS, MAJOR_OBJECTS, TOGGLE_ASPECTS
 
@@ -86,6 +85,8 @@ resolved_dark_mode = set_background_for_theme(
 	dark_mode=st.session_state.get("dark_mode", False),
 )
 
+st.session_state["dark_mode"] = resolved_dark_mode
+
 # --- Sidebar profile styling (single-space lines + thin separators) ---
 st.sidebar.markdown("""
 <style>
@@ -110,7 +111,7 @@ st.session_state.setdefault("render_fig", None)
 
 # --- Handle pending chart swap BEFORE any widgets are created ---
 if st.session_state.get("__pending_swap_charts__"):
-    swap_primary_and_secondary_charts()
+	swap_primary_and_secondary_charts()
 
 synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
 
@@ -125,19 +126,19 @@ test_chart = st.radio(
 
 # Only apply test chart data if the selection changed (not on every rerun)
 if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
-    st.session_state["last_test_chart"] = test_chart
+	st.session_state["last_test_chart"] = test_chart
 
-    # 1. Apply data
-    apply_test_chart_to_session(test_chart)
+	# 1. Apply data
+	apply_test_chart_to_session(test_chart)
 
-    # 2. Trigger calculation for Chart 1 (no suffix)
-    if calculate_chart_from_session():
-        st.success(f"Chart 1 loaded: {st.session_state.get('city')}")
-    else:
-        st.error(f"Failed to calculate Chart 1. Check date/time/location inputs.")
+	# 2. Trigger calculation for Chart 1 (no suffix)
+	if calculate_chart_from_session():
+		st.success(f"Chart 1 loaded: {st.session_state.get('city')}")
+	else:
+		st.error(f"Failed to calculate Chart 1. Check date/time/location inputs.")
 
 elif test_chart == "Custom":
-    st.session_state["last_test_chart"] = "Custom"
+	st.session_state["last_test_chart"] = "Custom"
 
 # Secondary chart selector (only visible in synastry mode)
 if synastry_mode:
@@ -156,324 +157,36 @@ else:
 
 # Handle second chart selection (for synastry mode)
 if synastry_mode and test_chart_2:
-    # Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
-    chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
-    df_missing = st.session_state.get("last_df_2") is None
+	# Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
+	chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
+	df_missing = st.session_state.get("last_df_2") is None
 
-    should_calculate = chart_changed and test_chart_2 != "Custom"
+	should_calculate = chart_changed and test_chart_2 != "Custom"
 
-    # Also calculate if a non-Custom chart is selected but no data exists yet
-    if test_chart_2 != "Custom" and df_missing:
-        should_calculate = True
+	# Also calculate if a non-Custom chart is selected but no data exists yet
+	if test_chart_2 != "Custom" and df_missing:
+		should_calculate = True
 
-    if should_calculate:
-        st.session_state["last_test_chart_2"] = test_chart_2
+	if should_calculate:
+		st.session_state["last_test_chart_2"] = test_chart_2
 
-        # 1. Apply data for Chart 2
-        success_apply = apply_test_chart_to_session(test_chart_2, suffix="_2")
+		# 1. Apply data for Chart 2
+		success_apply = apply_test_chart_to_session(test_chart_2, suffix="_2")
 
-        if success_apply:
-            # 2. Trigger calculation for Chart 2 (with suffix)
-            if calculate_chart_from_session(suffix="_2"):
-                st.success(f"Chart 2 loaded: {st.session_state.get('city_2')}")
-            else:
-                st.error(f"Failed to calculate Chart 2. Check date/time/location inputs.")
-        else:
-            st.error(f"Error: Could not find test chart data for {test_chart_2}")
+		if success_apply:
+			# 2. Trigger calculation for Chart 2 (with suffix)
+			if calculate_chart_from_session(suffix="_2"):
+				st.success(f"Chart 2 loaded: {st.session_state.get('city_2')}")
+			else:
+				st.error(f"Failed to calculate Chart 2. Check date/time/location inputs.")
+		else:
+			st.error(f"Error: Could not find test chart data for {test_chart_2}")
 
-    elif test_chart_2 == "Custom":
-        st.session_state["last_test_chart_2"] = "Custom"
+	elif test_chart_2 == "Custom":
+		st.session_state["last_test_chart_2"] = "Custom"
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
-
-def _refresh_chart_figure():
-	"""Rebuild the chart figure using the current session-state toggles."""
-	# Check if we're in synastry mode
-	synastry_mode = st.session_state.get("synastry_mode", False)
-	
-	if synastry_mode:
-		# Synastry/biwheel mode: need both charts
-		df_inner = st.session_state.get("last_df")
-		df_outer = st.session_state.get("last_df_2")
-		
-		if df_inner is None or df_outer is None:
-			# If we don't have both charts yet, fall back to single chart
-			if df_inner is None:
-				return
-			df_outer = df_inner  # Use same chart for both rings as fallback
-		
-		house_system = st.session_state.get("house_system", "placidus")
-		label_style = st.session_state.get("label_style", "glyph")
-		dark_mode = st.session_state.get("dark_mode", False)
-		chart_mode = st.session_state.get("chart_mode", "Circuits")
-		
-		# Compute aspects for Standard Chart mode
-		edges_inter_chart = []
-		edges_chart1 = []
-		edges_chart2 = []
-		
-		if chart_mode == "Standard Chart":
-			# Get positions for both charts
-			pos_inner = extract_positions(df_inner)
-			pos_outer = extract_positions(df_outer)
-			
-			# Get aspect toggles
-			aspect_toggles = st.session_state.get("aspect_toggles", {})
-			
-			# Build list of bodies for aspects: PLANETS_PLUS + enabled TOGGLE_ASPECTS
-			aspect_bodies_inner = dict(PLANETS_PLUS)
-			aspect_bodies_outer = dict(PLANETS_PLUS)
-			
-			for body_name, enabled in aspect_toggles.items():
-				if enabled and body_name in TOGGLE_ASPECTS:
-					aspect_bodies_inner[body_name] = TOGGLE_ASPECTS[body_name]
-					aspect_bodies_outer[body_name] = TOGGLE_ASPECTS[body_name]
-			
-			# Filter positions to aspect-enabled bodies
-			inner_pos_filtered = {name: deg for name, deg in pos_inner.items() if name in aspect_bodies_inner}
-			outer_pos_filtered = {name: deg for name, deg in pos_outer.items() if name in aspect_bodies_outer}
-			
-			# Get synastry aspect group toggles
-			show_inter = st.session_state.get("synastry_aspects_inter", True)
-			show_chart1 = st.session_state.get("synastry_aspects_chart1", False)
-			show_chart2 = st.session_state.get("synastry_aspects_chart2", False)
-			
-			# Compute inter-chart aspects (chart 1 to chart 2)
-			if show_inter:
-				for p1 in inner_pos_filtered:
-					for p2 in outer_pos_filtered:
-						d1 = inner_pos_filtered[p1]
-						d2 = outer_pos_filtered[p2]
-						angle = abs(d1 - d2) % 360
-						if angle > 180:
-							angle = 360 - angle
-						
-						# Check all aspect types
-						for aspect_name, aspect_data in ASPECTS.items():
-							if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
-								edges_inter_chart.append((p1, p2, aspect_name))
-								break  # Only one aspect per pair
-			
-			# Compute chart 1 internal aspects
-			if show_chart1:
-				planets_chart1 = list(inner_pos_filtered.keys())
-				for i in range(len(planets_chart1)):
-					for j in range(i + 1, len(planets_chart1)):
-						p1, p2 = planets_chart1[i], planets_chart1[j]
-						d1 = inner_pos_filtered[p1]
-						d2 = inner_pos_filtered[p2]
-						angle = abs(d1 - d2) % 360
-						if angle > 180:
-							angle = 360 - angle
-						
-						for aspect_name, aspect_data in ASPECTS.items():
-							if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
-								edges_chart1.append((p1, p2, aspect_name))
-								break
-			
-			# Compute chart 2 internal aspects
-			if show_chart2:
-				planets_chart2 = list(outer_pos_filtered.keys())
-				for i in range(len(planets_chart2)):
-					for j in range(i + 1, len(planets_chart2)):
-						p1, p2 = planets_chart2[i], planets_chart2[j]
-						d1 = outer_pos_filtered[p1]
-						d2 = outer_pos_filtered[p2]
-						angle = abs(d1 - d2) % 360
-						if angle > 180:
-							angle = 360 - angle
-						
-						for aspect_name, aspect_data in ASPECTS.items():
-							if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
-								edges_chart2.append((p1, p2, aspect_name))
-								break
-		
-		try:
-			rr = render_biwheel_chart(
-				df_inner,
-				df_outer,
-				edges_inter_chart=edges_inter_chart,
-				edges_chart1=edges_chart1,
-				edges_chart2=edges_chart2,
-				house_system=house_system,
-				dark_mode=dark_mode,
-				label_style=label_style,
-				figsize=(6.0, 6.0),
-				dpi=144,
-			)
-			st.session_state["render_fig"] = rr.fig
-			st.session_state["render_result"] = rr
-			# If Compass Rose is toggled, ensure all AC/DC canonical variants are present
-			visible_objects = set(rr.visible_objects)
-			if st.session_state.get("toggle_compass_rose", False):
-				visible_objects.update(["Ascendant", "AC", "Asc", "Descendant", "DC"])
-			st.session_state["visible_objects"] = sorted(visible_objects)
-			st.session_state["active_shapes"] = []
-			st.session_state["last_cusps"] = rr.cusps
-			st.session_state["ai_text"] = None
-			return
-		except Exception as e:
-			st.error(f"Biwheel chart rendering failed: {e}")
-			# Fall through to regular chart rendering
-	
-	# Regular single-chart mode
-	df = st.session_state.get("last_df")
-	pos = st.session_state.get("chart_positions")
-
-	if df is None or pos is None:
-		return
-
-	patterns = st.session_state.get("patterns") or []
-	shapes = st.session_state.get("shapes") or []
-	filaments = st.session_state.get("filaments") or []
-	combos = st.session_state.get("combos") or {}
-	singleton_map = st.session_state.get("singleton_map") or {}
-	major_edges_all = st.session_state.get("major_edges_all") or []
-
-	pattern_labels = [
-		st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
-		for i in range(len(patterns))
-	]
-	toggles = [
-		st.session_state.get(f"toggle_pattern_{i}", False)
-		for i in range(len(patterns))
-	]
-	singleton_toggles = {
-		planet: st.session_state.get(f"singleton_{planet}", False)
-		for planet in singleton_map
-	}
-	shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
-	combo_toggles = st.session_state.get("combo_toggles", {})
-
-	house_system = st.session_state.get("house_system", "placidus")
-	label_style = st.session_state.get("label_style", "glyph")
-	dark_mode = st.session_state.get("dark_mode", False)
-
-	edges_major = st.session_state.get("edges_major") or []
-	edges_minor = st.session_state.get("edges_minor") or []
-
-	# Check if we're in Standard Chart mode
-	chart_mode = st.session_state.get("chart_mode", "Circuits")
-	
-	if chart_mode == "Standard Chart":
-		# Standard Chart mode: compute aspects for PLANETS_PLUS only
-		
-		# Build list of bodies to compute aspects for: PLANETS_PLUS + selected TOGGLE_ASPECTS
-		aspect_bodies = dict(PLANETS_PLUS)
-		
-		# Get aspect_toggles from session state (will be set by render_circuit_toggles later)
-		aspect_toggles = st.session_state.get("aspect_toggles", {})
-		
-		# Add any TOGGLE_ASPECTS bodies that are enabled
-		for body_name, enabled in aspect_toggles.items():
-			if enabled and body_name in TOGGLE_ASPECTS:
-				aspect_bodies[body_name] = TOGGLE_ASPECTS[body_name]
-		
-		# Filter positions to only include aspect-enabled bodies
-		standard_pos = {name: deg for name, deg in pos.items() if name in aspect_bodies}
-		
-		# Get all MAJOR_OBJECTS that exist in the chart for display
-		major_pos = {name: deg for name, deg in pos.items() if name in MAJOR_OBJECTS}
-		
-		# Compute all aspects between aspect-enabled bodies
-		standard_edges = []
-		planets_list = list(standard_pos.keys())
-		for i in range(len(planets_list)):
-			for j in range(i + 1, len(planets_list)):
-				p1, p2 = planets_list[i], planets_list[j]
-				d1, d2 = standard_pos[p1], standard_pos[p2]
-				angle = abs(d1 - d2) % 360
-				if angle > 180:
-					angle = 360 - angle
-				
-				# Check all aspect types
-				for aspect_name, aspect_data in ASPECTS.items():
-					if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
-						standard_edges.append((p1, p2, aspect_name))
-						break  # Only one aspect per pair
-		
-		# Use render_chart for standard mode with all MAJOR_OBJECTS visible
-		try:
-			compass_on = st.session_state.get(COMPASS_KEY, True)
-			# Show all MAJOR_OBJECTS that actually exist in the chart
-			visible_objects = list(major_pos.keys())
-			# Ensure AC and DC are always included when compass rose is toggled
-			if compass_on:
-				for axis in ["Ascendant", "Descendant", "AC", "DC"]:
-					if axis in df["Object"].values and axis not in visible_objects:
-						visible_objects.append(axis)
-			rr = render_chart(
-				df,
-				dark_mode=resolved_dark_mode,
-				visible_toggle_state=visible_objects,  # Show all MAJOR_OBJECTS
-				edges_major=standard_edges,
-				edges_minor=[],
-				house_system=_selected_house_system(),
-				label_style=st.session_state.get("label_style", "glyph"),
-				compass_on=compass_on,
-				degree_markers=True,
-				zodiac_labels=True,
-				figsize=(6.0, 6.0),
-				dpi=144,
-			)
-			st.session_state["render_fig"] = rr.fig
-			st.session_state["render_result"] = rr
-			st.session_state["visible_objects"] = rr.visible_objects
-			st.session_state["active_shapes"] = []
-			st.session_state["last_cusps"] = rr.cusps
-			st.session_state["ai_text"] = None
-		except Exception as e:
-			st.error(f"Standard chart rendering failed: {e}")
-			return
-	else:
-		# Circuits mode: use existing logic
-		try:
-			fig, visible_objects, active_shapes, cusps, out_text = render_chart_with_shapes(
-				pos=pos,
-				patterns=patterns,
-				pattern_labels=pattern_labels,
-				toggles=toggles,
-				filaments=filaments,
-				house_system=_selected_house_system(),
-				combo_toggles=combo_toggles,
-				label_style=label_style,
-				singleton_map=singleton_map or {},
-				df=df,
-				dark_mode=resolved_dark_mode,
-				shapes=shapes,
-				shape_toggles_by_parent=shape_toggles_by_parent,
-				singleton_toggles=singleton_toggles,
-				major_edges_all=major_edges_all,
-			)
-		except Exception:
-			rr = render_chart(
-				df,
-				dark_mode=resolved_dark_mode,
-				visible_toggle_state=None,
-				edges_major=edges_major,
-				edges_minor=edges_minor,
-				house_system=_selected_house_system(),
-				label_style=st.session_state.get("label_style", "glyph"),
-				compass_on=st.session_state.get("toggle_compass_rose", True),
-				degree_markers=True,
-				zodiac_labels=True,
-				figsize=(6.0, 6.0),
-				dpi=144,
-			)
-			st.session_state["render_fig"] = rr.fig
-			st.session_state["render_result"] = rr
-			st.session_state["visible_objects"] = rr.visible_objects
-			st.session_state["active_shapes"] = []
-			st.session_state["last_cusps"] = rr.cusps
-			st.session_state["ai_text"] = None
-		else:
-			st.session_state["render_fig"] = fig
-			st.session_state["visible_objects"] = sorted(visible_objects)
-			st.session_state["active_shapes"] = active_shapes
-			st.session_state["last_cusps"] = cusps
-			st.session_state["ai_text"] = out_text
-			st.session_state["render_result"] = None
 
 def run_chart(lat, lon, tz_name):
 	"""
@@ -695,121 +408,27 @@ with col_left:
 			st.session_state["profile_birth_hour_24"] = birth_hour_24
 			st.session_state["profile_birth_minute"]  = birth_minute
 			
+			# ... (Birth form inputs above this line) ...
+
+			#             # Persist normalized values if you need them elsewhere - NOT NEEDED, done inside calc_chart_from_session!
+			#             st.session_state["profile_birth_hour_24"] = birth_hour_24
+			#             st.session_state["profile_birth_minute"]  = birth_minute
+
 			submitted = st.form_submit_button("Calculate Chart")
 
 			if submitted:
 				# Trigger the calculation for Chart 1 (no suffix).
-				# This reads all inputs from st.session_state (which were populated by the form's key values).
+				# This function now handles everything: Geocoding, Time Parsing, Core Calc, Post-Processing, and State Saving.
 				success = calculate_chart_from_session(suffix="")
-				
+
 				if success:
 					st.success(f"Chart successfully calculated for {st.session_state.get('city')}.")
-					# Clear the render_fig state to force the chart to be redrawn
-					st.session_state["render_fig"] = None
-					# Use st.rerun() to immediately display the chart if needed, 
-					# otherwise the chart will display on the next Streamlit run.
-					# st.rerun() 
+
+					# Use st.rerun() to immediately display the chart if needed
+					st.rerun() # Using rerun to see the result immediately
 				else:
 					# This message appears if geocoding failed or date/time parsing failed
 					st.error(f"Calculation failed! Please ensure all date/time fields are valid and the city lookup succeeds.")
-			
-			if submitted:
-				if unknown_time:
-					# Your policy for unknown time (noon chart is common)
-					hour_val   = 12
-					minute_val = 0
-				else:
-					hour_val   = birth_hour_24
-					minute_val = birth_minute
-
-				st.session_state["hour_val"] = hour_val
-				st.session_state["minute_val"] = minute_val
-
-				# City text comes from key="city"
-				city_query = (st.session_state.get("city") or "").strip()
-				st.session_state["city_query"] = city_query
-
-				try:
-					lat, lon, tz_name, formatted_address = geocode_city_with_timezone(
-						city_query
-					)
-					# Make the location visible to drawing_v2
-					if lat is not None and lon is not None:
-						st.session_state["chart_lat"] = float(lat)
-						st.session_state["chart_lon"] = float(lon)
-					else:
-						# Explicitly clear if lookup failed, so we fall back to 🌐
-						st.session_state["chart_lat"] = None
-						st.session_state["chart_lon"] = None
-
-				except Exception as e:
-					st.session_state["last_location"] = None
-					st.session_state["last_timezone"] = f"Lookup error: {e}"
-					lat = lon = tz_name = None
-				else:
-					if lat is not None and lon is not None and tz_name:
-						st.session_state["last_location"] = formatted_address or city_query
-						st.session_state["last_timezone"] = tz_name
-						st.session_state["current_lat"] = lat
-						st.session_state["current_lon"] = lon
-						st.session_state["current_tz_name"] = tz_name
-					else:
-						st.session_state["last_location"] = None
-						st.session_state["last_timezone"] = "City not found. Try a more specific query."
-
-				# Persist “profile_*” used by run_chart
-				st.session_state["profile_year"] = year
-				st.session_state["profile_month_name"] = month_name
-				st.session_state["profile_day"] = day
-				st.session_state["profile_hour"] = hour_val
-				st.session_state["profile_minute"] = minute_val
-				st.session_state["profile_city"] = city_query
-
-				# Calculate chart only on submit
-				if lat is None or lon is None or tz_name is None:
-					st.error("Please enter a valid city and make sure lookup succeeds.")
-				else:
-					run_chart(lat, lon, tz_name)
-
-				# --- Build chart datetime safely (handles Unknown Time + string widgets) ---
-				year  = int(st.session_state["year"])
-				month = MONTH_NAMES.index(st.session_state["month_name"]) + 1
-				day   = int(st.session_state["day"])
-
-				unknown_time = st.session_state.get("profile_unknown_time", False)
-				h_str = st.session_state.get("hour_12", "--")      # "--" or "01".."12"
-				m_str = st.session_state.get("minute_str", "--")   # "--" or "00".."59"
-				ap    = st.session_state.get("ampm", "--")         # "--" or "AM"/"PM"
-
-				chart_dt_local = None
-				chart_dt_utc   = None
-
-				if not (unknown_time or h_str == "--" or m_str == "--" or ap == "--"):
-					h12    = int(h_str)
-					minute = int(m_str)
-					if ap == "AM":
-						hour24 = 0 if h12 == 12 else h12
-					else:
-						hour24 = 12 if h12 == 12 else h12 + 12
-
-					if tz_name:
-						tzinfo = ZoneInfo(tz_name)
-						chart_dt_local = datetime(year, month, day, hour24, minute, tzinfo=tzinfo)
-						chart_dt_utc   = chart_dt_local.astimezone(ZoneInfo("UTC"))
-					else:
-						chart_dt_local = datetime(year, month, day, hour24, minute)
-						chart_dt_utc   = None
-
-				st.session_state["chart_dt_local"] = chart_dt_local
-				st.session_state["chart_dt_utc"]   = chart_dt_utc
-
-				# Location info BELOW, optional
-				if st.session_state.get("last_location"):
-					st.success(f"Found: {st.session_state['last_location']}")
-					if st.session_state.get("last_timezone"):
-						st.write(f"Timezone: {st.session_state['last_timezone']}")
-			elif st.session_state.get("last_timezone"):
-				st.error(st.session_state["last_timezone"])
 
 
 df_cached     = st.session_state.get("last_df")# --- Quick city UI state defaults & safe-clear ---
@@ -960,6 +579,7 @@ if df_cached is not None:
 
 	# Store aspect toggles to session state so _refresh_chart_figure can access them
 	st.session_state["aspect_toggles"] = aspect_toggles
+
 	col_1, col_2 = st.columns([2, 1])
 	with col_1:
 		st.write("")  # just a spacer
@@ -1084,109 +704,7 @@ if df_cached is not None:
 	st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
 
 	# --- Dispositor Graph (moved from popover) ---
-	import matplotlib.pyplot as plt
-	import networkx as nx
-	from house_selector_v2 import render_house_system_selector
-	
-	# Add anchor for jump button
-	st.markdown('<div id="ruler-hierarchies"></div>', unsafe_allow_html=True)
-	
-	header_col, toggle_col, house_col = st.columns([2, 2, 1])
-	
-	with header_col:
-		st.subheader("Ruler Hierarchies")
-	
-	with house_col:
-		render_house_system_selector()
-	
-	with toggle_col:
-		# House system selector (always render, but only relevant for "By House")
-		# Dispositor scope toggle
-		st.session_state.setdefault("dispositor_scope", "By Sign")
-		disp_scope = st.radio(
-			"Scope",
-			["By Sign", "By House"],
-			horizontal=True,
-			key="dispositor_scope",
-			label_visibility="collapsed"
-		)
-	
-	plot_data = st.session_state.get("plot_data")
-	if plot_data is not None:
-		# Determine which scope to use
-		if disp_scope == "By Sign":
-			scope_data = plot_data.get("by_sign")
-		else:  # By House
-			# Map lowercase session state keys to plot_data keys
-			house_key_map = {
-				"placidus": "Placidus",
-				"equal": "Equal",
-				"whole": "Whole Sign"
-			}
-			selected_house = st.session_state.get("house_system", "placidus")
-			plot_data_key = house_key_map.get(selected_house, "Placidus")
-			scope_data = plot_data.get(plot_data_key)
-
-		if scope_data and scope_data.get("raw_links"):
-			# Get header info from _current_chart_header_lines
-			from drawing_v2 import _current_chart_header_lines
-			name, date_line, time_line, city, extra_line = _current_chart_header_lines()
-			header_info = {
-				'name': name,
-				'date_line': date_line,
-				'time_line': time_line,
-				'city': city,
-				'extra_line': extra_line
-			}
-			disp_fig = plot_dispositor_graph(scope_data, header_info=header_info)
-			if disp_fig is not None:
-				# Create columns for legend and graph
-				legend_col, graph_col = st.columns([1, 5])
-				
-			with legend_col:
-				import os
-				import base64
-				png_dir = os.path.join(os.path.dirname(__file__), "pngs")
-				
-				# Load and encode images as base64
-				def img_to_b64(filename):
-					path = os.path.join(png_dir, filename)
-					if os.path.exists(path):
-						with open(path, "rb") as f:
-							return base64.b64encode(f.read()).decode()
-					return ""
-				
-				# Create legend with dark background
-				st.markdown("""
-					<div style="background-color: #262730; padding: 15px; border-radius: 8px;">
-						<strong style="color: white;">Legend</strong>
-					</div>
-				""", unsafe_allow_html=True)
-				
-				legend_items = [
-					("green.png", "Sovereign"),
-					("orange.png", "Dual rulership"),
-					("purple.png", "Loop"),
-					("purpleorange.png", "Dual + Loop"),
-					("blue.png", "Standard"),
-				]
-				
-				# Wrap all legend items in the dark background
-				legend_html = '<div style="background-color: #262730; padding: 15px; border-radius: 8px; margin-top: -15px;">'
-				for img_file, label in legend_items:
-					b64 = img_to_b64(img_file)
-					if b64:
-						legend_html += f'<div style="margin-bottom: 8px;"><img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:5px"/><span style="color: white;">{label}</span></div>'
-				legend_html += '<div style="color: white; margin-top: 8px;">↻ Self-Ruling</div>'
-				legend_html += '</div>'
-				st.markdown(legend_html, unsafe_allow_html=True)
-				
-			with graph_col:
-				st.pyplot(disp_fig, use_container_width=True)
-		else:
-			st.info("No dispositor graph to display.")
-	else:
-		st.info("Calculate a chart first.")
+	render_dispositor_section(st, df_cached)
 
 	st.subheader("🤓 Nerdy Chart Specs 📋")
 	unknown_time_chart = bool(

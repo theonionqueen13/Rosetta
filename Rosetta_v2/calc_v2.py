@@ -4,7 +4,7 @@ import swisseph as swe
 import networkx as nx
 from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
 from lookup_v2 import SIGNS, PLANETARY_RULERS
-
+import streamlit as st
 import datetime
 import pandas as pd
 
@@ -557,7 +557,6 @@ def calculate_chart(
 
 	# If aspects not included, return combined_df and plot_data
 	return combined_df, None, plot_data
-
 
 import matplotlib.pyplot as plt
 import networkx as nx

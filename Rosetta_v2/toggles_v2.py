@@ -84,8 +84,8 @@ def render_circuit_toggles(
 	# ---------- Header + events panel ----------
 	
 	# Adjust header based on chart mode
-	current_mode = st.session_state.get("chart_mode", "Circuits")
-	header_text = "🗺️Circuits" if current_mode == "Circuits" else "Standard Chart"
+	chart_mode = st.session_state.get("chart_mode", "Circuits")
+	header_text = "🗺️Circuits" if chart_mode == "Circuits" else "Standard Chart"
 
 	header_col, events_col, jump_col = st.columns([1, 6, 2])
 	with header_col:
@@ -118,7 +118,7 @@ def render_circuit_toggles(
 	st.divider()
 	
 	# ---------- Circuits Mode-Specific UI ----------
-	if current_mode == "Circuits":
+	if chart_mode == "Circuits":
 		c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
 
 		with c1:
@@ -249,7 +249,7 @@ def render_circuit_toggles(
 	circuits_col, spacer_col, options_col = st.columns([3, 1, 2])
 	
 	# Add Standard Chart aspect toggles in left column
-	if current_mode == "Standard Chart":
+	if chart_mode == "Standard Chart":
 		with circuits_col:
 			# Check if we're in synastry mode
 			synastry_mode = st.session_state.get("synastry_mode", False)
@@ -312,7 +312,7 @@ def render_circuit_toggles(
 
 	with circuits_col:
 		# Only show circuit patterns in Circuits mode
-		if current_mode == "Circuits":
+		if chart_mode == "Circuits":
 			# Pattern checkboxes + expanders
 			half = (len(patterns) + 1) // 2
 			left_patterns, right_patterns = st.columns(2)
