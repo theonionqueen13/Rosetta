@@ -1,5 +1,6 @@
 # src/chart_core.py
-from drawing_v2 import RenderResult, render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
+from drawing_v2 import RenderResult as DrawingV2RenderResult
+from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
 import streamlit as st
 import datetime as dt
 from zoneinfo import ZoneInfo
@@ -512,7 +513,7 @@ def calculate_chart_from_session(suffix: str = "") -> bool:
     
     fig_placeholder, ax_placeholder = None, None 
     
-    render_result = RenderResult( 
+    render_result = DrawingV2RenderResult( 
         fig=fig_placeholder, ax=ax_placeholder,
         positions=positions, cusps=cusps,
         visible_objects=visible_objects,
@@ -523,6 +524,7 @@ def calculate_chart_from_session(suffix: str = "") -> bool:
         patterns=patterns,
         shapes=shapes,
         singleton_map=singleton_map,
+		plot_data=plot_data,
     )
     
     st.session_state["render_result"] = render_result

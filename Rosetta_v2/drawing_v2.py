@@ -14,6 +14,8 @@ import streamlit as st
 from patterns_v2 import detect_shapes, connected_components_from_edges
 from now_v2 import _moon_phase_label_emoji
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from dataclasses import dataclass
+from typing import Any, List, Dict, Tuple
 
 try:  # Pandas is part of the calculation pipeline; import defensively.
 	import pandas as pd
@@ -236,119 +238,119 @@ def _segment_points(theta1: float, theta2: float, radius: float = 1.0, steps: in
 	return thetas, radii
 
 def _draw_gradient_line(
-    ax,
-    theta1: float,
-    theta2: float,
-    color_start: str,
-    color_end: str,
-    linewidth: float,
-    linestyle: str,
-    radius: float = 1.0,
+	ax,
+	theta1: float,
+	theta2: float,
+	color_start: str,
+	color_end: str,
+	linewidth: float,
+	linestyle: str,
+	radius: float = 1.0,
 ) -> None:
-    """
-    Draw a chord between two polar angles with either:
-      - SOLID (with gradient if colors differ), or
-      - DOTTED/DASHED/DASHDOT (simulated using many short solid segments),
-    so that we can keep a smooth color gradient AND a visible pattern.
-    """
-    def _vec(th):
-        return np.cos(th) * radius, np.sin(th) * radius
+	"""
+	Draw a chord between two polar angles with either:
+	  - SOLID (with gradient if colors differ), or
+	  - DOTTED/DASHED/DASHDOT (simulated using many short solid segments),
+	so that we can keep a smooth color gradient AND a visible pattern.
+	"""
+	def _vec(th):
+		return np.cos(th) * radius, np.sin(th) * radius
 
-    def _interp_xy(t):
-        x = (1.0 - t) * x1 + t * x2
-        y = (1.0 - t) * y1 + t * y2
-        return x, y
+	def _interp_xy(t):
+		x = (1.0 - t) * x1 + t * x2
+		y = (1.0 - t) * y1 + t * y2
+		return x, y
 
-    def _xy_to_polar(x, y):
-        return np.arctan2(y, x), np.hypot(x, y)
+	def _xy_to_polar(x, y):
+		return np.arctan2(y, x), np.hypot(x, y)
 
-    # endpoints in Cartesian on the unit ring
-    x1, y1 = _vec(theta1)
-    x2, y2 = _vec(theta2)
-    chord_len = float(np.hypot(x2 - x1, y2 - y1))  # ~[0, 2]
+	# endpoints in Cartesian on the unit ring
+	x1, y1 = _vec(theta1)
+	x2, y2 = _vec(theta2)
+	chord_len = float(np.hypot(x2 - x1, y2 - y1))  # ~[0, 2]
 
-    style = (linestyle or "solid").lower()
-    wants_pattern = style in ("dotted", "dashed", "dashdot")
+	style = (linestyle or "solid").lower()
+	wants_pattern = style in ("dotted", "dashed", "dashdot")
 
-    # ---------- PATTERNED (dotted/dashed) with GRADIENT ----------
-    if wants_pattern:
-        # Choose segment (dash) length and gap ratio that read well on screen.
-        # Scale lengths by chord_len so visuals are consistent across spans.
-        if style == "dotted":
-            # lots of short "dots"
-            seg_len = 0.02 * max(1.0, chord_len)     # length of a dot (in chord units)
-            gap_ratio = 1.8                          # gap ~1.8x segment -> clear dots
-        elif style == "dashdot":
-            seg_len = 0.05 * max(1.0, chord_len)
-            gap_ratio = 0.9
-        else:  # dashed
-            seg_len = 0.06 * max(1.0, chord_len)
-            gap_ratio = 0.7
+	# ---------- PATTERNED (dotted/dashed) with GRADIENT ----------
+	if wants_pattern:
+		# Choose segment (dash) length and gap ratio that read well on screen.
+		# Scale lengths by chord_len so visuals are consistent across spans.
+		if style == "dotted":
+			# lots of short "dots"
+			seg_len = 0.02 * max(1.0, chord_len)     # length of a dot (in chord units)
+			gap_ratio = 1.8                          # gap ~1.8x segment -> clear dots
+		elif style == "dashdot":
+			seg_len = 0.05 * max(1.0, chord_len)
+			gap_ratio = 0.9
+		else:  # dashed
+			seg_len = 0.06 * max(1.0, chord_len)
+			gap_ratio = 0.7
 
-        # Number of dashes; clamp for stability
-        step = seg_len * (1.0 + gap_ratio)
-        n = max(6, int(np.ceil(chord_len / max(1e-6, step))))
-        # How much of each cycle is "ink"
-        fill = seg_len / max(1e-6, step)             # (0,1)
+		# Number of dashes; clamp for stability
+		step = seg_len * (1.0 + gap_ratio)
+		n = max(6, int(np.ceil(chord_len / max(1e-6, step))))
+		# How much of each cycle is "ink"
+		fill = seg_len / max(1e-6, step)             # (0,1)
 
-        # Build tiny solid segments and color each by the gradient at its midpoint
-        seg_points = []
-        seg_colors = []
+		# Build tiny solid segments and color each by the gradient at its midpoint
+		seg_points = []
+		seg_colors = []
 
-        c0 = np.array(to_rgba(color_start))
-        c1 = np.array(to_rgba(color_end))
+		c0 = np.array(to_rgba(color_start))
+		c1 = np.array(to_rgba(color_end))
 
-        for i in range(n):
-            t0 = i / n
-            t1 = min(t0 + fill / n, 1.0)             # shorten to leave a gap
-            if t1 <= t0:
-                continue
+		for i in range(n):
+			t0 = i / n
+			t1 = min(t0 + fill / n, 1.0)             # shorten to leave a gap
+			if t1 <= t0:
+				continue
 
-            xm0, ym0 = _interp_xy(t0)
-            xm1, ym1 = _interp_xy(t1)
-            th0, r0 = _xy_to_polar(xm0, ym0)
-            th1, r1 = _xy_to_polar(xm1, ym1)
-            seg_points.append([[th0, r0], [th1, r1]])
+			xm0, ym0 = _interp_xy(t0)
+			xm1, ym1 = _interp_xy(t1)
+			th0, r0 = _xy_to_polar(xm0, ym0)
+			th1, r1 = _xy_to_polar(xm1, ym1)
+			seg_points.append([[th0, r0], [th1, r1]])
 
-            tm = 0.5 * (t0 + t1)
-            rgba = (1.0 - tm) * c0 + tm * c1
-            seg_colors.append(tuple(rgba))
+			tm = 0.5 * (t0 + t1)
+			rgba = (1.0 - tm) * c0 + tm * c1
+			seg_colors.append(tuple(rgba))
 
-        if not seg_points:
-            return
+		if not seg_points:
+			return
 
-        lc = LineCollection(
-            np.array(seg_points),
-            colors=seg_colors,
-            linewidth=linewidth,
-            linestyle="solid",           # each short segment is solid; spacing makes the pattern
-            capstyle="round",
-            joinstyle="round",
-        )
-        ax.add_collection(lc)
-        return
+		lc = LineCollection(
+			np.array(seg_points),
+			colors=seg_colors,
+			linewidth=linewidth,
+			linestyle="solid",           # each short segment is solid; spacing makes the pattern
+			capstyle="round",
+			joinstyle="round",
+		)
+		ax.add_collection(lc)
+		return
 
-    # ---------- SOLID ----------
-    # Build a single polyline; if colors differ, use a gradient LineCollection.
-    steps = max(16, int(64 * chord_len))
-    thetas, radii = _segment_points(theta1, theta2, radius=radius, steps=steps)
+	# ---------- SOLID ----------
+	# Build a single polyline; if colors differ, use a gradient LineCollection.
+	steps = max(16, int(64 * chord_len))
+	thetas, radii = _segment_points(theta1, theta2, radius=radius, steps=steps)
 
-    if color_start == color_end:
-        ax.plot(thetas, radii, color=color_start, linewidth=linewidth, linestyle="solid")
-        return
+	if color_start == color_end:
+		ax.plot(thetas, radii, color=color_start, linewidth=linewidth, linestyle="solid")
+		return
 
-    pts = np.column_stack([thetas, radii])
-    segs = np.stack([pts[:-1], pts[1:]], axis=1)
+	pts = np.column_stack([thetas, radii])
+	segs = np.stack([pts[:-1], pts[1:]], axis=1)
 
-    c0 = np.array(to_rgba(color_start))
-    c1 = np.array(to_rgba(color_end))
-    cols = [tuple((1.0 - t) * c0 + t * c1) for t in np.linspace(0, 1, len(segs))]
+	c0 = np.array(to_rgba(color_start))
+	c1 = np.array(to_rgba(color_end))
+	cols = [tuple((1.0 - t) * c0 + t * c1) for t in np.linspace(0, 1, len(segs))]
 
-    lc = LineCollection(segs, colors=cols, linewidth=linewidth)
-    lc.set_linestyle("solid")
-    lc.set_capstyle("round")
-    lc.set_joinstyle("round")
-    ax.add_collection(lc)
+	lc = LineCollection(segs, colors=cols, linewidth=linewidth)
+	lc.set_linestyle("solid")
+	lc.set_capstyle("round")
+	lc.set_joinstyle("round")
+	ax.add_collection(lc)
 
 
 def shape_color_for(shape_id: Any) -> str:
@@ -918,67 +920,67 @@ def draw_degree_markers(ax, asc_deg, dark_mode):
 				color=base_color, linewidth=1.2)
 
 def draw_zodiac_signs(ax, asc_deg, dark_mode):
-    """Draw zodiac wheel with colored element bands and zodiac glyphs."""
+	"""Draw zodiac wheel with colored element bands and zodiac glyphs."""
 
-    # --- Define element colors based on dark_mode ---
-    if dark_mode:
-        PASTEL_BLUE   = "#1567A5FF"  # blue
-        PASTEL_GREEN  = "#366E21FF"  # green
-        PASTEL_ORANGE = "#946D19FF"  # orange
-        PASTEL_RED    = "#6D2424FF"  # soft red/pink
-    else:
-        PASTEL_BLUE   = "#6D9EC4FF"  # blue
-        PASTEL_GREEN  = "#7CAF6AFF"  # green
-        PASTEL_ORANGE = "#D8B873FF"  # orange
-        PASTEL_RED    = "#CE7878FF"  # soft red/pink
+	# --- Define element colors based on dark_mode ---
+	if dark_mode:
+		PASTEL_BLUE   = "#1567A5FF"  # blue
+		PASTEL_GREEN  = "#366E21FF"  # green
+		PASTEL_ORANGE = "#946D19FF"  # orange
+		PASTEL_RED    = "#6D2424FF"  # soft red/pink
+	else:
+		PASTEL_BLUE   = "#6D9EC4FF"  # blue
+		PASTEL_GREEN  = "#7CAF6AFF"  # green
+		PASTEL_ORANGE = "#D8B873FF"  # orange
+		PASTEL_RED    = "#CE7878FF"  # soft red/pink
 
-    # --- Constants that are always needed ---
-    element_color = {
-        "fire":  PASTEL_BLUE,
-        "earth": PASTEL_RED,
-        "air":   PASTEL_GREEN,
-        "water": PASTEL_ORANGE,
-    }
-    elements = ["fire", "earth", "air", "water"] * 3
-    sector_width = np.deg2rad(30)  # each zodiac occupies 30 degrees
+	# --- Constants that are always needed ---
+	element_color = {
+		"fire":  PASTEL_BLUE,
+		"earth": PASTEL_RED,
+		"air":   PASTEL_GREEN,
+		"water": PASTEL_ORANGE,
+	}
+	elements = ["fire", "earth", "air", "water"] * 3
+	sector_width = np.deg2rad(30)  # each zodiac occupies 30 degrees
 
-    ring_inner, ring_outer = 1.45, 1.58
-    divider_inner, divider_outer = 1.457, 1.573
+	ring_inner, ring_outer = 1.45, 1.58
+	divider_inner, divider_outer = 1.457, 1.573
 
-    # --- Draw colored element bands ---
-    for i in range(12):
-        theta_left = deg_to_rad(i * 30, asc_deg)
-        ax.bar(
-            theta_left,
-            ring_outer - ring_inner,
-            width=sector_width,
-            bottom=ring_inner,
-            align="edge",
-            color=element_color[elements[i]],
-            edgecolor=None,
-            linewidth=0,
-            alpha=0.85,
-            zorder=0,
-        )
+	# --- Draw colored element bands ---
+	for i in range(12):
+		theta_left = deg_to_rad(i * 30, asc_deg)
+		ax.bar(
+			theta_left,
+			ring_outer - ring_inner,
+			width=sector_width,
+			bottom=ring_inner,
+			align="edge",
+			color=element_color[elements[i]],
+			edgecolor=None,
+			linewidth=0,
+			alpha=0.85,
+			zorder=0,
+		)
 
-    # --- Draw zodiac glyphs ---
-    for i, base_deg in enumerate(range(0, 360, 30)):
-        rad = deg_to_rad(base_deg + 15, asc_deg)
-        ax.text(
-            rad, 1.50, ZODIAC_SIGNS[i],
-            ha="center", va="center",
-            fontsize=16, fontweight="bold",
-            color=ZODIAC_COLORS[i],
-            zorder=1,
-        )
+	# --- Draw zodiac glyphs ---
+	for i, base_deg in enumerate(range(0, 360, 30)):
+		rad = deg_to_rad(base_deg + 15, asc_deg)
+		ax.text(
+			rad, 1.50, ZODIAC_SIGNS[i],
+			ha="center", va="center",
+			fontsize=16, fontweight="bold",
+			color=ZODIAC_COLORS[i],
+			zorder=1,
+		)
 
-    # --- Draw dividers for each house cusp ---
-    asc_sign_start = int(asc_deg // 30) * 30.0
-    cusps = [(asc_sign_start + i * 30.0) % 360.0 for i in range(12)]
-    for deg in cusps:
-        rad = deg_to_rad(deg, asc_deg)
-        ax.plot([rad, rad], [divider_inner, divider_outer],
-                color="black", linestyle="solid", linewidth=1, zorder=5)
+	# --- Draw dividers for each house cusp ---
+	asc_sign_start = int(asc_deg // 30) * 30.0
+	cusps = [(asc_sign_start + i * 30.0) % 360.0 for i in range(12)]
+	for deg in cusps:
+		rad = deg_to_rad(deg, asc_deg)
+		ax.plot([rad, rad], [divider_inner, divider_outer],
+				color="black", linestyle="solid", linewidth=1, zorder=5)
 
 
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=None):
@@ -1448,7 +1450,7 @@ def draw_center_earth(ax, *, size: float = 0.22, zorder: int = 10_000) -> None:
 		"🌍": "earth_africa.png",
 		"🌎": "earth_americas.png",
 		"🌏": "earth_asia.png",
-		"🌐": "earth_unknown.png",
+		"🌐": "earth_americas.png",
 	}
 	fname = mapping.get(emoji, "earth_unknown.png")
 
@@ -1468,6 +1470,7 @@ def draw_center_earth(ax, *, size: float = 0.22, zorder: int = 10_000) -> None:
 
 @dataclass
 class RenderResult:
+	# Existing Chart Drawing Fields
 	fig: Any
 	ax: Any
 	positions: dict[str, float]
@@ -1475,6 +1478,16 @@ class RenderResult:
 	visible_objects: list[str]
 	drawn_major_edges: list[tuple[str, str, str]]
 	drawn_minor_edges: list[tuple[str, str, str]]
+	
+	# ⬇️ NEW FIELDS FOR CIRCUIT TOGGLES ⬇️
+	patterns: List[List[str]]          # e.g., [['Sun', 'Moon'], ['Mars', 'Jupiter']]
+	shapes: List[Dict[str, Any]]       # e.g., [{'id': 'T-Square', 'parent': 0, ...}]
+	singleton_map: Dict[str, Any]      # e.g., {'Pluto': {'lon': 15.1, 'house': 10, ...}}
+	plot_data: Dict[str, Any]
+
+	# Optional: Add the DataFrame/Summary data for robustness
+	# df_positions: Any                 # Combined chart data frame
+	# chart_data_summary: Any           # Summary data
 
 def render_chart(
 	df: pd.DataFrame,
@@ -1490,7 +1503,14 @@ def render_chart(
 	zodiac_labels: bool = True,
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
+	patterns: List[List[str]] = None,
+	shapes: List[Dict[str, Any]] = None,
+	singleton_map: Dict[str, Any] = None,
 ):
+	# Set safe defaults immediately inside the function
+	patterns = patterns or []
+	shapes = shapes or []
+	singleton_map = singleton_map or {}
 	"""Render the chart wheel using already-curated data."""
 	unknown_time_chart = bool(
 		st.session_state.get("chart_unknown_time")
@@ -1587,18 +1607,23 @@ def render_chart(
 		for obj in ["Ascendant", "Descendant", "MC", "IC", "North Node", "South Node"]:
 			if obj in compass_positions and obj not in positions:
 				positions[obj] = compass_positions[obj]
-    
+	
 	draw_center_earth(ax)
 
 	return RenderResult(
-		fig=fig,
-		ax=ax,
-		positions=positions,
-		cusps=cusps,
-		visible_objects=sorted(positions.keys()),
-		drawn_major_edges=major_edges_drawn,
-		drawn_minor_edges=minor_edges_drawn,
-	)
+    	fig=fig,
+    	ax=ax,
+    	positions=positions,
+    	cusps=cusps,
+    	visible_objects=resolve_visible_objects,
+    	drawn_major_edges=major_edges_drawn,
+    	drawn_minor_edges=minor_edges_drawn,
+        
+        # ⬇️ ADD THESE ⬇️
+        patterns=patterns,
+        shapes=shapes,
+        singleton_map=singleton_map,
+    )
 
 # --- CHART RENDERER (full; calls your new helpers) -------------------------
 def render_chart_with_shapes(
