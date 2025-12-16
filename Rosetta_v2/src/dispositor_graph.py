@@ -111,6 +111,9 @@ def render_dispositor_section(st, df_cached) -> None:
 				st.markdown(legend_html, unsafe_allow_html=True)
 				
 			with graph_col:
+				import matplotlib.pyplot as plt
+				if not isinstance(disp_fig, plt.Figure):
+					st.error(f"Debug: disp_fig is of type {type(disp_fig)}")
 				st.pyplot(disp_fig, use_container_width=True)
 		else:
 			st.info("No dispositor graph to display.")

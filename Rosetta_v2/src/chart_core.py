@@ -1,45 +1,41 @@
 # src/chart_core.py
-from drawing_v2 import RenderResult as DrawingV2RenderResult
-from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
 import streamlit as st
+import matplotlib.pyplot as plt
 import datetime as dt
 from zoneinfo import ZoneInfo
-from typing import Optional, Dict, Any, Tuple
-import pandas as pd
+from typing import Dict, Any
+from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
+from drawing_v2 import RenderResult as result
 from toggles_v2 import COMPASS_KEY
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups
-# Import the new geocoding module
 from src.geocoding import geocode_city_with_timezone
-# Import the core calculation functions from the original calc_v2.py
-from calc_v2 import calculate_chart, chart_sect_from_df, build_aspect_edges, \
-                    annotate_reception, build_dispositor_tables, \
-                    build_conjunction_clusters, plot_dispositor_graph 
 from event_lookup_v2 import update_events_html_state
-# You'll also need the global constants from the lookup file:
 from lookup_v2 import MAJOR_OBJECTS, TOGGLE_ASPECTS, ASPECTS, PLANETS_PLUS
-# And the house system selector:
 from house_selector_v2 import _selected_house_system
+from calc_v2 import calculate_chart, chart_sect_from_df, build_aspect_edges, \
+					annotate_reception, build_dispositor_tables, \
+					build_conjunction_clusters, plot_dispositor_graph 
 
 
 def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
-    """Extracts all necessary birth data inputs from session state."""
-    # This structure mirrors the inputs used in your original file.
-    data = {}
-    data["year"] = st.session_state.get(f"year{suffix}")
-    data["month_name"] = st.session_state.get(f"month_name{suffix}")
-    data["day"] = st.session_state.get(f"day{suffix}")
-    data["hour_12"] = st.session_state.get(f"hour_12{suffix}")
-    data["minute_str"] = st.session_state.get(f"minute_str{suffix}")
-    data["ampm"] = st.session_state.get(f"ampm{suffix}")
-    data["city"] = st.session_state.get(f"city{suffix}")
-    
-    # Non-suffixed inputs required for calculation
-    data["house_system"] = st.session_state.get("house_system", "placidus")
-    
-    # Crucial: Get the unknown time flag
-    data["unknown_time_flag"] = st.session_state.get(f"profile_unknown_time{suffix}", False)
-    
-    return data
+	"""Extracts all necessary birth data inputs from session state."""
+	# This structure mirrors the inputs used in your original file.
+	data = {}
+	data["year"] = st.session_state.get(f"year{suffix}")
+	data["month_name"] = st.session_state.get(f"month_name{suffix}")
+	data["day"] = st.session_state.get(f"day{suffix}")
+	data["hour_12"] = st.session_state.get(f"hour_12{suffix}")
+	data["minute_str"] = st.session_state.get(f"minute_str{suffix}")
+	data["ampm"] = st.session_state.get(f"ampm{suffix}")
+	data["city"] = st.session_state.get(f"city{suffix}")
+	
+	# Non-suffixed inputs required for calculation
+	data["house_system"] = st.session_state.get("house_system", "placidus")
+	
+	# Crucial: Get the unknown time flag
+	data["unknown_time_flag"] = st.session_state.get(f"profile_unknown_time{suffix}", False)
+	
+	return data
 
 resolved_dark_mode=st.session_state.get("dark_mode", False)
 
@@ -168,11 +164,12 @@ def _refresh_chart_figure():
 			st.session_state["active_shapes"] = []
 			st.session_state["last_cusps"] = rr.cusps
 			st.session_state["ai_text"] = None
-			return
+			return rr
 		except Exception as e:
 			st.error(f"Biwheel chart rendering failed: {e}")
 			# Fall through to regular chart rendering
 	
+
 	# Regular single-chart mode
 	df = st.session_state.get("last_df")
 	pos = st.session_state.get("chart_positions")
@@ -185,7 +182,7 @@ def _refresh_chart_figure():
 		return
 
 	# ⬇️ START: NEW BLOCK TO PULL CIRCUIT DATA FROM RENDER_RESULT ⬇️
-	# Retrieve the circuit data from the stored RenderResult set by calculate_chart_from_session
+	# Retrieve the circuit data from the stored RenderResult set by run_chart
 	stored_rr = st.session_state.get("render_result")
 	
 	# The data is already available in Session State keys, but we use a fallback if needed
@@ -310,30 +307,23 @@ def _refresh_chart_figure():
 			st.session_state["active_shapes"] = []
 			st.session_state["last_cusps"] = rr.cusps
 			st.session_state["ai_text"] = None
+			return rr
 		except Exception as e:
 			st.error(f"Standard chart rendering failed: {e}")
 			return
 	else:
 		# Circuits mode: use existing logic
 		try:
-			fig, visible_objects, active_shapes, cusps, out_text = render_chart_with_shapes(
-				pos=pos,
-				patterns=patterns,
-				pattern_labels=pattern_labels,
-				toggles=toggles,
-				filaments=filaments,
-				house_system=_selected_house_system(),
-				combo_toggles=combo_toggles,
-				label_style=label_style,
-				singleton_map=singleton_map or {},
-				df=df,
-				dark_mode=resolved_dark_mode,
-				shapes=shapes,
-				shape_toggles_by_parent=shape_toggles_by_parent,
-				singleton_toggles=singleton_toggles,
-				major_edges_all=major_edges_all,
+			# 1. Call the complex renderer and store as 'rr'
+			rr = render_chart_with_shapes(
+				pos, patterns, pattern_labels, toggles,
+				filaments, combo_toggles, label_style, singleton_map, df,
+				house_system, dark_mode, shapes, shape_toggles_by_parent, 
+				singleton_toggles, major_edges_all
 			)
-		except Exception:
+			return rr
+		except Exception as e:
+			st.error(f"Complex chart rendering failed: {e}")
 			rr = render_chart(
 				df,
 				dark_mode=resolved_dark_mode,
@@ -351,217 +341,217 @@ def _refresh_chart_figure():
 			st.session_state["render_fig"] = rr.fig
 			st.session_state["render_result"] = rr
 			st.session_state["visible_objects"] = rr.visible_objects
-			st.session_state["active_shapes"] = []
+			st.session_state["active_shapes"] = getattr(rr, "shapes", []) # Use [] if shapes is None
 			st.session_state["last_cusps"] = rr.cusps
-			st.session_state["ai_text"] = None
-		else:
-			st.session_state["render_fig"] = fig
-			st.session_state["visible_objects"] = sorted(visible_objects)
-			st.session_state["active_shapes"] = active_shapes
-			st.session_state["last_cusps"] = cusps
-			st.session_state["ai_text"] = out_text
-			st.session_state["render_result"] = None
+			st.session_state["ai_text"] = getattr(rr, "out_text", None)
+			fig = plt.figure(figsize=figsize, dpi=dpi)
+			figsize: tuple[float, float] = (5.0, 5.0),
+			dpi: int = 144,
+
+			return rr
+
+rr = _refresh_chart_figure()
+
+def run_chart(suffix: str = "") -> bool:
+	"""
+	Core function to read input data, geocode, calculate the chart, 
+	perform post-processing (including circuit detection), and 
+	store all results back into session state (with suffix).
+	
+	Returns True on success, False otherwise.
+	"""
+	# Initialize variables to prevent scope errors and ensure availability
+	utc_dt = None 
+	patterns = []
+	shapes = []
+	singleton_map = {}
+	filaments = []
+	combos = {}
+	major_edges_all = []
+	
+	# Assuming get_chart_inputs_from_session is defined and returns a dict
+	inputs = get_chart_inputs_from_session(suffix)
+	city = inputs.get("city")
+	chart_unknown_time = inputs.get("unknown_time_flag")
+	
+	# 1. Input Validation and Time Parsing (UNCHANGED)
+	try:
+		year = int(inputs.get("year"))
+		month = dt.datetime.strptime(inputs.get("month_name"), "%B").month
+		day = int(inputs.get("day"))
+		hour_12 = int(inputs.get("hour_12"))
+		minute = int(inputs.get("minute_str"))
+		ampm = inputs.get("ampm", "AM")
+		
+		# Convert 12-hour time to 24-hour time
+		hour_24 = hour_12
+		if ampm == "PM" and hour_12 != 12:
+			hour_24 += 12
+		elif ampm == "AM" and hour_12 == 12: # Midnight
+			hour_24 = 0
 			
-def calculate_chart_from_session(suffix: str = "") -> bool:
-    """
-    Core function to read input data, geocode, calculate the chart, 
-    perform post-processing (including circuit detection), and 
-    store all results back into session state (with suffix).
-    
-    Returns True on success, False otherwise.
-    """
-    # Initialize variables to prevent scope errors and ensure availability
-    utc_dt = None 
-    patterns = []
-    shapes = []
-    singleton_map = {}
-    filaments = []
-    combos = {}
-    major_edges_all = []
-    
-    # Assuming get_chart_inputs_from_session is defined and returns a dict
-    inputs = get_chart_inputs_from_session(suffix)
-    city = inputs.get("city")
-    chart_unknown_time = inputs.get("unknown_time_flag")
-    
-    # 1. Input Validation and Time Parsing (UNCHANGED)
-    try:
-        year = int(inputs.get("year"))
-        month = dt.datetime.strptime(inputs.get("month_name"), "%B").month
-        day = int(inputs.get("day"))
-        hour_12 = int(inputs.get("hour_12"))
-        minute = int(inputs.get("minute_str"))
-        ampm = inputs.get("ampm", "AM")
-        
-        # Convert 12-hour time to 24-hour time
-        hour_24 = hour_12
-        if ampm == "PM" and hour_12 != 12:
-            hour_24 += 12
-        elif ampm == "AM" and hour_12 == 12: # Midnight
-            hour_24 = 0
-            
-        local_dt = dt.datetime(year, month, day, hour_24, minute)
-        
-    except Exception:
-        return False
-        
-    # 2. Geocoding and Timezone (UNCHANGED)
-    lat, lon, tz_name, _ = geocode_city_with_timezone(city)
-    
-    if lat is None or lon is None or tz_name is None:
-        return False
-        
-    # 3. Timezone Conversion (local -> UTC) (UNCHANGED)
-    try:
-        tz = ZoneInfo(tz_name)
-        local_dt_aware = local_dt.replace(tzinfo=tz)
-        utc_dt = local_dt_aware.astimezone(dt.timezone.utc).replace(tzinfo=None)
-    except Exception:
-        return False
-        
-    # ⬇️ ADDED: OLD RUN_CHART STATE UPDATES (before calc) ⬇️
-    st.session_state["chart_dt_utc"] = utc_dt # Store new UTC time
-    st.session_state[COMPASS_KEY] = True     # Default Compass Rose On
-    update_events_html_state(utc_dt)
-        
-    # 4. Core Calculation (include_aspects=False is intentional for new flow)
-    try:
-        utc_tz_offset = 0
-        (
-            df_positions,
-            aspect_df_result,
-            plot_data
-        ) = calculate_chart(
-            year=utc_dt.year, month=utc_dt.month, day=utc_dt.day,
-            hour=utc_dt.hour, minute=utc_dt.minute,
-            tz_offset=utc_tz_offset, lat=lat, lon=lon,
-            input_is_ut=True, # Corrected input flag
-            tz_name=tz_name, 
-            house_system=inputs["house_system"],
-            include_aspects=True, # Calculate edges/aspects separately
-            unknown_time=chart_unknown_time,
-        )
-        
-        house_angles_df = df_positions[df_positions["Object"].str.contains("cusp")].copy()
-        chart_data_summary = df_positions 
+		local_dt = dt.datetime(year, month, day, hour_24, minute)
 		
-        st.session_state["DISPOSITOR_GRAPH_DATA"] = plot_data
+	except Exception:
+		return False
 		
-    except Exception as e:
-        st.error(f"Core astrological calculation failed: {e}")
-        return False
+	# 2. Geocoding and Timezone (UNCHANGED)
+	lat, lon, tz_name, _ = geocode_city_with_timezone(city)
+	
+	if lat is None or lon is None or tz_name is None:
+		return False
+		
+	# 3. Timezone Conversion (local -> UTC) (UNCHANGED)
+	try:
+		tz = ZoneInfo(tz_name)
+		local_dt_aware = local_dt.replace(tzinfo=tz)
+		utc_dt = local_dt_aware.astimezone(dt.timezone.utc).replace(tzinfo=None)
+	except Exception:
+		return False
+		
+	# ⬇️ ADDED: OLD RUN_CHART STATE UPDATES (before calc) ⬇️
+	st.session_state["chart_dt_utc"] = utc_dt # Store new UTC time
+	st.session_state[COMPASS_KEY] = True     # Default Compass Rose On
+	update_events_html_state(utc_dt)
+		
+	# 4. Core Calculation (include_aspects=False is intentional for new flow)
+	try:
+		utc_tz_offset = 0
+		(
+			df_positions,
+			aspect_df_result,
+			plot_data
+		) = calculate_chart(
+			year=utc_dt.year, month=utc_dt.month, day=utc_dt.day,
+			hour=utc_dt.hour, minute=utc_dt.minute,
+			tz_offset=utc_tz_offset, lat=lat, lon=lon,
+			input_is_ut=True, # Corrected input flag
+			tz_name=tz_name, 
+			house_system=inputs["house_system"],
+			include_aspects=True, # Calculate edges/aspects separately
+			unknown_time=chart_unknown_time,
+		)
+		
+		house_angles_df = df_positions[df_positions["Object"].str.contains("cusp")].copy()
+		chart_data_summary = df_positions 
+		
+		st.session_state["DISPOSITOR_GRAPH_DATA"] = plot_data
+		
+	except Exception as e:
+		st.error(f"Core astrological calculation failed: {e}")
+		return False
 
-    # ------------------------------------------------------------------
-    # 5. POST-PROCESSING (All Logic from run_chart is re-added here)
-    # ------------------------------------------------------------------
-    
-    # Aspect Edge Calculation
-    include_compass_rose = st.session_state.get("ui_compass_overlay", False) 
-    edges_major, edges_minor = build_aspect_edges(
-        df_positions, 
-        compass_rose=include_compass_rose
-    )
-    
-    # ⬇️ MISSING POST-PROCESSING ADDED ⬇️
-    # Annotate Reception
-    df_positions = annotate_reception(df_positions, edges_major)
-    
-    # Chart Sect
-    try:
-        st.session_state["last_sect"] = chart_sect_from_df(df_positions)
-        st.session_state["last_sect_error"] = None
-    except Exception as e:
-        st.session_state["last_sect"] = None
-        st.session_state["last_sect_error"] = str(e)
-    
-    # Conjunction Clusters
-    clusters_rows = build_conjunction_clusters(df_positions, edges_major)
-    st.session_state["conj_clusters_rows"] = clusters_rows
-    
-    # Dispositors (already existed, but ensures order)
-    dispositor_summary_rows, dispositor_chains_rows = build_dispositor_tables(df_positions)
-    
-    # ⬇️ CIRCUIT/SHAPE/SINGLETON DETECTION (CORRECTED SIGNATURE) ⬇️
-    try:
-        # Corrected call to get all 3 outputs (was butchered in refactor)
-        pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(df_positions, edges_major)
-        
-        patterns = [sorted(list(s)) for s in patterns_sets]
-        shapes = detect_shapes(pos_chart, patterns_sets, major_edges_all)
-        
-        # Missing minor links/singletons logic added back
-        filaments, singleton_map = detect_minor_links_from_dataframe(df_positions, edges_major)
-        combos = generate_combo_groups(filaments)
-        
-    except Exception as e:
-        print(f"Warning: Circuit detection failed: {e}")
-        # Defaults remain as empty lists/dicts
-        pos_chart = {}
-        
-    # ------------------------------------------------------------------
-    # 6. Store ALL Results in RenderResult Object
-    # ------------------------------------------------------------------
-    
-    # Prepare data for RenderResult
-    positions = dict(zip(df_positions['Object'], df_positions['Longitude']))
-    cusps = list(house_angles_df['Longitude'])
-    visible_objects = st.session_state.get(f"visible_objects{suffix}", [])
-    
-    # FIX: Corrected list comprehension for edges (from last step)
-    drawn_major_edges = [tuple(e) for e in edges_major] 
-    drawn_minor_edges = [tuple(e) for e in edges_minor]
-    
-    fig_placeholder, ax_placeholder = None, None 
-    
-    render_result = DrawingV2RenderResult( 
-        fig=fig_placeholder, ax=ax_placeholder,
-        positions=positions, cusps=cusps,
-        visible_objects=visible_objects,
-        drawn_major_edges=drawn_major_edges,
-        drawn_minor_edges=drawn_minor_edges,
-        
-        # CIRCUIT DATA
-        patterns=patterns,
-        shapes=shapes,
-        singleton_map=singleton_map,
+	# ------------------------------------------------------------------
+	# 5. POST-PROCESSING (All Logic from run_chart is re-added here)
+	# ------------------------------------------------------------------
+	
+	# Aspect Edge Calculation
+	include_compass_rose = st.session_state.get("ui_compass_overlay", False) 
+	edges_major, edges_minor = build_aspect_edges(
+		df_positions, 
+		compass_rose=include_compass_rose
+	)
+	
+	# ⬇️ MISSING POST-PROCESSING ADDED ⬇️
+	# Annotate Reception
+	df_positions = annotate_reception(df_positions, edges_major)
+	
+	# Chart Sect
+	try:
+		st.session_state["last_sect"] = chart_sect_from_df(df_positions)
+		st.session_state["last_sect_error"] = None
+	except Exception as e:
+		st.session_state["last_sect"] = None
+		st.session_state["last_sect_error"] = str(e)
+	
+	# Conjunction Clusters
+	clusters_rows = build_conjunction_clusters(df_positions, edges_major)
+	st.session_state["conj_clusters_rows"] = clusters_rows
+	
+	# Dispositors (already existed, but ensures order)
+	dispositor_summary_rows, dispositor_chains_rows = build_dispositor_tables(df_positions)
+	
+	# ⬇️ CIRCUIT/SHAPE/SINGLETON DETECTION (CORRECTED SIGNATURE) ⬇️
+	try:
+		# Corrected call to get all 3 outputs (was butchered in refactor)
+		pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(df_positions, edges_major)
+		
+		patterns = [sorted(list(s)) for s in patterns_sets]
+		shapes = detect_shapes(pos_chart, patterns_sets, major_edges_all)
+		
+		# Missing minor links/singletons logic added back
+		filaments, singleton_map = detect_minor_links_from_dataframe(df_positions, edges_major)
+		combos = generate_combo_groups(filaments)
+		
+	except Exception as e:
+		print(f"Warning: Circuit detection failed: {e}")
+		# Defaults remain as empty lists/dicts
+		pos_chart = {}
+		
+	# ------------------------------------------------------------------
+	# 6. Store ALL Results in RenderResult Object
+	# ------------------------------------------------------------------
+	
+	# Prepare data for RenderResult
+	positions = dict(zip(df_positions['Object'], df_positions['Longitude']))
+	cusps = list(house_angles_df['Longitude'])
+	visible_objects = st.session_state.get(f"visible_objects{suffix}", [])
+	
+	# FIX: Corrected list comprehension for edges (from last step)
+	drawn_major_edges = [tuple(e) for e in edges_major] 
+	drawn_minor_edges = [tuple(e) for e in edges_minor]
+	
+	fig_placeholder, ax_placeholder = None, None 
+	
+	render_result = result( 
+		fig=fig_placeholder, ax=ax_placeholder,
+		positions=positions, cusps=cusps,
+		visible_objects=visible_objects,
+		drawn_major_edges=drawn_major_edges,
+		drawn_minor_edges=drawn_minor_edges,
+		
+		# CIRCUIT DATA
+		patterns=patterns,
+		shapes=shapes,
+		singleton_map=singleton_map,
 		plot_data=plot_data,
-    )
-    
-    st.session_state["render_result"] = render_result
-    
-    # ------------------------------------------------------------------
-    # 7. Final Session State Keys (for old code compatibility)
-    # ------------------------------------------------------------------
-    # Restore the large update block from run_chart
-    st.session_state.update({
-        f"last_df{suffix}": df_positions,
-        f"last_aspect_df{suffix}": aspect_df_result, # Added back
-        f"edges_major{suffix}": edges_major,
-        f"edges_minor{suffix}": edges_minor,
-        f"patterns{suffix}": patterns,
-        f"shapes{suffix}": shapes,
-        f"filaments{suffix}": filaments,           # Added back
-        f"singleton_map{suffix}": singleton_map,
-        f"combos{suffix}": combos,                 # Added back
-        f"chart_positions{suffix}": pos_chart,     # Added back (now pos_chart)
-        f"major_edges_all{suffix}": major_edges_all, # Added back
-        f"chart_dt_utc{suffix}": utc_dt,
-        f"chart_unknown_time{suffix}": chart_unknown_time,
-        f"house_angles_df{suffix}": house_angles_df,
-        f"dispositor_summary_rows{suffix}": dispositor_summary_rows,
-        f"dispositor_chains_rows{suffix}": dispositor_chains_rows,
-    })
+	)
+	
+	st.session_state["render_result"] = render_result
+	
+	# ------------------------------------------------------------------
+	# 7. Final Session State Keys (for old code compatibility)
+	# ------------------------------------------------------------------
+	# Restore the large update block from run_chart
+	st.session_state.update({
+		f"last_df{suffix}": df_positions,
+		f"last_aspect_df{suffix}": aspect_df_result, # Added back
+		f"edges_major{suffix}": edges_major,
+		f"edges_minor{suffix}": edges_minor,
+		f"patterns{suffix}": patterns,
+		f"shapes{suffix}": shapes,
+		f"filaments{suffix}": filaments,           # Added back
+		f"singleton_map{suffix}": singleton_map,
+		f"combos{suffix}": combos,                 # Added back
+		f"chart_positions{suffix}": pos_chart,     # Added back (now pos_chart)
+		f"major_edges_all{suffix}": major_edges_all, # Added back
+		f"chart_dt_utc{suffix}": utc_dt,
+		f"chart_unknown_time{suffix}": chart_unknown_time,
+		f"house_angles_df{suffix}": house_angles_df,
+		f"dispositor_summary_rows{suffix}": dispositor_summary_rows,
+		f"dispositor_chains_rows{suffix}": dispositor_chains_rows,
+	})
 
-    # 8. Trigger Figure Refresh (MISSING CALL FROM run_chart)
-    _refresh_chart_figure()
-    
-    # 9. UI State Defaults (MISSING BLOCK FROM run_chart)
-    for i in range(len(patterns)):
-        st.session_state.setdefault(f"toggle_pattern_{i}", False)
-        st.session_state.setdefault(f"circuit_name_{i}", f"Circuit {i+1}")
+	# 8. Trigger Figure Refresh (MISSING CALL FROM run_chart)
+	_refresh_chart_figure()
+	
+	# 9. UI State Defaults (MISSING BLOCK FROM run_chart)
+	for i in range(len(patterns)):
+		st.session_state.setdefault(f"toggle_pattern_{i}", False)
+		st.session_state.setdefault(f"circuit_name_{i}", f"Circuit {i+1}")
 
-    if singleton_map:
-        for planet in singleton_map.keys():
-            st.session_state.setdefault(f"singleton_{planet}", False)
+	if singleton_map:
+		for planet in singleton_map.keys():
+			st.session_state.setdefault(f"singleton_{planet}", False)
 
-    return True
+	return True

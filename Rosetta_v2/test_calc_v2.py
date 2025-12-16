@@ -1,52 +1,45 @@
-import os
-# --- Set Swiss Ephemeris path before any other imports ---
+import os, sys
 import swisseph as swe
 EPHE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "ephe"))
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
 os.environ["SE_EPHE_PATH"] = EPHE_PATH
 swe.set_ephe_path(EPHE_PATH)
-
-from typing import Dict, Any, List, Optional, Tuple
+from src.ui_utils import apply_custom_css, set_background_for_theme
+from src.test_data import apply_test_chart_to_session, MONTH_NAMES
+from src.geocoding import geocode_city_with_timezone
+from src.chart_core import run_chart, _refresh_chart_figure
+from src.state_manager import swap_primary_and_secondary_charts
+from src.dispositor_graph import render_dispositor_section
 from src.data_stubs import (
 	current_user_id, save_user_profile_db, load_user_profiles_db, 
 	delete_user_profile_db, community_save, community_list, 
 	community_get, community_load, community_delete, is_admin
 )
-from src.ui_utils import apply_custom_css, set_background_for_theme
-from src.test_data import apply_test_chart_to_session, MONTH_NAMES
-from src.geocoding import geocode_city_with_timezone
-from src.chart_core import calculate_chart_from_session, _refresh_chart_figure
-from src.state_manager import swap_primary_and_secondary_charts
-from src.dispositor_graph import render_dispositor_section
-import sys
-
-# Add the Rosetta project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
-
-from typing import Dict, Any, List, Optional, Tuple
 from house_selector_v2 import _selected_house_system
 from donate_v2 import donate_chart
 from now_v2 import render_now_widget
 from event_lookup_v2 import update_events_html_state
 from datetime import datetime
-from zoneinfo import ZoneInfo
-import pytz
 from profiles_v2 import format_object_profile_html, ordered_object_rows
-import os, importlib.util, streamlit as st
+import os, streamlit as st
+import matplotlib.pyplot as plt
 from interp import ChartInterpreter
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
+from drawing_v2 import RenderResult, render_chart, render_chart_with_shapes
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
+from lookup_v2 import SIGNS, PLANETARY_RULERS, PLANETS_PLUS, ASPECTS, MAJOR_OBJECTS, TOGGLE_ASPECTS
 from calc_v2 import (
 	calculate_chart, chart_sect_from_df, build_aspect_edges, 
 	annotate_reception, build_dispositor_tables, 
 	build_conjunction_clusters
 )
-from lookup_v2 import SIGNS, PLANETARY_RULERS, PLANETS_PLUS, ASPECTS, MAJOR_OBJECTS, TOGGLE_ASPECTS
 
+result = st.session_state.get("render_result")
 # Key initialization:
 st.session_state.setdefault("last_test_chart", None)
 st.session_state.setdefault("last_test_chart_2", None)
@@ -66,9 +59,7 @@ st.session_state.setdefault("defaults_loaded", False)
 st.session_state.setdefault("test_chart_2", "Custom")
 
 apply_custom_css() # Call the imported CSS function
-
 current_user_id = "test-user"
-
 COMPASS_KEY = "ui_compass_overlay"
 
 # --- Pick backgrounds for each theme and apply ---
@@ -105,11 +96,6 @@ st.sidebar.markdown("""
 # --- Handle pending chart swap BEFORE any widgets are created ---
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
-
-# Track the most recent chart figure so the wheel column can always render.
-st.session_state.setdefault("render_fig", None)
-
-# --- Handle pending chart swap BEFORE any widgets are created ---
 if st.session_state.get("__pending_swap_charts__"):
 	swap_primary_and_secondary_charts()
 
@@ -132,7 +118,7 @@ if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
 	apply_test_chart_to_session(test_chart)
 
 	# 2. Trigger calculation for Chart 1 (no suffix)
-	if calculate_chart_from_session():
+	if run_chart():
 		st.success(f"Chart 1 loaded: {st.session_state.get('city')}")
 	else:
 		st.error(f"Failed to calculate Chart 1. Check date/time/location inputs.")
@@ -175,7 +161,7 @@ if synastry_mode and test_chart_2:
 
 		if success_apply:
 			# 2. Trigger calculation for Chart 2 (with suffix)
-			if calculate_chart_from_session(suffix="_2"):
+			if run_chart(suffix="_2"):
 				st.success(f"Chart 2 loaded: {st.session_state.get('city_2')}")
 			else:
 				st.error(f"Failed to calculate Chart 2. Check date/time/location inputs.")
@@ -187,107 +173,6 @@ if synastry_mode and test_chart_2:
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
-
-def run_chart(lat, lon, tz_name):
-	"""
-	Build chart DF, aspects, dispositors, clusters, circuits/shapes—then render.
-	"""
-	# --- Inputs from session ---
-	year   = int(st.session_state["profile_year"])
-	month  = MONTH_NAMES.index(st.session_state["profile_month_name"]) + 1
-	day    = int(st.session_state["profile_day"])
-	hour   = int(st.session_state["profile_hour"])
-	minute = int(st.session_state["profile_minute"])
-	unknown_time = bool(st.session_state.get("profile_unknown_time"))
-
-	# --- Determine UTC chart datetime ---
-	new_chart_dt_utc = None
-	try:
-		tzinfo = ZoneInfo(tz_name) if tz_name else None
-	except Exception:
-		tzinfo = None
-
-	if tzinfo:
-		try:
-			chart_dt_local = datetime(year, month, day, hour, minute, tzinfo=tzinfo)
-			new_chart_dt_utc = chart_dt_local.astimezone(ZoneInfo("UTC"))
-		except Exception:
-			new_chart_dt_utc = None
-
-	st.session_state["chart_dt_utc"] = new_chart_dt_utc
-	st.session_state[COMPASS_KEY] = True
-	update_events_html_state(new_chart_dt_utc)
-
-	# --- Calculate chart ---
-	combined_df, aspect_df, raw_plot_data = calculate_chart(
-		year=year, month=month, day=day, hour=hour, minute=minute,
-		tz_offset=0, lat=lat, lon=lon, input_is_ut=False,
-		tz_name=tz_name, include_aspects=True, unknown_time=unknown_time
-	)
-
-	st.session_state["chart_unknown_time"] = unknown_time
-	df = combined_df
-	st.session_state["dispositor_summary_rows"] = df.to_dict("records")
-
-	# --- Use the plot_data returned from calculate_chart ---
-	st.session_state["plot_data"] = raw_plot_data
-
-	# Optional: keep summary tables for UI
-	chains_rows, summary_rows = build_dispositor_tables(df)
-	st.session_state["dispositor_summary_rows"] = summary_rows
-	st.session_state["dispositor_chains_rows"] = chains_rows
-
-	# --- Build aspects / reception / clusters / patterns ---
-	compass_rose = st.session_state.get("ui_compass_overlay", False)
-	edges_major, edges_minor = build_aspect_edges(df, compass_rose=compass_rose)
-	df = annotate_reception(df, edges_major)
-
-	try:
-		st.session_state["last_sect"] = chart_sect_from_df(df)
-		st.session_state["last_sect_error"] = None
-	except Exception as e:
-		st.session_state["last_sect"] = None
-		st.session_state["last_sect_error"] = str(e)
-
-	clusters_rows = build_conjunction_clusters(df, edges_major)
-	st.session_state["conj_clusters_rows"] = clusters_rows
-
-	pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(df, edges_major)
-	patterns = [sorted(list(s)) for s in patterns_sets]
-	shapes   = detect_shapes(pos_chart, patterns_sets, major_edges_all)
-	filaments, singleton_map = detect_minor_links_from_dataframe(df, edges_major)
-	combos = generate_combo_groups(filaments)
-
-	st.session_state.update({
-		"last_df": df,
-		"last_aspect_df": aspect_df,
-		"edges_major": edges_major,
-		"edges_minor": edges_minor,
-		"patterns": patterns,
-		"shapes": shapes,
-		"filaments": filaments,
-		"singleton_map": singleton_map,
-		"combos": combos,
-		"chart_positions": pos_chart,
-		"major_edges_all": major_edges_all
-	})
-
-	# --- Build chart figure ---
-	_refresh_chart_figure()
-	st.session_state.update({
-		"calc_lat": lat,
-		"calc_lon": lon,
-		"calc_tz": tz_name
-	})
-
-	# --- UI state defaults ---
-	for i in range(len(patterns)):
-		st.session_state.setdefault(f"toggle_pattern_{i}", False)
-		st.session_state.setdefault(f"circuit_name_{i}", f"Circuit {i+1}")
-
-	if singleton_map:
-		for planet in singleton_map.keys():
-			st.session_state.setdefault(f"singleton_{planet}", False)
 
 col_left, col_mid, col_right = st.columns([3, 2, 3])
 # -------------------------
@@ -419,7 +304,7 @@ with col_left:
 			if submitted:
 				# Trigger the calculation for Chart 1 (no suffix).
 				# This function now handles everything: Geocoding, Time Parsing, Core Calc, Post-Processing, and State Saving.
-				success = calculate_chart_from_session(suffix="")
+				success = run_chart(suffix="")
 
 				if success:
 					st.success(f"Chart successfully calculated for {st.session_state.get('city')}.")
@@ -464,8 +349,6 @@ with col_mid:
 
 
 with col_right:
-	from profile_manager_v2 import ensure_profile_session_defaults, render_profile_manager
-
 	# Make sure the session keys exist before rendering any widgets in this panel
 	ensure_profile_session_defaults(MONTH_NAMES)
 	with st.expander("📂 Chart Profile Manager"):
@@ -638,14 +521,10 @@ if df_cached is not None:
 					with tcol3:
 						st.selectbox(" ",          options=AMPMS,   key="transit_ampm")
 
-	_refresh_chart_figure()
-
-
-	fig = st.session_state.get("render_fig")
-	if fig is not None:
-		st.pyplot(fig, clear_figure=True, use_container_width=True)
-	else:
-		st.caption("Calculate a chart to render the wheel.")
+	rr = _refresh_chart_figure()
+	if rr.fig is not None:
+		st.pyplot(rr.fig, clear_figure=True)
+		plt.close(rr.fig)
 
 	# --- MCP Interpretation Output Section ---
 	st.markdown("<div id='mcp-interpretation'></div>", unsafe_allow_html=True)

@@ -1,12 +1,16 @@
-from zoneinfo import ZoneInfo
-import os
+import re
 import swisseph as swe
 import networkx as nx
-from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
-from lookup_v2 import SIGNS, PLANETARY_RULERS
-import streamlit as st
 import datetime
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
+import matplotlib.gridspec as gridspec
+import importlib.util, pathlib
+from zoneinfo import ZoneInfo
+from collections import defaultdict, deque
+from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
+from lookup_v2 import SIGNS, PLANETARY_RULERS, ABREVIATED_PLANET_NAMES
 
 OOB_LIMIT = 23.44  # degrees declination
 
@@ -160,7 +164,6 @@ def calculate_chart(
 	# ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
 	# This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
 	global DIGNITIES, PLANETARY_RULERS, MAJOR_OBJECTS, SIGNS
-	import importlib.util, pathlib
 
 	here = pathlib.Path(__file__).resolve()
 	lookup_path = here.with_name("lookup_v2.py")
@@ -345,8 +348,6 @@ def calculate_chart(
 
 	cusps_by_system: dict[str, list[float]] = {}
 	all_cusp_rows: list[dict] = []
-
-	import re
 
 	for sys in systems:
 		rows_sys = calculate_house_cusps(jd, lat, lon, asc_val, sys)
@@ -558,9 +559,6 @@ def calculate_chart(
 	# If aspects not included, return combined_df and plot_data
 	return combined_df, None, plot_data
 
-import matplotlib.pyplot as plt
-import networkx as nx
-
 def chart_sect_from_df(df) -> str:
 	"""
 	Return 'Diurnal' or 'Nocturnal' based on Sun relative to horizon.
@@ -690,7 +688,6 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 		"self_ruling": [...],      # planets that rule themselves (even if co-ruled)
 	}
 	"""
-	import networkx as nx
 
 	def _ensure_list(x):
 		if x is None:
@@ -790,7 +787,6 @@ def _draw_dispositor_header(fig, header_info):
 	Draw a single-line header across the top of the dispositor graph.
 	Format: Name | Date | Time | City
 	"""
-	import matplotlib.patheffects as pe
 	
 	# Get header components
 	name = header_info.get('name', 'Untitled Chart')
@@ -843,10 +839,6 @@ def plot_dispositor_graph(plot_data, header_info=None):
 		plot_data: Dispositor data structure with raw_links, sovereigns, self_ruling
 		header_info: Optional dict with keys: name, date_line, time_line, city, extra_line
 	"""
-	import matplotlib.pyplot as plt
-	import networkx as nx
-	from lookup_v2 import ABREVIATED_PLANET_NAMES
-	import matplotlib.patheffects as pe
 
 	raw_links = plot_data.get("raw_links", [])
 	sovereigns = plot_data.get("sovereigns", [])
@@ -1471,7 +1463,6 @@ def plot_dispositor_graph(plot_data, header_info=None):
 	print(f"   Calculated figure size: {fig_width:.1f}\" × {fig_height:.1f}\"")
 	
 	# Use GridSpec to control subplot widths proportionally
-	import matplotlib.gridspec as gridspec
 	
 	# Calculate width ratios based on tree widths
 	max_width = max(tree_widths) if tree_widths else 1
@@ -1627,8 +1618,6 @@ def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
 
 	return chains_rows, summary_rows
 
-import networkx as nx
-
 def build_dispositor_trees(disp_data):
 	"""
 	Build clean, deduped trees for each final dispositor.
@@ -1691,7 +1680,6 @@ def _resolve_dignity(obj: str, sign_name: str):
 		return None
 
 	# If your row/object includes “(Mean)”, strip those suffixes for matching
-	import re
 	base_obj = re.sub(r"\s*\(.*?\)\s*$", "", obj).strip()
 
 	for label in ("domicile", "exaltation", "detriment", "fall"):
@@ -2075,7 +2063,6 @@ def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> li
 	order_ix = {name: i for i, name in enumerate(names)}
 
 	# Build undirected adjacency from conjunction pairs
-	from collections import defaultdict, deque
 	adj = defaultdict(set)
 	for a, b, meta in edges_major or []:
 		if meta.get("aspect") == "Conjunction":
@@ -2174,7 +2161,6 @@ def build_clustered_aspect_edges(df: pd.DataFrame, edges_major: list[tuple]) -> 
 	set_sorted_names = [sorted(s, key=lambda x: names.index(x)) for s in all_sets]
 
 	# For each unique unordered pair of sets, find all aspects between their members
-	from collections import defaultdict
 	aspect_map = defaultdict(list)  # (setA, setB, aspect) -> list of (a, b, meta)
 	# Build a lookup for quick member-to-set index
 	obj_to_setidx = {}

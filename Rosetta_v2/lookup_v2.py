@@ -37,6 +37,8 @@ MAJOR_OBJECTS = {
     "Psyche": swe.AST_OFFSET + 16,
 }
 
+LUMINARIES_AND_PLANETS = {"sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"}
+
 PLANETS_PLUS = {
     "Sun": swe.SUN,
     "Moon": swe.MOON,
@@ -253,6 +255,12 @@ GROUP_COLORS = [
 GROUP_COLORS_LIGHT = [
   	"#B8030375", "#FF510075", "#FFAE0075", "#53B80075",
     "#0071BD75", "#1D20C575", "#6321CE75", "#44010175",
+]
+SUBSHAPE_COLORS = [
+    "#FF5214FF", "#FFA600FF", "#FBFF00FF", "#87DB00FF",
+    "#00B828FF", "#049167FF", "#006EFFFF", "#1100FFFF",
+    "#6320FFFF", "#9E0099FF", "#FF00EAFF", "#720022FF",
+    "#4B2C06FF", "#534546FF", "#C4A5A5FF", "#5F7066FF",
 ]
 SUBSHAPE_COLORS_LIGHT = [
     "#FF521475", "#FFA60075", "#FBFF0075", "#87DB0075",

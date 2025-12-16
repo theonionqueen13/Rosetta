@@ -1,126 +1,29 @@
-"""Utilities for rendering the Rosetta v2 chart wheel using precomputed data."""
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Any, Collection, Iterable, Mapping, Sequence
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-import matplotlib.image as mpimg
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
-from matplotlib.colors import to_rgba, to_hex
-import os, re, math
+import re, math
 import numpy as np
 import streamlit as st
-from patterns_v2 import detect_shapes, connected_components_from_edges
-from now_v2 import _moon_phase_label_emoji
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import pandas as pd
+import matplotlib.pyplot as plt
+import data_helpers as _dh
 from dataclasses import dataclass
-from typing import Any, List, Dict, Tuple
-
-try:  # Pandas is part of the calculation pipeline; import defensively.
-	import pandas as pd
-except Exception:  # pragma: no cover - pandas is expected to be present.
-	pd = None  # type: ignore
-
-# ---------------------------------------------------------------------------
-# Lookup tables (glyphs, aspect metadata, colours)
-# ---------------------------------------------------------------------------
-
-def _import_lookup_attr(name: str, default: Any) -> Any:
-	"""Attempt to import ``name`` from lookup_v2, falling back to legacy data."""
-	try:
-		import lookup_v2 as _lookup  # type: ignore
-	except Exception:  # pragma: no cover - fallback if module absent
-		_lookup = None
-
-	if _lookup is not None and hasattr(_lookup, name):
-		return getattr(_lookup, name)
-
-	try:  # legacy fallback (original package)
-		from rosetta.lookup import __dict__ as _legacy_lookup  # type: ignore
-	except Exception:  # pragma: no cover - last resort
-		_legacy_lookup = {}
-
-	return _legacy_lookup.get(name, default)
-
-GLYPHS: Mapping[str, str] = _import_lookup_attr("GLYPHS", {})
-
-try:  # Glyph resolver from profiles_v2 (handles aliases)
-	from profiles_v2 import glyph_for  # type: ignore
-except Exception:  # pragma: no cover - optional fallback
-	glyph_for = None  # type: ignore
-
-try:  # Optional helper to resolve toggle selections directly
-	import patterns_v2 as _patterns_mod  # type: ignore
-except Exception:  # pragma: no cover - patterns module optional
-	_patterns_mod = None
-
-# ---------------------------------------------------------------------------
-# Chart Drawing helpers (NEW ones you pasted — kept)
-# ---------------------------------------------------------------------------
-
-def _selected_house_system():
-	s = st.session_state.get("house_system_main", "Equal")
-	return s.lower().replace(" sign", "")
-
-def _in_forward_arc(start_deg, end_deg, x_deg):
-	"""True if x lies on the forward arc from start->end (mod 360)."""
-	span = (end_deg - start_deg) % 360.0
-	off  = (x_deg   - start_deg) % 360.0
-	return off < span if span != 0 else off == 0
-
-def _house_of_degree(deg, cusps):
-	"""Given a degree and a 12-length cusp list (House 1..12), return 1..12."""
-	if not cusps or len(cusps) != 12:
-		return None
-	for i in range(12):
-		a = cusps[i]
-		b = cusps[(i + 1) % 12]
-		if _in_forward_arc(a, b, deg):
-			return i + 1
-	return 12
-
-# ---------------------------------------------------------------------------
-# Basic math helpers & canonicalisation
-# ---------------------------------------------------------------------------
-
-def deg_to_rad(deg: float, asc_shift: float = 0.0) -> float:
-	"""Convert an absolute degree into the polar coordinate used for plotting."""
-	return np.deg2rad((360 - (deg - asc_shift + 180) % 360 + 90) % 360)
-
-_CANON_RE = re.compile(r"[^a-z0-9]+")
-
-def _canonical_name(name: Any) -> str:
-	if name is None:
-		return ""
-	return _CANON_RE.sub("", str(name).lower())
-
-_ALIAS_GROUPS = [
-	{"ac", "ascendant"},
-	{"dc", "descendant"},
-	{"mc", "midheaven"},
-	{"ic", "imumcoeli"},
-	{"northnode", "truenode"},
-	{"southnode"},
-	{"partoffortune", "pof"},
-	{"blackmoonlilithmean", "blackmoonlilith", "lilith"},
-]
-
-_ALIAS_LOOKUP: dict[str, set[str]] = {}
-for group in _ALIAS_GROUPS:
-	canon_group = {_canonical_name(name) for name in group}
-	for entry in canon_group:
-		_ALIAS_LOOKUP[entry] = canon_group
-
-_COMPASS_ALIAS_MAP: dict[str, list[str]] = {
-	"Ascendant": ["AC", "Ascendant"],
-	"Descendant": ["DC", "Descendant"],
-	"MC": ["MC", "Midheaven"],
-	"IC": ["IC", "Imum Coeli"],
-	"North Node": ["North Node", "True Node"],
-	"South Node": ["South Node"],
-}
-
+from typing import Any, Collection, Iterable, Mapping, Sequence, List, Dict, Optional
+from lookup_v2 import SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, ASPECTS, GROUP_COLORS, SUBSHAPE_COLORS, LUMINARIES_AND_PLANETS, GLYPHS
+from profiles_v2 import glyph_for
+from patterns_v2 import detect_shapes
+from src.ui_state_helpers import (
+	_selected_house_system, _current_chart_header_lines, 
+	reset_chart_state, resolve_visible_objects, 
+)
+from src.drawing_primitives import (
+	deg_to_rad, _draw_gradient_line, draw_center_earth, 
+	_draw_header_on_figure, _draw_header_on_figure_right, _draw_moon_phase_on_axes, _light_variant_for,
+	_lighten_color,
+)
+from data_helpers import (
+	_degree_for_label, extract_positions, extract_compass_positions,
+	_COMPASS_ALIAS_MAP, _degree_for_label, _expand_visible_canon, get_ascendant_degree, _find_row,
+	_edge_record_to_components, _resolve_aspect, _is_luminary_or_planet, 
+)
 _cache_shapes = {}
 
 def get_shapes(pos, patterns, major_edges_all):
@@ -131,227 +34,6 @@ def get_shapes(pos, patterns, major_edges_all):
 	if key not in _cache_shapes:
 		_cache_shapes[key] = detect_shapes(pos, patterns, major_edges_all)
 	return _cache_shapes[key]
-
-GROUP_COLORS = [
-  	"#008CFF", "#FFAE00", "#B80303","#6321CE",
-	"#FF5100", "#53B800", "#1D1FC5", "#440101",
-]
-GROUP_COLORS_LIGHT = [
-  	"#008Cff63", "#EED29463", "#C7717163", "#A98ED363",
-	"#F5A98658", "#9DD17263", "#9394EC63", "#85686863",
-]
-SUBSHAPE_COLORS = [
-	"#FF5214", "#FFA600", "#FBFF00", "#87DB00",
-	"#00B828", "#049167", "#006EFF", "#1100FF",
-	"#6320FF", "#9E0099", "#FF00EA", "#720022",
-	"#4B2C06", "#534546", "#C4A5A5", "#5F7066",
-]
-SUBSHAPE_COLORS_LIGHT = [
-	"#FF521449", "#FFA60049", "#FBFF0049", "#87DB0049",
-	"#00B82849", "#04916749", "#006EFF49", "#1100FF49",
-	"#6320FF49", "#9E009949", "#FF00EA49", "#72002249",
-	"#4B2C0649", "#53454675", "#C4A5A549", "#5F706649",
-]
-
-LUMINARIES_AND_PLANETS = {
-	"sun", "moon", "mercury", "venus", "mars",
-	"jupiter", "saturn", "uranus", "neptune", "pluto",
-}
-
-
-def _is_luminary_or_planet(name: str) -> bool:
-	return _canonical_name(name) in LUMINARIES_AND_PLANETS
-
-
-def _light_variant_for(color: str) -> str:
-	"""Return a lighter + less-opaque variant of `color`.
-	1) If `color` is in GROUP_COLORS or SUBSHAPE_COLORS, return the matching *_LIGHT entry.
-	2) Otherwise, blend the RGB toward white and scale alpha down.
-	"""
-	# 1) Exact palette matches first
-	try:
-		idx = GROUP_COLORS.index(color)
-		if idx < len(GROUP_COLORS_LIGHT):
-			return GROUP_COLORS_LIGHT[idx]
-	except ValueError:
-		pass
-
-	try:
-		idx = SUBSHAPE_COLORS.index(color)
-		if idx < len(SUBSHAPE_COLORS_LIGHT):
-			return SUBSHAPE_COLORS_LIGHT[idx]
-	except ValueError:
-		pass
-
-	# 2) Generic fallback: lighten + reduce opacity
-	# Tune these two knobs if you want a different feel:
-	BLEND_TOWARD_WHITE = 0.35  # 0..1 (higher = lighter)
-	ALPHA_SCALE = 0.6          # 0..1 (lower = more transparent)
-
-	r, g, b, a = to_rgba(color)
-
-	# Lighten toward white
-	r = r + (1.0 - r) * BLEND_TOWARD_WHITE
-	g = g + (1.0 - g) * BLEND_TOWARD_WHITE
-	b = b + (1.0 - b) * BLEND_TOWARD_WHITE
-
-	# Reduce opacity (respect any existing alpha)
-	a = a * ALPHA_SCALE
-
-	return to_hex((r, g, b, a), keep_alpha=True)
-
-def _lighten_color(color: str, blend: float = 0.5) -> str:
-	"""Blend ``color`` toward white by ``blend`` (0..1)."""
-
-	blend = max(0.0, min(1.0, blend))
-	r, g, b, a = to_rgba(color)
-	r = r + (1.0 - r) * blend
-	g = g + (1.0 - g) * blend
-	b = b + (1.0 - b) * blend
-	return to_hex((r, g, b, a), keep_alpha=True)
-
-
-def _normalise_aspect(aspect: Any) -> tuple[str, bool]:
-	"""Return (clean_name, is_approx) for an aspect label."""
-
-	if aspect is None:
-		return "", False
-	name = str(aspect).strip()
-	if not name:
-		return "", False
-	approx = False
-	if name.endswith("_approx"):
-		approx = True
-		name = name[:-7]
-	return name, approx
-
-
-def _segment_points(theta1: float, theta2: float, radius: float = 1.0, steps: int = 48) -> tuple[np.ndarray, np.ndarray]:
-	"""Return theta/r arrays describing the straight chord between two polar points."""
-
-	x1, y1 = radius * np.cos(theta1), radius * np.sin(theta1)
-	x2, y2 = radius * np.cos(theta2), radius * np.sin(theta2)
-	xs = np.linspace(x1, x2, steps)
-	ys = np.linspace(y1, y2, steps)
-	thetas = np.unwrap(np.arctan2(ys, xs))
-	radii = np.hypot(xs, ys)
-	return thetas, radii
-
-def _draw_gradient_line(
-	ax,
-	theta1: float,
-	theta2: float,
-	color_start: str,
-	color_end: str,
-	linewidth: float,
-	linestyle: str,
-	radius: float = 1.0,
-) -> None:
-	"""
-	Draw a chord between two polar angles with either:
-	  - SOLID (with gradient if colors differ), or
-	  - DOTTED/DASHED/DASHDOT (simulated using many short solid segments),
-	so that we can keep a smooth color gradient AND a visible pattern.
-	"""
-	def _vec(th):
-		return np.cos(th) * radius, np.sin(th) * radius
-
-	def _interp_xy(t):
-		x = (1.0 - t) * x1 + t * x2
-		y = (1.0 - t) * y1 + t * y2
-		return x, y
-
-	def _xy_to_polar(x, y):
-		return np.arctan2(y, x), np.hypot(x, y)
-
-	# endpoints in Cartesian on the unit ring
-	x1, y1 = _vec(theta1)
-	x2, y2 = _vec(theta2)
-	chord_len = float(np.hypot(x2 - x1, y2 - y1))  # ~[0, 2]
-
-	style = (linestyle or "solid").lower()
-	wants_pattern = style in ("dotted", "dashed", "dashdot")
-
-	# ---------- PATTERNED (dotted/dashed) with GRADIENT ----------
-	if wants_pattern:
-		# Choose segment (dash) length and gap ratio that read well on screen.
-		# Scale lengths by chord_len so visuals are consistent across spans.
-		if style == "dotted":
-			# lots of short "dots"
-			seg_len = 0.02 * max(1.0, chord_len)     # length of a dot (in chord units)
-			gap_ratio = 1.8                          # gap ~1.8x segment -> clear dots
-		elif style == "dashdot":
-			seg_len = 0.05 * max(1.0, chord_len)
-			gap_ratio = 0.9
-		else:  # dashed
-			seg_len = 0.06 * max(1.0, chord_len)
-			gap_ratio = 0.7
-
-		# Number of dashes; clamp for stability
-		step = seg_len * (1.0 + gap_ratio)
-		n = max(6, int(np.ceil(chord_len / max(1e-6, step))))
-		# How much of each cycle is "ink"
-		fill = seg_len / max(1e-6, step)             # (0,1)
-
-		# Build tiny solid segments and color each by the gradient at its midpoint
-		seg_points = []
-		seg_colors = []
-
-		c0 = np.array(to_rgba(color_start))
-		c1 = np.array(to_rgba(color_end))
-
-		for i in range(n):
-			t0 = i / n
-			t1 = min(t0 + fill / n, 1.0)             # shorten to leave a gap
-			if t1 <= t0:
-				continue
-
-			xm0, ym0 = _interp_xy(t0)
-			xm1, ym1 = _interp_xy(t1)
-			th0, r0 = _xy_to_polar(xm0, ym0)
-			th1, r1 = _xy_to_polar(xm1, ym1)
-			seg_points.append([[th0, r0], [th1, r1]])
-
-			tm = 0.5 * (t0 + t1)
-			rgba = (1.0 - tm) * c0 + tm * c1
-			seg_colors.append(tuple(rgba))
-
-		if not seg_points:
-			return
-
-		lc = LineCollection(
-			np.array(seg_points),
-			colors=seg_colors,
-			linewidth=linewidth,
-			linestyle="solid",           # each short segment is solid; spacing makes the pattern
-			capstyle="round",
-			joinstyle="round",
-		)
-		ax.add_collection(lc)
-		return
-
-	# ---------- SOLID ----------
-	# Build a single polyline; if colors differ, use a gradient LineCollection.
-	steps = max(16, int(64 * chord_len))
-	thetas, radii = _segment_points(theta1, theta2, radius=radius, steps=steps)
-
-	if color_start == color_end:
-		ax.plot(thetas, radii, color=color_start, linewidth=linewidth, linestyle="solid")
-		return
-
-	pts = np.column_stack([thetas, radii])
-	segs = np.stack([pts[:-1], pts[1:]], axis=1)
-
-	c0 = np.array(to_rgba(color_start))
-	c1 = np.array(to_rgba(color_end))
-	cols = [tuple((1.0 - t) * c0 + t * c1) for t in np.linspace(0, 1, len(segs))]
-
-	lc = LineCollection(segs, colors=cols, linewidth=linewidth)
-	lc.set_linestyle("solid")
-	lc.set_capstyle("round")
-	lc.set_joinstyle("round")
-	ax.add_collection(lc)
-
 
 def shape_color_for(shape_id: Any) -> str:
 	"""Return a stable solid colour for the given shape identifier."""
@@ -373,271 +55,6 @@ def shape_color_for(shape_id: Any) -> str:
 
 _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 
-def _current_chart_header_lines():
-	name = (
-		st.session_state.get("current_profile_title")
-		or st.session_state.get("current_profile")
-		or "Untitled Chart"
-	)
-	if isinstance(name, str) and name.startswith("community:"):
-		name = "Community Chart"
-
-	month  = st.session_state.get("profile_month_name", "")
-	day    = st.session_state.get("profile_day", "")
-	year   = st.session_state.get("profile_year", "")
-	hour   = st.session_state.get("profile_hour")
-	minute = st.session_state.get("profile_minute")
-	city   = st.session_state.get("profile_city", "")
-	unknown_time = bool(
-		st.session_state.get("chart_unknown_time")
-		or st.session_state.get("profile_unknown_time")
-	)
-
-	date_line = f"{month} {day}, {year}".strip()
-
-	if unknown_time:
-		# Desired render order:
-		# Line 1: AC = Aries 0° (default)
-		# Line 2: date_line
-		# Line 3: 12:00 PM
-		extra_line = ""
-		date_line  = "AC = Aries 0° (default)"
-		time_line  = f"{month} {day}, {year}".strip()
-		city       = "12:00 PM"
-	else:
-		extra_line = ""
-		time_line = ""
-		if hour is not None and minute is not None:
-			h = int(hour)
-			m = int(minute)
-			ampm = "AM" if h < 12 else "PM"
-			h12 = 12 if (h % 12 == 0) else (h % 12)
-			time_line = f"{h12}:{m:02d} {ampm}"
-
-	return name, date_line, time_line, city, extra_line
-
-import matplotlib.patheffects as pe
-
-def _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode):
-	"""Paint header in the figure margin (top-left), with extra_line on same line as name (non-bold)."""
-	import matplotlib.patheffects as pe
-
-	color  = "white" if dark_mode else "black"
-	stroke = "black" if dark_mode else "white"
-	effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
-
-	y0 = 0.99   # top margin in figure coords
-	x0 = 0.00   # left margin
-
-	# 1) Bold chart name (left)
-	name_text = fig.text(
-		x0, y0, name,
-		ha="left", va="top",
-		fontsize=12, fontweight="bold",
-		color=color, path_effects=effects
-	)
-
-	# 2) Optional extra line on SAME TOP LINE, normal size, right after name
-	if extra_line:
-		# Force a draw so we can measure the name's pixel width reliably
-		fig.canvas.draw()
-		renderer = fig.canvas.get_renderer()
-
-		name_bbox = name_text.get_window_extent(renderer=renderer)
-		fig_bbox  = fig.get_window_extent(renderer=renderer)
-
-		# Convert the name's pixel width to figure-coordinate width
-		dx = name_bbox.width / fig_bbox.width
-
-		# Small horizontal padding in figure coords
-		pad = 0.01
-
-		fig.text(
-			x0 + dx + pad, y0, extra_line,
-			ha="left", va="top",
-			fontsize=9, fontweight=None,
-			color=color, path_effects=effects
-		)
-
-	# 3) Stack the remaining lines below
-	lines = []
-	if date_line:
-		lines.append(date_line)
-	if time_line:
-		lines.append(time_line)
-	if city:
-		lines.append(city)
-
-	for idx, line in enumerate(lines, start=1):
-		fig.text(
-			x0,
-			y0 - 0.035 * idx,
-			line,
-			ha="left",
-			va="top",
-			fontsize=9,
-			color=color,
-			path_effects=effects,
-		)
-
-def _draw_header_on_figure_right(fig, name, date_line, time_line, city, extra_line, dark_mode):
-	"""Paint header in the figure margin (top-right), with maroon color for chart 2."""
-	import matplotlib.patheffects as pe
-
-	color  = "#6D0000"  # Maroon color for chart 2
-	stroke = "black" if dark_mode else "white"
-	effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
-
-	y0 = 0.99   # top margin in figure coords
-	x0 = 0.98   # right side positioning (closer to edge but within bounds)
-
-	# 1) Bold chart name (right-aligned)
-	name_text = fig.text(
-		x0, y0, name,
-		ha="right", va="top",
-		fontsize=12, fontweight="bold",
-		color=color, path_effects=effects
-	)
-
-	# 2) Optional extra line on SAME TOP LINE, normal size, before name
-	if extra_line:
-		# Force a draw so we can measure the name's pixel width reliably
-		fig.canvas.draw()
-		renderer = fig.canvas.get_renderer()
-
-		name_bbox = name_text.get_window_extent(renderer=renderer)
-		fig_bbox  = fig.get_window_extent(renderer=renderer)
-
-		# Convert the name's pixel width to figure-coordinate width
-		dx = name_bbox.width / fig_bbox.width
-
-		# Small horizontal padding in figure coords
-		pad = 0.01
-
-		fig.text(
-			x0 - dx - pad, y0, extra_line,
-			ha="right", va="top",
-			fontsize=9, fontweight=None,
-			color=color, path_effects=effects
-		)
-
-	# 3) Stack the remaining lines below
-	lines = []
-	if date_line:
-		lines.append(date_line)
-	if time_line:
-		lines.append(time_line)
-	if city:
-		lines.append(city)
-
-	for idx, line in enumerate(lines, start=1):
-		fig.text(
-			x0,
-			y0 - 0.035 * idx,
-			line,
-			ha="right",
-			va="top",
-			fontsize=9,
-			color=color,
-			path_effects=effects,
-		)
-
-
-def _draw_moon_phase_on_axes(ax, df, dark_mode: bool, icon_frac: float = 0.10) -> None:
-	"""
-	Draw the chart-based moon phase (icon + label) INSIDE the main chart axes,
-	anchored at the upper-right corner. This does NOT change the figure/frame size.
-	icon_frac = width/height of inset as a fraction of the parent axes.
-	"""
-	try:
-		if df is None or "Object" not in df or "Longitude" not in df:
-			return
-
-		sun_row  = df[df["Object"].astype(str).str.lower() == "sun"].head(1)
-		moon_row = df[df["Object"].astype(str).str.lower() == "moon"].head(1)
-		if sun_row.empty or moon_row.empty:
-			return
-
-		sun_lon  = float(sun_row["Longitude"].iloc[0]) % 360.0
-		moon_lon = float(moon_row["Longitude"].iloc[0]) % 360.0
-
-		# Reuse your existing mapping to get label + PNG path
-		label, icon_path = _moon_phase_label_emoji(sun_lon, moon_lon, emoji_size_px=None)
-		if not os.path.exists(icon_path):
-			return
-
-		# --- ICON inset inside the axes (upper-right) ---
-		icon_ax = inset_axes(
-			ax,
-			width=f"{int(icon_frac * 100)}%",
-			height=f"{int(icon_frac * 100)}%",
-			loc="upper right",
-			bbox_to_anchor=(0.0, 0.075, 1.0, 1.0),   # <<< push the icon a bit DOWN
-			bbox_transform=ax.transAxes,
-			borderpad=0.0,
-		)
-
-		icon_ax.set_axis_off()
-		try:
-			img = mpimg.imread(icon_path)
-			icon_ax.imshow(img)
-		except Exception:
-			pass
-
-		# --- LABEL just to the left of the icon (still inside axes) ---
-		import matplotlib.patheffects as pe
-		color  = "white" if dark_mode else "black"
-		stroke = "black" if dark_mode else "white"
-		effects = [pe.withStroke(linewidth=3, foreground=stroke, alpha=0.6)]
-
-		ax.text(
-			0.89, 1.078, label,                 # <<< y almost at 1.0 (top); x near right edge
-			transform=ax.transAxes,
-			ha="right", va="top",
-			fontsize=10, color=color, path_effects=effects, zorder=10,
-		)
-
-	except Exception:
-		# decorative only; fail silently
-		return
-
-def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | None:
-	if not pos:
-		return None
-	value = pos.get(name)
-	if value is not None:
-		try:
-			return float(value) % 360.0
-		except Exception:
-			return None
-	canon = _canonical_name(name)
-	aliases = _ALIAS_LOOKUP.get(canon, {canon})
-	for key, val in pos.items():
-		if val is None:
-			continue
-		try:
-			deg = float(val) % 360.0
-		except Exception:
-			continue
-		if _canonical_name(key) in aliases:
-			return deg
-	return None
-
-# Import ASPECTS from lookup_v2 - use the same source as test_calc_v2.py
-try:
-	from lookup_v2 import ASPECTS
-except ImportError:
-	ASPECTS = {
-		"Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
-		"Sextile": {"angle": 60, "orb": 3, "color": "#6321CE", "style": "solid"},
-		"Square": {"angle": 90, "orb": 3, "color": "#F70000", "style": "solid"},
-		"Trine": {"angle": 120, "orb": 3, "color": "#0011FF", "style": "solid"},
-		"Sesquisquare": {"angle": 135, "orb": 2, "color": "#FF5100", "style": "dotted"},
-		"Quincunx": {"angle": 150, "orb": 3, "color": "#439400", "style": "dotted"},
-		"Opposition": {"angle": 180, "orb": 3, "color": "#F70000", "style": "solid"},
-		"Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
-	}
-
 def group_color_for(idx: int) -> str:
 	"""Return a deterministic colour for the given circuit index."""
 
@@ -648,178 +65,6 @@ def group_color_for(idx: int) -> str:
 	except Exception:
 		return "teal"
 
-
-ZODIAC_SIGNS = _import_lookup_attr(
-	"ZODIAC_SIGNS",
-	("♈️","♉️","♊️","♋️","♌️","♍️","♎️","♏️","♐️","♑️","♒️","♓️"),
-)
-
-# NEW: add a safe default palette for sign colors
-ZODIAC_COLORS = _import_lookup_attr(
-	"ZODIAC_COLORS",
-	(
-		"#E57373", "#F06292", "#BA68C8", "#9575CD",
-		"#64B5F6", "#4FC3F7", "#4DD0E1", "#81C784",
-		"#AED581", "#FFD54F", "#C77700", "#A1887F",
-	),
-)
-
-def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | None:
-	if not pos:
-		return None
-	value = pos.get(name)
-	if value is not None:
-		try:
-			return float(value) % 360.0
-		except Exception:
-			return None
-	canon = _canonical_name(name)
-	aliases = _ALIAS_LOOKUP.get(canon, {canon})
-	for key, val in pos.items():
-		if val is None:
-			continue
-		try:
-			deg = float(val) % 360.0
-		except Exception:
-			continue
-		if _canonical_name(key) in aliases:
-			return deg
-	return None
-
-def _expand_visible_canon(names: Collection[str] | None) -> set[str] | None:
-	if not names:
-		return None
-	expanded: set[str] = set()
-	for name in names:
-		canon = _canonical_name(name)
-		expanded.update(_ALIAS_LOOKUP.get(canon, {canon}))
-	return expanded
-
-def _object_rows(df: pd.DataFrame) -> pd.DataFrame:
-	if df is None or "Object" not in df:
-		return pd.DataFrame(columns=["Object", "Longitude"])
-	obj_series = df["Object"].astype("string")
-	mask = ~obj_series.str.contains("cusp", case=False, na=False)
-	return df.loc[mask].copy()
-
-def _canonical_series(df: pd.DataFrame) -> pd.Series:
-	obj_series = df["Object"].astype("string")
-	return obj_series.map(_canonical_name)
-
-def _find_row(df: pd.DataFrame, names: Iterable[str]) -> pd.Series | None:
-	if df is None or "Object" not in df:
-		return None
-	canon_series = _canonical_series(df)
-	for candidate in names:
-		canon = _canonical_name(candidate)
-		target = _ALIAS_LOOKUP.get(canon, {canon})
-		mask = canon_series.isin(target)
-		if mask.any():
-			return df.loc[mask].iloc[0]
-	return None
-
-def get_ascendant_degree(df: pd.DataFrame) -> float:
-	row = _find_row(df, ["AC", "Ascendant", "Asc"])
-	if row is None:
-		return 0.0
-	try:
-		return float(row.get("Longitude", 0.0))
-	except Exception:
-		return 0.0
-
-def _resolve_visible_from_patterns(toggle_state: Any, df: pd.DataFrame | None) -> set[str] | None:
-	if _patterns_mod is None:
-		return None
-	candidate_funcs = (
-		"resolve_visible_objects",
-		"visible_objects_from_toggles",
-		"visible_object_names",
-		"get_visible_objects",
-	)
-	for func_name in candidate_funcs:
-		func = getattr(_patterns_mod, func_name, None)
-		if callable(func):
-			try:
-				result = func(toggle_state, df=df)
-			except TypeError:
-				try:
-					result = func(toggle_state)
-				except TypeError:
-					continue
-			if result:
-				return set(result)
-	return None
-
-def resolve_visible_objects(toggle_state: Any = None, df: pd.DataFrame | None = None) -> set[str] | None:
-	print("[DEBUG] resolve_visible_objects called with toggle_state:", toggle_state)
-	via_patterns = _resolve_visible_from_patterns(toggle_state, df)
-	if via_patterns:
-		return via_patterns
-	if toggle_state is None:
-		return None
-	compass_points = {"AC", "DC", "MC", "IC", "Ascendant", "Descendant", "Midheaven", "Imum Coeli"}
-	compass_rose_on = False
-	# Check for Compass Rose toggle in Mapping
-	if isinstance(toggle_state, Mapping):
-		names = {str(name) for name, enabled in toggle_state.items() if enabled}
-		# Try to detect Compass Rose toggle
-		if "Compass Rose" in toggle_state and toggle_state["Compass Rose"]:
-			compass_rose_on = True
-		if compass_rose_on:
-			names.update(compass_points)
-			print("[DEBUG] Compass Rose ON - visible_names:", names)
-		return names or None
-	if isinstance(toggle_state, Collection) and not isinstance(toggle_state, (str, bytes)):
-		names = {str(name) for name in toggle_state}
-		# Try to detect Compass Rose toggle
-		if "Compass Rose" in names:
-			compass_rose_on = True
-		if compass_rose_on:
-			names.update(compass_points)
-			print("[DEBUG] Compass Rose ON - visible_names:", names)
-		return names
-	return None
-
-def extract_positions(df: pd.DataFrame, visible_names: Collection[str] | None = None) -> dict[str, float]:
-	objs = _object_rows(df)
-	if objs.empty:
-		return {}
-	visible_canon = _expand_visible_canon(visible_names)
-	canon_series = _canonical_series(objs)
-	positions: dict[str, float] = {}
-	for (_, row), canon in zip(objs.iterrows(), canon_series):
-		if visible_canon is not None and canon not in visible_canon:
-			continue
-		lon = row.get("Longitude")
-		if lon is None or (pd.isna(lon) if pd is not None else False):
-			continue
-		positions[str(row.get("Object"))] = float(lon)
-	return positions
-
-def extract_compass_positions(
-	df: pd.DataFrame,
-	visible_names: Collection[str] | None = None,
-) -> dict[str, float]:
-	visible_canon = _expand_visible_canon(visible_names)
-	out: dict[str, float] = {}
-	for label, names in _COMPASS_ALIAS_MAP.items():
-		row = _find_row(df, names)
-		if row is None:
-			continue
-		target_group: set[str] = set()
-		for n in names:
-			target_group.update(_ALIAS_LOOKUP.get(_canonical_name(n), {_canonical_name(n)}))
-		if visible_canon is not None and target_group.isdisjoint(visible_canon):
-			continue
-		lon = row.get("Longitude")
-		if lon is None or (pd.isna(lon) if pd is not None else False):
-			continue
-		out[label] = float(lon)
-	return out
-
-# ---------------------------------------------------------------------------
-# Drawing primitives (NEW versions kept; old duplicates removed)
-# ---------------------------------------------------------------------------
 
 def draw_house_cusps(
 	ax,
@@ -982,7 +227,6 @@ def draw_zodiac_signs(ax, asc_deg, dark_mode):
 		ax.plot([rad, rad], [divider_inner, divider_outer],
 				color="black", linestyle="solid", linewidth=1, zorder=5)
 
-
 def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=None):
 	"""Planet glyphs/names with degree (no sign), cluster fan-out + global spacing."""
 	if not pos:
@@ -1019,9 +263,9 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=None):
 		if df is None or "Object" not in df or "Speed" not in df:
 			return False
 		try:
-			canon_name = _canonical_name(obj_name)
+			canon_name = _dh._canonical_name(obj_name)
 			for _, row in df.iterrows():
-				row_canon = _canonical_name(str(row.get("Object", "")))
+				row_canon = _dh._canonical_name(str(row.get("Object", "")))
 				if row_canon == canon_name:
 					speed = row.get("Speed")
 					if speed is not None and float(speed) < 0:
@@ -1094,42 +338,9 @@ def draw_filament_lines(
 		drawn_keys=drawn_keys,
 	)
 
-def reset_chart_state():
-	"""Clear transient UI keys so each chart loads cleanly."""
-	for key in list(st.session_state.keys()):
-		if key.startswith("toggle_pattern_"):
-			del st.session_state[key]
-		if key.startswith("shape_"):
-			del st.session_state[key]
-		if key.startswith("singleton_"):
-			del st.session_state[key]
-	st.session_state.pop("shape_toggles_by_parent", None)
-
 # ---------------------------------------------------------------------------
 # Aspect drawing (shared)
 # ---------------------------------------------------------------------------
-def _resolve_aspect(aspect: Any) -> tuple[str, bool, Mapping[str, Any]]:
-	"""Return (canon_name, is_approx, spec) with case-insensitive lookup."""
-	name, approx = _normalise_aspect(aspect)
-	if not name:
-		return "", approx, {}
-	# case-insensitive match against ASPECTS keys
-	for k in ASPECTS.keys():
-		if k.lower() == name.lower():
-			return k, approx, ASPECTS[k]
-	return name, approx, {}  # unknown aspect -> empty spec
-
-def _edge_record_to_components(record: Any):
-	if isinstance(record, (list, tuple)):
-		if len(record) == 3:
-			a, b, meta = record
-			aspect = meta.get("aspect") if isinstance(meta, Mapping) else meta
-			return str(a), str(b), aspect
-		if len(record) == 2:
-			(a, b), meta = record
-			aspect = meta.get("aspect") if isinstance(meta, Mapping) else meta
-			return str(a), str(b), aspect
-	return None, None, None
 
 def draw_aspect_lines(
 	ax,
@@ -1154,7 +365,7 @@ def draw_aspect_lines(
 		if not a or not b or not aspect:
 			continue
 
-		canon_a = _canonical_name(a); canon_b = _canonical_name(b)
+		canon_a = _dh._canonical_name(a); canon_b = _dh._canonical_name(b)
 		if visible_canon is not None and (canon_a not in visible_canon or canon_b not in visible_canon):
 			continue
 
@@ -1192,7 +403,6 @@ def draw_aspect_lines(
 
 	return drawn
 
-
 def draw_minor_edges(
 	ax,
 	pos,
@@ -1215,7 +425,7 @@ def draw_minor_edges(
 		a, b, aspect = _edge_record_to_components(record)
 		if not a or not b or not aspect:
 			continue
-		canon_a = _canonical_name(a); canon_b = _canonical_name(b)
+		canon_a = _dh._canonical_name(a); canon_b = _dh._canonical_name(b)
 		if visible_canon is not None and (canon_a not in visible_canon or canon_b not in visible_canon):
 			continue
 
@@ -1374,100 +584,9 @@ def draw_compass_rose(
 		zorder=z_nodal_top,
 	)
 
-def _get_profile_lat_lon() -> tuple[float | None, float | None]:
-	"""Pull chart/birth lat/lon from session_state."""
-	SS = st.session_state
-
-	def f(x):
-		try:
-			return float(x)
-		except Exception:
-			return None
-
-	# Highest priority: current chart lookup (city geocode)
-	lat = f(SS.get("chart_lat"))
-	lon = f(SS.get("chart_lon"))
-
-	# If not present, fall back to stored birth coords
-	if lat is None or lon is None:
-		lat = f(SS.get("birth_lat"))
-		lon = f(SS.get("birth_lon"))
-
-	# If still missing, report unknown
-	if lat is None or lon is None:
-		return None, None
-	return lat, lon
-
-def _earth_emoji_for_region(lat: float | None, lon: float | None) -> str:
-	"""
-	Region mapping requested:
-	  - Africa, Europe, Middle East: 🌍
-	  - The Americas: 🌎
-	  - Asia and Australia: 🌏
-	  - Any other obscure locations: 🌎
-	  - Unknown chart location: 🌐
-	"""
-	if lat is None or lon is None:
-		# If location isn’t known yet, reserve the 'unknown' globe
-		return "🌐"
-
-	# Normalize longitude to [-180, 180]
-	try:
-		lon = ((lon + 180.0) % 360.0) - 180.0
-	except Exception:
-		return "🌎"
-
-	# Coarse, readable bands by longitude:
-	# Americas: roughly [-170, -30]
-	if -170.0 <= lon <= -30.0:
-		return "🌎"  # Americas
-
-	# Europe / Africa / Middle East: roughly [-30, +60]
-	if -30.0 < lon <= 60.0:
-		return "🌍"
-
-	# Asia / Australia: roughly (+60, +180]
-	if 60.0 < lon <= 180.0:
-		return "🌏"
-
-	# Wraparound edge cases (e.g., extreme Pacific longitudes near -180/+180)
-	# Treat as Asia/Australia band first; if you prefer Americas, swap this.
-	if lon < -170.0 or lon > 180.0:
-		return "🌏"
-
-	# Fallback for anything weird/obscure
-	return "🌎"
-
-def draw_center_earth(ax, *, size: float = 0.22, zorder: int = 10_000) -> None:
-	"""
-	Draw a region-appropriate Earth PNG at the chart center.
-	"""
-	lat, lon = _get_profile_lat_lon()
-	emoji = _earth_emoji_for_region(lat, lon)
-
-	# Map emoji → filename
-	mapping = {
-		"🌍": "earth_africa.png",
-		"🌎": "earth_americas.png",
-		"🌏": "earth_asia.png",
-		"🌐": "earth_americas.png",
-	}
-	fname = mapping.get(emoji, "earth_unknown.png")
-
-	# Your folder: Rosetta_v2/pngs/<files>
-	img_path = os.path.join(os.path.dirname(__file__), "pngs", fname)
-	if not os.path.exists(img_path):
-		return  # fail gracefully if file missing
-
-	arr_img = mpimg.imread(img_path)
-	imagebox = OffsetImage(arr_img, zoom=size)
-	ab = AnnotationBbox(imagebox, (0, 0), frameon=False, zorder=zorder)
-	ax.add_artist(ab)
-
 # ---------------------------------------------------------------------------
 # High-level renderer
 # ---------------------------------------------------------------------------
-
 @dataclass
 class RenderResult:
 	# Existing Chart Drawing Fields
@@ -1479,15 +598,20 @@ class RenderResult:
 	drawn_major_edges: list[tuple[str, str, str]]
 	drawn_minor_edges: list[tuple[str, str, str]]
 	
-	# ⬇️ NEW FIELDS FOR CIRCUIT TOGGLES ⬇️
-	patterns: List[List[str]]          # e.g., [['Sun', 'Moon'], ['Mars', 'Jupiter']]
-	shapes: List[Dict[str, Any]]       # e.g., [{'id': 'T-Square', 'parent': 0, ...}]
-	singleton_map: Dict[str, Any]      # e.g., {'Pluto': {'lon': 15.1, 'house': 10, ...}}
-	plot_data: Dict[str, Any]
+	# ⬇️ Optional fields with defaults ⬇️
+	patterns: List[List[str]] = None
+	shapes: List[Dict[str, Any]] = None
+	singleton_map: Dict[str, Any] = None
+	plot_data: Dict[str, Any] = None
+	out_text: str = ""
 
-	# Optional: Add the DataFrame/Summary data for robustness
-	# df_positions: Any                 # Combined chart data frame
-	# chart_data_summary: Any           # Summary data
+	# ⬇️ ADDED FIELDS FOR FLEXIBILITY (Bi-Wheel and Text Output) ⬇️
+	# Text output from the rendering process (e.g., from shape summary)
+	out_text: Optional[str] = None
+
+	# Bi-Wheel specific data (for the outer chart)
+	outer_positions: Optional[Dict[str, float]] = None
+	outer_cusps: Optional[List[float]] = None
 
 def render_chart(
 	df: pd.DataFrame,
@@ -1611,27 +735,31 @@ def render_chart(
 	draw_center_earth(ax)
 
 	return RenderResult(
-    	fig=fig,
-    	ax=ax,
-    	positions=positions,
-    	cusps=cusps,
-    	visible_objects=resolve_visible_objects,
-    	drawn_major_edges=major_edges_drawn,
-    	drawn_minor_edges=minor_edges_drawn,
-        
-        # ⬇️ ADD THESE ⬇️
-        patterns=patterns,
-        shapes=shapes,
-        singleton_map=singleton_map,
-    )
+		fig=fig,
+		ax=ax,
+		positions=positions,
+		cusps=cusps,
+		visible_objects=resolve_visible_objects,
+		drawn_major_edges=major_edges_drawn,
+		drawn_minor_edges=minor_edges_drawn,
+		
+		# ⬇️ ADD THESE ⬇️
+		patterns=patterns,
+		shapes=shapes,
+		singleton_map=singleton_map,
+	)
 
 # --- CHART RENDERER (full; calls your new helpers) -------------------------
 def render_chart_with_shapes(
 	pos, patterns, pattern_labels, toggles,
 	filaments, combo_toggles, label_style, singleton_map, df,
 	house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
-	major_edges_all
+	major_edges_all,
+	figsize=(5.0, 5.0),  # Add this
+	dpi=144
 ):
+	plt.close('all')  # Kill any background figures before starting
+	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	unknown_time_chart = bool(
 		st.session_state.get("chart_unknown_time")
 		or st.session_state.get("profile_unknown_time")
@@ -1846,8 +974,20 @@ def render_chart_with_shapes(
 		out_text = ask_gemini_brain(genai, task, context)  # type: ignore
 	except Exception:
 		pass
-
-	return fig, visible_objects, active_shapes, cusps, out_text
+	# Return the standardized result
+	return RenderResult(
+		fig=fig,
+		ax=ax,
+		positions=pos,
+		cusps=cusps,
+		visible_objects=list(visible_objects), # Ensure it's a list
+		drawn_major_edges=[], # Or populate if you track these in this function
+		drawn_minor_edges=[],
+		patterns=patterns,
+		shapes=active_shapes,
+		singleton_map=singleton_map,
+		out_text=out_text # Added this to the dataclass above
+	)
 
 # ---------------------------------------------------------------------------
 # Bi-wheel (synastry/transit) renderer
@@ -1863,7 +1003,7 @@ def render_biwheel_chart(
 	house_system: str = "placidus",
 	dark_mode: bool = False,
 	label_style: str = "glyph",
-	figsize: tuple[float, float] = (6.0, 6.0),
+	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
 ):
 	"""
@@ -1993,13 +1133,6 @@ def render_biwheel_chart(
 	show_chart2 = bool(edges_chart2)
 	num_groups_enabled = sum([show_inter, show_chart1, show_chart2])
 	use_group_colors = num_groups_enabled >= 2
-	
-	# Import synastry colors
-	try:
-		from lookup_v2 import SYNASTRY_COLORS_1, SYNASTRY_COLORS_2
-	except ImportError:
-		SYNASTRY_COLORS_1 = ["#FF0000"]
-		SYNASTRY_COLORS_2 = ["#00FF0075"]
 	
 	# Draw chart 1 internal aspects first (bottom layer)
 	if show_chart1:
@@ -2296,9 +1429,9 @@ def draw_planet_labels_biwheel(
 		if df is None or "Object" not in df or "Speed" not in df:
 			return False
 		try:
-			canon_name = _canonical_name(obj_name)
+			canon_name = _dh._canonical_name(obj_name)
 			for _, row in df.iterrows():
-				row_canon = _canonical_name(str(row.get("Object", "")))
+				row_canon = _dh._canonical_name(str(row.get("Object", "")))
 				if row_canon == canon_name:
 					speed = row.get("Speed")
 					if speed is not None and float(speed) < 0:
@@ -2355,4 +1488,3 @@ __all__ = [
 	"_selected_house_system",
 	"reset_chart_state",
 ]
-
