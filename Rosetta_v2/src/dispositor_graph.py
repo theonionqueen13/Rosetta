@@ -120,13 +120,9 @@ def render_dispositor_section(st, df_cached) -> None:
             legend_col, graph_col = st.columns([1, 5])
                 
             with legend_col:
-                png_dir = os.path.join(os.path.dirname(__file__), "pngs")
-                
-                # Get the directory of the current file (e.g., ...\Rosetta_v2\src)
+                # Get the directory of the current file and point to pngs
                 current_dir = os.path.dirname(__file__) 
-                
-                # ⬇️ THE FIX: Go up one level (..) to Rosetta_v2, then look for 'pngs' ⬇️
-                png_dir = os.path.join(current_dir, "..", "pngs")
+                png_dir = os.path.abspath(os.path.join(current_dir, "..", "pngs"))
 
                 # Load and encode images as base64
                 def img_to_b64(filename):
@@ -136,29 +132,52 @@ def render_dispositor_section(st, df_cached) -> None:
                             return base64.b64encode(f.read()).decode()
                     return ""
                 
-                # Create legend with dark background
+                # Create legend header
                 st.markdown("""
                     <div style="background-color: #262730; padding: 15px; border-radius: 8px;">
                         <strong style="color: white;">Legend</strong>
                     </div>
                 """, unsafe_allow_html=True)
                 
+                # Updated list including the two new reception icons
                 legend_items = [
                     ("green.png", "Sovereign"),
                     ("orange.png", "Dual rulership"),
                     ("purple.png", "Loop"),
                     ("purpleorange.png", "Dual + Loop"),
                     ("blue.png", "Standard"),
+                    ("blue_reception.png", "Has reception (in orb)"),
+                    ("green_reception.png", "Has reception by sign"),
+                    ("conjunction.png", "Conjunction"),
+                    ("sextile.png", "Sextile"),
+                    ("square.png", "Square"),
+                    ("trine.png", "Trine"),
+                    ("opposition.png", "Opposition"),
                 ]
                 
-                # Wrap all legend items in the dark background
+                # Build the HTML
                 legend_html = '<div style="background-color: #262730; padding: 15px; border-radius: 8px; margin-top: -15px;">'
-                for img_file, label in legend_items:
+                
+                # 1. Move Self-Ruling to the very top
+                legend_html += '<div style="color: white; margin-bottom: 12px; font-size: 0.9em; border-bottom: 1px solid #444; padding-bottom: 12px;">↻ Self-Ruling</div>'
+                
+                # 2. Iterate through the rest of the items
+                for i, (img_file, label) in enumerate(legend_items):
+                    # We adjusted the divider logic: 
+                    # Since Self-Ruling is at the top, we now only need a divider before the aspect icons.
+                    # In your list, the aspects/reception start at index 5 ("blue_reception.png")
+                    margin_top = "margin-top: 12px; border-top: 1px solid #444; padding-top: 12px;" if i == 5 else ""
+                    
                     b64 = img_to_b64(img_file)
                     if b64:
-                        legend_html += f'<div style="margin-bottom: 8px;"><img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:5px"/><span style="color: white;">{label}</span></div>'
-                legend_html += '<div style="color: white; margin-top: 8px;">↻ Self-Ruling</div>'
+                        legend_html += f'''
+                        <div style="margin-bottom: 8px; {margin_top}">
+                            <img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:8px"/>
+                            <span style="color: white; font-size: 0.9em;">{label}</span>
+                        </div>'''
+                
                 legend_html += '</div>'
+                
                 st.markdown(legend_html, unsafe_allow_html=True)
                 
             with graph_col:
@@ -869,254 +888,144 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
         if not nodes:
             continue
 
-        # Calculate dynamic spacing based on tree size relative to largest tree
-        num_nodes = len(tree_nodes)  # Use tree_nodes (actual count) not nodes (includes duplicates)
-        # Gentler scaling: interpolate between 0.85 and 1.0
-        raw_scale = num_nodes / max_nodes
-        scale_factor = 0.85 + (0.15 * raw_scale)  # Scale ranges from 0.85 to 1.0
-        
-        # Scale spacing
-        min_spacing = 5.0 * scale_factor
-        vertical_gap = 2.0 * scale_factor
-        
-        # Simple node-count-based sizing (like original code)
-        if num_nodes <= 5:
-            label_fontsize = 9
-            symbol_fontsize = 12
-            circle_size = 2000
-            icon_zoom = 0.90  # Largest icons for small trees
-        elif num_nodes <= 15:
-            label_fontsize = 11
-            symbol_fontsize = 13
-            circle_size = 2000
-            icon_zoom = 0.75
-        elif num_nodes <= 20:
-            label_fontsize = 12
-            symbol_fontsize = 14
-            circle_size = 3000
-            icon_zoom = 0.66
-        elif num_nodes <= 25:
-            label_fontsize = 11
-            symbol_fontsize = 13
-            circle_size = 3000
-            icon_zoom = 0.60
-        else:
-            label_fontsize = 8
-            symbol_fontsize = 10
-            circle_size = 900
-            icon_zoom = 0.54  # Smallest icons for crowded trees
-
-        subtree_gap = -min_spacing * 1  # Negative gap to bring siblings closer
+        # Circle label, icon and font sizes
+        label_fontsize = 11
+        symbol_fontsize = 16
+        circle_size = 2300
+        icon_zoom = 0.60        
         
         # Build parent->children map for this tree
         tree_edges = {}
         for parent_id, child_id in edges:
             tree_edges.setdefault(parent_id, []).append(child_id)
-        
-        # Position nodes level by level, centering children under parents
-        pos = {}
-        next_x_by_level = {}  # track next available x position per level
-        
-        def position_subtree(node_id, parent_x=None):
-            """Position node and its descendants, returning the node's final x position."""
-            level = next(lev for lev, ids in level_nodes.items() if node_id in ids)
-            children = tree_edges.get(node_id, [])
             
-            if not children:
-                # Leaf node: place at next available position
-                x = next_x_by_level.get(level, 0.0)
-                pos[node_id] = (x, -level * vertical_gap)
-                next_x_by_level[level] = x + min_spacing
-                return x
-            else:
-                # Internal node: position children one by one
-                child_positions = []
-                for child in children:
-                    # Position this child subtree
-                    child_x = position_subtree(child, parent_x=None)
-                    child_positions.append(child_x)
-                    
-                    # After positioning child, find rightmost node in its subtree and update tracker
-                    def update_tracker_for_subtree(nid):
-                        if nid in pos:
-                            node_level = next(lev for lev, ids in level_nodes.items() if nid in ids)
-                            node_x = pos[nid][0]
-                            next_x_by_level[node_level] = max(
-                                next_x_by_level.get(node_level, -float('inf')),
-                                node_x + min_spacing
-                            )
-                        for c in tree_edges.get(nid, []):
-                            update_tracker_for_subtree(c)
-                    
-                    # Update tracker based on final positions in this child's subtree
-                    update_tracker_for_subtree(child)
-                
-                # Parent centers over its children's actual final positions
-                leftmost_child = min(child_positions)
-                rightmost_child = max(child_positions)
-                x = (leftmost_child + rightmost_child) / 2.0
-                
-                # Ensure parent doesn't collide with other nodes at its level
-                min_x = next_x_by_level.get(level, -float('inf'))
-                if x < min_x:
-                    # Need to shift: calculate how much and shift the whole subtree
-                    shift = min_x - x
-                    x = min_x
-                    
-                    # Shift all descendants that were already positioned
-                    def shift_subtree(nid, dx):
-                        if nid in pos:
-                            old_x, old_y = pos[nid]
-                            pos[nid] = (old_x + dx, old_y)
-                        for c in tree_edges.get(nid, []):
-                            shift_subtree(c, dx)
-                    
-                    for child in children:
-                        shift_subtree(child, shift)
-                    
-                    # After shifting, update tracker again for all children
-                    for child in children:
-                        update_tracker_for_subtree(child)
-                
-                pos[node_id] = (x, -level * vertical_gap)
-                
-                # Add extra spacing after parent nodes to separate subtree groups
-                next_x_by_level[level] = x + min_spacing + subtree_gap
-                return x
-        
-        # Start positioning from root
-        root_id = f"{root}_0"
-        position_subtree(root_id)
+        # --- COLUMN-BASED POSITIONING (NO OVERLAP + BOOKEND RULE) ---
 
-        root_id = f"{root}_0"
-        if root_id not in pos:
-            pos[root_id] = (0.0, 0.0)
-        
-        # COMPACTION PHASE: Pack childless siblings into gaps between parent siblings
-        # For each parent node, compact its direct children
-        def compact_children(parent_id):
-            """Reposition childless children to fill gaps between parent children."""
+        # 1. Build parent->children map
+        tree_edges = {}
+        for parent_id, child_id in edges:
+            tree_edges.setdefault(parent_id, []).append(child_id)
+            
+        # 2. CONFIGURATION
+        H_GAP = 1.0  # Since we are level-aware, we can go back to a normal number
+        V_GAP = 5.0 
+
+        def get_branch_weight(node_id):
+            """Helper to count how many descendants a planet has."""
+            kids = tree_edges.get(node_id, [])
+            count = len(kids)
+            for k in kids:
+                count += get_branch_weight(k)
+            return count
+
+        def get_ordered_children(parent_id):
             children = tree_edges.get(parent_id, [])
-            if len(children) <= 1:
-                return  # nothing to compact
+            if not children: return []
             
-            # Separate children into parents (have their own children) and leaves (no children)
-            parent_children = [cid for cid in children if tree_edges.get(cid)]
-            leaf_children = [cid for cid in children if not tree_edges.get(cid)]
+            # 1. Categorize children by family size
+            # We'll store them as tuples: (node_id, weight)
+            weighted_kids = [(c, get_branch_weight(c)) for c in children]
             
-            if not parent_children or not leaf_children:
-                return  # need both types to compact
+            # Sort by weight descending (biggest families first)
+            weighted_kids.sort(key=lambda x: x[1], reverse=True)
             
-            # Sort parent children by x position
-            parent_children.sort(key=lambda cid: pos[cid][0])
-            
-            # Sort leaf children by current x position to maintain relative order
-            leaf_children.sort(key=lambda cid: pos[cid][0])
-            
-            # Get the level of these children (all siblings are at same level)
-            child_level = next(lev for lev, ids in level_nodes.items() if children[0] in ids)
-            
-            # Collect ALL nodes at this level to check for collisions
-            all_nodes_at_level = [(nid, pos[nid][0]) for nid in level_nodes.get(child_level, []) if nid in pos]
-            all_nodes_at_level.sort(key=lambda x: x[1])  # sort by x position
-            
-            # Calculate total gap space between all parent children
-            gaps = []
-            total_gap_space = 0
-            for i in range(len(parent_children) - 1):
-                left_child = parent_children[i]
-                right_child = parent_children[i + 1]
-                left_x = pos[left_child][0]
-                right_x = pos[right_child][0]
-                gap_size = right_x - left_x - min_spacing
-                # Only use gaps that can fit at least one leaf with proper spacing
-                if gap_size >= min_spacing * 1.5:  # Relaxed threshold
-                    gaps.append({
-                        'left_x': left_x,
-                        'right_x': right_x,
-                        'size': gap_size
-                    })
-                    total_gap_space += gap_size
-            
-            if not gaps:
-                return  # no gaps to fill
-            
-            # Distribute leaves evenly across all gaps
-            num_leaves = len(leaf_children)
-            leaf_idx = 0
-            
-            for gap in gaps:
-                # Calculate how many leaves should go in this gap (proportional to gap size)
-                gap_proportion = gap['size'] / total_gap_space
-                leaves_for_gap = max(1, round(num_leaves * gap_proportion))
-                
-                # Don't exceed remaining leaves
-                leaves_for_gap = min(leaves_for_gap, num_leaves - leaf_idx)
-                
-                if leaves_for_gap == 0:
-                    continue
-                
-                # Evenly space the leaves in this gap
-                gap_start = gap['left_x'] + min_spacing
-                gap_end = gap['right_x']
-                available_space = gap_end - gap_start
-                
-                # Ensure we have enough space for the leaves with minimum spacing
-                required_space = leaves_for_gap * min_spacing
-                if available_space < required_space:
-                    # Adjust number of leaves to fit
-                    leaves_for_gap = max(1, int(available_space / min_spacing))
-                
-                spacing = available_space / (leaves_for_gap + 1)
-                # Don't let spacing go below min_spacing
-                spacing = max(spacing, min_spacing * 0.8)
-                
-                for i in range(leaves_for_gap):
-                    if leaf_idx >= num_leaves:
-                        break
-                    leaf_id = leaf_children[leaf_idx]
-                    new_x = gap_start + spacing * (i + 1)
-                    
-                    # CRITICAL: Check if this position would overlap with any existing node
-                    collision = False
-                    for other_id, other_x in all_nodes_at_level:
-                        if other_id != leaf_id and abs(new_x - other_x) < min_spacing * 0.9:
-                            collision = True
-                            break
-                    
-                    if not collision:
-                        old_x, y = pos[leaf_id]
-                        pos[leaf_id] = (new_x, y)
-                    # If collision, keep original position
-                    
-                    leaf_idx += 1
-                
-                if leaf_idx >= num_leaves:
-                    break
-        
-        # COMPACTION PHASE: Pack childless siblings into gaps between parent siblings
-        # Always apply compaction, but respect min_spacing
-        for node_id in pos.keys():
-            if tree_edges.get(node_id):  # is a parent
-                compact_children(node_id)
+            # 2. Separate them into "Heavy Families" and "Light/Leaf"
+            # We'll consider any branch with more than 1 descendant a "Heavy Family"
+            heavy = [k[0] for k in weighted_kids if k[1] > 1]
+            light = [k[0] for k in weighted_kids if k[1] <= 1]
 
-        # Calculate tree extent
+            # 3. THE "SANDWICH" RULE
+            # Place the heaviest families on the ends, and tuck the lighter ones in the gaps.
+            if len(heavy) < 2:
+                # If there's only one big family, put it in the middle of the leaves
+                mid = len(light) // 2
+                return light[:mid] + heavy + light[mid:]
+
+            # If we have multiple big families, distribute leaves/small families between them
+            num_gaps = len(heavy) - 1
+            distributed_list = []
+            light_per_gap = len(light) // num_gaps
+            extra_light = len(light) % num_gaps
+            light_idx = 0
+            
+            for i in range(num_gaps):
+                distributed_list.append(heavy[i])
+                count = light_per_gap + (1 if i < extra_light else 0)
+                distributed_list.extend(light[light_idx : light_idx + count])
+                light_idx += count
+                
+            distributed_list.append(heavy[-1])
+            return distributed_list
+
+        # 4. LEVEL-AWARE POSITIONING
+        pos = {}
+        level_next_x = {} # Tracks the next 'free' edge for each level
+
+        def assign_pos_final(node_id, level):
+            kids = get_ordered_children(node_id)
+            
+            if not kids:
+                # 1. It's a leaf. Place it at the next available slot on this level.
+                x = level_next_x.get(level, 0.0)
+                pos[node_id] = (x, -level * V_GAP)
+                level_next_x[level] = x + H_GAP
+                return x, x # Return (min_x, max_x) of this branch
+
+            # 2. It's a parent. Position all children first to find the family's width.
+            child_bounds = [assign_pos_final(k, level + 1) for k in kids]
+            
+            # The 'Kingdom Width' is defined by the first and last child
+            min_child_x = child_bounds[0][0]
+            max_child_x = child_bounds[-1][1]
+            
+            # 3. Calculate the ideal center point for the parent
+            ideal_x = (min_child_x + max_child_x) / 2.0
+            
+            # 4. SAFETY CHECK: Is the parent's level already crowded?
+            current_level_min = level_next_x.get(level, 0.0)
+            
+            if ideal_x < current_level_min:
+                # If the family is too far left, we must shift the WHOLE family right
+                shift = current_level_min - ideal_x
+                
+                # Update this parent's position
+                ideal_x += shift
+                
+                # Recursive Shift: We have to move the children we already placed
+                def shift_branch(n_id, s_amount):
+                    curr_p = pos[n_id]
+                    pos[n_id] = (curr_p[0] + s_amount, curr_p[1])
+                    # Update the level tracker for the children's levels too
+                    node_level = int(abs(curr_p[1]) / V_GAP)
+                    level_next_x[node_level] = max(level_next_x.get(node_level, 0.0), pos[n_id][0] + H_GAP)
+                    
+                    for child in tree_edges.get(n_id, []):
+                        shift_branch(child, s_amount)
+
+                # Move all descendants to keep them vertical/centered
+                for k in kids:
+                    shift_branch(k, shift)
+            
+            # 5. Finalize the parent and update the level tracker
+            pos[node_id] = (ideal_x, -level * V_GAP)
+            level_next_x[level] = ideal_x + H_GAP
+            
+            # Return the new bounds of this entire shifted family
+            return min_child_x + (shift if 'shift' in locals() else 0), max_child_x + (shift if 'shift' in locals() else 0)
+
+        # --- EXECUTION ---
+        root_id = f"{root}_0"
+        assign_pos_final(root_id, 0)
+    
+        # 6. Calculate ACTUAL width for scaling later
         x_coords = [p[0] for p in pos.values()]
-        y_coords = [p[1] for p in pos.values()]
         tree_width = max(x_coords) - min(x_coords) if x_coords else 0
-        tree_height = max(y_coords) - min(y_coords) if y_coords else 0
         
-        # Store all data for this tree
         all_tree_data.append({
-            'root': root,
-            'nodes': nodes,
-            'edges': edges,
-            'pos': pos,
-            'label_fontsize': label_fontsize,
-            'symbol_fontsize': symbol_fontsize,
-            'circle_size': circle_size,
-            'width': tree_width,
-            'height': tree_height
+            'root': root, 'nodes': nodes, 'edges': edges, 'pos': pos,
+            'label_fontsize': label_fontsize, 'symbol_fontsize': symbol_fontsize,
+            'circle_size': circle_size, 'width': tree_width,
+            'height': max([abs(p[1]) for p in pos.values()]) if pos else 0
         })
     
     # Count planet occurrences across all trees to detect duplicates (dual rulership)
@@ -1127,25 +1036,25 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
     # Identify planets that appear more than once
     duplicated_planets = {name for name, count in planet_occurrences.items() if count > 1}
     
-    # PHASE 2: Create figure with proper size based on actual tree extents
+    # PHASE 2: Create figure with dynamic scaling
     tree_widths = [td['width'] for td in all_tree_data]
     tree_heights = [td['height'] for td in all_tree_data]
+
+    # Calculate the total physical inches needed
+    # We use 0.15 as a "multiplier" to turn coordinate units into inches
+    # If the chart is too wide for your screen, make 0.15 a smaller number like 0.1
+    total_inches_needed = sum(tree_widths) * 0.15 
     
-    # Use a fixed, reasonable figure size that's not based on data width
-    # Data widths can be large due to spacing, but we don't want huge figures
-    fig_width = 8 * n  # 8 inches per tree - reasonable and consistent
-    fig_height = 10     # 10 inches tall
+    # Ensure the figure isn't too small or absurdly large
+    fig_width = max(15, total_inches_needed)
+    fig_height = 12 
     
-    # Use GridSpec to control subplot widths proportionally
-    
-    # Calculate width ratios based on tree widths
-    max_width = max(tree_widths) if tree_widths else 1
-    width_ratios = [w / max_width for w in tree_widths]
+    # width_ratios ensures a 10-planet tree gets more room than a 2-planet tree
+    width_ratios = [max(0.1, w) for w in tree_widths]
     
     fig = plt.figure(figsize=(fig_width, fig_height))
-    gs = gridspec.GridSpec(1, n, figure=fig, width_ratios=width_ratios, wspace=0.15)
+    gs = gridspec.GridSpec(1, n, figure=fig, width_ratios=width_ratios, wspace=0.3)
     axes = [fig.add_subplot(gs[0, i]) for i in range(n)]
-    
     # PHASE 3: Render all trees
     # First, calculate the maximum y-range needed across all trees
     max_height = max(tree_heights) if tree_heights else 10
@@ -1209,20 +1118,18 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
                         fontsize=symbol_fontsize, color='black', zorder=3)
 
         # --- PHASE 1: PRE-CALCULATION & AXIS SETUP ---
-        # Set axis limits FIRST so the coordinate system is stable
+        # SET AXIS LIMITS - This locks the camera to the family's width
         if pos:
             x_coords = [p[0] for p in pos.values()]
             y_coords = [p[1] for p in pos.values()]
-            x_min, x_max = min(x_coords), max(x_coords)
-            y_min, y_max = min(y_coords), max(y_coords)
             
-            x_pad = (x_max - x_min) * 0.1 if x_max > x_min else 1.0
-            ax.set_xlim(x_min - x_pad, x_max + x_pad)
+            # Give it a small 10% buffer so the circles aren't cut off
+            x_margin = H_GAP * 0.5
+            ax.set_xlim(min(x_coords) - x_margin, max(x_coords) + x_margin)
             
-            y_range = max_height
-            ax.set_ylim(y_max - y_range - 1, y_max + 1)
-
-        # Turn off axis before drawing artists
+            # Use a fixed bottom limit so all trees start at the top
+            ax.set_ylim(min(y_coords) - 20, 10) 
+            
         ax.axis("off")
 
 # --- PHASE 4: Render Arrows and Aspect Icons ---
@@ -1278,7 +1185,7 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
                             ab = AnnotationBbox(
                                 imagebox, (mid_x, mid_y),
                                 xycoords='data', frameon=True, pad=0.1,
-                                bboxprops=dict(facecolor='white', edgecolor='none', alpha=0.9),
+                                bboxprops=dict(facecolor='none', edgecolor='none', alpha=0.9),
                                 zorder=10
                             )
                             ax.add_artist(ab)

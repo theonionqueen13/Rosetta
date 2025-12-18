@@ -282,6 +282,7 @@ SYNASTRY_COLORS_2 = [
 ]
 ZODIAC_SIGNS = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
 ZODIAC_COLORS = ["red", "green", "#DAA520", "blue"] * 3
+ZODIAC_NUMBERS = {"Aries": "1", "Taurus": "2", "Gemini": "3", "Cancer": "4", "Leo": "5", "Virgo": "6", "Libra": "7", "Scorpio": "8", "Sagittarius": "9", "Capricorn": "10", "Aquarius": "11", "Pisces": "12"}
 
 ASPECTS = {
     "Conjunction": {"angle": 0, "orb": 5, "color": "#888888", "style": "solid", "glyph": "☌"},
@@ -545,8 +546,6 @@ CATEGORY_INSTRUCTIONS = {
     "Switches": "Treat these as sensitive toggles or thresholds. They activate, invert, or flip circuits. Interpret them as switches that trigger growth arcs, release conditions, or polarity shifts.",
     "Imprints": "Treat these as permanent marks from the heavens. They stamp the chart with mythic inheritance, often conferring unusual talents or fated qualities. Interpret them as imprints that ‘hard-code’ certain powers or vulnerabilities into the native’s system.",
 }
-
-ZODIAC_NUMBERS = {"Aries": "1", "Taurus": "2", "Gemini": "3", "Cancer": "4", "Leo": "5", "Virgo": "6", "Libra": "7", "Scorpio": "8", "Sagittarius": "9", "Capricorn": "10", "Aquarius": "11", "Pisces": "12"}
 
 ASPECTS_BY_SIGN = {
     "Conjunction": "0",
