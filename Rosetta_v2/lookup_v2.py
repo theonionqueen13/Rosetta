@@ -282,15 +282,32 @@ SYNASTRY_COLORS_2 = [
 ]
 ZODIAC_SIGNS = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎️", "♏️", "♐️", "♑️", "♒️", "♓️"]
 ZODIAC_COLORS = ["red", "green", "#DAA520", "blue"] * 3
+
 ASPECTS = {
-    "Conjunction": {"angle": 0, "orb": 5, "color": "#888888", "style": "solid"},
-    "Sextile": {"angle": 60, "orb": 3, "color": "purple", "style": "solid"},
-    "Square": {"angle": 90, "orb": 3, "color": "red", "style": "solid"},
-    "Trine": {"angle": 120, "orb": 3, "color": "blue", "style": "solid"},
-    "Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted"},
-    "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted"},
-    "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid"},
-    "Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
+    "Conjunction": {"angle": 0, "orb": 5, "color": "#888888", "style": "solid", "glyph": "☌"},
+    "Sextile": {"angle": 60, "orb": 3, "color": "purple", "style": "solid", "glyph": "⚹"},
+    "Square": {"angle": 90, "orb": 3, "color": "red", "style": "solid", "glyph": "□"},
+    "Trine": {"angle": 120, "orb": 3, "color": "blue", "style": "solid", "glyph": "△"},
+    "Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted", "glyph": "⚼"},
+    "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted", "glyph": "⚻"},
+    "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid", "glyph": "☍"},
+    "Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted", "glyph": "⚺"},
+}
+
+RECEPTION_SYMBOLS = {
+    "Conjunction": {"by orb": "blue_conjunction.png", "by sign": "green_conjunction.png"},
+    "Sextile": {"by orb": "blue_sextile.png", "by sign": "green_sextile.png"},
+    "Square": {"by orb": "blue_square.png", "by sign": "green_square.png"},
+    "Trine": {"by orb": "blue_trine.png", "by sign": "green_trine.png"},
+    "Opposition": {"by orb": "blue_opposition.png", "by sign": "green_opposition.png"}
+}
+
+_RECEPTION_ASPECTS = {
+	"Conjunction": 0,
+	"Sextile": 60,
+	"Square": 90,
+	"Trine": 120,
+	"Opposition": 180,
 }
 
 ALIASES_MEANINGS = {
@@ -527,6 +544,16 @@ CATEGORY_INSTRUCTIONS = {
     "Compass Needle": "Treat these as the chart’s directional polarity. They mark the karmic vector between where the native has come from and where they are growing toward. Interpret them as the navigational axis of soul trajectory.",
     "Switches": "Treat these as sensitive toggles or thresholds. They activate, invert, or flip circuits. Interpret them as switches that trigger growth arcs, release conditions, or polarity shifts.",
     "Imprints": "Treat these as permanent marks from the heavens. They stamp the chart with mythic inheritance, often conferring unusual talents or fated qualities. Interpret them as imprints that ‘hard-code’ certain powers or vulnerabilities into the native’s system.",
+}
+
+ZODIAC_NUMBERS = {"Aries": "1", "Taurus": "2", "Gemini": "3", "Cancer": "4", "Leo": "5", "Virgo": "6", "Libra": "7", "Scorpio": "8", "Sagittarius": "9", "Capricorn": "10", "Aquarius": "11", "Pisces": "12"}
+
+ASPECTS_BY_SIGN = {
+    "Conjunction": "0",
+    "Sextile": "2",
+    "Square": "3",
+    "Trine": "4",
+    "Opposition": "6"
 }
 
 
