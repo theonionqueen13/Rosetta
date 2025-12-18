@@ -829,51 +829,60 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
     
     # PHASE 1: Position all trees and calculate their extents
     all_tree_data = []
+    processed_nodes = set()
     
+    # Use the pre-existing 'roots' list from your tree-building logic
     for tree_idx, root in enumerate(roots):
-        # Get the set of nodes that should be in this tree
+        
+        # 1. SKIP CHECK: If this root (the starting planet) has already been 
+        # mapped as a member of a previous tree, skip it!
+        if root in processed_nodes:
+            continue
+            
+        # Get the set of nodes that belong to this specific tree
         tree_nodes = all_trees[tree_idx]
         
-        # Build a parent->children map ONLY for nodes in this tree
+        # 2. MARK AS SEEN: Add all planets in THIS tree to the seen set 
+        # so they don't trigger their own duplicate trees later
+        for planet_name in tree_nodes:
+            processed_nodes.add(planet_name)
+
+        # --- Everything below remains the same as your logic ---
+        
+        # Build maps ONLY for nodes in this tree
         tree_children_map = {}
         for parent, child in raw_links:
             if parent in tree_nodes and child in tree_nodes:
                 tree_children_map.setdefault(parent, []).append(child)
         
-        # Also build a reverse map (child->parents) to handle rulership
         tree_parents_map = {}
         for parent, child in raw_links:
             if parent in tree_nodes and child in tree_nodes:
                 tree_parents_map.setdefault(child, []).append(parent)
         
-        nodes = []          # list of tuples (name, node_id)
-        edges = []          # list of tuples (parent_id, child_id)
-        level_nodes = {}    # level -> ordered list of node_ids (no duplicates)
-        queue = [(root, f"{root}_0", 0)]  # (name, unique_id, level)
+        nodes = []          
+        edges = []          
+        level_nodes = {}    
+        queue = [(root, f"{root}_0", 0)]  
 
-        visited_names = set([root])  # track which planet NAMES we've added
-        visited_ids = set([f"{root}_0"])  # track unique node IDs to prevent infinite loops
-        processed_pairs = set()  # track (parent_name, child_name) pairs to prevent reprocessing
+        visited_names = set([root])  
+        visited_ids = set([f"{root}_0"])  
+        processed_pairs = set()  
 
         while queue:
             parent_name, parent_id, level = queue.pop(0)
-
             nodes.append((parent_name, parent_id))
             level_nodes.setdefault(level, [])
             if parent_id not in level_nodes[level]:
                 level_nodes[level].append(parent_id)
 
-            # Process children (downward edges)
             children = tree_children_map.get(parent_name, [])
             for i, child in enumerate(children):
-                # Skip if we've already processed this parent->child relationship
                 if (parent_name, child) in processed_pairs:
                     continue
                 processed_pairs.add((parent_name, child))
                 
                 child_id = f"{child}_{level+1}_{i}"
-
-                # Prevent infinite recursion while still allowing repeats at different levels
                 if child_id in visited_ids:
                     continue
                 visited_ids.add(child_id)
@@ -881,10 +890,6 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
 
                 edges.append((parent_id, child_id))
                 queue.append((child, child_id, level+1))
-                level_nodes.setdefault(level+1, [])
-                if child_id not in level_nodes[level+1]:
-                    level_nodes[level+1].append(child_id)
-
         if not nodes:
             continue
 
@@ -1035,6 +1040,13 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
     
     # Identify planets that appear more than once
     duplicated_planets = {name for name, count in planet_occurrences.items() if count > 1}
+    
+    # NEW: Update 'n' to be the actual number of trees we processed
+    n = len(all_tree_data) 
+    
+    # If no trees were generated at all, safety exit
+    if n == 0:
+        return None
     
     # PHASE 2: Create figure with dynamic scaling
     tree_widths = [td['width'] for td in all_tree_data]
