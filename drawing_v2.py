@@ -647,6 +647,8 @@ def render_chart(
 	positions = extract_positions(df, visible_names)
 	visible_canon = _expand_visible_canon(visible_names)
 
+	st.session_state.set("resolved_visible_objects", visible_names)
+
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	if dark_mode:
 		ax.set_facecolor("black")

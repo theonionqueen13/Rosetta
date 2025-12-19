@@ -71,11 +71,11 @@ BASE_DIR = Path(__file__).parent.absolute()
 # Construct the path to the images
 LIGHT_BG = BASE_DIR / "pngs" / "nebula2.jpg"
 if not LIGHT_BG.exists():
-    print(f"DEBUG: I'm looking for the background here: {LIGHT_BG}")
+	print(f"DEBUG: I'm looking for the background here: {LIGHT_BG}")
 
 DARK_BG = BASE_DIR / "pngs" / "galaxies.jpg"
 if not DARK_BG.exists():
-    print(f"DEBUG: I'm looking for the background here: {DARK_BG}")
+	print(f"DEBUG: I'm looking for the background here: {DARK_BG}")
 
 LIGHT_OVERLAY = 0.20
 DARK_OVERLAY  = 0.45
@@ -585,9 +585,15 @@ if df_cached is not None:
 		},
 		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
 	}
-	interp = ChartInterpreter(chart_state)
-	interp_output = interp.generate()
-	st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
+	# Debugging: Log chart_state before instantiation
+	print(f"chart_state: {chart_state}")
+
+	try:
+		interp = ChartInterpreter(chart_state)
+		interp_output = interp.generate()
+		st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
+	except Exception as e:
+		print(f"Error during ChartInterpreter instantiation: {e}")
 
 	# --- Dispositor Graph (moved from popover) ---
 	render_dispositor_section(st, df_cached)

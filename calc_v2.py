@@ -1048,6 +1048,7 @@ def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
 
 	return pd.DataFrame(data, index=names, columns=names)
 
+
 def build_aspect_edges(df: pd.DataFrame, compass_rose: bool = False) -> tuple[list[tuple], list[tuple]]:
 	"""
 	Return (edges_major, edges_minor), each as a list of tuples:
@@ -1144,6 +1145,8 @@ def build_aspect_edges(df: pd.DataFrame, compass_rose: bool = False) -> tuple[li
 				}
 				edges_major.append((ac, dc, meta))
 	return edges_major, edges_minor
+
+
 
 def _sign_to_index(sign_name: str) -> int | None:
 	"""Return 0..11 for Aries..Pisces using your SIGNS list."""
@@ -1329,7 +1332,7 @@ def oxford_join(lst):
         return f"{lst[0]} and {lst[1]}"
     else:
         return ", ".join(lst[:-1]) + f", and {lst[-1]}"
-	
+
 def build_clustered_aspect_edges(df: pd.DataFrame, edges_major: list[tuple]) -> list[tuple]:
 	"""
 	Returns a list of aspects between conjunction clusters and singletons, avoiding redundant listings.

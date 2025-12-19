@@ -8,9 +8,10 @@ Usage:
     interpreter = ChartInterpreter(chart_state)
     text = interpreter.generate(mode="poetic")
 """
-
+ 
 from typing import List, Dict, Any, Optional
 import pandas as pd
+import logging
 # Assuming these lookups are dictionaries keyed for quick access
 from lookup_v2 import COMPASS_ASPECT_INTERP, HOUSE_AXIS_INTERP, SIGN_AXIS_INTERP 
 # Assuming calc_v2 exists in the same environment
@@ -20,6 +21,9 @@ except ImportError:
     # Define placeholder functions if calc_v2 is missing to prevent errors
     def build_clustered_aspect_edges(df, edges): return []
     def build_conjunction_clusters(df, edges): return {}, {}, set()
+
+# Configure logging for debugging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class ChartInterpreter:
     """
@@ -35,32 +39,91 @@ class ChartInterpreter:
     COMPASS_KEYS = {
         frozenset(['Ascendant', 'Descendant']): 'ACDC',
         frozenset(['MC', 'IC']): 'MCIC',
-        frozenset(['North Node', 'South Node']): 'Nodes',
+        frozenset(['North Node', 'South Node']): 'Nodes'
     }
 
     def __init__(self, chart_state: Dict[str, Any]):
         """
-        Initializes the interpreter and normalizes object names for consistent lookup.
+        Initializes the interpreter and filters data to only include visible objects.
         """
         self.state = chart_state
-        self.ordered_df: Optional[pd.DataFrame] = chart_state.get('ordered_df')
-        self.edges_major: List[tuple] = chart_state.get('edges_major', [])
-        self.edges_minor: List[tuple] = chart_state.get('edges_minor', [])
         self.mode: str = chart_state.get('mode', 'poetic')
-        self.raw_links: Dict[str, Any] = chart_state.get('raw_links', {})
         self.lookup: Dict[str, Any] = chart_state.get('lookup', {})
-        self.missing: List[str] = []  # Track missing data for footnotes
+        self.missing: List[str] = []
         self.fixed_star_catalog = self.lookup.get('FIXED_STAR_CATALOG')
 
-        # Pre-normalize 'Object' names in the DataFrame once
-        if self.ordered_df is not None and not self.ordered_df.empty:
-            def normalize_name(x):
-                # Ensure it's a string before calling strip/get
-                return self.AXIS_MAP.get(str(x).strip(), str(x).strip())
-            
-            # Create a dedicated normalized object name column for consistent lookups
-            self.ordered_df['Object_Normalized'] = self.ordered_df['Object'].apply(normalize_name)
+        # 1. Get visibility list from state (Checking both possible keys)
+        # ui_state_helpers.py uses "visible_objects"
+        visible_data = chart_state.get("rr.visible_objects", {"objects": set(), "compass_rose_on": False})
+        visible_objects = visible_data["objects"]
+        compass_rose_on = visible_data["compass_rose_on"]
+        logging.debug(f"Visible objects: {visible_objects}, Compass Rose On: {compass_rose_on}")
 
+        # 2. Filter the DataFrame
+        raw_df = chart_state.get('ordered_df')
+        if raw_df is not None and not raw_df.empty:
+            logging.debug(f"Initial DataFrame:\n{raw_df}")
+            if visible_objects:
+                # Convert to set for faster lookup
+                v_set = set(visible_objects)
+                # Add shorthands/variants to the set to ensure matches like AC -> Ascendant
+                for key, val in self.AXIS_MAP.items():
+                    if key in v_set: v_set.add(val)
+                    if val in v_set: v_set.add(key)
+                logging.debug(f"Visibility set after normalization: {v_set}")
+
+                # Filter DataFrame to only include visible objects
+                self.ordered_df = raw_df[raw_df['Object'].isin(v_set)].copy()
+                logging.debug(f"Filtered DataFrame by visible_objects: {self.ordered_df}")
+            else:
+                self.ordered_df = raw_df.copy()
+                logging.debug("No visible objects provided; using full DataFrame.")
+        else:
+            self.ordered_df = None
+            logging.debug("Raw DataFrame is None or empty.")
+
+        # Exclude house cusps from the DataFrame based on specific patterns
+        house_cusp_patterns = ['cusp', 'Equal', 'Placidus', 'Whole Sign']
+        if self.ordered_df is not None:
+            self.ordered_df = self.ordered_df[~self.ordered_df['Object'].str.contains('|'.join(house_cusp_patterns), case=False, na=False)]
+            logging.debug(f"Filtered DataFrame after excluding house cusps: {self.ordered_df}")
+
+        # Debugging: Log all unique objects in the DataFrame
+        if self.ordered_df is not None:
+            unique_objects = self.ordered_df['Object'].unique()
+            logging.debug(f"Unique objects in DataFrame: {unique_objects}")
+
+        # 3. Filter Aspects (Edges)
+        # Only include aspects where BOTH objects are currently in our filtered DataFrame
+        raw_edges = chart_state.get('edges_major', [])
+        if self.ordered_df is not None:
+            active_objs = set(self.ordered_df['Object'])
+            self.edges_major = [
+                e for e in raw_edges 
+                if e[0] in active_objs and e[1] in active_objs
+            ]
+            logging.debug(f"Filtered edges_major: {self.edges_major}")
+        else:
+            self.edges_major = []
+
+        self.edges_minor = chart_state.get('edges_minor', [])
+
+        # Log the initial chart_state for debugging
+        logging.debug(f"Initial chart_state: {chart_state}")
+
+        # Normalize the Object column to handle formatting issues
+        if raw_df is not None and not raw_df.empty:
+            raw_df['Object'] = raw_df['Object'].str.strip().str.title()
+            logging.debug(f"Normalized Object column: {raw_df['Object'].unique()}")
+
+        # Log the DataFrame before and after filtering
+        logging.debug(f"Raw DataFrame before filtering: {raw_df}")
+        if self.ordered_df is not None:
+            logging.debug(f"Filtered DataFrame after filtering: {self.ordered_df}")
+
+        # Log edges_major before and after filtering
+        logging.debug(f"Raw edges_major: {raw_edges}")
+        logging.debug(f"Filtered edges_major: {self.edges_major}")
 
     def _get_object_row(self, obj_name: str) -> Optional[pd.Series]:
         """Find the row for an object using its normalized name, handling variants."""
@@ -266,11 +329,7 @@ class ChartInterpreter:
         # We handle this check implicitly below if the aspect is an Opposition.
         
         # 2. Get Aspect Interpretation (Planet-to-Planet or Planet-to-Axis)
-        interp_text = self.lookup.get('ASPECT_INTERP', {}).get(key)
-        if not interp_text:
-            self.missing.append(f"aspect:{aspect}")
-            interp_text = f"[{aspect.title()} aspect]"
-            
+        interp_text = self.lookup.get('ASPECT_INTERP', {}).get(key, f"[{aspect.title()} aspect]")
         connector = 'Opposite' if key == 'Opposition' else key
         out = [f"**{a}** {connector} **{b}**: {interp_text}"]
 
@@ -325,64 +384,41 @@ class ChartInterpreter:
 
     def generate(self, mode: Optional[str] = None) -> str:
         """Generate the full interpretation text for the current chart state."""
-        if mode:
-            self.mode = mode
+        if mode: self.mode = mode
         if self.ordered_df is None or self.ordered_df.empty:
-            return "No objects to interpret."
+            return "No active objects selected to interpret."
 
-        output_sections: List[str] = []
-        handled_edges: set = set()
+        output_sections = []
+        handled_edges = set()
 
-        # 1. Interpret objects
+        # 1. Objects (Now pre-filtered in __init__)
         object_texts = [self._interpret_object(row) for _, row in self.ordered_df.iterrows()]
         output_sections.append('## 💫 Object Placements\n' + '\n\n'.join(object_texts))
         
-        # 2. Clustered Aspect/Axis Output
-        # A. Always check for the three main axis oppositions if compass_rose is on
+        # 2. Compass/Axes
         if self.state.get('compass_rose_on', False):
-            compass_pairs = [
-                ('Ascendant', 'Descendant', 'ACDC'),
-                ('MC', 'IC', 'MCIC'),
-                ('North Node', 'South Node', 'Nodes')
-            ]
+            compass_pairs = [('Ascendant', 'Descendant', 'ACDC'), ('MC', 'IC', 'MCIC'), ('North Node', 'South Node', 'Nodes')]
             axis_texts = []
             for a, b, key in compass_pairs:
-                # Only interpret if both axes exist in the DataFrame
                 if self._get_object_row(a) is not None and self._get_object_row(b) is not None:
                     axis_texts.append(self._interpret_axis_pair(a, b, key))
                     handled_edges.add(frozenset([a, b]))
-
             if axis_texts:
-                 output_sections.append('## 🧭 Cardinal Axis Interpretations\n' + '\n\n'.join(axis_texts))
+                output_sections.append('## 🧭 Cardinal Axis Interpretations\n' + '\n\n'.join(axis_texts))
         
-        # B. Handle Conjunction Clusters (using helper functions from calc_v2)
+        # 3. Aspects (Now pre-filtered in __init__)
         clusters, cluster_map, clustered_members = build_conjunction_clusters(self.ordered_df, self.edges_major)
-        # Note: Logic to interpret clusters (multi-object groups) needs to be defined
-        # For now, we skip individual conjunctions if objects are clustered.
-        
-        # 3. Individual Aspect Output (Major)
         aspect_texts = []
         for a_orig, b_orig, meta in self.edges_major:
             pair = frozenset([a_orig, b_orig])
-            
-            # Skip if already handled by axis logic or part of a conjunction cluster
             if pair not in handled_edges and a_orig not in clustered_members and b_orig not in clustered_members:
                 aspect_texts.append(self._interpret_aspect(a_orig, b_orig, meta))
         
         if aspect_texts:
             output_sections.append('## ✨ Major Aspects\n' + '\n\n'.join(aspect_texts))
             
-        # 4. Synthesize circuit
-        objects = list(self.ordered_df['Object'])
-        aspects = [meta.get('aspect', '') for _, _, meta in self.edges_major]
-        circuit_text = self._interpret_circuit(objects, aspects)
+        # 4. Summary
+        circuit_text = self._interpret_circuit(list(self.ordered_df['Object']), [])
         output_sections.append('## 🌐 Whole Chart Summary\n' + circuit_text)
 
-        # 5. Compose output
-        output = '\n\n'.join(output_sections)
-        
-        # 6. Add missing info footnote
-        if self.missing:
-            output += f"\n\n---\n**[Data Warnings]** Missing lookups for: {', '.join(self.missing)}"
-            
-        return output
+        return '\n\n'.join(output_sections)

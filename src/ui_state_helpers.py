@@ -112,32 +112,40 @@ def _resolve_visible_from_patterns(toggle_state: Any, df: pd.DataFrame | None) -
 	return None
 
 
-def resolve_visible_objects(toggle_state: Any = None, df: pd.DataFrame | None = None) -> set[str] | None:
-	print("[DEBUG] resolve_visible_objects called with toggle_state:", toggle_state)
-	via_patterns = _resolve_visible_from_patterns(toggle_state, df)
-	if via_patterns:
-		return via_patterns
-	if toggle_state is None:
-		return None
-	compass_points = {"AC", "DC", "MC", "IC", "Ascendant", "Descendant", "Midheaven", "Imum Coeli"}
-	compass_rose_on = False
-	# Check for Compass Rose toggle in Mapping
-	if isinstance(toggle_state, Mapping):
-		names = {str(name) for name, enabled in toggle_state.items() if enabled}
-		# Try to detect Compass Rose toggle
-		if "Compass Rose" in toggle_state and toggle_state["Compass Rose"]:
-			compass_rose_on = True
-		if compass_rose_on:
-			names.update(compass_points)
-			print("[DEBUG] Compass Rose ON - visible_names:", names)
-		return names or None
-	if isinstance(toggle_state, Collection) and not isinstance(toggle_state, (str, bytes)):
-		names = {str(name) for name in toggle_state}
-		# Try to detect Compass Rose toggle
-		if "Compass Rose" in names:
-			compass_rose_on = True
-		if compass_rose_on:
-			names.update(compass_points)
-			print("[DEBUG] Compass Rose ON - visible_names:", names)
-		return names
-	return None
+def resolve_visible_objects(toggle_state: Any = None, df: pd.DataFrame | None = None) -> dict:
+    """
+    Resolve visible objects and include Compass Rose toggle state.
+
+    Returns:
+        {
+            "objects": set[str],  # All visible objects
+            "compass_rose_on": bool  # Whether Compass Rose is toggled
+        }
+    """
+    print("[DEBUG] resolve_visible_objects called with toggle_state:", toggle_state)
+    via_patterns = _resolve_visible_from_patterns(toggle_state, df)
+    if via_patterns:
+        return {"objects": via_patterns, "compass_rose_on": False}
+
+    if toggle_state is None:
+        return {"objects": set(), "compass_rose_on": False}
+
+    compass_points = {"AC", "DC", "MC", "IC", "Ascendant", "Descendant", "Midheaven", "Imum Coeli"}
+    compass_rose_on = False
+    visible_objects = set()
+
+    # Check for Compass Rose toggle in Mapping
+    if isinstance(toggle_state, Mapping):
+        visible_objects = {str(name) for name, enabled in toggle_state.items() if enabled}
+        if "Compass Rose" in toggle_state and toggle_state["Compass Rose"]:
+            compass_rose_on = True
+            visible_objects.update(compass_points)
+
+    elif isinstance(toggle_state, Collection) and not isinstance(toggle_state, (str, bytes)):
+        visible_objects = {str(name) for name in toggle_state}
+        if "Compass Rose" in visible_objects:
+            compass_rose_on = True
+            visible_objects.update(compass_points)
+
+    print("[DEBUG] Compass Rose ON - visible_objects:", visible_objects if compass_rose_on else "OFF")
+    return {"objects": visible_objects, "compass_rose_on": compass_rose_on}

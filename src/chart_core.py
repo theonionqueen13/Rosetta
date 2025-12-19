@@ -16,6 +16,7 @@ from calc_v2 import calculate_chart, chart_sect_from_df, build_aspect_edges, \
 					annotate_reception, build_dispositor_tables, \
 					build_conjunction_clusters
 from src.dispositor_graph import plot_dispositor_graph
+import logging
 
 
 def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
@@ -158,9 +159,15 @@ def _refresh_chart_figure():
 			st.session_state["render_fig"] = rr.fig
 			st.session_state["render_result"] = rr
 			# If Compass Rose is toggled, ensure all AC/DC canonical variants are present
+			# Debugging: Log visible_objects before updating session state
+			logging.debug(f"rr.visible_objects: {rr.visible_objects}")
+			logging.debug(f"toggle_compass_rose: {st.session_state.get('toggle_compass_rose', False)}")
+
+			# Update session state with visible_objects
 			visible_objects = set(rr.visible_objects)
 			if st.session_state.get("toggle_compass_rose", False):
 				visible_objects.update(["Ascendant", "AC", "Asc", "Descendant", "DC"])
+			logging.debug(f"Updated visible_objects: {visible_objects}")
 			st.session_state["visible_objects"] = sorted(visible_objects)
 			st.session_state["active_shapes"] = []
 			st.session_state["last_cusps"] = rr.cusps
@@ -304,6 +311,11 @@ def _refresh_chart_figure():
 			)
 			st.session_state["render_fig"] = rr.fig
 			st.session_state["render_result"] = rr
+			
+			# Debugging: Log visible_objects before updating session state
+			logging.debug(f"rr.visible_objects: {rr.visible_objects}")
+			logging.debug(f"toggle_compass_rose: {st.session_state.get('toggle_compass_rose', False)}")
+
 			st.session_state["visible_objects"] = rr.visible_objects
 			st.session_state["active_shapes"] = []
 			st.session_state["last_cusps"] = rr.cusps
@@ -448,9 +460,14 @@ def run_chart(suffix: str = "") -> bool:
 	
 	# Aspect Edge Calculation
 	include_compass_rose = st.session_state.get("ui_compass_overlay", False) 
+	# Ensure chart_state is defined
+	if 'chart_state' not in globals():
+		globals()['chart_state'] = {}
+
+	# Pass chart_state to build_aspect_edges
 	edges_major, edges_minor = build_aspect_edges(
 		df_positions, 
-		compass_rose=include_compass_rose
+		compass_rose=include_compass_rose,
 	)
 	
 	# ⬇️ MISSING POST-PROCESSING ADDED ⬇️
