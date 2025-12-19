@@ -430,6 +430,23 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
             return min_x, max_x
 
         assign_pos(f"{root}_0", 0)
+		# 2. RE-CENTER THE ROOT (Jupiter Fix)
+        # Find all direct children of the root
+        root_id = f"{root}_0"
+        root_kids = tree_edges_map.get(root_id, [])
+        if root_kids:
+            # Get the actual final X positions of the first and last child
+            first_kid_x = pos[root_kids[0]][0]
+            last_kid_x = pos[root_kids[-1]][0]
+            
+            # Snap Jupiter to the exact midpoint of his children
+            new_root_x = (first_kid_x + last_kid_x) / 2.0
+            pos[root_id][0] = new_root_x
+            
+            # Update the level tracker to ensure the next tree doesn't overlap Jupiter
+            lvl_next_x[0] = max(lvl_next_x.get(0, 0.0), new_root_x + H_GAP)
+
+        # 3. Normalize to 0 (Keep your existing normalization logic)
         min_x_val = min(p[0] for p in pos.values())
         for nid in pos: pos[nid][0] -= min_x_val
         
