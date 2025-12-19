@@ -189,37 +189,6 @@ def render_dispositor_section(st, df_cached) -> None:
         st.info("Calculate a chart first.")
 
 
-
-def setup_figure_layout(tree_widths, tree_heights, n, header_info):
-    """
-    Set up the figure layout dynamically based on tree dimensions and header information.
-
-    Args:
-        tree_widths: List of widths for each tree.
-        tree_heights: List of heights for each tree.
-        n: Number of trees.
-        header_info: Optional header information for the figure.
-
-    Returns:
-        A Matplotlib figure and axes.
-    """
-    max_width = max(tree_widths) if tree_widths else 1
-    width_ratios = [w / max_width for w in tree_widths]
-    fig_width = 8 * n  # 8 inches per tree
-    fig_height = 10    # Fixed height
-
-    fig = plt.figure(figsize=(fig_width, fig_height))
-    gs = gridspec.GridSpec(1, n, figure=fig, width_ratios=width_ratios, wspace=0.15)
-    axes = [fig.add_subplot(gs[0, i]) for i in range(n)]
-
-    if header_info:
-        plt.subplots_adjust(left=0.02, right=0.98, top=0.94, bottom=0.02, wspace=0.1)
-        _draw_dispositor_header(fig, header_info)
-    else:
-        plt.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02, wspace=0.1)
-
-    return fig, axes
-
 # Define the base path for your icons
 ICON_BASE_PATH = r"C:\Users\theon\OneDrive\Desktop\Rosetta\Rosetta_v2\pngs"
 
@@ -359,10 +328,21 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
     for node in all_nodes:
         potential_roots.add(find_root_by_following_parents(node))
     
-    for root in sorted(potential_roots):
+    # SORTING LOGIC: Prioritize Sovereigns, then move heavy families to the bottom 
+    # by picking the parent with the FEWEST children as the root.
+    def root_priority_score(n):
+        is_sov = 1 if n in sovereigns else 0
+        child_count = len(children_by_parent.get(n, []))
+        # We negate is_sov because sorted() is ascending by default (1 > 0).
+        # We want is_sov first, then LOWEST child_count.
+        return (-is_sov, child_count, n)
+
+    for root in sorted(potential_roots, key=root_priority_score):
         if root not in accounted_for:
             tree_nodes = collect_tree_downward(root)
-            all_trees.append(tree_nodes); accounted_for.update(tree_nodes); roots.append(root)
+            all_trees.append(tree_nodes)
+            accounted_for.update(tree_nodes)
+            roots.append(root)
 
     # Phase 2: Self-Ruling (if not accounted for)
     sr_parents = sorted([s for s in self_ruling if s in children_by_parent and s not in accounted_for],
@@ -378,139 +358,207 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
         full_comp = collect_connected_component(start)
         unaccounted = full_comp - accounted_for
         if not unaccounted:
-            remaining.pop(0); continue
-        best_root = sorted(unaccounted, key=lambda n: (0 if n in children_by_parent else 1, -len(children_by_parent.get(n, [])), n))[0]
-        all_trees.append(unaccounted); accounted_for.update(unaccounted); roots.append(best_root)
+            remaining.pop(0)
+            continue
+        
+        # Use the same "fewest children first" logic for the fallback root
+        best_root = sorted(unaccounted, key=root_priority_score)[0]
+        
+        all_trees.append(unaccounted)
+        accounted_for.update(unaccounted)
+        roots.append(best_root)
         remaining = [n for n in remaining if n not in unaccounted]
+    
+    # --- 3. DYNAMIC SCALING CALCULATION ---
+    # First, let's find the 'Logical Complexity' of the whole forest
+    total_logical_width = 0
+    max_logical_height = 0
+    
+    # Simple proxy for logical width: sum of children at the widest level of each tree
+    # Simple proxy for logical height: max depth of any tree
+    for tree_nodes in all_trees:
+        # Depth calculation
+        depth = 1 
+        # (This is a simplified estimate to avoid a double-pass of the recursion)
+        max_logical_height = max(max_logical_height, 5) # Default min height
 
-    # --- 3. TREE DATA & POSITIONING ---
+    # Determine dynamic gaps based on how many roots/trees we have
+    num_trees = len(roots)
+    H_GAP = max(0.5, 0.7 / (num_trees**0.5)) 
+    V_GAP = 5.0 
+
     all_tree_data = []
     processed_nodes = set()
     
+    # We'll track the absolute max height across all trees for the final figure
+    global_max_h = 0
+
     for tree_idx, root in enumerate(roots):
         if root in processed_nodes: continue
         tree_nodes = all_trees[tree_idx]
         for p_name in tree_nodes: processed_nodes.add(p_name)
 
+        # --- 3. TREE DATA & POSITIONING ---
         nodes, edges, level_nodes = [], [], {}
         queue = [(root, f"{root}_0", 0)]
-        visited_ids, processed_pairs = {f"{root}_0"}, set()
+        
+        # We only want to prevent the EXACT same parent->child link from repeating
+        # This stops infinite loops but allows one child to have multiple parents
+        processed_links = set() 
 
         while queue:
             p_name, p_id, level = queue.pop(0)
             nodes.append((p_name, p_id))
             level_nodes.setdefault(level, []).append(p_id)
             
-            # FIXED: Avoid circular references in tree building by checking 'level'
             for i, child in enumerate(children_by_parent.get(p_name, [])):
-                if (p_name, child) in processed_pairs or level > 10: continue
-                processed_pairs.add((p_name, child))
-                c_id = f"{child}_{level+1}_{i}"
+                # 1. PER-RELATIONSHIP CHECK:
+                # If we've already drawn Mercury -> Jupiter, don't do it again.
+                # But if we haven't drawn Ceres -> Jupiter, that is a NEW link.
+                link_key = (p_name, child)
+                if link_key in processed_links or level > 10:
+                    continue
+                
+                processed_links.add(link_key)
+                
+                # 2. UNIQUE IDENTITY:
+                # We append the parent's name to the ID. 
+                # This ensures Jupiter_under_Mercury is a different 'dot' than Jupiter_under_Ceres.
+                c_id = f"{child}_{level+1}_{i}_{p_name}"
+                
                 edges.append((p_id, c_id))
                 queue.append((child, c_id, level+1))
 
         if not nodes: continue
 
-        # --- PYRAMID SANDWICH LOGIC (RETAINED) ---
         tree_edges_map = {}
         for p_id, c_id in edges: tree_edges_map.setdefault(p_id, []).append(c_id)
 
         def get_branch_weight(node_id):
+            """Helper to count how many descendants a planet has."""
             kids = tree_edges_map.get(node_id, [])
-            return len(kids) + sum(get_branch_weight(k) for k in kids)
+            count = len(kids)
+            for k in kids:
+                count += get_branch_weight(k)
+            return count
 
         def get_ordered_children(parent_id):
             children = tree_edges_map.get(parent_id, [])
             if not children: return []
-            w_kids = sorted([(c, get_branch_weight(c)) for c in children], key=lambda x: x[1], reverse=True)
-            heavy, light = [k[0] for k in w_kids if k[1] > 0], [k[0] for k in w_kids if k[1] == 0]
-            if not heavy: return light
-            ord_heavy = [None] * len(heavy)
-            l, r = 0, len(heavy)-1
-            for i, h in enumerate(heavy):
-                if i % 2 == 0: ord_heavy[l] = h; l += 1
-                else: ord_heavy[r] = h; r -= 1
-            mid = len(ord_heavy) // 2
-            return ord_heavy[:mid] + light + ord_heavy[mid:]
+            
+            # 1. Categorize children by family size (weight)
+            weighted_kids = [(c, get_branch_weight(c)) for c in children]
+            
+            # Sort by weight descending (biggest families first)
+            weighted_kids.sort(key=lambda x: x[1], reverse=True)
+            
+            # 2. Separate them into "Heavy Families" and "Light/Leaf"
+            # Branches with more than 1 descendant are "Heavy"
+            heavy = [k[0] for k in weighted_kids if k[1] > 1]
+            light = [k[0] for k in weighted_kids if k[1] <= 1]
+
+            # 3. THE "SANDWICH" RULE
+            if not heavy:
+                return light
+            
+            if len(heavy) < 2:
+                # If only one big family, center it within the leaves
+                mid = len(light) // 2
+                return light[:mid] + heavy + light[mid:]
+
+            # If multiple big families, distribute leaves/small families between them
+            num_gaps = len(heavy) - 1
+            distributed_list = []
+            light_per_gap = len(light) // num_gaps
+            extra_light = len(light) % num_gaps
+            light_idx = 0
+            
+            for i in range(num_gaps):
+                distributed_list.append(heavy[i])
+                count = light_per_gap + (1 if i < extra_light else 0)
+                distributed_list.extend(light[light_idx : light_idx + count])
+                light_idx += count
+                
+            distributed_list.append(heavy[-1])
+            return distributed_list
 
         pos, level_next_x = {}, {}
+
         def assign_pos_final(node_id, level):
             kids = get_ordered_children(node_id)
-            
             if not kids:
-                # Leaf placement
                 x = level_next_x.get(level, 0.0)
-                pos[node_id] = [x, -level * 5.0]
-                level_next_x[level] = x + 1.2 
+                pos[node_id] = [x, -level * V_GAP]
+                level_next_x[level] = x + H_GAP
                 return x, x 
 
-            # 1. Position all children subtrees first
-            # We still need the bounds to handle collisions correctly
             child_bounds = [assign_pos_final(k, level + 1) for k in kids]
-            
-            # 2. THE "GOOD CHANGE": Centering based on child circles, not bounds
-            # This is what keeps Jupiter from leaning
             child_x_positions = [pos[k][0] for k in kids]
             ideal_x = (min(child_x_positions) + max(child_x_positions)) / 2.0
             
-            # 3. COLLISION CHECK: Shift the parent AND the family if the spot is taken
             current_level_x = level_next_x.get(level, 0.0)
             if ideal_x < current_level_x:
                 diff = current_level_x - ideal_x
                 ideal_x += diff
-                
                 def shift_subtree(n_id, amount):
                     pos[n_id][0] += amount
                     for child in tree_edges_map.get(n_id, []):
                         shift_subtree(child, amount)
-                
-                for k in kids:
-                    shift_subtree(k, diff)
+                for k in kids: shift_subtree(k, diff)
 
-            # 4. COMMIT POSITION
-            pos[node_id] = [ideal_x, -level * 5.0]
+            pos[node_id] = [ideal_x, -level * V_GAP]
+            level_next_x[level] = ideal_x + H_GAP
             
-            # 5. BOOKKEEPING
-            level_next_x[level] = ideal_x + 1.2
             for l in range(level + 1, max(level_next_x.keys()) + 1):
-                level_nodes = [p[0] for nid, p in pos.items() if int(abs(p[1])/5.0) == l]
-                if level_nodes:
-                    level_next_x[l] = max(level_next_x.get(l, 0.0), max(level_nodes) + 1.2)
+                level_nodes_at_l = [p[0] for nid, p in pos.items() if int(abs(p[1])/V_GAP) == l]
+                if level_nodes_at_l:
+                    level_next_x[l] = max(level_next_x.get(l, 0.0), max(level_nodes_at_l) + H_GAP)
 
-            # Return the actual horizontal span of this subtree for the parent to use
-            all_subtree_x = [p[0] for nid, p in pos.items() if nid == node_id or any(nid.startswith(k) for k in kids)]
+            all_subtree_x = [p[0] for nid, p in pos.items()]
             return min(all_subtree_x), max(all_subtree_x)
 
         assign_pos_final(f"{root}_0", 0)
         
-        # Squeeze & Store
         min_x_val = min(p[0] for p in pos.values())
         for nid in pos: pos[nid][0] -= min_x_val
-        all_tree_data.append({'root': root, 'nodes': nodes, 'edges': edges, 'pos': pos, 
-                              'width': max(p[0] for p in pos.values()), 
-                              'height': max(abs(p[1]) for p in pos.values())})
+        
+        current_tree_height = max(abs(p[1]) for p in pos.values())
+        global_max_h = max(global_max_h, current_tree_height)
+
+        all_tree_data.append({
+            'root': root, 'nodes': nodes, 'edges': edges, 'pos': pos, 
+            'width': max(p[0] for p in pos.values()), 
+            'height': current_tree_height
+        })
 
     # --- 4. RENDERING ---
     n = len(all_tree_data)
     if n == 0: return None
 
-    # Count for Duplicates
     planet_occurrences = {}
     for td in all_tree_data:
         for name, _ in td['nodes']: planet_occurrences[name] = planet_occurrences.get(name, 0) + 1
     duplicated_planets = {name for name, count in planet_occurrences.items() if count > 1}
 
-    fig_w = max(15, sum(td['width'] for td in all_tree_data) * 0.15)
-    fig = plt.figure(figsize=(fig_w, 12))
-    gs = gridspec.GridSpec(1, n, figure=fig, width_ratios=[max(0.1, td['width']) for td in all_tree_data], wspace=0.3)
-    
-    max_h = max(td['height'] for td in all_tree_data)
+    # Use the globally calculated width and height to set figure size
+    total_width_units = sum(td['width'] for td in all_tree_data)
+    fig_w = max(15, min(35, total_width_units * 1.5))
+    fig_h = max(10, min(25, (global_max_h / V_GAP) * 3.5))
+
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    gs = gridspec.GridSpec(
+        1, n, 
+        figure=fig, 
+        width_ratios=[max(0.2, td['width']) for td in all_tree_data], 
+        wspace=0.01  # <--- REDUCE THIS (from 0.4 to 0.15)
+    )
     edges_major = st.session_state.get('edges_major', [])
     png_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pngs")
 
     for i, td in enumerate(all_tree_data):
         ax = fig.add_subplot(gs[i])
         pos = td['pos']
+        tree_max_h = td['height']
         
         for name, nid in td['nodes']:
             xy = pos[nid]
@@ -528,15 +576,12 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
             if name in self_ruling or name in sovereigns:
                 ax.text(xy[0], xy[1]-0.08, "↻", ha='center', va='top', fontsize=16, zorder=3)
 
-        # Edges & Aspect Icons
         for p_id, c_id in td['edges']:
             start, end = pos[p_id], pos[c_id]
             ax.annotate("", xy=end, xytext=start, arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8), zorder=1)
-            
             p_name, c_name = p_id.rsplit('_', 2)[0], c_id.rsplit('_', 2)[0]
             mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
             
-            # Logic for Orb/Sign Aspects (Simplified for brevity but kept your intent)
             aspect_meta = next((m for p, c, m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
             icon_file = None
             if aspect_meta:
@@ -552,10 +597,16 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
                     ab = AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10)
                     ax.add_artist(ab)
 
-        ax.set_xlim(min(p[0] for p in pos.values())-0.5, max(p[0] for p in pos.values())+0.5)
-        ax.set_ylim(-max_h - 1, 1)
+        ax.set_xlim(min(p[0] for p in pos.values())-0.8, max(p[0] for p in pos.values())+0.8)
+        ax.set_ylim(-tree_max_h - 2, 2)
         ax.axis("off")
 
-    plt.subplots_adjust(left=0.02, right=0.98, top=0.94 if header_info else 0.98, bottom=0.02, wspace=0.1)
+    plt.subplots_adjust(
+            left=0.02, 
+            right=0.98, 
+            top=0.92 if header_info else 0.98, 
+            bottom=0.05, 
+            wspace=0.03  # <--- ALSO REDUCE THIS
+        )
     if header_info: _draw_dispositor_header(fig, header_info)
     return fig
