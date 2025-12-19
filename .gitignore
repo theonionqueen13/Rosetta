@@ -1,7 +1,0 @@
-rosetta/config.toml
-.streamlit/*
-rosetta/__pycache__/
-*.pyc
-data/profiles.dbdata/*.db
-Rosetta_v2/ephe/*.se1
-Rosetta_v2/swisseph-2.10.03/*
