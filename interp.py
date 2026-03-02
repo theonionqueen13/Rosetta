@@ -13,7 +13,11 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 import logging
 # Assuming these lookups are dictionaries keyed for quick access
-from lookup_v2 import COMPASS_ASPECT_INTERP, HOUSE_AXIS_INTERP, SIGN_AXIS_INTERP 
+from models_v2 import static_db
+
+COMPASS_AXIS_INTERP = static_db.COMPASS_AXIS_INTERP
+HOUSE_AXIS_INTERP = static_db.HOUSE_AXIS_INTERP
+SIGN_AXIS_INTERP = static_db.SIGN_AXIS_INTERP 
 # Assuming calc_v2 exists in the same environment
 try:
     from calc_v2 import build_clustered_aspect_edges, build_conjunction_clusters
@@ -280,7 +284,7 @@ class ChartInterpreter:
                 return f"{min(s1, s2)}-{max(s1, s2)}" # Fallback to alphabetical if non-zodiac signs
         
         # 1. Get Base Interpretation (Compass Aspect)
-        interp_text = COMPASS_ASPECT_INTERP.get(interp_key, f"[No axis interpretation for {interp_key}]")
+        interp_text = COMPASS_AXIS_INTERP.get(interp_key, f"[No axis interpretation for {interp_key}]")
         connector = '↔'
         
         axis_label_map = {

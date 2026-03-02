@@ -8,7 +8,14 @@ from matplotlib import gridspec
 from house_selector_v2 import render_house_system_selector
 from drawing_v2 import _current_chart_header_lines
 import matplotlib.patheffects as pe
-from lookup_v2 import ABREVIATED_PLANET_NAMES, _RECEPTION_ASPECTS, ASPECTS, ZODIAC_NUMBERS, ASPECTS_BY_SIGN, RECEPTION_SYMBOLS
+from models_v2 import static_db
+
+ABREVIATED_PLANET_NAMES = static_db.ABREVIATED_PLANET_NAMES
+_RECEPTION_ASPECTS = static_db._RECEPTION_ASPECTS
+ASPECTS = static_db.ASPECTS
+ZODIAC_NUMBERS = static_db.ZODIAC_NUMBERS
+ASPECTS_BY_SIGN = static_db.ASPECTS_BY_SIGN
+RECEPTION_SYMBOLS = static_db.RECEPTION_SYMBOLS
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 # Helper function to get abbreviated name if available
@@ -58,7 +65,7 @@ def _draw_dispositor_header(fig, header_info):
         path_effects=effects
     )
 
-def render_dispositor_section(st, df_cached) -> None:
+def render_dispositor_section(st, chart) -> None:
     """
     Renders the Dispositor Graph section in the Streamlit app.
     This includes the header, house system selector, scope toggle,
@@ -181,7 +188,7 @@ def render_dispositor_section(st, df_cached) -> None:
                 st.markdown(legend_html, unsafe_allow_html=True)
                 
             with graph_col:
-                disp_fig = plot_dispositor_graph(scope_data, planets_df=df_cached, header_info=header_info)
+                disp_fig = plot_dispositor_graph(scope_data, chart=chart, header_info=header_info)
                 st.pyplot(disp_fig, use_container_width=True)
         else:
             st.info("No dispositor graph to display.")
@@ -196,21 +203,26 @@ def get_base_name(node_id):
     """Cleans IDs like 'Saturn_1_0' or 'South_Node_0' into 'Saturn' or 'South_Node'."""
     return re.sub(r'(_\d+)+$', '', node_id)
 
-def get_sign_aspect_name(p1_name, p2_name, planets_df):
-    """Calculates if two planets are in signs that aspect each other using 'Object' column."""
+def get_sign_aspect_name(p1_name, p2_name, chart):
+    """Calculates if two planets are in signs that aspect each other using chart objects."""
     try:
-        col = "Object" if "Object" in planets_df.columns else "object"
         search_p1 = p1_name.replace('_', ' ')
         search_p2 = p2_name.replace('_', ' ')
-
-        row1 = planets_df.loc[planets_df[col] == search_p1]
-        row2 = planets_df.loc[planets_df[col] == search_p2]
-
-        if row1.empty or row2.empty:
+        if chart is None:
             return None
-            
-        s1 = str(row1['Sign'].iloc[0]).strip().title()
-        s2 = str(row2['Sign'].iloc[0]).strip().title()
+
+        s1 = None
+        s2 = None
+        for obj in chart.objects:
+            if not obj.object_name:
+                continue
+            if obj.object_name.name == search_p1:
+                s1 = obj.sign.name if obj.sign else None
+            if obj.object_name.name == search_p2:
+                s2 = obj.sign.name if obj.sign else None
+
+        if not s1 or not s2:
+            return None
         
         # FIX: Convert the string values from ZODIAC_NUMBERS to integers
         n1 = int(ZODIAC_NUMBERS.get(s1, 0))
@@ -231,7 +243,7 @@ def get_sign_aspect_name(p1_name, p2_name, planets_df):
         print(f"Error in sign aspect calc: {e}")
         return None
 
-def plot_dispositor_graph(plot_data, planets_df, header_info=None):
+def plot_dispositor_graph(plot_data, chart, header_info=None):
     # --- 0. DATA EXTRACTION ---
     raw_links = plot_data.get("raw_links", [])
     sovereigns = plot_data.get("sovereigns", [])
@@ -486,7 +498,7 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
             elif is_dup: ax.scatter(xy[0], xy[1], s=2300, c="#FF8656", zorder=2)
             elif is_loop: ax.scatter(xy[0], xy[1], s=2300, c="#B386D8", zorder=2)
             else: ax.scatter(xy[0], xy[1], s=2300, c="#5F6FFF", zorder=2)
-            
+        
             ax.text(xy[0], xy[1], ABREVIATED_PLANET_NAMES.get(name, name), ha='center', va='center', fontsize=11, fontweight="bold", zorder=4)
             if name in self_ruling or name in sovereigns:
                 ax.text(xy[0], xy[1]-0.08, "↻", ha='center', va='top', fontsize=16, zorder=3)
@@ -497,7 +509,7 @@ def plot_dispositor_graph(plot_data, planets_df, header_info=None):
             p_name, c_name = p_id.split('_')[0], c_id.split('_')[0]
             mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
             asp_meta = next((m for p,c,m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
-            icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, planets_df), {}).get("by sign")
+            icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, chart), {}).get("by sign")
             if icon_file and os.path.exists(os.path.join(png_dir, icon_file)):
                 img = plt.imread(os.path.join(png_dir, icon_file))
                 ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))

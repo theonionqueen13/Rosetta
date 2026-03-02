@@ -1,6 +1,9 @@
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
-from lookup_v2 import GLYPHS, TOGGLE_ASPECTS
+from models_v2 import static_db
+
+GLYPHS = static_db.GLYPHS
+TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
 
 COMPASS_KEY = "ui_compass_overlay"
 

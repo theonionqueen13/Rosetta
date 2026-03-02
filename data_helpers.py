@@ -1,7 +1,10 @@
 import re
 import pandas as pd
 from typing import Any, Collection, Iterable, Mapping, Sequence, List, Dict
-from lookup_v2 import ASPECTS, LUMINARIES_AND_PLANETS
+from models_v2 import static_db
+
+ASPECTS = static_db.ASPECTS
+LUMINARIES_AND_PLANETS = static_db.LUMINARIES_AND_PLANETS
 
 
 _CANON_RE = re.compile(r"[^a-z0-9]+")
@@ -88,8 +91,6 @@ def _expand_visible_canon(names: Collection[str] | None) -> set[str] | None:
 	return expanded
 
 def _object_rows(df: pd.DataFrame) -> pd.DataFrame:
-	if df is None or "Object" not in df:
-		return pd.DataFrame(columns=["Object", "Longitude"])
 	obj_series = df["Object"].astype("string")
 	mask = ~obj_series.str.contains("cusp", case=False, na=False)
 	return df.loc[mask].copy()
@@ -99,8 +100,6 @@ def _canonical_series(df: pd.DataFrame) -> pd.Series:
 	return obj_series.map(_canonical_name)
 
 def _find_row(df: pd.DataFrame, names: Iterable[str]) -> pd.Series | None:
-	if df is None or "Object" not in df:
-		return None
 	canon_series = _canonical_series(df)
 	for candidate in names:
 		canon = _canonical_name(candidate)
@@ -111,7 +110,7 @@ def _find_row(df: pd.DataFrame, names: Iterable[str]) -> pd.Series | None:
 	return None
 
 def get_ascendant_degree(df: pd.DataFrame) -> float:
-	row = _find_row(df, ["AC", "Ascendant", "Asc"])
+	row = _find_row(df, ["AC", "Ascendant", "Asc", "Ac"])
 	if row is None:
 		return 0.0
 	try:

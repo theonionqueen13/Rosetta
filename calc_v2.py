@@ -10,7 +10,12 @@ import importlib.util, pathlib
 from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
 from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
-from lookup_v2 import SIGNS, PLANETARY_RULERS, ABREVIATED_PLANET_NAMES
+from models_v2 import static_db
+
+SIGNS = static_db.SIGNS
+PLANETARY_RULERS = static_db.PLANETARY_RULERS
+ABREVIATED_PLANET_NAMES = static_db.ABREVIATED_PLANET_NAMES
+from models_v2 import ChartObject, HouseCusp, AstrologicalChart, ReceptionLink, static_db
 
 OOB_LIMIT = 23.44  # degrees declination
 
@@ -418,17 +423,8 @@ def calculate_chart(
 		for n in cyc:
 			sign_loops.add(n)
 
-	# Fill SIGN flags on object rows
-	for r in rows:
-		obj = r["Object"]
-		r["Sign: Dominant Ruler"]   = (obj in sign_dominant)
-		r["Sign: Final Dispositor"] = (obj in sign_final)
-		r["Sign: Sovereign"]        = (obj in sign_sovereign)
-		r["Sign: In Loop"]          = (obj in sign_loops)
-
 	# 2) HOUSE-based dispositor graphs for EACH system
 	#    Uses the cusps we already computed per system above: cusps_by_system
-	house_flags_by_system: dict[str, dict[str, set]] = {}
 	house_dispositor_data: dict[str, dict] = {}  # Store full dispositor analysis for plotting
 
 	for sys in systems:  # systems = ("placidus", "equal", "whole")
@@ -436,47 +432,46 @@ def calculate_chart(
 		print(f"\n🏠 Calculating dispositors for {sys.upper()} house system...")
 		disp_sys = analyze_dispositors(pos_for_dispositors, cusps)
 		by_house = disp_sys.get("by_house", {})
-		
-		print(f"\n🔍 DEBUG house dispositor analysis for {sys}:")
-		print(f"   cusps count: {len(cusps)}")
-		print(f"   by_house keys: {list(by_house.keys())}")
-		print(f"   raw_links: {by_house.get('raw_links', [])}")
-		print(f"   sovereigns: {by_house.get('sovereigns', [])}")
-
-		dom   = set(by_house.get("dominant_rulers", []) or [])
-		final = set(by_house.get("final_dispositors", []) or [])
-		sov   = set(by_house.get("sovereign", []) or [])
-
-		loops_set = set()
-		for cyc in (by_house.get("loops") or []):
-			for n in cyc:
-				loops_set.add(n)
 
 		sys_lbl = system_label[sys]  # "Placidus", "Equal", "Whole Sign"
-		house_flags_by_system[sys_lbl] = {
-			"dom":   dom,
-			"final": final,
-			"sov":   sov,
-			"loop":  loops_set,
-		}
 		# Store full dispositor data for plotting
 		house_dispositor_data[sys_lbl] = by_house
 
-	# Fill HOUSE flags per system on object rows
-	for r in rows:
-		obj = r["Object"]
-		for sys_lbl, flags in house_flags_by_system.items():
-			r[f"{sys_lbl} House: Dominant Ruler"]   = (obj in flags["dom"])
-			r[f"{sys_lbl} House: Final Dispositor"] = (obj in flags["final"])
-			r[f"{sys_lbl} House: Sovereign"]        = (obj in flags["sov"])
-			r[f"{sys_lbl} House: In Loop"]          = (obj in flags["loop"])
+	# --- Build AstrologicalChart from rows and cusps ---
+	chart_objects = [ChartObject.from_dict(r, static=static_db) for r in rows]
+	house_cusps = []
+	for r in all_cusp_rows:
+		obj = str(r.get("Object", "")).strip()
+		lon = r.get("Longitude") or r.get("Computed Absolute Degree", 0.0)
+		try:
+			lon = float(lon)
+		except Exception:
+			lon = 0.0
+		m = re.match(r"^\s*(?:Placidus|Equal|Whole\s*Sign)\s*(\d+)\s*H\s*cusp", obj, re.I)
+		num = int(m.group(1)) if m else 1
+		if "Placidus" in obj:
+			sys_key = "placidus"
+		elif "Equal" in obj:
+			sys_key = "equal"
+		elif "Whole" in obj:
+			sys_key = "whole"
+		else:
+			sys_key = r.get("House System", "placidus")
+		house_cusps.append(HouseCusp(cusp_number=num, absolute_degree=lon, house_system=sys_key))
 
-	# --- Build final DataFrame (objects + all cusps) ---
-	base_df = pd.DataFrame(rows)
-	cusp_df = pd.DataFrame(all_cusp_rows)
-	combined_df = pd.concat([base_df, cusp_df], ignore_index=True)
+	chart_datetime_str = utc_dt.strftime("%Y-%m-%d %H:%M:%S") if utc_dt else ""
+	tz_str = tz_name or "UTC"
+	chart = AstrologicalChart(
+		objects=chart_objects,
+		house_cusps=house_cusps,
+		chart_datetime=chart_datetime_str,
+		timezone=tz_str,
+		latitude=lat,
+		longitude=lon,
+	)
+	combined_df = chart.to_dataframe()
 
-	# --- REMOVE redundant Sign: and House: columns ---
+	# --- Remove any legacy Sign:/House: columns if present ---
 	cols_to_keep = [
 		c for c in combined_df.columns
 		if not (
@@ -484,8 +479,7 @@ def calculate_chart(
 			re.match(r"^(Placidus|Equal|Whole Sign) House:", c)
 		)
 	]
-
-	combined_df = combined_df[cols_to_keep]
+	combined_df = combined_df[[c for c in cols_to_keep if c in combined_df.columns]]
 
 	aspect_df = build_aspect_table(combined_df)
 
@@ -552,12 +546,10 @@ def calculate_chart(
 		print(f"      self_ruling: {data.get('self_ruling', [])}")
 
 	# --- Return values ---
+	# chart is AstrologicalChart for session storage (chart_core stores as last_chart)
 	if include_aspects:
-		aspect_df = build_aspect_table(combined_df)
-		return combined_df, aspect_df, plot_data
-
-	# If aspects not included, return combined_df and plot_data
-	return combined_df, None, plot_data
+		return combined_df, aspect_df, plot_data, chart
+	return combined_df, None, plot_data, chart
 
 def chart_sect_from_df(df) -> str:
 	"""
@@ -576,6 +568,28 @@ def chart_sect_from_df(df) -> str:
 	ac  = float(ac_series.iloc[0])  % 360.0
 	dc  = (ac + 180.0) % 360.0
 
+	return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
+
+def chart_sect_from_chart(chart: AstrologicalChart) -> str:
+	"""
+	Return 'Diurnal' or 'Nocturnal' based on Sun relative to horizon.
+	Requires both Sun and AC objects.
+	"""
+	if chart is None:
+		raise ValueError("time unknown")
+	sun = None
+	ac = None
+	for obj in chart.objects:
+		if not obj.object_name:
+			continue
+		name = obj.object_name.name
+		if name == "Sun":
+			sun = float(obj.longitude) % 360.0
+		elif name in ("AC", "Ascendant"):
+			ac = float(obj.longitude) % 360.0
+	if sun is None or ac is None:
+		raise ValueError("time unknown")
+	dc = (ac + 180.0) % 360.0
 	return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
 
 def _house_of_degree(deg: float, cusps: list[float]) -> int | None:
@@ -782,29 +796,33 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 		"by_house": by_house_result,
 	}
 
-def build_dispositor_tables(df: pd.DataFrame) -> tuple[list[dict], list[dict]]:
+def build_dispositor_tables(chart: AstrologicalChart) -> tuple[list[dict], list[dict]]:
 	"""
 	Returns two UI-ready tables:
 	  chains_rows  : (unused, kept for API compatibility)
 	  summary_rows : [{"Scope":"...", "Final":"...", "Dominant":"...", "Sovereign":"...", "Loops":"...", "Chains":"..."}, ...]
 	"""
-	# objects → longitude (exclude cusps)
-	objs = df[~df["Object"].str.contains("cusp", case=False, na=False)]
-	pos = dict(zip(objs["Object"], objs["Longitude"]))
+	# objects → longitude
+	pos = {
+		obj.object_name.name: obj.longitude
+		for obj in chart.objects
+		if obj.object_name
+	}
 
-	def _cusps(label: str) -> list[float]:
-		vals = []
-		for h in range(1, 13):
-			m = df.loc[df["Object"] == f"{label} {h}H cusp", "Longitude"]
-			if not m.empty:
-				vals.append(float(m.iloc[0]) % 360.0)
+	def _cusps(sys_key: str) -> list[float]:
+		vals = [
+			float(c.absolute_degree) % 360.0
+			for c in chart.house_cusps
+			if (c.house_system or "").strip().lower() == sys_key
+		]
+		vals = vals[:12]
 		return vals if len(vals) == 12 else []
 
 	scopes = [
 		("Sign", []),
-		("Placidus", _cusps("Placidus")),
-		("Equal", _cusps("Equal")),
-		("Whole Sign", _cusps("Whole Sign")),
+		("Placidus", _cusps("placidus")),
+		("Equal", _cusps("equal")),
+		("Whole Sign", _cusps("whole")),
 	]
 
 	chains_rows: list[dict] = []
@@ -1049,7 +1067,7 @@ def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
 	return pd.DataFrame(data, index=names, columns=names)
 
 
-def build_aspect_edges(df: pd.DataFrame, compass_rose: bool = False) -> tuple[list[tuple], list[tuple]]:
+def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> tuple[list[tuple], list[tuple]]:
 	"""
 	Return (edges_major, edges_minor), each as a list of tuples:
 	  (obj1, obj2, {
@@ -1061,18 +1079,21 @@ def build_aspect_edges(df: pd.DataFrame, compass_rose: bool = False) -> tuple[li
 	  })
 	Pairs are de-duplicated (A,B) only once (A < B by index).
 	"""
-	objs  = _extract_object_rows(df)
-	names = list(objs["Object"])
-	# Ensure AC and DC are present in names if their canonical forms exist in the DataFrame
-	ac_candidates = [x for x in objs["Object"] if x.lower() in ("ac", "asc", "ascendant")]
-	dc_candidates = [x for x in objs["Object"] if x.lower() in ("dc", "dsc", "descendant")]
-	if ac_candidates and "AC" not in names:
-		names.append("AC")
-	if dc_candidates and "DC" not in names:
-		names.append("DC")
-	lons  = dict(zip(objs["Object"], objs["Longitude"]))
-	spds  = dict(zip(objs["Object"], objs["Speed"]))
-	decls = dict(zip(objs["Object"], objs["Declination"]))  # for decl_diff
+	print("[DEBUG] build_aspect_edges called")
+	if chart is None:
+		return [], []
+	# Backward-compatible: accept a DataFrame if passed accidentally
+	if hasattr(chart, "iterrows"):
+		objs  = _extract_object_rows(chart)
+		names = list(objs["Object"])
+		lons  = dict(zip(objs["Object"], objs["Longitude"]))
+		spds  = dict(zip(objs["Object"], objs["Speed"]))
+		decls = dict(zip(objs["Object"], objs["Declination"]))
+	else:
+		names = [obj.object_name.name for obj in chart.objects if obj.object_name]
+		lons = {obj.object_name.name: obj.longitude for obj in chart.objects if obj.object_name}
+		spds = {obj.object_name.name: obj.speed for obj in chart.objects if obj.object_name}
+		decls = {obj.object_name.name: obj.declination for obj in chart.objects if obj.object_name}
 
 	edges_major: list[tuple] = []
 	edges_minor: list[tuple] = []
@@ -1144,6 +1165,8 @@ def build_aspect_edges(df: pd.DataFrame, compass_rose: bool = False) -> tuple[li
 					"decl_diff": decl_diff,
 				}
 				edges_major.append((ac, dc, meta))
+	print(f"[DEBUG] edges_major: {edges_major}")
+	print(f"[DEBUG] edges_minor: {edges_minor}")
 	return edges_major, edges_minor
 
 
@@ -1266,7 +1289,63 @@ def annotate_reception(df: pd.DataFrame, edges_major: list[tuple]) -> pd.DataFra
 	out["Reception"] = results
 	return out
 
-def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> list[dict]:
+def annotate_chart(chart: AstrologicalChart, edges_major: list[tuple]) -> AstrologicalChart:
+	"""
+	Populate ChartObject.reception based on aspect edges and sign-based fallback.
+	ReceptionLink.mode is "orb" when a direct aspect is present, otherwise "sign".
+	"""
+	if chart is None:
+		return chart
+
+	name_to_obj = {obj.object_name.name: obj for obj in chart.objects if obj.object_name}
+	name_to_sign = {obj.object_name.name: (obj.sign.name if obj.sign else "") for obj in chart.objects if obj.object_name}
+
+	pair_to_aspect = {}
+	for a, b, meta in edges_major or []:
+		asp = meta.get("aspect") if isinstance(meta, dict) else None
+		if asp in _RECEPTION_ASPECT_NAMES:
+			pair_to_aspect[tuple(sorted((a, b)))] = asp
+
+	for obj in chart.objects:
+		if not obj.object_name:
+			continue
+		obj_name = obj.object_name.name
+		sign = name_to_sign.get(obj_name, "")
+		rulers = lookup_sign_rulers(sign, PLANETARY_RULERS) or []
+
+		for ruler in rulers:
+			if ruler not in name_to_obj:
+				continue
+
+			# by orb (preferred)
+			key = tuple(sorted((obj_name, ruler)))
+			aspname = pair_to_aspect.get(key)
+			if aspname in _RECEPTION_ASPECT_NAMES:
+				if not (obj_name == ruler and aspname == "Conjunction"):
+					aspect_obj = static_db.aspects.get(aspname)
+					target_obj = name_to_obj[ruler].object_name
+					if aspect_obj and target_obj:
+						obj.reception.append(ReceptionLink(other=target_obj, aspect=aspect_obj, mode="orb"))
+				continue
+
+			# by sign (fallback)
+			obj_si = _sign_to_index(sign)
+			ruler_sign = name_to_sign.get(ruler, "")
+			rul_si = _sign_to_index(ruler_sign)
+			if obj_si is None or rul_si is None:
+				continue
+			dist = _sign_distance(obj_si, rul_si)
+			sign_aspect = _aspect_name_for_sign_distance(dist)
+			if sign_aspect in _RECEPTION_ASPECT_NAMES:
+				if not (obj_name == ruler and sign_aspect == "Conjunction"):
+					aspect_obj = static_db.aspects.get(sign_aspect)
+					target_obj = name_to_obj[ruler].object_name
+					if aspect_obj and target_obj:
+						obj.reception.append(ReceptionLink(other=target_obj, aspect=aspect_obj, mode="sign"))
+
+	return chart
+
+def build_conjunction_clusters(chart: AstrologicalChart, edges_major: list[tuple]) -> list[dict]:
 	"""
 	Build conjunction clusters using *existing* edges_major (no recomputation).
 	Returns a UI-ready list of rows: [{"Cluster": "Sun, South Node, IC"}, ...]
@@ -1275,9 +1354,12 @@ def build_conjunction_clusters(df: pd.DataFrame, edges_major: list[tuple]) -> li
 	- Singletons (size 1) are ignored.
 	Also returns a mapping: object_name → cluster_id, and a list of clusters (each as a set of names).
 	"""
-	# Objects in DF order
-	objs = _extract_object_rows(df)
-	names = list(objs["Object"])
+	# Objects in chart order
+	if hasattr(chart, "iterrows"):
+		objs = _extract_object_rows(chart)
+		names = list(objs["Object"])
+	else:
+		names = [obj.object_name.name for obj in chart.objects if obj.object_name]
 	order_ix = {name: i for i, name in enumerate(names)}
 
 	# Build undirected adjacency from conjunction pairs
@@ -1333,15 +1415,18 @@ def oxford_join(lst):
     else:
         return ", ".join(lst[:-1]) + f", and {lst[-1]}"
 
-def build_clustered_aspect_edges(df: pd.DataFrame, edges_major: list[tuple]) -> list[tuple]:
+def build_clustered_aspect_edges(chart: AstrologicalChart, edges_major: list[tuple]) -> list[tuple]:
 	"""
 	Returns a list of aspects between conjunction clusters and singletons, avoiding redundant listings.
 	Each aspect is only listed once between any two clusters (or singleton and cluster).
 	Output: list of tuples (A, B, meta), where A and B are either cluster names (comma-joined) or singleton names.
 	"""
-	clusters, cluster_map, cluster_sets = build_conjunction_clusters(df, edges_major)
-	objs = _extract_object_rows(df)
-	names = list(objs["Object"])
+	clusters, cluster_map, cluster_sets = build_conjunction_clusters(chart, edges_major)
+	if hasattr(chart, "iterrows"):
+		objs = _extract_object_rows(chart)
+		names = list(objs["Object"])
+	else:
+		names = [obj.object_name.name for obj in chart.objects if obj.object_name]
 	# Build reverse: cluster_id → list of members
 	cluster_id_to_members = {}
 	for obj, cid in cluster_map.items():

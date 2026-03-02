@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Any, Collection, Iterable, Mapping, Sequence, List, Dict, Optional
 from models_v2 import static_db
 
-# migrate legacy constants to module namespace for backwards compatibility
 SYNASTRY_COLORS_1 = static_db.SYNASTRY_COLORS_1
 SYNASTRY_COLORS_2 = static_db.SYNASTRY_COLORS_2
 ZODIAC_SIGNS = static_db.ZODIAC_SIGNS
@@ -31,81 +30,12 @@ from src.drawing_primitives import (
 	_lighten_color,
 )
 from data_helpers import (
-	_degree_for_label,
-	_COMPASS_ALIAS_MAP,
-	_expand_visible_canon,
-	_edge_record_to_components,
-	_resolve_aspect,
-	_is_luminary_or_planet,
-	_canonical_name,
+	_degree_for_label, extract_positions, extract_compass_positions,
+	_COMPASS_ALIAS_MAP, _degree_for_label, _expand_visible_canon, get_ascendant_degree, _find_row,
+	_edge_record_to_components, _resolve_aspect, _is_luminary_or_planet, 
 )
-from models_v2 import AstrologicalChart
 _cache_shapes = {}
 
-def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
-	if chart is None:
-		return {}
-	return {obj.object_name.name: obj for obj in chart.objects if obj.object_name}
-
-def _chart_positions(chart: AstrologicalChart, visible_names: Collection[str] | None = None) -> dict[str, float]:
-	if chart is None:
-		return {}
-	visible_canon = _expand_visible_canon(visible_names)
-	positions: dict[str, float] = {}
-	for obj in chart.objects:
-		if not obj.object_name:
-			continue
-		name = obj.object_name.name
-		if visible_canon is not None and _canonical_name(name) not in visible_canon:
-			continue
-		try:
-			positions[name] = float(obj.longitude)
-		except Exception:
-			continue
-	return positions
-
-def _chart_compass_positions(
-	chart: AstrologicalChart,
-	visible_names: Collection[str] | None = None,
-) -> dict[str, float]:
-	if chart is None:
-		return {}
-	visible_canon = _expand_visible_canon(visible_names)
-	obj_map = _object_map(chart)
-	out: dict[str, float] = {}
-	for label, names in _COMPASS_ALIAS_MAP.items():
-		for name in names:
-			target = obj_map.get(name)
-			if target is None:
-				continue
-			target_group = {_canonical_name(n) for n in names}
-			if visible_canon is not None and target_group.isdisjoint(visible_canon):
-				continue
-			try:
-				out[label] = float(target.longitude)
-			except Exception:
-				pass
-			break
-	return out
-
-def _get_ascendant_degree(chart: AstrologicalChart) -> float:
-	obj_map = _object_map(chart)
-	for name in ("AC", "Ascendant", "Asc", "Ac"):
-		obj = obj_map.get(name)
-		if obj is None:
-			continue
-		try:
-			return float(obj.longitude)
-		except Exception:
-			return 0.0
-	return 0.0
-
-# Backward-compatible wrappers (legacy dataframe usage)
-def extract_positions(df: pd.DataFrame, visible_names: Collection[str] | None = None) -> dict[str, float]:
-	return _dh.extract_positions(df, visible_names)
-
-def get_ascendant_degree(df: pd.DataFrame) -> float:
-	return _dh.get_ascendant_degree(df)
 def get_shapes(pos, patterns, major_edges_all):
 	pos_items_tuple = tuple(sorted(pos.items()))
 	patterns_key = tuple(tuple(sorted(p)) for p in patterns)
@@ -148,7 +78,7 @@ def group_color_for(idx: int) -> str:
 
 def draw_house_cusps(
 	ax,
-	chart: AstrologicalChart,
+	df: pd.DataFrame,
 	asc_deg: float,
 	house_system: str = "placidus",
 	dark_mode: bool = False,
@@ -168,15 +98,18 @@ def draw_house_cusps(
 	sys_key = (house_system or "placidus").strip().lower()
 	sys_label = system_map.get(sys_key, system_map["placidus"])
 
+	print("HOUSE CUSPS:", "dark_mode =", dark_mode, "draw_lines =", draw_lines)
+
 	cusps: list[float] = []
-	if chart is not None:
-		system_key = sys_key.replace(" ", "")
-		cusp_rows = [
-			c for c in chart.house_cusps
-			if (c.house_system or "").strip().lower().replace(" ", "") == system_key
-		]
-		cusp_rows.sort(key=lambda c: c.cusp_number)
-		cusps = [float(c.absolute_degree) for c in cusp_rows if c is not None]
+	if df is not None and "Object" in df and "Longitude" in df:
+		obj_series = df["Object"].astype("string")
+		pattern = rf"^\s*{re.escape(sys_label)}\s*(\d+)H\s*cusp\s*$"
+		mask = obj_series.str.match(pattern, case=False, na=False)
+		cusp_rows = df.loc[mask].copy()
+		if not cusp_rows.empty:
+			cusp_rows["__H"] = cusp_rows["Object"].astype("string").str.extract(r"(\d+)").astype(int)
+			cusp_rows = cusp_rows.sort_values("__H")
+			cusps = [float(v) for v in cusp_rows.get("Longitude", []) if not pd.isna(v)]
 
 	if len(cusps) != 12:
 		start = asc_deg % 360.0
@@ -304,7 +237,7 @@ def draw_zodiac_signs(ax, asc_deg, dark_mode):
 		ax.plot([rad, rad], [divider_inner, divider_outer],
 				color="black", linestyle="solid", linewidth=1, zorder=5)
 
-def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, chart: AstrologicalChart | None = None):
+def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=None):
 	"""Planet glyphs/names with degree (no sign), cluster fan-out + global spacing."""
 	if not pos:
 		return
@@ -337,15 +270,16 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, chart: Astrolog
 
 	# Helper to check retrograde status
 	def is_retrograde(obj_name):
-		if chart is None:
+		if df is None or "Object" not in df or "Speed" not in df:
 			return False
 		try:
-			target = _canonical_name(obj_name)
-			for obj in chart.objects:
-				if not obj.object_name:
-					continue
-				if _canonical_name(obj.object_name.name) == target:
-					return bool(obj.retrograde)
+			canon_name = _dh._canonical_name(obj_name)
+			for _, row in df.iterrows():
+				row_canon = _dh._canonical_name(str(row.get("Object", "")))
+				if row_canon == canon_name:
+					speed = row.get("Speed")
+					if speed is not None and float(speed) < 0:
+						return True
 			return False
 		except Exception:
 			return False
@@ -690,7 +624,7 @@ class RenderResult:
 	outer_cusps: Optional[List[float]] = None
 
 def render_chart(
-	chart: AstrologicalChart,
+	df: pd.DataFrame,
 	*,
 	visible_toggle_state: Any = None,
 	edges_major: Sequence[Any] | None = None,
@@ -716,14 +650,14 @@ def render_chart(
 		st.session_state.get("chart_unknown_time")
 		or st.session_state.get("profile_unknown_time")
 	)
-	asc_deg = _get_ascendant_degree(chart)
+	asc_deg = get_ascendant_degree(df)
 	if unknown_time_chart:
 		asc_deg = 0.0
-	visible_names = resolve_visible_objects(visible_toggle_state, chart=chart)
-	positions = _chart_positions(chart, visible_names)
+	visible_names = resolve_visible_objects(visible_toggle_state, df)
+	positions = extract_positions(df, visible_names)
 	visible_canon = _expand_visible_canon(visible_names)
 
-	st.session_state.set("resolved_visible_objects", visible_names)
+	st.session_state["resolved_visible_objects"] = visible_names
 
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	if dark_mode:
@@ -744,19 +678,19 @@ def render_chart(
 	try:
 		name, date_line, time_line, city, extra_line = _current_chart_header_lines()
 		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
-		_draw_moon_phase_on_axes(ax, chart, dark_mode, icon_frac=0.10)
+		_draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
 	except Exception:
 		pass
 
 	cusps: list[float] = []
 	if not unknown_time_chart:
-		cusps = draw_house_cusps(ax, chart, asc_deg, house_system, dark_mode)
+		cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
 	if degree_markers:
 		draw_degree_markers(ax, asc_deg, dark_mode)
 	if zodiac_labels:
 		draw_zodiac_signs(ax, asc_deg, dark_mode)
 
-	draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode, chart=chart)
+	draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode, df=df)
 
 	edge_keys: set[tuple[frozenset[str], str]] = set()
 
@@ -780,7 +714,7 @@ def render_chart(
 	)
 
 	if compass_on:
-		compass_positions = _chart_compass_positions(chart, visible_names)
+		compass_positions = extract_compass_positions(df, visible_names)
 		draw_compass_rose(
 			ax,
 			compass_positions,
@@ -815,9 +749,10 @@ def render_chart(
 	return RenderResult(
 		fig=fig,
 		ax=ax,
+		plot_data={'ordered_df': df},
 		positions=positions,
 		cusps=cusps,
-		visible_objects=visible_names or [],
+		visible_objects=resolve_visible_objects,
 		drawn_major_edges=major_edges_drawn,
 		drawn_minor_edges=minor_edges_drawn,
 		
@@ -830,10 +765,10 @@ def render_chart(
 # --- CHART RENDERER (full; calls your new helpers) -------------------------
 def render_chart_with_shapes(
 	pos, patterns, pattern_labels, toggles,
-	filaments, combo_toggles, label_style, singleton_map, chart: AstrologicalChart,
+	filaments, combo_toggles, label_style, singleton_map, df,
 	house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
 	major_edges_all,
-	figsize=(5.0, 5.0),  # Add this
+	figsize=(5.0, 5.0),
 	dpi=144
 ):
 	plt.close('all')  # Kill any background figures before starting
@@ -842,7 +777,7 @@ def render_chart_with_shapes(
 		st.session_state.get("chart_unknown_time")
 		or st.session_state.get("profile_unknown_time")
 	)
-	asc_deg = _get_ascendant_degree(chart)
+	asc_deg = get_ascendant_degree(df)
 	if unknown_time_chart:
 		asc_deg = 0.0
 	fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
@@ -864,17 +799,17 @@ def render_chart_with_shapes(
 	try:
 		name, date_line, time_line, city, extra_line = _current_chart_header_lines()  # type: ignore
 		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)  # type: ignore
-		_draw_moon_phase_on_axes(ax, chart, dark_mode, icon_frac=0.10)
+		_draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
 	except Exception:
 		pass
 
 	# Base wheel
 	cusps: list[float] = []
 	if not unknown_time_chart:
-		cusps = draw_house_cusps(ax, chart, asc_deg, house_system, dark_mode)
+		cusps = draw_house_cusps(ax, df, asc_deg, house_system, dark_mode)
 	draw_degree_markers(ax, asc_deg, dark_mode)
 	draw_zodiac_signs(ax, asc_deg, dark_mode)
-	draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, chart=chart)
+	draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, df=df)
 
 	active_parents = set(i for i, show in enumerate(toggles) if show)
 	active_shape_ids = [
@@ -898,7 +833,8 @@ def render_chart_with_shapes(
 	aspects_for_context = []
 	seen = set()
 	edge_keys: set[tuple[frozenset[str], str]] = set()
-
+	major_edges_drawn = []
+	minor_edges_drawn = []
 	def _add_edge(a, aspect, b):
 		asp = (aspect or "").replace("_approx", "").strip()
 		if not asp or asp.lower() == "conjunction":
@@ -920,14 +856,7 @@ def render_chart_with_shapes(
 
 			color = group_color_for(idx) if layered_mode else None
 			# major edges in this circuit’s color
-			draw_aspect_lines(
-				ax,
-				pos,
-				edges,
-				asc_deg,
-				color_override=color,
-				drawn_keys=edge_keys,
-			)
+			major_edges_drawn.extend(draw_aspect_lines(ax, pos, edges, asc_deg, color_override=color, drawn_keys=edge_keys))
 
 			for (p1, p2), asp in edges:
 				_add_edge(p1, asp, p2)
@@ -936,28 +865,14 @@ def render_chart_with_shapes(
 			internal_minors = [((p1, p2), asp_name)
 							for (p1, p2, asp_name, pat1, pat2) in filaments
 							if pat1 == idx and pat2 == idx]
-			draw_minor_edges(
-				ax,
-				pos,
-				internal_minors,
-				asc_deg,
-				color_override=color,
-				drawn_keys=edge_keys,
-			)
+			minor_edges_drawn.extend(draw_minor_edges(ax, pos, internal_minors, asc_deg, color_override=color, drawn_keys=edge_keys))
 			
 			for (p1, p2), asp in internal_minors:
 				_add_edge(p1, asp, p2)
 
 	# Inter-parent filaments (dotted connectors)
 	if active_parents:
-		draw_filament_lines(
-			ax,
-			pos,
-			filaments,
-			active_parents,
-			asc_deg,
-			drawn_keys=edge_keys,
-		)
+		minor_edges_drawn.extend(draw_filament_lines(ax, pos, filaments, active_parents, asc_deg, drawn_keys=edge_keys))
 		for (p1, p2, asp_name, pat1, pat2) in filaments:
 			if pat1 == pat2:
 				continue
@@ -968,14 +883,7 @@ def render_chart_with_shapes(
 	for s in active_shapes:
 		visible_objects.update(s["members"])
 		color = shape_color_for(s["id"]) if layered_mode else None
-		draw_aspect_lines(
-			ax,
-			pos,
-			s["edges"],
-			asc_deg,
-			color_override=color,
-			drawn_keys=edge_keys,
-		)
+		major_edges_drawn.extend(draw_aspect_lines(ax, pos, s["edges"], asc_deg, color_override=color, drawn_keys=edge_keys))
 		for (p1, p2), asp in s["edges"]:
 			_add_edge(p1, asp, p2)
 
@@ -986,7 +894,7 @@ def render_chart_with_shapes(
 
 	# Compass
 	if st.session_state.get("ui_compass_overlay", True):
-		compass_positions = _chart_compass_positions(chart)
+		compass_positions = extract_compass_positions(df)
 		compass_source = compass_positions or pos
 		draw_compass_rose(
 			ax,
@@ -1003,6 +911,16 @@ def render_chart_with_shapes(
 		visible_objects.update({"North Node", "South Node"})
 		if not unknown_time_chart:
 			visible_objects.update({"Ascendant", "Descendant", "MC", "IC"})
+		for names in (
+			_COMPASS_ALIAS_MAP["North Node"],
+			_COMPASS_ALIAS_MAP["South Node"],
+		):
+			row = _find_row(df, names)
+			if row is not None:
+				obj_name = str(row.get("Object"))
+				if obj_name:
+					visible_objects.add(obj_name)
+
 		sn = _degree_for_label(compass_source, "South Node")
 		nn = _degree_for_label(compass_source, "North Node")
 		if sn is not None and nn is not None:            
@@ -1025,7 +943,7 @@ def render_chart_with_shapes(
 		context = build_context_for_objects(  # type: ignore
 			targets=list(visible_objects),
 			pos=pos,
-			df=None,
+			df=df,
 			active_shapes=active_shapes,
 			aspects=aspects_for_context,
 			star_catalog=STAR_CATALOG,          # type: ignore
@@ -1046,11 +964,12 @@ def render_chart_with_shapes(
 	return RenderResult(
 		fig=fig,
 		ax=ax,
+		plot_data={'ordered_df': df},
 		positions=pos,
 		cusps=cusps,
 		visible_objects=list(visible_objects), # Ensure it's a list
-		drawn_major_edges=[], # Or populate if you track these in this function
-		drawn_minor_edges=[],
+		drawn_major_edges=major_edges_drawn, # Or populate if you track these in this function
+		drawn_minor_edges=minor_edges_drawn,
 		patterns=patterns,
 		shapes=active_shapes,
 		singleton_map=singleton_map,
@@ -1060,10 +979,11 @@ def render_chart_with_shapes(
 # ---------------------------------------------------------------------------
 # Bi-wheel (synastry/transit) renderer
 # ---------------------------------------------------------------------------
+df = st.session_state.get("last_df")
 
 def render_biwheel_chart(
-	chart_inner: AstrologicalChart,
-	chart_outer: AstrologicalChart,
+	df_inner: pd.DataFrame,
+	df_outer: pd.DataFrame,
 	*,
 	edges_inter_chart: Sequence[Any] | None = None,
 	edges_chart1: Sequence[Any] | None = None,
@@ -1076,8 +996,8 @@ def render_biwheel_chart(
 ):
 	"""
 	Render a bi-wheel chart with two concentric rings:
-	- Inner chart: chart_inner (between the two degree circles)
-	- Outer chart: chart_outer (outside the outer degree circle)
+	- Inner chart: df_inner (between the two degree circles)
+	- Outer chart: df_outer (outside the outer degree circle)
 	- edges_inter_chart: Aspects between inner and outer chart planets
 	- edges_chart1: Internal aspects within inner chart
 	- edges_chart2: Internal aspects within outer chart
@@ -1087,14 +1007,15 @@ def render_biwheel_chart(
 		st.session_state.get("chart_unknown_time")
 		or st.session_state.get("profile_unknown_time")
 	)
-	asc_deg_inner = _get_ascendant_degree(chart_inner)
+	asc_deg_inner = get_ascendant_degree(df_inner)
 	if unknown_time_inner:
 		asc_deg_inner = 0.0
 
 	# Extract positions for both charts
-	pos_inner = _chart_positions(chart_inner)
-	pos_outer = _chart_positions(chart_outer)
-
+	pos_inner = extract_positions(df_inner)
+	pos_outer = extract_positions(df_outer)
+	major_edges_drawn = []
+	minor_edges_drawn = []
 	# Setup figure
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	if dark_mode:
@@ -1166,7 +1087,7 @@ def render_biwheel_chart(
 	# Draw inner chart house cusps (between inner and outer circles)
 	if not unknown_time_inner:
 		cusps_inner = draw_house_cusps_biwheel(
-			ax, chart_inner, asc_deg_inner, house_system, dark_mode,
+			ax, df_inner, asc_deg_inner, house_system, dark_mode,
 			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
 		)
 	else:
@@ -1174,10 +1095,10 @@ def render_biwheel_chart(
 
 	# Draw outer chart house cusps (between outer circle and zodiac)
 	unknown_time_outer = False  # For now, assume outer chart has time
-	asc_deg_outer = _get_ascendant_degree(chart_outer)
+	asc_deg_outer = get_ascendant_degree(df_outer)
 	if not unknown_time_outer:
 		cusps_outer = draw_house_cusps_biwheel(
-			ax, chart_outer, asc_deg_inner, house_system, dark_mode,
+			ax, df_outer, asc_deg_inner, house_system, dark_mode,
 			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
 		)
 	else:
@@ -1185,13 +1106,13 @@ def render_biwheel_chart(
 
 	# Draw planet labels for inner chart (between the circles)
 	draw_planet_labels_biwheel(
-		ax, pos_inner, asc_deg_inner, label_style, dark_mode, chart_inner,
+		ax, pos_inner, asc_deg_inner, label_style, dark_mode, df_inner,
 		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
 	)
 
 	# Draw planet labels for outer chart (outside outer circle)
 	draw_planet_labels_biwheel(
-		ax, pos_outer, asc_deg_inner, label_style, dark_mode, chart_outer,
+		ax, pos_outer, asc_deg_inner, label_style, dark_mode, df_outer,
 		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
 	)
 
@@ -1210,6 +1131,7 @@ def render_biwheel_chart(
 		for record in edges_chart1:
 			if isinstance(record, (list, tuple)) and len(record) == 3:
 				p1, p2, aspect = record
+				major_edges_drawn.append(record)
 			else:
 				continue
 			
@@ -1248,6 +1170,7 @@ def render_biwheel_chart(
 		for record in edges_chart2:
 			if isinstance(record, (list, tuple)) and len(record) == 3:
 				p1, p2, aspect = record
+				major_edges_drawn.append(record)
 			else:
 				continue
 			
@@ -1283,6 +1206,7 @@ def render_biwheel_chart(
 		for record in edges_inter_chart:
 			if isinstance(record, (list, tuple)) and len(record) == 3:
 				p1, p2, aspect = record
+				major_edges_drawn.append(record)
 			else:
 				continue
 			
@@ -1373,17 +1297,18 @@ def render_biwheel_chart(
 	return RenderResult(
 		fig=fig,
 		ax=ax,
+		plot_data={'ordered_df': df},
 		positions=pos_inner,  # Return inner positions as primary
 		cusps=cusps_inner,
 		visible_objects=sorted(pos_inner.keys()),
-		drawn_major_edges=[],
-		drawn_minor_edges=[],
+		drawn_major_edges=major_edges_drawn, # Currently captures all aspects as major
+        drawn_minor_edges=minor_edges_drawn,
 	)
 
 # Helper functions for biwheel
 
 def draw_house_cusps_biwheel(
-	ax, chart: AstrologicalChart, asc_deg, house_system, dark_mode,
+	ax, df, asc_deg, house_system, dark_mode,
 	r_inner, r_outer, draw_labels=False, label_frac=0.50
 ):
 	"""Draw house cusps between two radii for biwheel charts."""
@@ -1398,14 +1323,15 @@ def draw_house_cusps_biwheel(
 	sys_label = system_map.get(sys_key, system_map["placidus"])
 
 	cusps: list[float] = []
-	if chart is not None:
-		system_key = sys_key.replace(" ", "")
-		cusp_rows = [
-			c for c in chart.house_cusps
-			if (c.house_system or "").strip().lower().replace(" ", "") == system_key
-		]
-		cusp_rows.sort(key=lambda c: c.cusp_number)
-		cusps = [float(c.absolute_degree) for c in cusp_rows if c is not None]
+	if df is not None and "Object" in df and "Longitude" in df:
+		obj_series = df["Object"].astype("string")
+		pattern = rf"^\s*{re.escape(sys_label)}\s*(\d+)H\s*cusp\s*$"
+		mask = obj_series.str.match(pattern, case=False, na=False)
+		cusp_rows = df.loc[mask].copy()
+		if not cusp_rows.empty:
+			cusp_rows["__H"] = cusp_rows["Object"].astype("string").str.extract(r"(\d+)").astype(int)
+			cusp_rows = cusp_rows.sort_values("__H")
+			cusps = [float(v) for v in cusp_rows.get("Longitude", []) if not pd.isna(v)]
 
 	if len(cusps) != 12:
 		start = asc_deg % 360.0
@@ -1454,7 +1380,7 @@ def draw_house_cusps_biwheel(
 	return cusps
 
 def draw_planet_labels_biwheel(
-	ax, pos, asc_deg, label_style, dark_mode, chart: AstrologicalChart,
+	ax, pos, asc_deg, label_style, dark_mode, df,
 	label_r, degree_r, is_outer_chart=False
 ):
 	"""Draw planet labels at specified radius for biwheel charts."""
@@ -1493,15 +1419,16 @@ def draw_planet_labels_biwheel(
 
 	# Retrograde checker
 	def is_retrograde(obj_name):
-		if chart is None:
+		if df is None or "Object" not in df or "Speed" not in df:
 			return False
 		try:
-			target = _canonical_name(obj_name)
-			for obj in chart.objects:
-				if not obj.object_name:
-					continue
-				if _canonical_name(obj.object_name.name) == target:
-					return bool(obj.retrograde)
+			canon_name = _dh._canonical_name(obj_name)
+			for _, row in df.iterrows():
+				row_canon = _dh._canonical_name(str(row.get("Object", "")))
+				if row_canon == canon_name:
+					speed = row.get("Speed")
+					if speed is not None and float(speed) < 0:
+						return True
 			return False
 		except Exception:
 			return False

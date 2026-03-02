@@ -3,10 +3,21 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import List, Dict
+from models_v2 import AstrologicalChart, ChartObject, ReceptionLink, SabianSymbol
 from collections import defaultdict
 import pandas as pd
 import re
 import html
+from models_v2 import static_db
+
+# pre-populate lookup tables from static_db if available; this lets the
+# rest of the file continue to reference these names without worrying
+# about import order or the legacy ``lookup_v2`` module.
+SABIAN_SYMBOLS = getattr(static_db, 'SABIAN_SYMBOLS', {})
+GLYPHS = getattr(static_db, 'GLYPHS', {})
+OBJECT_MEANINGS = getattr(static_db, 'OBJECT_MEANINGS', {})
+ALIASES_MEANINGS = getattr(static_db, 'ALIASES_MEANINGS', {})
+
 # --- shared lookups -------------------------------------------------------
 #
 # The module is imported from multiple entry-points (as a package via
@@ -16,38 +27,11 @@ import html
 # file, overwrote ``OBJECT_MEANINGS`` with ``{}`` if a package-style import
 # failed.  When the file was executed from inside the directory that bare
 # import succeeded, but the later fallback path still failed and replaced the
-# populated dictionary with an empty one—leaving the profiles without any
-# meaning text.
-#
-# To keep the meanings populated regardless of how the module is loaded we
-# attempt the imports in order of preference (package-relative first, then the
-# older flat layout) and only fall back to the legacy ``rosetta.lookup`` module
-# if both of those fail.  We also avoid clobbering already-imported globals.
-try:  # Preferred: package relative
-    from .lookup_v2 import SABIAN_SYMBOLS, GLYPHS, OBJECT_MEANINGS  # type: ignore
-    from .lookup_v2 import (  # type: ignore
-        SABIAN_SYMBOLS,
-        GLYPHS,
-        OBJECT_MEANINGS,
-        ALIASES_MEANINGS,
-    )
-except ImportError:
-    try:  # Fallback: same directory on sys.path
-        from lookup_v2 import (  # type: ignore
-            SABIAN_SYMBOLS,
-            GLYPHS,
-            OBJECT_MEANINGS,
-            ALIASES_MEANINGS,
-        )
-    except ImportError:
-        # Last resort: legacy lookup module.  Only assign when available so we
-        # never end up with an empty dictionary due to import order.
-        from rosetta.lookup import (  # type: ignore
-            SABIAN_SYMBOLS,  # noqa: F401 (re-exported)
-            GLYPHS,          # noqa: F401 (re-exported)
-            OBJECT_MEANINGS,
-        )
-        ALIASES_MEANINGS: Dict[str, str] = {}
+# earlier versions of this module attempted to import directly from
+# ``lookup_v2`` or even the legacy ``rosetta.lookup`` package.  After the
+# refactor we now source all lookup data from ``models_v2.static_db``; the
+# prepopulation block at the top of the file handles that, so we no longer
+# need the complex fallback logic that used to live here.
 
 def glyph_for(obj: str) -> str:
     """
@@ -583,6 +567,108 @@ def _determine_visible_order(
     return ordered_names
 
 
+def ordered_objects(
+    chart: AstrologicalChart,
+    *,
+    visible_objects: List[str] | None = None,
+    edges_major: List[tuple] | None = None,
+) -> List[ChartObject]:
+    """Return chart objects ordered according to visibility and pattern rules."""
+    if chart is None:
+        return []
+
+    objects = [obj for obj in chart.objects if obj.object_name]
+    if not objects:
+        return []
+
+    names_in_order = [(obj.object_name.name, idx) for idx, obj in enumerate(objects)]
+    if visible_objects:
+        visible_canon = {_canon(name) for name in visible_objects if name}
+        if visible_canon:
+            objects = [obj for obj in objects if _canon(obj.object_name.name) in visible_canon]
+            names_in_order = [(obj.object_name.name, idx) for idx, obj in enumerate(objects)]
+
+    if not objects:
+        return []
+
+    ordered_names = _determine_visible_order_from_names(names_in_order, edges_major or [])
+    name_to_objs: dict[str, List[ChartObject]] = {}
+    for obj in objects:
+        name_to_objs.setdefault(obj.object_name.name, []).append(obj)
+
+    ordered: List[ChartObject] = []
+    seen = set()
+    for name in ordered_names:
+        for obj in name_to_objs.get(name, []):
+            if id(obj) not in seen:
+                ordered.append(obj)
+                seen.add(id(obj))
+    for obj in objects:
+        if id(obj) not in seen:
+            ordered.append(obj)
+    return ordered
+
+def _determine_visible_order_from_names(
+    names_in_order: List[tuple[str, int]],
+    edges_major: List[tuple],
+) -> List[str]:
+    canon_to_name: dict[str, str] = {}
+    canon_to_pos: dict[str, int] = {}
+
+    for name, pos in names_in_order:
+        canon = _canon(name)
+        canon_to_name.setdefault(canon, name)
+        canon_to_pos.setdefault(canon, pos)
+
+    if not canon_to_name:
+        names_in_order.sort(key=lambda item: _sort_key(item[0], _FALLBACK_RANKS) + (item[1],))
+        return [name for name, _ in names_in_order]
+
+    visible_canons = set(canon_to_name.keys())
+    clusters = _build_clusters(edges_major, visible_canons)
+    units, canon_to_unit, unit_order = _build_units(canon_to_name, canon_to_pos, clusters)
+    if not units:
+        names_in_order.sort(key=lambda item: _sort_key(item[0], _FALLBACK_RANKS) + (item[1],))
+        return [name for name, _ in names_in_order]
+
+    cluster_unit_ids = [uid for uid in unit_order if units[uid]["size"] >= 2]
+    if not cluster_unit_ids:
+        names_in_order.sort(key=lambda item: _sort_key(item[0], _FALLBACK_RANKS) + (item[1],))
+        return [name for name, _ in names_in_order]
+
+    primary_unit_id = sorted(
+        cluster_unit_ids,
+        key=lambda uid: (
+            -units[uid]["size"],
+            _min_rank(units[uid]["members"], _CLUSTER_RANKS),
+            units[uid]["first_index"],
+        ),
+    )[0]
+
+    ordered_names: List[str] = []
+    processed_units = {primary_unit_id}
+    ordered_names.extend(_sort_members(units[primary_unit_id]["members"], _CLUSTER_RANKS))
+
+    for uid in _units_with_aspects(primary_unit_id, units, canon_to_unit, edges_major):
+        if uid in processed_units:
+            continue
+        ordered_names.extend(_sort_members(units[uid]["members"], _CLUSTER_RANKS))
+        processed_units.add(uid)
+
+    remaining_units = [uid for uid in unit_order if uid not in processed_units]
+    remaining_units.sort(
+        key=lambda uid: (
+            _min_rank(units[uid]["members"], _FALLBACK_RANKS),
+            -units[uid]["size"],
+            units[uid]["first_index"],
+        ),
+    )
+
+    for uid in remaining_units:
+        ordered_names.extend(_sort_members(units[uid]["members"], _CLUSTER_RANKS))
+
+    return ordered_names
+
 def ordered_object_rows(
     df: pd.DataFrame,
     *,
@@ -686,6 +772,7 @@ __all__ = [
     "load_fixed_star_catalog",
     "find_fixed_star_conjunctions",
     "STAR_CATALOG",
+    "ordered_objects",
     "ordered_object_rows",
 ]
 
@@ -725,6 +812,25 @@ def _transform_reception_cell(cell: str | None) -> str:
         out.append(it)
     return "Reception: Has reception via " + ", ".join(out) if out else ""
 
+def _format_reception_links(items: List[ReceptionLink]) -> str:
+    if not items:
+        return ""
+    parts = []
+    for item in items:
+        if not item or not item.other or not item.aspect:
+            continue
+        mode = " (by orb)" if item.mode == "orb" else " (by sign)"
+        verb_map = {
+            "Conjunction": "Conjunct",
+            "Opposition": "Opposite",
+            "Trine": "Trine",
+            "Square": "Square",
+            "Sextile": "Sextile",
+        }
+        verb = verb_map.get(item.aspect.name, item.aspect.name)
+        parts.append(f"{verb} {item.other.name}{mode}")
+    return ", ".join(parts)
+
 def _paren_rx_dignity(is_rx: bool, dignity: str | None) -> str:
     parts = []
     if is_rx:
@@ -744,61 +850,124 @@ def format_object_profile_html(
     """
     Build a single object's profile block using ONLY values already in the DF row.
     No recalculation here—pure formatting.
-    """
-    glyph = (row.get("Glyph") or "").strip()
-    obj   = (row.get("Object") or "").strip()
-    meaning = meaning_for(obj)
 
-    # Header tag: (Rx first, then dignity) — omit if neither present
-    tags = []
-    if row.get("Retrograde Bool"):
-        tags.append("Rx")
-    if row.get("Dignity"):
-        tags.append(str(row.get("Dignity")).strip())
-    paren = f" ({', '.join(tags)})" if tags else ""
+    Accepts either a :class:`ChartObject` or any mapping-like object with the
+    expected keys.  The previous implementation used ``isinstance(row,
+    ChartObject)`` which could fail if the caller had come from a different
+    import path (due to circular imports).  We now detect objects by the
+    presence of attributes commonly found on ``ChartObject`` instances instead
+    of relying on strict type equality.
+    """
+    # treat anything with an ``object_name`` attribute as a ChartObject (or at
+    # least duck-type compatible) so we don't depend on class identity
+    if hasattr(row, "object_name") and hasattr(row, "glyph"):
+        obj_name = row.object_name.name if row.object_name else ""
+        glyph = row.glyph or (row.object_name.glyph if row.object_name else "")
+        meaning = meaning_for(obj_name)
+
+        tags = []
+        if row.retrograde:
+            tags.append("Rx")
+        if row.dignity:
+            tags.append(str(row.dignity).strip())
+        paren = f" ({', '.join(tags)})" if tags else ""
+
+        sign = row.sign.name if row.sign else ""
+        dms = row.dms or ""
+        # row.sabian_symbol may be a SabianSymbol from another import path,
+        # so avoid direct isinstance checks which can fail during reloads.
+        sabian = ""
+        ss = row.sabian_symbol
+        if ss is not None:
+            # prefer the explicit symbol text if provided
+            if hasattr(ss, 'symbol'):
+                sabian = ss.symbol or ""
+            # if the symbol field is empty, try the short meaning (common in
+            # the dataset where the text lives there instead)
+            if not sabian and hasattr(ss, 'short_meaning'):
+                sabian = ss.short_meaning or ""
+            # if we still don't have anything, fall back to stringifying
+            if not sabian:
+                sabian = str(ss)
+        stars = row.fixed_star_conj or ""
+        oob = row.oob_status or ""
+
+        house = None
+        if house_label == "Placidus" and row.placidus_house:
+            house = row.placidus_house.number
+        elif house_label == "Equal" and row.equal_house:
+            house = row.equal_house.number
+        elif house_label == "Whole Sign" and row.whole_sign_house:
+            house = row.whole_sign_house.number
+        if house is None:
+            for h in (row.placidus_house, row.equal_house, row.whole_sign_house):
+                if h:
+                    house = h.number
+                    break
+
+        by_house = ""
+        if house_label == "Placidus":
+            by_house = ", ".join([o.name for o in row.house_ruler_placidus if o])
+        elif house_label == "Equal":
+            by_house = ", ".join([o.name for o in row.house_ruler_equal if o])
+        elif house_label == "Whole Sign":
+            by_house = ", ".join([o.name for o in row.house_ruler_whole if o])
+
+        by_sign = row.ruled_by_sign or ", ".join([o.name for o in row.sign_ruler if o])
+        reception = _format_reception_links(row.reception)
+        speed_txt = _fmt_speed_per_day(row.speed)
+        lat_txt = _fmt_lat(row.latitude)
+        dec_txt = _fmt_decl(row.declination)
+        dist_txt = _fmt_distance_au_km(row.distance)
+    else:
+        glyph = (row.get("Glyph") or "").strip()
+        obj_name = (row.get("Object") or "").strip()
+        meaning = meaning_for(obj_name)
+
+        # Header tag: (Rx first, then dignity) — omit if neither present
+        tags = []
+        if row.get("Retrograde Bool"):
+            tags.append("Rx")
+        if row.get("Dignity"):
+            tags.append(str(row.get("Dignity")).strip())
+        paren = f" ({', '.join(tags)})" if tags else ""
+
+        sign   = row.get("Sign") or ""
+        dms    = row.get("DMS") or ""                       # precomputed positional DMS
+        sabian = (row.get("Sabian Symbol") or "").strip()
+        stars  = (row.get("Fixed Star Conj") or "").strip()
+        oob    = (row.get("OOB Status") or "").strip()
+
+        # House (prefer specified label; fall back if missing)
+        house = row.get(f"{house_label} House")
+        if house is None:
+            for alt in ("Placidus House", "Equal House", "Whole Sign House"):
+                if row.get(alt) is not None:
+                    house = row.get(alt)
+                    break
+
+        by_house = (row.get(f"{house_label} House Rulers") or "").strip()
+        by_sign  = (row.get("Ruled by (sign)") or "").strip()
+        reception = (row.get("Reception") or "").strip()
+        speed_txt = _fmt_speed_per_day(row.get("Speed"))
+        lat_txt   = _fmt_lat(row.get("Latitude"))
+        dec_txt   = _fmt_decl(row.get("Declination"))
+        dist_txt  = _fmt_distance_au_km(row.get("Distance"))
 
     # Short meaning (from lookup_v2.OBJECT_MEANINGS)
     # Try exact key first, then a version with any trailing "(...)" removed.
-    base_obj = re.sub(r"\s*\(.*?\)\s*$", "", obj).strip()
+    base_obj = re.sub(r"\s*\(.*?\)\s*$", "", obj_name).strip()
     meaning_short = (
-        OBJECT_MEANINGS.get(obj)
+        OBJECT_MEANINGS.get(obj_name)
         or OBJECT_MEANINGS.get(base_obj)
         or ""
     )
-
-    # Core text bits already in DF
-    sign   = row.get("Sign") or ""
-    dms    = row.get("DMS") or ""                       # precomputed positional DMS
-    sabian = (row.get("Sabian Symbol") or "").strip()
-    stars  = (row.get("Fixed Star Conj") or "").strip()
-    oob    = (row.get("OOB Status") or "").strip()
-
-    # House (prefer specified label; fall back if missing)
-    house = row.get(f"{house_label} House")
-    if house is None:
-        for alt in ("Placidus House", "Equal House", "Whole Sign House"):
-            if row.get(alt) is not None:
-                house = row.get(alt)
-                break
-
-    # Rulership summaries (simple strings the DF already carries)
-    by_house = (row.get(f"{house_label} House Rulers") or "").strip()
-    by_sign  = (row.get("Ruled by (sign)") or "").strip()
-
-    # Reception text (already written into DF by annotate_reception)
-    reception = (row.get("Reception") or "").strip()
-
-    # Format kinematics/coords using helpers
-    speed_txt = _fmt_speed_per_day(row.get("Speed"))
-    lat_txt   = _fmt_lat(row.get("Latitude"))
-    dec_txt   = _fmt_decl(row.get("Declination"))
-    dist_txt  = _fmt_distance_au_km(row.get("Distance"))
 
     # Build HTML (single-spaced via your sidebar CSS)
     lines: list[str] = []
 
     # Title line (slightly larger/bold—your CSS controls exact look)
-    lines.append(f"<div class='pf-title'><strong>{glyph} {obj}{paren}</strong></div>")
+    lines.append(f"<div class='pf-title'><strong>{glyph} {obj_name}{paren}</strong></div>")
 
     # Meaning line directly under the title
     if meaning:
@@ -840,9 +1009,9 @@ def format_object_profile_html(
         by_house = ""
 
     if include_house_data and by_house:
-        lines.append(f"<div><strong>Rulership by House:</strong><br/>{by_house} rules {obj}</div>")
+        lines.append(f"<div><strong>Rulership by House:</strong><br/>{by_house} rules {obj_name}</div>")
     if by_sign:
-        lines.append(f"<div><strong>Rulership by Sign:</strong><br/>{by_sign} rules {obj}</div>")
+        lines.append(f"<div><strong>Rulership by Sign:</strong><br/>{by_sign} rules {obj_name}</div>")
 
     # Join lines; add a divider for spacing between profiles
     inner = "\n".join(lines)

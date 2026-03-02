@@ -2,7 +2,12 @@ import numpy as np
 import os
 import matplotlib.patheffects as pe
 from now_v2 import _moon_phase_label_emoji
-from lookup_v2 import GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT
+from models_v2 import static_db
+
+GROUP_COLORS = static_db.GROUP_COLORS
+GROUP_COLORS_LIGHT = static_db.GROUP_COLORS_LIGHT
+SUBSHAPE_COLORS = static_db.SUBSHAPE_COLORS
+SUBSHAPE_COLORS_LIGHT = static_db.SUBSHAPE_COLORS_LIGHT
 from src.ui_state_helpers import _get_profile_lat_lon
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.collections import LineCollection
@@ -312,23 +317,28 @@ def _draw_header_on_figure_right(fig, name, date_line, time_line, city, extra_li
 		)
 
 
-def _draw_moon_phase_on_axes(ax, df, dark_mode: bool, icon_frac: float = 0.10) -> None:
+def _draw_moon_phase_on_axes(ax, chart, dark_mode: bool, icon_frac: float = 0.10) -> None:
 	"""
 	Draw the chart-based moon phase (icon + label) INSIDE the main chart axes,
 	anchored at the upper-right corner. This does NOT change the figure/frame size.
 	icon_frac = width/height of inset as a fraction of the parent axes.
 	"""
 	try:
-		if df is None or "Object" not in df or "Longitude" not in df:
+		if chart is None:
 			return
 
-		sun_row  = df[df["Object"].astype(str).str.lower() == "sun"].head(1)
-		moon_row = df[df["Object"].astype(str).str.lower() == "moon"].head(1)
-		if sun_row.empty or moon_row.empty:
+		sun_lon = None
+		moon_lon = None
+		for obj in chart.objects:
+			if not obj.object_name:
+				continue
+			name = obj.object_name.name.lower()
+			if name == "sun":
+				sun_lon = float(obj.longitude) % 360.0
+			elif name == "moon":
+				moon_lon = float(obj.longitude) % 360.0
+		if sun_lon is None or moon_lon is None:
 			return
-
-		sun_lon  = float(sun_row["Longitude"].iloc[0]) % 360.0
-		moon_lon = float(moon_row["Longitude"].iloc[0]) % 360.0
 
 		# Reuse your existing mapping to get label + PNG path
 		label, icon_path = _moon_phase_label_emoji(sun_lon, moon_lon, emoji_size_px=None)

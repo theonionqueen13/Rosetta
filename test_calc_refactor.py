@@ -22,12 +22,12 @@ from donate_v2 import donate_chart
 from now_v2 import render_now_widget
 from event_lookup_v2 import update_events_html_state
 from datetime import datetime
-from profiles_v2 import format_object_profile_html, ordered_objects
+from profiles_v2 import format_object_profile_html, ordered_object_rows
 import os, streamlit as st
 import matplotlib.pyplot as plt
 from interp import ChartInterpreter
 st.set_page_config(layout="wide")
-from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups, edges_from_major_list
+from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from drawing_v2 import RenderResult, render_chart, render_chart_with_shapes
@@ -46,7 +46,6 @@ from calc_v2 import (
 	build_conjunction_clusters
 )
 
-result = st.session_state.get("render_result")
 # Key initialization:
 st.session_state.setdefault("last_test_chart", None)
 st.session_state.setdefault("last_test_chart_2", None)
@@ -156,7 +155,7 @@ if synastry_mode:
 	)
 	# Show what charts are currently loaded
 	df2_city = st.session_state.get("city_2", "Not set")
-	st.caption(f"Chart 2 data: {df2_city}, Chart exists: {st.session_state.get('last_chart_2') is not None}")
+	st.caption(f"Chart 2 data: {df2_city}, DF exists: {st.session_state.get('last_df_2') is not None}")
 else:
 	test_chart_2 = None
 
@@ -164,7 +163,7 @@ else:
 if synastry_mode and test_chart_2:
 	# Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
 	chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
-	df_missing = st.session_state.get("last_chart_2") is None
+	df_missing = st.session_state.get("last_df_2") is None
 
 	should_calculate = chart_changed and test_chart_2 != "Custom"
 
@@ -335,8 +334,7 @@ with col_left:
 					st.error(f"Calculation failed! Please ensure all date/time fields are valid and the city lookup succeeds.")
 
 
-chart_cached = st.session_state.get("last_chart")
-df_cached     = chart_cached.to_dataframe() if chart_cached is not None else None# --- Quick city UI state defaults & safe-clear ---
+df_cached     = st.session_state.get("last_df")# --- Quick city UI state defaults & safe-clear ---
 st.session_state.setdefault("show_now_city_field", False)
 st.session_state.setdefault("now_city_temp", "")
 st.session_state.setdefault("__clear_now_city_temp__", False)
@@ -415,8 +413,7 @@ shapes = st.session_state.get("shapes", [])
 singleton_map = st.session_state.get("singleton_map", {})
 
 # --- Bottom-of-page popovers ---
-chart_cached = st.session_state.get("last_chart")
-df_cached     = chart_cached.to_dataframe() if chart_cached is not None else None
+df_cached     = st.session_state.get("last_df")
 aspect_cached = st.session_state.get("last_aspect_df")
 sect_cached   = st.session_state.get("last_sect")
 sect_err      = st.session_state.get("last_sect_error")
@@ -547,6 +544,9 @@ if df_cached is not None:
 		st.pyplot(rr.fig, clear_figure=True)
 		plt.close(rr.fig)
 
+	# --- Dispositor Graph (moved from popover) ---
+	render_dispositor_section(st, df_cached)
+
 	# --- MCP Interpretation Output Section ---
 	st.markdown("<div id='mcp-interpretation'></div>", unsafe_allow_html=True)
 	st.markdown("**Interpretation**", unsafe_allow_html=True)
@@ -560,25 +560,36 @@ if df_cached is not None:
 	# Prepare chart state for MCP
 	# Filter objects and aspects to only those currently visible
 	visible_objects = st.session_state.get('visible_objects', [])
-	chart_cached = st.session_state.get('last_chart')
-	last_df = chart_cached.to_dataframe() if chart_cached is not None else None
+	last_df = st.session_state.get('last_df')
 	edges_major = st.session_state.get('edges_major', [])
 	# Filter DataFrame rows to visible objects
-	if chart_cached is not None and visible_objects:
-		ordered = ordered_objects(chart_cached, visible_objects=visible_objects, edges_major=edges_major)
-		filter_names = {obj.object_name.name for obj in ordered if obj.object_name}
-		filtered_df = last_df[last_df["Object"].isin(filter_names)] if last_df is not None else None
+	if last_df is not None and not last_df.empty and visible_objects:
+		from profiles_v2 import ordered_object_rows
+		filtered_df = ordered_object_rows(last_df, visible_objects=visible_objects, edges_major=edges_major)
 	else:
 		filtered_df = last_df
+
+	# Debugging: Log visible_objects to confirm fallback
+	print(f"[DEBUG] visible_objects after fallback: {visible_objects}")
 	# Filter aspects to only those between visible objects
 	visible_set = set(visible_objects)
 	filtered_edges_major = [e for e in edges_major if e[0] in visible_set and e[1] in visible_set]
-	# Import lookups from the central static_db and profiles_v2
+
+	# Debugging: Log edges_major before filtering
+	print(f"edges_major before filtering: {edges_major}")
+	# Debugging: Log filtered_edges_major after filtering
+	print(f"filtered_edges_major after filtering: {filtered_edges_major}")
+
+	# Import lookups from static_db for interpretation
 	from models_v2 import static_db
 	from profiles_v2 import STAR_CATALOG, find_fixed_star_conjunctions
 
+	result = st.session_state.get("render_result")
+	visible_objects = result.visible_objects if result and result.visible_objects else []
+
 	chart_state = {
 		'ordered_df': filtered_df,
+		'RenderResult': result,
 		'edges_major': filtered_edges_major,
 		'edges_minor': st.session_state.get('edges_minor', []),
 		'mode': interp_mode,
@@ -599,16 +610,23 @@ if df_cached is not None:
 	# Debugging: Log chart_state before instantiation
 	print(f"chart_state: {chart_state}")
 
-	try:
-		interp = ChartInterpreter(chart_state)
-		interp_output = interp.generate()
-		st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
-	except Exception as e:
-		print(f"Error during ChartInterpreter instantiation: {e}")
+	# Add visible_names to chart_state
+	chart_state['visible_objects'] = {
+		'objects': visible_objects or set(),
+		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
+	}
 
-	# --- Dispositor Graph (moved from popover) ---
-	render_dispositor_section(st, chart_cached)
+	result = chart_state.get('render_result')
 
+	interp = ChartInterpreter(
+		result,
+		mode=chart_state['mode'],
+		lookup=chart_state['lookup']
+	)
+	interp_output = interp.generate()
+	st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
+	
+	# CHART SPECS POPOVERS
 	st.subheader("🤓 Nerdy Chart Specs 📋")
 	unknown_time_chart = bool(
 		st.session_state.get("chart_unknown_time")
@@ -645,11 +663,11 @@ if df_cached is not None:
 		st.subheader("Aspect Lists")
 		edges_major = st.session_state.get("edges_major") or []
 		edges_minor = st.session_state.get("edges_minor") or []
-		chart_cached = st.session_state.get("last_chart")
+		df_cached = st.session_state.get("last_df")
 		# Use the new clustered aspect edge builder
 		from calc_v2 import build_clustered_aspect_edges
-		if chart_cached is not None:
-			clustered_edges = build_clustered_aspect_edges(chart_cached, edges_major)
+		if df_cached is not None:
+			clustered_edges = build_clustered_aspect_edges(df_cached, edges_major)
 			# For debugging, show both the cluster names and the original A/B
 			rows = []
 			for a, b, meta in clustered_edges:
@@ -689,28 +707,28 @@ with st.sidebar:
 	""", unsafe_allow_html=True)
 
 	# 2) Render all profiles inside one wrapper so the CSS applies uniformly
-	if chart_cached is not None:
+	if df_cached is not None:
 		visible_objects = st.session_state.get("visible_objects")
 		edges_major = st.session_state.get("edges_major") or []
 		unknown_time_chart = bool(
 			st.session_state.get("chart_unknown_time")
 			or st.session_state.get("profile_unknown_time")
 		)
-		ordered_rows = ordered_objects(
-			chart_cached,
+		ordered_rows = ordered_object_rows(
+			df_cached,
 			visible_objects=visible_objects,
 			edges_major=edges_major,
 		)
 		print("[DEBUG] Sidebar visible_objects:", visible_objects)
-		print("[DEBUG] Sidebar ordered_rows objects:", [obj.object_name.name for obj in ordered_rows if obj.object_name])
-		if ordered_rows:
+		print("[DEBUG] Sidebar ordered_rows objects:", list(ordered_rows["Object"]) if not ordered_rows.empty else [])
+		if not ordered_rows.empty:
 			blocks = [
 				format_object_profile_html(
 					r,
 					house_label=_selected_house_system,
 					include_house_data=not unknown_time_chart,
 				)
-				for r in ordered_rows
+				for _, r in ordered_rows.iterrows()
 			]
 			st.markdown(
 				"<div class='pf-root'>" + "\n".join(blocks) + "</div>",

@@ -32,7 +32,14 @@ from wizard_v2 import render_guided_wizard
 from toggles_v2 import render_circuit_toggles
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
 from calc_v2 import calculate_chart, plot_dispositor_graph, analyze_dispositors
-from lookup_v2 import SIGNS, PLANETARY_RULERS, PLANETS_PLUS, ASPECTS, MAJOR_OBJECTS, TOGGLE_ASPECTS
+from models_v2 import static_db
+
+SIGNS = static_db.SIGNS
+PLANETARY_RULERS = static_db.PLANETARY_RULERS
+PLANETS_PLUS = static_db.PLANETS_PLUS
+ASPECTS = static_db.ASPECTS
+MAJOR_OBJECTS = static_db.MAJOR_OBJECTS
+TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
 current_user_id = "test-user"
 
 COMPASS_KEY = "ui_compass_overlay"
@@ -811,7 +818,7 @@ def run_chart(lat, lon, tz_name, chart_key="last_df"):
 	update_events_html_state(new_chart_dt_utc)
 
 	# --- Calculate chart ---
-	combined_df, aspect_df, raw_plot_data = calculate_chart(
+	combined_df, aspect_df, raw_plot_data, _ = calculate_chart(
 		year=year, month=month, day=day, hour=hour, minute=minute,
 		tz_offset=0, lat=lat, lon=lon, input_is_ut=False,
 		tz_name=tz_name, include_aspects=True, unknown_time=unknown_time

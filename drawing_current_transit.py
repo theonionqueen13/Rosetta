@@ -25,7 +25,27 @@ except Exception:  # pragma: no cover - pandas is expected to be present.
 # ---------------------------------------------------------------------------
 
 def _import_lookup_attr(name: str, default: Any) -> Any:
-	"""Attempt to import ``name`` from lookup_v2, falling back to legacy data."""
+	"""Attempt to import ``name`` from the modern lookup infrastructure.
+
+	Checks the following sources in order:
+
+	1. ``models_v2.static_db`` (preferred).
+	2. the ``lookup_v2`` shim (for transition period).
+	3. the original ``rosetta.lookup`` package as a last resort.
+	
+	The goal is that existing code will gradually move toward
+	``static_db`` without needing to change all the import lines at once.
+	"""
+	# first try the dataclass-backed static_db
+	try:
+		from models_v2 import static_db  # type: ignore
+	except Exception:
+		static_db = None  # type: ignore
+
+	if static_db is not None and hasattr(static_db, name):
+		return getattr(static_db, name)
+
+	# then fall back to lookup_v2 if available
 	try:
 		import lookup_v2 as _lookup  # type: ignore
 	except Exception:  # pragma: no cover - fallback if module absent
@@ -34,6 +54,7 @@ def _import_lookup_attr(name: str, default: Any) -> Any:
 	if _lookup is not None and hasattr(_lookup, name):
 		return getattr(_lookup, name)
 
+	# finally try the legacy package
 	try:  # legacy fallback (original package)
 		from rosetta.lookup import __dict__ as _legacy_lookup  # type: ignore
 	except Exception:  # pragma: no cover - last resort
@@ -657,20 +678,18 @@ _COMPASS_ALIAS_MAP: dict[str, list[str]] = {
 	"South Node": ["South Node"],
 }
 
-# Import ASPECTS from lookup_v2 - use the same source as test_calc_v2.py
-try:
-	from lookup_v2 import ASPECTS
-except ImportError:
-	ASPECTS = {
-		"Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
-		"Sextile": {"angle": 60, "orb": 3, "color": "#6321CE", "style": "solid"},
-		"Square": {"angle": 90, "orb": 3, "color": "#F70000", "style": "solid"},
-		"Trine": {"angle": 120, "orb": 3, "color": "#0011FF", "style": "solid"},
-		"Sesquisquare": {"angle": 135, "orb": 2, "color": "#FF5100", "style": "dotted"},
-		"Quincunx": {"angle": 150, "orb": 3, "color": "#439400", "style": "dotted"},
-		"Opposition": {"angle": 180, "orb": 3, "color": "#F70000", "style": "solid"},
-		"Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
-	}
+# pull aspects table from the central lookup; the helper already
+# prefers ``static_db`` so we can reuse it here as well.
+ASPECTS = _import_lookup_attr("ASPECTS", {
+    "Conjunction": {"angle": 0, "orb": 3, "color": "#888888", "style": "solid"},
+    "Sextile": {"angle": 60, "orb": 3, "color": "#6321CE", "style": "solid"},
+    "Square": {"angle": 90, "orb": 3, "color": "#F70000", "style": "solid"},
+    "Trine": {"angle": 120, "orb": 3, "color": "#0011FF", "style": "solid"},
+    "Sesquisquare": {"angle": 135, "orb": 2, "color": "#FF5100", "style": "dotted"},
+    "Quincunx": {"angle": 150, "orb": 3, "color": "#439400", "style": "dotted"},
+    "Opposition": {"angle": 180, "orb": 3, "color": "#F70000", "style": "solid"},
+    "Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted"},
+})
 
 def group_color_for(idx: int) -> str:
 	"""Return a deterministic colour for the given circuit index."""
@@ -1969,7 +1988,10 @@ def render_biwheel_chart(
 	
 	# Import synastry colors
 	try:
-		from lookup_v2 import SYNASTRY_COLORS_1, SYNASTRY_COLORS_2
+		# make sure we honour the latest palette from the lookup infrastructure
+		from models_v2 import static_db
+		SYNASTRY_COLORS_1 = static_db.SYNASTRY_COLORS_1
+		SYNASTRY_COLORS_2 = static_db.SYNASTRY_COLORS_2
 	except ImportError:
 		SYNASTRY_COLORS_1 = ["#FF0000"]
 		SYNASTRY_COLORS_2 = ["#00FF0075"]

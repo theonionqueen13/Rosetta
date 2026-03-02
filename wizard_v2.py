@@ -2,7 +2,13 @@
 from typing import List, Tuple
 
 import streamlit as st
-from lookup_v2 import ALIASES_MEANINGS, GLYPHS, OBJECT_MEANINGS_SHORT, SIGN_MEANINGS, HOUSE_MEANINGS
+from models_v2 import static_db
+
+ALIASES_MEANINGS = static_db.ALIASES_MEANINGS
+GLYPHS = static_db.GLYPHS
+OBJECT_MEANINGS_SHORT = static_db.OBJECT_MEANINGS_SHORT
+SIGN_MEANINGS = static_db.SIGN_MEANINGS
+HOUSE_MEANINGS = static_db.HOUSE_MEANINGS
 # ------------------------
 # Guided Question Wizard (shared renderer)
 # ------------------------

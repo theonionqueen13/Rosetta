@@ -9,6 +9,7 @@ from typing import Sequence
 import networkx as nx
 
 import profiles_v2 as _profiles_mod
+from models_v2 import AstrologicalChart
 
 
 def _load_calc_module():
@@ -49,7 +50,6 @@ def glyph_for(name: str) -> str:
 
 def _object_rows(df):
     """Return the object-only subset of the dataframe via calc_v2 helper."""
-
     extractor = getattr(_calc_mod, "_extract_object_rows", None)
     if extractor is not None:
         return extractor(df)
@@ -57,7 +57,6 @@ def _object_rows(df):
 
 def positions_from_dataframe(df) -> dict[str, float]:
     """Build {name: longitude} from the already-curated calc_v2 dataframe."""
-
     objs = _object_rows(df)
     pos = {}
     for _, row in objs.iterrows():
@@ -66,6 +65,20 @@ def positions_from_dataframe(df) -> dict[str, float]:
         try:
             if name is not None and lon is not None:
                 pos[str(name)] = float(lon) % 360.0
+        except Exception:
+            continue
+    return pos
+
+def positions_from_chart(chart: AstrologicalChart) -> dict[str, float]:
+    """Build {name: longitude} from the chart objects."""
+    pos = {}
+    if chart is None:
+        return pos
+    for obj in chart.objects:
+        if not obj.object_name:
+            continue
+        try:
+            pos[obj.object_name.name] = float(obj.longitude) % 360.0
         except Exception:
             continue
     return pos
@@ -91,12 +104,11 @@ def build_patterns_from_edges(pos: dict[str, float], edges_major: Sequence[tuple
     formatted_edges = edges_from_major_list(edges_major)
     return connected_components_from_edges(nodes, formatted_edges)
 
-def prepare_pattern_inputs(df, edges_major: Sequence[tuple] | None = None):
+def prepare_pattern_inputs(chart: AstrologicalChart, edges_major: Sequence[tuple] | None = None):
     """Return (pos, patterns, major_edges_all) ready for shape detection."""
-
     if edges_major is None:
-        edges_major, _ = build_aspect_edges(df)
-    pos = positions_from_dataframe(df)
+        edges_major, _ = build_aspect_edges(chart)
+    pos = positions_from_chart(chart) if isinstance(chart, AstrologicalChart) else positions_from_dataframe(chart)
     formatted_edges = edges_from_major_list(edges_major)
     patterns = connected_components_from_edges(list(pos.keys()), formatted_edges)
     return pos, patterns, formatted_edges
@@ -847,11 +859,14 @@ def detect_shapes(pos, patterns, major_edges_all):
     shapes.sort(key=sort_key)
     return shapes
 
-def detect_shapes_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
-    """High-level helper that plugs curated calc_v2 data into detect_shapes."""
-
-    pos, patterns, major_edges_all = prepare_pattern_inputs(df, edges_major)
+def detect_shapes_from_chart(chart: AstrologicalChart, edges_major: Sequence[tuple] | None = None):
+    """High-level helper that plugs curated chart data into detect_shapes."""
+    pos, patterns, major_edges_all = prepare_pattern_inputs(chart, edges_major)
     return detect_shapes(pos, patterns, major_edges_all)
+
+def detect_shapes_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
+    """Backward-compatible wrapper for dataframe callers."""
+    return detect_shapes_from_chart(df, edges_major)
 
 # -------------------------------
 # Suppression
@@ -936,11 +951,14 @@ def detect_minor_links_with_singletons(pos, patterns):
                 break
     return connections, singleton_map
 
-def detect_minor_links_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
-    """Wrapper using calc_v2 dataframes to find filaments + singleton map."""
-
-    pos, patterns, _ = prepare_pattern_inputs(df, edges_major)
+def detect_minor_links_from_chart(chart: AstrologicalChart, edges_major: Sequence[tuple] | None = None):
+    """Wrapper using chart data to find filaments + singleton map."""
+    pos, patterns, _ = prepare_pattern_inputs(chart, edges_major)
     return detect_minor_links_with_singletons(pos, patterns)
+
+def detect_minor_links_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
+    """Backward-compatible wrapper for dataframe callers."""
+    return detect_minor_links_from_chart(df, edges_major)
 
 def generate_combo_groups(filaments):
     G = nx.Graph()

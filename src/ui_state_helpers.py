@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import patterns_v2 as _patterns_mod
 from typing import Any, Mapping, Collection
+import logging
 
 
 def _selected_house_system():
@@ -88,7 +89,7 @@ def reset_chart_state():
 			del st.session_state[key]
 	st.session_state.pop("shape_toggles_by_parent", None)
 
-def _resolve_visible_from_patterns(toggle_state: Any, df: pd.DataFrame | None) -> set[str] | None:
+def _resolve_visible_from_patterns(toggle_state: Any, chart=None) -> set[str] | None:
 	if _patterns_mod is None:
 		return None
 	candidate_funcs = (
@@ -101,7 +102,7 @@ def _resolve_visible_from_patterns(toggle_state: Any, df: pd.DataFrame | None) -
 		func = getattr(_patterns_mod, func_name, None)
 		if callable(func):
 			try:
-				result = func(toggle_state, df=df)
+				result = func(toggle_state, chart=chart)
 			except TypeError:
 				try:
 					result = func(toggle_state)
@@ -112,40 +113,23 @@ def _resolve_visible_from_patterns(toggle_state: Any, df: pd.DataFrame | None) -
 	return None
 
 
-def resolve_visible_objects(toggle_state: Any = None, df: pd.DataFrame | None = None) -> dict:
-    """
-    Resolve visible objects and include Compass Rose toggle state.
+def resolve_visible_objects(toggle_state: Any = None, chart=None) -> set[str] | None:
+	# Debugging: Log inputs and output of resolve_visible_objects
+	print(f"resolve_visible_objects called with toggle_state: {toggle_state}, chart: {chart}")
+	via_patterns = _resolve_visible_from_patterns(toggle_state, chart)
+	if via_patterns:
+		print(f"resolve_visible_objects returning via_patterns: {via_patterns}")
+		return via_patterns
+	if toggle_state is None:
+		print("resolve_visible_objects returning None (toggle_state is None)")
+		return None
+	if isinstance(toggle_state, Mapping):
+		names = {str(name) for name, enabled in toggle_state.items() if enabled}
+		print(f"resolve_visible_objects returning names from Mapping: {names}")
+		return names or None
+	if isinstance(toggle_state, Collection) and not isinstance(toggle_state, (str, bytes)):
+		result = {str(name) for name in toggle_state}
+		print(f"resolve_visible_objects returning names from Collection: {result}")
+		return result
 
-    Returns:
-        {
-            "objects": set[str],  # All visible objects
-            "compass_rose_on": bool  # Whether Compass Rose is toggled
-        }
-    """
-    print("[DEBUG] resolve_visible_objects called with toggle_state:", toggle_state)
-    via_patterns = _resolve_visible_from_patterns(toggle_state, df)
-    if via_patterns:
-        return {"objects": via_patterns, "compass_rose_on": False}
 
-    if toggle_state is None:
-        return {"objects": set(), "compass_rose_on": False}
-
-    compass_points = {"AC", "DC", "MC", "IC", "Ascendant", "Descendant", "Midheaven", "Imum Coeli"}
-    compass_rose_on = False
-    visible_objects = set()
-
-    # Check for Compass Rose toggle in Mapping
-    if isinstance(toggle_state, Mapping):
-        visible_objects = {str(name) for name, enabled in toggle_state.items() if enabled}
-        if "Compass Rose" in toggle_state and toggle_state["Compass Rose"]:
-            compass_rose_on = True
-            visible_objects.update(compass_points)
-
-    elif isinstance(toggle_state, Collection) and not isinstance(toggle_state, (str, bytes)):
-        visible_objects = {str(name) for name in toggle_state}
-        if "Compass Rose" in visible_objects:
-            compass_rose_on = True
-            visible_objects.update(compass_points)
-
-    print("[DEBUG] Compass Rose ON - visible_objects:", visible_objects if compass_rose_on else "OFF")
-    return {"objects": visible_objects, "compass_rose_on": compass_rose_on}

@@ -4,19 +4,23 @@ import matplotlib.pyplot as plt
 import datetime as dt
 from zoneinfo import ZoneInfo
 from typing import Dict, Any
-from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, extract_positions
+from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart
 from drawing_v2 import RenderResult as result
 from toggles_v2 import COMPASS_KEY
-from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_dataframe, generate_combo_groups
+from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups
 from src.geocoding import geocode_city_with_timezone
 from event_lookup_v2 import update_events_html_state
-from lookup_v2 import MAJOR_OBJECTS, TOGGLE_ASPECTS, ASPECTS, PLANETS_PLUS
+from models_v2 import static_db
+
+MAJOR_OBJECTS = static_db.MAJOR_OBJECTS
+TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
+ASPECTS = static_db.ASPECTS
+PLANETS_PLUS = static_db.PLANETS_PLUS
 from house_selector_v2 import _selected_house_system
-from calc_v2 import calculate_chart, chart_sect_from_df, build_aspect_edges, \
-					annotate_reception, build_dispositor_tables, \
+from calc_v2 import calculate_chart, chart_sect_from_chart, build_aspect_edges, \
+					annotate_chart, build_dispositor_tables, \
 					build_conjunction_clusters
 from src.dispositor_graph import plot_dispositor_graph
-import logging
 
 
 def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
@@ -41,6 +45,15 @@ def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
 
 resolved_dark_mode=st.session_state.get("dark_mode", False)
 
+def _positions_from_chart(chart):
+	if chart is None:
+		return {}
+	return {
+		obj.object_name.name: obj.longitude
+		for obj in chart.objects
+		if obj.object_name
+	}
+
 def _refresh_chart_figure():
 	"""Rebuild the chart figure using the current session-state toggles."""
 	# Check if we're in synastry mode
@@ -48,14 +61,14 @@ def _refresh_chart_figure():
 	
 	if synastry_mode:
 		# Synastry/biwheel mode: need both charts
-		df_inner = st.session_state.get("last_df")
-		df_outer = st.session_state.get("last_df_2")
+		chart_inner = st.session_state.get("last_chart")
+		chart_outer = st.session_state.get("last_chart_2")
 		
-		if df_inner is None or df_outer is None:
+		if chart_inner is None or chart_outer is None:
 			# If we don't have both charts yet, fall back to single chart
-			if df_inner is None:
+			if chart_inner is None:
 				return
-			df_outer = df_inner  # Use same chart for both rings as fallback
+			chart_outer = chart_inner  # Use same chart for both rings as fallback
 		
 		house_system = st.session_state.get("house_system", "placidus")
 		label_style = st.session_state.get("label_style", "glyph")
@@ -69,8 +82,8 @@ def _refresh_chart_figure():
 		
 		if chart_mode == "Standard Chart":
 			# Get positions for both charts
-			pos_inner = extract_positions(df_inner)
-			pos_outer = extract_positions(df_outer)
+			pos_inner = _positions_from_chart(chart_inner)
+			pos_outer = _positions_from_chart(chart_outer)
 			
 			# Get aspect toggles
 			aspect_toggles = st.session_state.get("aspect_toggles", {})
@@ -145,8 +158,8 @@ def _refresh_chart_figure():
 		
 		try:
 			rr = render_biwheel_chart(
-				df_inner,
-				df_outer,
+				chart_inner,
+				chart_outer,
 				edges_inter_chart=edges_inter_chart,
 				edges_chart1=edges_chart1,
 				edges_chart2=edges_chart2,
@@ -160,14 +173,14 @@ def _refresh_chart_figure():
 			st.session_state["render_result"] = rr
 			# If Compass Rose is toggled, ensure all AC/DC canonical variants are present
 			# Debugging: Log visible_objects before updating session state
-			logging.debug(f"rr.visible_objects: {rr.visible_objects}")
-			logging.debug(f"toggle_compass_rose: {st.session_state.get('toggle_compass_rose', False)}")
+			print(f"rr.visible_objects: {rr.visible_objects}")
+			print(f"toggle_compass_rose: {st.session_state.get('toggle_compass_rose', False)}")
 
 			# Update session state with visible_objects
 			visible_objects = set(rr.visible_objects)
 			if st.session_state.get("toggle_compass_rose", False):
 				visible_objects.update(["Ascendant", "AC", "Asc", "Descendant", "DC"])
-			logging.debug(f"Updated visible_objects: {visible_objects}")
+			print(f"Updated visible_objects: {visible_objects}")
 			st.session_state["visible_objects"] = sorted(visible_objects)
 			st.session_state["active_shapes"] = []
 			st.session_state["last_cusps"] = rr.cusps
@@ -179,14 +192,10 @@ def _refresh_chart_figure():
 	
 
 	# Regular single-chart mode
-	df = st.session_state.get("last_df")
+	chart = st.session_state.get("last_chart")
 	pos = st.session_state.get("chart_positions")
 
-	# Regular single-chart mode
-	df = st.session_state.get("last_df")
-	pos = st.session_state.get("chart_positions")
-
-	if df is None or pos is None:
+	if chart is None or pos is None:
 		return
 
 	# ⬇️ START: NEW BLOCK TO PULL CIRCUIT DATA FROM RENDER_RESULT ⬇️
@@ -210,7 +219,7 @@ def _refresh_chart_figure():
 	patterns = st.session_state.get("patterns") or []
 	# ... (rest of the old retrievals continue below)
 
-	if df is None or pos is None:
+	if chart is None or pos is None:
 		return
 
 	patterns = st.session_state.get("patterns") or []
@@ -265,6 +274,10 @@ def _refresh_chart_figure():
 		# Get all MAJOR_OBJECTS that exist in the chart for display
 		major_pos = {name: deg for name, deg in pos.items() if name in MAJOR_OBJECTS}
 		
+		# Debugging: Log standard_pos and ASPECTS
+		print(f"[DEBUG] standard_pos: {standard_pos}")
+		print(f"[DEBUG] ASPECTS: {ASPECTS}")
+
 		# Compute all aspects between aspect-enabled bodies
 		standard_edges = []
 		planets_list = list(standard_pos.keys())
@@ -288,12 +301,13 @@ def _refresh_chart_figure():
 			# Show all MAJOR_OBJECTS that actually exist in the chart
 			visible_objects = list(major_pos.keys())
 			# Ensure AC and DC are always included when compass rose is toggled
-			if compass_on:
+			if compass_on and chart is not None:
+				chart_names = {obj.object_name.name for obj in chart.objects if obj.object_name}
 				for axis in ["Ascendant", "Descendant", "AC", "DC"]:
-					if axis in df["Object"].values and axis not in visible_objects:
+					if axis in chart_names and axis not in visible_objects:
 						visible_objects.append(axis)
 			rr = render_chart(
-				df,
+				chart,
 				dark_mode=resolved_dark_mode,
 				visible_toggle_state=visible_objects,  # Show all MAJOR_OBJECTS
 				edges_major=standard_edges,
@@ -313,8 +327,8 @@ def _refresh_chart_figure():
 			st.session_state["render_result"] = rr
 			
 			# Debugging: Log visible_objects before updating session state
-			logging.debug(f"rr.visible_objects: {rr.visible_objects}")
-			logging.debug(f"toggle_compass_rose: {st.session_state.get('toggle_compass_rose', False)}")
+			print(f"rr.visible_objects: {rr.visible_objects}")
+			print(f"toggle_compass_rose: {st.session_state.get('toggle_compass_rose', False)}")
 
 			st.session_state["visible_objects"] = rr.visible_objects
 			st.session_state["active_shapes"] = []
@@ -330,7 +344,7 @@ def _refresh_chart_figure():
 			# 1. Call the complex renderer and store as 'rr'
 			rr = render_chart_with_shapes(
 				pos, patterns, pattern_labels, toggles,
-				filaments, combo_toggles, label_style, singleton_map, df,
+				filaments, combo_toggles, label_style, singleton_map, chart,
 				house_system, dark_mode, shapes, shape_toggles_by_parent, 
 				singleton_toggles, major_edges_all
 			)
@@ -338,7 +352,7 @@ def _refresh_chart_figure():
 		except Exception as e:
 			st.error(f"Complex chart rendering failed: {e}")
 			rr = render_chart(
-				df,
+				chart,
 				dark_mode=resolved_dark_mode,
 				visible_toggle_state=None,
 				edges_major=edges_major,
@@ -364,6 +378,7 @@ def _refresh_chart_figure():
 			return rr
 
 rr = _refresh_chart_figure()
+st.session_state["render_result"] = rr
 
 def run_chart(suffix: str = "") -> bool:
 	"""
@@ -433,20 +448,18 @@ def run_chart(suffix: str = "") -> bool:
 		(
 			df_positions,
 			aspect_df_result,
-			plot_data
+			plot_data,
+			chart,
 		) = calculate_chart(
 			year=utc_dt.year, month=utc_dt.month, day=utc_dt.day,
 			hour=utc_dt.hour, minute=utc_dt.minute,
 			tz_offset=utc_tz_offset, lat=lat, lon=lon,
 			input_is_ut=True, # Corrected input flag
-			tz_name=tz_name, 
+			tz_name=tz_name,
 			house_system=inputs["house_system"],
 			include_aspects=True, # Calculate edges/aspects separately
 			unknown_time=chart_unknown_time,
 		)
-		
-		house_angles_df = df_positions[df_positions["Object"].str.contains("cusp")].copy()
-		chart_data_summary = df_positions 
 		
 		st.session_state["DISPOSITOR_GRAPH_DATA"] = plot_data
 		
@@ -466,39 +479,42 @@ def run_chart(suffix: str = "") -> bool:
 
 	# Pass chart_state to build_aspect_edges
 	edges_major, edges_minor = build_aspect_edges(
-		df_positions, 
+		chart,
 		compass_rose=include_compass_rose,
 	)
-	
+		
+	print(f"[DEBUG] edges_major after build_aspect_edges: {edges_major}")
+	print(f"[DEBUG] edges_minor after build_aspect_edges: {edges_minor}")
+
 	# ⬇️ MISSING POST-PROCESSING ADDED ⬇️
 	# Annotate Reception
-	df_positions = annotate_reception(df_positions, edges_major)
+	annotate_chart(chart, edges_major)
 	
 	# Chart Sect
 	try:
-		st.session_state["last_sect"] = chart_sect_from_df(df_positions)
+		st.session_state["last_sect"] = chart_sect_from_chart(chart)
 		st.session_state["last_sect_error"] = None
 	except Exception as e:
 		st.session_state["last_sect"] = None
 		st.session_state["last_sect_error"] = str(e)
 	
 	# Conjunction Clusters
-	clusters_rows = build_conjunction_clusters(df_positions, edges_major)
+	clusters_rows, _, _ = build_conjunction_clusters(chart, edges_major)
 	st.session_state["conj_clusters_rows"] = clusters_rows
 	
 	# Dispositors (already existed, but ensures order)
-	dispositor_summary_rows, dispositor_chains_rows = build_dispositor_tables(df_positions)
+	dispositor_summary_rows, dispositor_chains_rows = build_dispositor_tables(chart)
 	
 	# ⬇️ CIRCUIT/SHAPE/SINGLETON DETECTION (CORRECTED SIGNATURE) ⬇️
 	try:
 		# Corrected call to get all 3 outputs (was butchered in refactor)
-		pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(df_positions, edges_major)
+		pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(chart, edges_major)
 		
 		patterns = [sorted(list(s)) for s in patterns_sets]
 		shapes = detect_shapes(pos_chart, patterns_sets, major_edges_all)
 		
 		# Missing minor links/singletons logic added back
-		filaments, singleton_map = detect_minor_links_from_dataframe(df_positions, edges_major)
+		filaments, singleton_map = detect_minor_links_from_chart(chart, edges_major)
 		combos = generate_combo_groups(filaments)
 		
 	except Exception as e:
@@ -511,8 +527,12 @@ def run_chart(suffix: str = "") -> bool:
 	# ------------------------------------------------------------------
 	
 	# Prepare data for RenderResult
-	positions = dict(zip(df_positions['Object'], df_positions['Longitude']))
-	cusps = list(house_angles_df['Longitude'])
+	positions = _positions_from_chart(chart)
+	house_system = inputs.get("house_system", "placidus")
+	cusps = [
+		float(c.absolute_degree) for c in chart.house_cusps
+		if (c.house_system or "").strip().lower() == str(house_system).strip().lower()
+	]
 	visible_objects = st.session_state.get(f"visible_objects{suffix}", [])
 	
 	# FIX: Corrected list comprehension for edges (from last step)
@@ -542,6 +562,7 @@ def run_chart(suffix: str = "") -> bool:
 	# ------------------------------------------------------------------
 	# Restore the large update block from run_chart
 	st.session_state.update({
+		f"last_chart{suffix}": chart,
 		f"last_df{suffix}": df_positions,
 		f"last_aspect_df{suffix}": aspect_df_result, # Added back
 		f"edges_major{suffix}": edges_major,
@@ -555,7 +576,7 @@ def run_chart(suffix: str = "") -> bool:
 		f"major_edges_all{suffix}": major_edges_all, # Added back
 		f"chart_dt_utc{suffix}": utc_dt,
 		f"chart_unknown_time{suffix}": chart_unknown_time,
-		f"house_angles_df{suffix}": house_angles_df,
+		f"house_angles_df{suffix}": None,
 		f"dispositor_summary_rows{suffix}": dispositor_summary_rows,
 		f"dispositor_chains_rows{suffix}": dispositor_chains_rows,
 	})
