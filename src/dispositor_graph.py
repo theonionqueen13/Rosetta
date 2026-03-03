@@ -17,10 +17,119 @@ ZODIAC_NUMBERS = static_db.ZODIAC_NUMBERS
 ASPECTS_BY_SIGN = static_db.ASPECTS_BY_SIGN
 RECEPTION_SYMBOLS = static_db.RECEPTION_SYMBOLS
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from matplotlib.patches import Rectangle, FancyBboxPatch  # use FancyBboxPatch for rounded corners
+
 
 # Helper function to get abbreviated name if available
 def get_display_name(name):
     return ABREVIATED_PLANET_NAMES.get(name, name)
+
+
+def compute_house_map(chart, house_system: str) -> dict:
+    """Return mapping object name -> house number for the given chart/system.
+
+    ``house_system`` should be one of "placidus", "equal", or "whole"
+    (case insensitive).  If no house information is available for an object,
+    its value will be ``None``.  The chart is assumed to be an
+    ``AstrologicalChart`` instance; this helper simply inspects the
+    per-object house attributes created during calculation.
+    """
+    out = {}
+    if chart is None:
+        return out
+    sys_lc = (house_system or "placidus").strip().lower()
+    for obj in chart.objects:
+        if not obj.object_name:
+            continue
+        name = obj.object_name.name
+        if sys_lc == "placidus":
+            hobj = getattr(obj, "placidus_house", None)
+        elif sys_lc == "equal":
+            hobj = getattr(obj, "equal_house", None)
+        elif sys_lc == "whole":
+            hobj = getattr(obj, "whole_sign_house", None)
+        else:
+            hobj = getattr(obj, "placidus_house", None)
+        # store numeric house if possible
+        out[name] = hobj.number if hasattr(hobj, "number") else None
+    return out
+
+
+def order_siblings(names, global_weights, house_map=None):
+    """Return an ordering of ``names``.
+
+    The behaviour mirrors the previous ``get_sandwich_order`` logic.  When
+    ``house_map`` is provided (a dict of object->house number), siblings are
+    grouped first by house (ascending, ``None`` last) and then each group is
+    internally ordered according to weight buckets as before.  This allows the
+    plotting code to place same-house siblings next to each other at the
+    appropriate horizontal position.
+    """
+    if not names:
+        return []
+
+    # if no house_map or only one household, fall back to existing behaviour
+    if house_map is None:
+        # use original algorithm inline
+        def _bucketed_order(ns):
+            if len(ns) <= 2:
+                return sorted(ns, key=lambda x: global_weights.get(x, 0), reverse=True)
+            # compute buckets as before
+            def get_bucket_score(name):
+                w = global_weights.get(name, 0)
+                if w >= 10: return 5
+                if w >= 6:  return 4
+                if w >= 4:  return 3
+                if w >= 2:  return 2
+                if w >= 1:  return 1
+                return 0
+            buckets = {i: [] for i in range(6)}
+            for name in ns:
+                buckets[get_bucket_score(name)].append(name)
+            current_order = []
+            for b_idx in range(5, -1, -1):
+                if buckets[b_idx]:
+                    current_order = sorted(buckets[b_idx], key=lambda x: global_weights.get(x, 0), reverse=True)
+                    buckets[b_idx] = []
+                    break
+            for b_idx in range(5, -1, -1):
+                to_place = buckets[b_idx]
+                if not to_place: continue
+                to_place = sorted(to_place, key=lambda x: global_weights.get(x, 0), reverse=True)
+                num_gaps = len(current_order) - 1
+                new_order = []
+                if num_gaps <= 0:
+                    mid = len(to_place) // 2
+                    new_order = to_place[:mid] + current_order + to_place[mid:]
+                else:
+                    items_per_gap, extra = divmod(len(to_place), num_gaps)
+                    l_idx = 0
+                    for i in range(num_gaps):
+                        new_order.append(current_order[i])
+                        count = items_per_gap + (1 if i < extra else 0)
+                        new_order.extend(to_place[l_idx : l_idx + count])
+                        l_idx += count
+                    new_order.append(current_order[-1])
+                current_order = new_order
+            return current_order
+        return _bucketed_order(names)
+
+    # group by house
+    groups = {}
+    none_group = []
+    for name in names:
+        h = house_map.get(name)
+        if h is None:
+            none_group.append(name)
+        else:
+            groups.setdefault(h, []).append(name)
+    ordered = []
+    for h in sorted(groups.keys()):
+        ordered.extend(order_siblings(groups[h], global_weights, house_map=None))
+    if none_group:
+        ordered.extend(order_siblings(none_group, global_weights, house_map=None))
+    return ordered
+
 
 def _draw_dispositor_header(fig, header_info):
     """
@@ -188,7 +297,13 @@ def render_dispositor_section(st, chart) -> None:
                 st.markdown(legend_html, unsafe_allow_html=True)
                 
             with graph_col:
-                disp_fig = plot_dispositor_graph(scope_data, chart=chart, header_info=header_info)
+                selected_house = st.session_state.get("house_system", "placidus")
+                disp_fig = plot_dispositor_graph(
+                    scope_data,
+                    chart=chart,
+                    header_info=header_info,
+                    house_system=selected_house,
+                )
                 st.pyplot(disp_fig, use_container_width=True)
         else:
             st.info("No dispositor graph to display.")
@@ -243,11 +358,24 @@ def get_sign_aspect_name(p1_name, p2_name, chart):
         print(f"Error in sign aspect calc: {e}")
         return None
 
-def plot_dispositor_graph(plot_data, chart, header_info=None):
+def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None):
+    """Return a matplotlib figure containing the dispositor graph.
+
+    ``house_system`` is one of "placidus","equal","whole" and is used both
+    for ordering siblings by house and for the house‑number labels.  If
+    omitted we fall back to the value stored in ``st.session_state``.
+    """
     # --- 0. DATA EXTRACTION ---
     raw_links = plot_data.get("raw_links", [])
     sovereigns = plot_data.get("sovereigns", [])
     self_ruling = plot_data.get("self_ruling", [])
+
+    # determine the house system from argument / session
+    if house_system is None:
+        house_system = st.session_state.get("house_system", "placidus")
+    house_map = compute_house_map(chart, house_system)
+    # debug info
+    print(f"[DEBUG] plot_dispositor_graph called; house_system={house_system}, house_map_count={len(house_map)}")
     
     def find_rulership_loops(links):
         graph = {}
@@ -403,7 +531,8 @@ def plot_dispositor_graph(plot_data, chart, header_info=None):
             p_name, p_id, level = queue.pop(0)
             nodes.append((p_name, p_id))
             # THIS NOW CALLS THE CORRECT SANDWICH
-            sandwiched_kids = get_sandwich_order(children_by_parent.get(p_name, []))
+            sandwiched_kids = order_siblings(children_by_parent.get(p_name, []), global_weights, house_map=house_map)
+
             for i, child in enumerate(sandwiched_kids):
                 if (p_name, child) in processed_links or level > 12: continue
                 processed_links.add((p_name, child))
@@ -464,9 +593,11 @@ def plot_dispositor_graph(plot_data, chart, header_info=None):
         
         h = max(abs(p[1]) for p in pos.values())
         global_max_h = max(global_max_h, h)
+        # include H_GAP margin so house rectangles aren't clipped
+        tree_width = max(p[0] for p in pos.values()) + H_GAP
         all_tree_data.append({
             'nodes': nodes, 'edges': edges, 'pos': pos, 
-            'width': max(p[0] for p in pos.values()), 'height': h
+            'width': tree_width, 'height': h
         })
         
     # --- 3. RENDERING ---
@@ -488,6 +619,63 @@ def plot_dispositor_graph(plot_data, chart, header_info=None):
     for i, td in enumerate(all_tree_data):
         ax = fig.add_subplot(gs[i])
         pos = td['pos']
+        # collect x extents for each (house, level) combination
+        house_groups = {}
+        for name, nid in td['nodes']:
+            house = house_map.get(name)
+            lvl = int(nid.split('_')[1])
+            x = pos[nid][0]
+            house_groups.setdefault((house, lvl), []).append(x)
+        # if map has no real houses (e.g. chart==None or failure) still
+        # generate a group per node so we at least draw a box behind each planet
+        if not house_groups:
+            for name, nid in td['nodes']:
+                lvl = int(nid.split('_')[1])
+                x = pos[nid][0]
+                house_groups.setdefault((None, lvl), []).append(x)
+
+        # draw edges first (they will sit underneath the rectangles)
+        for p_id, c_id in td['edges']:
+            start, end = pos[p_id], pos[c_id]
+            ax.annotate("", xy=end, xytext=start, arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8), zorder=1)
+            p_name, c_name = p_id.split('_')[0], c_id.split('_')[0]
+            mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
+            asp_meta = next((m for p,c,m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
+            icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, chart), {}).get("by sign")
+            if icon_file and os.path.exists(os.path.join(png_dir, icon_file)):
+                img = plt.imread(os.path.join(png_dir, icon_file))
+                ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))
+
+        # draw the house rectangles on top of edges but underneath planet labels
+        for (house, lvl), xs in house_groups.items():
+            xmin, xmax = min(xs), max(xs)
+            pad = H_GAP / 2.0
+            width = (xmax - xmin) + pad
+            cx = (xmin + xmax) / 2.0
+            cy = -lvl * V_GAP
+            # make rectangle shorter (about half V_GAP) and shift upward slightly
+            rect_height = V_GAP * 0.5  # previously 0.8
+            rect_y = cy - rect_height / 2.0 + V_GAP * 0.05
+            # use FancyBboxPatch for rounded corners
+            ax.add_patch(FancyBboxPatch(
+                (xmin - pad/2.0, rect_y),
+                width,
+                rect_height,
+                boxstyle="round,pad=0,rounding_size=0.1",
+                facecolor="#fd8e8e",  # stronger pastel red
+                edgecolor="#ff5656",
+                linewidth=1.5,
+                alpha=0.6,
+                zorder=0,  # behind edges/planets
+            ))
+            if house is not None:
+                # label wants to sit nearer the bottom of the box now that it's bigger
+                # use a fraction of rect_height rather than a fixed constant
+                label_y = cy + rect_height/2.0 - rect_height*0.25
+                ax.text(cx, label_y, f"{house}H",
+                        ha='center', va='bottom', fontsize=16, zorder=0.5)
+
+        # finally draw planets & labels above everything
         for name, nid in td['nodes']:
             xy = pos[nid]
             is_sov, is_dup, is_loop = name in sovereigns, name in duplicated_planets, name in rulership_loops
@@ -498,7 +686,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None):
             elif is_dup: ax.scatter(xy[0], xy[1], s=2300, c="#FF8656", zorder=2)
             elif is_loop: ax.scatter(xy[0], xy[1], s=2300, c="#B386D8", zorder=2)
             else: ax.scatter(xy[0], xy[1], s=2300, c="#5F6FFF", zorder=2)
-        
+
             ax.text(xy[0], xy[1], ABREVIATED_PLANET_NAMES.get(name, name), ha='center', va='center', fontsize=11, fontweight="bold", zorder=4)
             if name in self_ruling or name in sovereigns:
                 ax.text(xy[0], xy[1]-0.08, "↻", ha='center', va='top', fontsize=16, zorder=3)
@@ -514,7 +702,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None):
                 img = plt.imread(os.path.join(png_dir, icon_file))
                 ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))
 
-        ax.set_xlim(-1.0, td['width'] + 1.0)
+        ax.set_xlim(-1.0, td['width'] + 1.0 + H_GAP)
         ax.set_ylim(-global_max_h - 2.5, 2.5)
         ax.axis("off")
 

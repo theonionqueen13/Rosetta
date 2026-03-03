@@ -507,8 +507,8 @@ def run_chart(suffix: str = "") -> bool:
 	
 	# ⬇️ CIRCUIT/SHAPE/SINGLETON DETECTION (CORRECTED SIGNATURE) ⬇️
 	try:
-		# Corrected call to get all 3 outputs (was butchered in refactor)
-		pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(chart, edges_major)
+		# prepare_pattern_inputs expects a DataFrame, not an AstrologicalChart
+		pos_chart, patterns_sets, major_edges_all = prepare_pattern_inputs(df_positions, edges_major)
 		
 		patterns = [sorted(list(s)) for s in patterns_sets]
 		shapes = detect_shapes(pos_chart, patterns_sets, major_edges_all)
