@@ -237,7 +237,11 @@ class ChartInterpreter:
         if house_num is not None:
             hm = self.lookup.get("HOUSE_MEANINGS", {})
             house_meaning = hm.get(house_num)
-            if not house_meaning:
+            if house_meaning:
+                # keep only the short description if lookup is structured
+                if isinstance(house_meaning, dict):
+                    house_meaning = house_meaning.get("meaning", str(house_meaning))
+            else:
                 self.missing.append(f"house_meaning:{house_num}")
                 house_meaning = f"[No meaning for house {house_num}]"
 
@@ -248,7 +252,11 @@ class ChartInterpreter:
             meaning = f"[No meaning for {obj}]"
 
         sign_meaning = self.lookup.get("SIGN_MEANINGS", {}).get(sign)
-        if not sign_meaning:
+        if sign_meaning:
+            # structured data now uses a dict with a "meaning" key
+            if isinstance(sign_meaning, dict):
+                sign_meaning = sign_meaning.get("meaning", str(sign_meaning))
+        else:
             self.missing.append(f"sign_meaning:{sign}")
             sign_meaning = f"[No meaning for sign {sign}]"
 
@@ -266,6 +274,18 @@ class ChartInterpreter:
                 "",
             )
 
+        # normalize sabian output: we want phrase and optional short meaning
+        sabian_phrase: Optional[str] = None
+        sabian_short: Optional[str] = None
+        if sabian:
+            if isinstance(sabian, dict):
+                # the lookup dict may contain sabian_symbol/symbol fields
+                sabian_phrase = sabian.get("sabian_symbol") or sabian.get("symbol") or ""
+                sabian_short = sabian.get("short_meaning")
+            else:
+                sabian_phrase = str(sabian)
+        # at this point sabian_phrase holds the text we will render
+
         fixed_stars = ""
         if self.lookup.get("find_fixed_star_conjunctions") and lon_abs is not None:
             try:
@@ -280,7 +300,7 @@ class ChartInterpreter:
                 self.missing.append(f"fixedstars:{obj}")
 
         lines: List[str] = []
-        name_line = f"{glyph} **{obj}**"
+        name_line = f"{glyph} {obj}"
         if retrograde:
             name_line += " (Rx)"
         if dignity:
@@ -293,8 +313,10 @@ class ChartInterpreter:
             lines.append(f"House {house_num}: {house_meaning}")
         if interp_flags:
             lines.append(f"Flags: {interp_flags}")
-        if sabian:
-            lines.append(f"Sabian: {sabian}")
+        if sabian_phrase:
+            lines.append(f"Sabian Symbol: {sabian_phrase}")
+            if sabian_short:
+                lines.append(f"Sabian Symbol Meaning: {sabian_short}")
         if fixed_stars:
             lines.append(f"Fixed Stars: {fixed_stars}")
         return "\n".join([l for l in lines if l])
@@ -342,7 +364,7 @@ class ChartInterpreter:
 
         label_a = get_label(axis1, sign_a)
         label_b = get_label(axis2, sign_b)
-        output = [f"**{label_a} {connector} {label_b}**: {interp_text}"]
+        output = [f"{label_a} {connector} {label_b}: {interp_text}"]
 
         hkey = self._axis_key(house_a, house_b, kind="house")
         if hkey:
@@ -361,7 +383,7 @@ class ChartInterpreter:
         key = aspect.strip().title() if aspect else ""
         interp_text = self.lookup.get("ASPECT_INTERP", {}).get(key, f"[{aspect.title()} aspect]")
         connector = "Opposite" if key == "Opposition" else key
-        out: List[str] = [f"**{a}** {connector} **{b}**: {interp_text}"]
+        out: List[str] = [f"{a} {connector} {b}: {interp_text}"]
 
         if key == "Opposition":
             house_a, sign_a = self._get_axis_info(a)
@@ -380,11 +402,11 @@ class ChartInterpreter:
 
     def _interpret_circuit(self, objects: List[str], aspects: List[str]) -> str:
         if self.mode == "poetic":
-            return "Together, these forces weave a **unique circuit** of meaning."
+            return "Together, these forces weave a unique circuit of meaning."
         else:
             objs_str = ", ".join(objects[:5]) + ("..." if len(objects) > 5 else "")
             aspects_str = ", ".join(sorted(set(aspects)))
-            return f"Circuit summary: Objects **{objs_str}** with aspects **{aspects_str}**."
+            return f"Circuit summary: Objects {objs_str} with aspects {aspects_str}."
 
     # public ----------------------------------------------------------------
 
@@ -398,8 +420,23 @@ class ChartInterpreter:
         handled = set()
 
         # objects
-        obj_texts = [self._interpret_object(r) for _, r in self.ordered_df.iterrows()]
-        sections.append("## 💫 Object Placements\n" + "\n\n".join(obj_texts))
+        obj_texts: List[str] = []
+        for _, r in self.ordered_df.iterrows():
+            text = self._interpret_object(r) or ""
+            # trim trailing/leading whitespace and collapse internal multiple blank lines
+            text = text.strip()
+            # replace any occurrence of 3+ newlines with exactly two (one blank line)
+            import re
+
+            text = re.sub(r"\n{3,}", "\n\n", text)
+            obj_texts.append(text)
+
+        body = "\n\n".join(obj_texts)
+        # ensure the joined body doesn't accidentally contain too many blanks
+        import re
+
+        body = re.sub(r"\n{3,}", "\n\n", body)
+        sections.append("💫 Object Placements\n" + body)
 
         # compass/axes
         compass_on = getattr(self.result, "compass_rose_on", False)
