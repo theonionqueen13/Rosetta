@@ -946,12 +946,19 @@ def detect_minor_links_from_dataframe(df, edges_major: Sequence[tuple] | None = 
 def detect_minor_links_from_chart(chart, edges_major: Sequence[tuple] | None = None):
     """Wrapper for Chart objects analogous to the dataframe variant.
 
-    The chart object is passed along to :func:`prepare_pattern_inputs` which
-    handles extraction of positions and patterns.  Returns the same
-    ``(connections, singleton_map)`` tuple produced by
+    The chart object is converted to a DataFrame via ``to_dataframe()`` so that
+    :func:`prepare_pattern_inputs` (which expects a DataFrame) works correctly.
+    Returns the same ``(connections, singleton_map)`` tuple produced by
     :func:`detect_minor_links_with_singletons`.
     """
-    pos, patterns, _ = prepare_pattern_inputs(chart, edges_major)
+    # Convert AstrologicalChart to DataFrame so positions_from_dataframe can
+    # process it; fall back to using the object as-is if it is already a
+    # DataFrame (backward-compatible).
+    if hasattr(chart, "to_dataframe"):
+        df = chart.to_dataframe()
+    else:
+        df = chart  # assume it is already a DataFrame
+    pos, patterns, _ = prepare_pattern_inputs(df, edges_major)
     return detect_minor_links_with_singletons(pos, patterns)
 
 def generate_combo_groups(filaments):

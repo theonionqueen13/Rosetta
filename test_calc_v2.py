@@ -395,7 +395,7 @@ with col_right:
 			chart_ready=st.session_state.get("chart_ready", False),
 		)
 
-	if df_cached is not None:
+	if chart_cached is not None:
 		# Call donate UI OUTSIDE the profile manager expander to avoid nesting
 		donate_chart(
 			MONTH_NAMES=MONTH_NAMES,
@@ -410,13 +410,25 @@ with col_right:
 		)
 	
 # BEFORE you use patterns/shapes in the UI:
-patterns = st.session_state.get("patterns", [])
-shapes = st.session_state.get("shapes", [])
-singleton_map = st.session_state.get("singleton_map", {})
+# the chart_core version of run_chart stores circuit data under
+# plain keys ("patterns", "shapes", "singleton_map") with an
+# optional suffix of "_2" for the second wheel when synastry mode
+# is active.  derive that suffix here rather than reaching for
+# "last_df" which belonged to the old DataFrame-centric API.
+synastry_mode = st.session_state.get("synastry_mode", False)
+suffix = "_2" if synastry_mode else ""
+
+patterns = st.session_state.get(f"patterns{suffix}", []) or []
+shapes = st.session_state.get(f"shapes{suffix}", []) or []
+singleton_map = st.session_state.get(f"singleton_map{suffix}", {}) or {}
 
 # --- Bottom-of-page popovers ---
 chart_cached = st.session_state.get("last_chart")
-df_cached     = chart_cached.to_dataframe() if chart_cached is not None else None
+# compute a DataFrame only when we need to display it later
+if chart_cached is not None:
+	df_cached = chart_cached.to_dataframe()
+else:
+	df_cached = None
 aspect_cached = st.session_state.get("last_aspect_df")
 sect_cached   = st.session_state.get("last_sect")
 sect_err      = st.session_state.get("last_sect_error")
@@ -436,7 +448,8 @@ st.markdown(
 )
 
 # Only show the bottom bar after a chart is calculated
-if df_cached is not None:
+# now base the test on the chart object rather than the derived DataFrame
+if chart_cached is not None:
 	col_a, col_b, col_c = st.columns([1, 3, 1])
 	# -------------------------
 	# Wizard
@@ -543,7 +556,7 @@ if df_cached is not None:
 						st.selectbox(" ",          options=AMPMS,   key="transit_ampm")
 
 	rr = _refresh_chart_figure()
-	if rr.fig is not None:
+	if rr is not None and rr.fig is not None:
 		st.pyplot(rr.fig, clear_figure=True)
 		plt.close(rr.fig)
 
@@ -628,7 +641,9 @@ if df_cached is not None:
 
 	with st.popover("Objects", use_container_width=True):
 		st.subheader("Calculated Chart")
-		st.dataframe(df_cached, use_container_width=True)
+		# show underlying DataFrame for debugging/transition
+		if df_cached is not None:
+			st.dataframe(df_cached, use_container_width=True)
 
 	with st.popover("Conjunctions", use_container_width=True):
 		st.subheader("Conjunction Clusters")
