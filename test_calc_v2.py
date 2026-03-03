@@ -711,8 +711,9 @@ with st.sidebar:
 
 	# 2) Render all profiles inside one wrapper so the CSS applies uniformly
 	if chart_cached is not None:
+		# Get visible_objects from render_result, with fallback to session state
 		rr = st.session_state.get("render_result")
-		visible_objects = rr.visible_objects if rr and hasattr(rr, "visible_objects") else []
+		visible_objects = (rr.visible_objects if rr and hasattr(rr, "visible_objects") else None) or st.session_state.get("visible_objects", [])
 		edges_major = st.session_state.get("edges_major") or []
 		unknown_time_chart = bool(
 			st.session_state.get("chart_unknown_time")

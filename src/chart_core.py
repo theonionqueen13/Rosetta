@@ -348,6 +348,13 @@ def _refresh_chart_figure():
 				house_system, dark_mode, shapes, shape_toggles_by_parent, 
 				singleton_toggles, major_edges_all
 			)
+			# Store result in session state so sidebar can access visible_objects
+			st.session_state["render_fig"] = rr.fig
+			st.session_state["render_result"] = rr
+			st.session_state["visible_objects"] = rr.visible_objects
+			st.session_state["active_shapes"] = getattr(rr, "shapes", [])
+			st.session_state["last_cusps"] = rr.cusps
+			st.session_state["ai_text"] = getattr(rr, "out_text", None)
 			return rr
 		except Exception as e:
 			st.error(f"Complex chart rendering failed: {e}")
@@ -371,14 +378,7 @@ def _refresh_chart_figure():
 			st.session_state["active_shapes"] = getattr(rr, "shapes", []) # Use [] if shapes is None
 			st.session_state["last_cusps"] = rr.cusps
 			st.session_state["ai_text"] = getattr(rr, "out_text", None)
-			fig = plt.figure(figsize=figsize, dpi=dpi)
-			figsize: tuple[float, float] = (5.0, 5.0),
-			dpi: int = 144,
-
 			return rr
-
-rr = _refresh_chart_figure()
-st.session_state["render_result"] = rr
 
 def run_chart(suffix: str = "") -> bool:
 	"""
