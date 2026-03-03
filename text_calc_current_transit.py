@@ -818,26 +818,28 @@ def run_chart(lat, lon, tz_name, chart_key="last_df"):
 	update_events_html_state(new_chart_dt_utc)
 
 	# --- Calculate chart ---
-	combined_df, aspect_df, raw_plot_data, _ = calculate_chart(
+	combined_df, aspect_df, raw_plot_data, chart = calculate_chart(
 		year=year, month=month, day=day, hour=hour, minute=minute,
 		tz_offset=0, lat=lat, lon=lon, input_is_ut=False,
 		tz_name=tz_name, include_aspects=True, unknown_time=unknown_time
 	)
 
 	st.session_state[f"{chart_key}_unknown_time"] = unknown_time
+	st.session_state[f"{chart_key}_chart"] = chart
+	# keep df for any legacy UI panels that still expect it
 	df = combined_df
 	st.session_state[f"{chart_key}_dispositor_summary_rows"] = df.to_dict("records")
 
 	# --- Use the plot_data returned from calculate_chart ---
 	st.session_state[f"{chart_key}_plot_data"] = raw_plot_data
 
-	# Optional: keep summary tables for UI
-	chains_rows, summary_rows = build_dispositor_tables(df)
+	# Optional: keep summary tables for UI (now using chart directly)
+	chains_rows, summary_rows = build_dispositor_tables(chart)
 	st.session_state[f"{chart_key}_dispositor_summary_rows"] = summary_rows
 	st.session_state[f"{chart_key}_dispositor_chains_rows"] = chains_rows
 
 	# --- Build aspects / reception / clusters / patterns ---
-	edges_major, edges_minor = build_aspect_edges(df)
+	edges_major, edges_minor = build_aspect_edges(chart)
 	df = annotate_reception(df, edges_major)
 
 	try:
@@ -1520,7 +1522,8 @@ with st.sidebar:
 
 	# 2) Render all profiles inside one wrapper so the CSS applies uniformly
 	if df_cached is not None:
-		visible_objects = st.session_state.get("visible_objects")
+		rr = st.session_state.get("render_result")
+		visible_objects = rr.visible_objects if rr and hasattr(rr, "visible_objects") else []
 		edges_major = st.session_state.get("edges_major") or []
 		unknown_time_chart = bool(
 			st.session_state.get("chart_unknown_time")

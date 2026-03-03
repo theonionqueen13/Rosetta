@@ -25,7 +25,7 @@ from datetime import datetime
 from profiles_v2 import format_object_profile_html, ordered_objects
 import os, streamlit as st
 import matplotlib.pyplot as plt
-from interp import ChartInterpreter
+from interp_v2 import ChartInterpreter
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
@@ -609,11 +609,17 @@ if chart_cached is not None:
 		},
 		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
 	}
-	# Debugging: Log chart_state before instantiation
+	# Debugging: Log chart_state before instantiation (no longer used)
 	print(f"chart_state: {chart_state}")
 
 	try:
-		interp = ChartInterpreter(chart_state)
+		# the new interpreter works directly against the RenderResult returned
+		# by ``_refresh_chart_figure`` rather than a dictionary.
+		if rr is not None:
+			interp = ChartInterpreter(rr)
+		else:
+			# fallback, will raise a helpful error
+			interp = ChartInterpreter(rr)
 		interp_output = interp.generate()
 		st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
 	except Exception as e:
@@ -705,7 +711,8 @@ with st.sidebar:
 
 	# 2) Render all profiles inside one wrapper so the CSS applies uniformly
 	if chart_cached is not None:
-		visible_objects = st.session_state.get("visible_objects")
+		rr = st.session_state.get("render_result")
+		visible_objects = rr.visible_objects if rr and hasattr(rr, "visible_objects") else []
 		edges_major = st.session_state.get("edges_major") or []
 		unknown_time_chart = bool(
 			st.session_state.get("chart_unknown_time")
@@ -716,7 +723,6 @@ with st.sidebar:
 			visible_objects=visible_objects,
 			edges_major=edges_major,
 		)
-		print("[DEBUG] Sidebar visible_objects:", visible_objects)
 		print("[DEBUG] Sidebar ordered_rows objects:", [obj.object_name.name for obj in ordered_rows if obj.object_name])
 		if ordered_rows:
 			blocks = [
