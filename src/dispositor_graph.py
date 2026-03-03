@@ -463,6 +463,11 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
         remaining = [n for n in remaining if n not in unaccounted]
 
     # --- 2. POSITIONING & WEIGHTS ---
+    # H_GAP defines the minimum horizontal separation (in data units) between
+    # sibling nodes.  Later code will scale the entire layout if any pair of
+    # nodes ends up closer than H_GAP, and the figure width computation is
+    # designed to respect this spacing.  This makes H_GAP a hard limit that
+    # cannot be violated by downstream scaling or rendering.
     H_GAP, V_GAP = 1.2, 5.0
     global_weights = {}
     def calc_weight(name, seen=None):
@@ -571,7 +576,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
             return min_x, max_x
 
         assign_pos(f"{root}_0", 0)
-		# 2. RE-CENTER THE ROOT (Jupiter Fix)
+		# 2. RE-CENTER THE ROOT (Parent Fix)
         # Find all direct children of the root
         root_id = f"{root}_0"
         root_kids = tree_edges_map.get(root_id, [])
@@ -580,12 +585,42 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
             first_kid_x = pos[root_kids[0]][0]
             last_kid_x = pos[root_kids[-1]][0]
             
-            # Snap Jupiter to the exact midpoint of his children
+            # Snap parent to the exact midpoint of its children
             new_root_x = (first_kid_x + last_kid_x) / 2.0
             pos[root_id][0] = new_root_x
             
-            # Update the level tracker to ensure the next tree doesn't overlap Jupiter
+            # Update the level tracker to ensure the next tree doesn't overlap parent
             lvl_next_x[0] = max(lvl_next_x.get(0, 0.0), new_root_x + H_GAP)
+
+        # 2b. REDISTRIBUTE CHILDLESS SIBLINGS IN GAPS
+        # For each parent, find gaps between children that have their own children,
+        # and evenly space the childless siblings within those gaps
+        for parent_id, child_ids in tree_edges_map.items():
+            if len(child_ids) < 2:
+                continue
+            
+            # Identify which children have their own children (fixed-position)
+            with_kids_indices = [i for i, cid in enumerate(child_ids) if tree_edges_map.get(cid)]
+            
+            # Process each gap between fixed-position siblings
+            for gap_num in range(len(with_kids_indices) - 1):
+                left_idx = with_kids_indices[gap_num]
+                right_idx = with_kids_indices[gap_num + 1]
+                
+                # Find childless siblings in this gap
+                gap_childless = [i for i in range(left_idx + 1, right_idx) 
+                                if not tree_edges_map.get(child_ids[i])]
+                
+                if gap_childless:
+                    left_x = pos[child_ids[left_idx]][0]
+                    right_x = pos[child_ids[right_idx]][0]
+                    
+                    # Evenly space childless siblings across the gap
+                    num_childless = len(gap_childless)
+                    spacing = (right_x - left_x) / (num_childless + 1)
+                    
+                    for place_idx, sibling_idx in enumerate(gap_childless):
+                        pos[child_ids[sibling_idx]][0] = left_x + spacing * (place_idx + 1)
 
         # 3. Normalize to 0 (Keep your existing normalization logic)
         min_x_val = min(p[0] for p in pos.values())
@@ -603,108 +638,175 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     # --- 3. RENDERING ---
     n = len(all_tree_data)
     if n == 0: return None
-    
+
+    # --- ENFORCE MINIMUM HORIZONTAL SPACING (per tree) ---
+    # Earlier we attempted a global scale based on the smallest gap
+    # across **all** trees.  That blew up when multiple independent trees
+    # were present: a tight cluster in one tree forced the entire figure to
+    # expand, leaving enormous white margins between otherwise normal trees.
+    #
+    # To fix this we perform the gap check on each tree individually and
+    # only scale that tree if needed.  This keeps sibling spacing inside a
+    # tree at least H_GAP without affecting neighbouring trees.
+
+    for td in all_tree_data:
+        local_min_dx = float("inf")
+        # group x coordinates by level within this tree
+        levels = {}
+        for name, nid in td['nodes']:
+            lvl = int(nid.split("_")[1])
+            levels.setdefault(lvl, []).append(td['pos'][nid][0])
+        for xs in levels.values():
+            xs.sort()
+            for a, b in zip(xs, xs[1:]):
+                local_min_dx = min(local_min_dx, b - a)
+        if local_min_dx < H_GAP and local_min_dx > 0:
+            factor = H_GAP / local_min_dx
+            for nid, xy in td['pos'].items():
+                xy[0] *= factor
+            td['width'] *= factor
+    # note: global_max_h unaffected by horizontal scaling
+
     planet_counts = {}
     for td in all_tree_data:
         for name, _ in td['nodes']: planet_counts[name] = planet_counts.get(name, 0) + 1
     duplicated_planets = {name for name, count in planet_counts.items() if count > 1}
 
-    fig_w = max(15, min(35, sum(td['width'] for td in all_tree_data) * 0.6))
+    # merge all trees into a single axis, offsetting each tree sequentially
+    total_width = 0.0
+    merged_nodes = []
+    merged_edges = []
+    merged_pos = {}
+    for td in all_tree_data:
+        # copy current tree positions with offset
+        for nid, xy in td['pos'].items():
+            merged_pos[nid] = [xy[0] + total_width, xy[1]]
+        for name, nid in td['nodes']:
+            merged_nodes.append((name, nid))
+        for edge in td['edges']:
+            merged_edges.append(edge)
+        total_width += td['width'] + H_GAP  # insert a gap between trees
+    # subtract last gap since we added one too many
+    total_width = max(0.0, total_width - H_GAP)
+
+    fig_w = max(15, total_width)
     fig = plt.figure(figsize=(fig_w, 12))
-    gs = gridspec.GridSpec(1, n, width_ratios=[max(0.2, td['width']) for td in all_tree_data], wspace=0.1)
-    
+    ax = fig.add_subplot(1, 1, 1)
+
+    # determine marker size so that the rendered circles never shrink to an
+    # unreadable size when the figure is later squashed by streamlit.
+    # ``s`` passed to scatter is in points^2; a figure that is much wider than
+    # the minimum baseline (15 inches) will typically be downscaled by the
+    # container, causing markers to appear smaller.  By enlarging the area
+    # proportionally to ``fig_w`` we keep a roughly constant pixel footprint.
+    # This also gives us a universal *minimum* display size, because when
+    # ``fig_w`` is at the baseline the scale factor is 1.0.
+    base_marker = 3500
+    scale_factor = fig_w / 18.0
+    marker_s = base_marker * scale_factor
+    # also compute font sizes based on the same scale factor so labels grow
+    base_font = 11
+    base_symbol_font = 14
+    font_size = base_font * scale_factor
+    symbol_font_size = base_symbol_font * scale_factor
+    # house label text likewise should scale
+    house_font_size = base_symbol_font * scale_factor * 1.1
+
     edges_major = st.session_state.get('edges_major', [])
     png_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pngs")
 
-    for i, td in enumerate(all_tree_data):
-        ax = fig.add_subplot(gs[i])
-        pos = td['pos']
-        # collect x extents for each (house, level) combination
-        house_groups = {}
-        for name, nid in td['nodes']:
-            house = house_map.get(name)
+    # collect x extents for each (house, level, parent) combination using merged data
+    # the extra parent component ensures rectangles never span across distinct
+    # family units even when multiple objects share the same house/level.
+    house_groups = {}
+    for name, nid in merged_nodes:
+        house = house_map.get(name)
+        lvl = int(nid.split('_')[1])
+        # last segment of nid is parent identifier for non-root nodes
+        parent = nid.split('_')[-1] if '_' in nid else None
+        x = merged_pos[nid][0]
+        house_groups.setdefault((house, lvl, parent), []).append(x)
+    if not house_groups:
+        for name, nid in merged_nodes:
             lvl = int(nid.split('_')[1])
-            x = pos[nid][0]
-            house_groups.setdefault((house, lvl), []).append(x)
-        # if map has no real houses (e.g. chart==None or failure) still
-        # generate a group per node so we at least draw a box behind each planet
-        if not house_groups:
-            for name, nid in td['nodes']:
-                lvl = int(nid.split('_')[1])
-                x = pos[nid][0]
-                house_groups.setdefault((None, lvl), []).append(x)
+            parent = nid.split('_')[-1] if '_' in nid else None
+            x = merged_pos[nid][0]
+            house_groups.setdefault((None, lvl, parent), []).append(x)
 
-        # draw edges first (they will sit underneath the rectangles)
-        for p_id, c_id in td['edges']:
-            start, end = pos[p_id], pos[c_id]
-            ax.annotate("", xy=end, xytext=start, arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8), zorder=1)
-            p_name, c_name = p_id.split('_')[0], c_id.split('_')[0]
-            mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
-            asp_meta = next((m for p,c,m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
-            icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, chart), {}).get("by sign")
-            if icon_file and os.path.exists(os.path.join(png_dir, icon_file)):
-                img = plt.imread(os.path.join(png_dir, icon_file))
-                ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))
+    # draw edges first
+    for p_id, c_id in merged_edges:
+        start, end = merged_pos[p_id], merged_pos[c_id]
+        ax.annotate("", xy=end, xytext=start, arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8), zorder=1)
+        p_name, c_name = p_id.split('_')[0], c_id.split('_')[0]
+        mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
+        asp_meta = next((m for p,c,m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
+        icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, chart), {}).get("by sign")
+        if icon_file and os.path.exists(os.path.join(png_dir, icon_file)):
+            img = plt.imread(os.path.join(png_dir, icon_file))
+            ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))
 
-        # draw the house rectangles on top of edges but underneath planet labels
-        for (house, lvl), xs in house_groups.items():
-            xmin, xmax = min(xs), max(xs)
-            pad = H_GAP / 2.0
-            width = (xmax - xmin) + pad
-            cx = (xmin + xmax) / 2.0
-            cy = -lvl * V_GAP
-            # make rectangle shorter (about half V_GAP) and shift upward slightly
-            rect_height = V_GAP * 0.5  # previously 0.8
-            rect_y = cy - rect_height / 2.0 + V_GAP * 0.05
-            # use FancyBboxPatch for rounded corners
-            ax.add_patch(FancyBboxPatch(
-                (xmin - pad/2.0, rect_y),
-                width,
-                rect_height,
-                boxstyle="round,pad=0,rounding_size=0.1",
-                facecolor="#fd8e8e",  # stronger pastel red
-                edgecolor="#ff5656",
-                linewidth=1.5,
-                alpha=0.6,
-                zorder=0,  # behind edges/planets
-            ))
-            if house is not None:
-                # label wants to sit nearer the bottom of the box now that it's bigger
-                # use a fraction of rect_height rather than a fixed constant
-                label_y = cy + rect_height/2.0 - rect_height*0.25
-                ax.text(cx, label_y, f"{house}H",
-                        ha='center', va='bottom', fontsize=16, zorder=0.5)
+    # draw the house rectangles; keys now include parent to keep units separate
+    for (house, lvl, parent), xs in house_groups.items():
+        xmin, xmax = min(xs), max(xs)
+        pad = H_GAP / 2.0
+        width = (xmax - xmin) + pad
+        cx = (xmin + xmax) / 2.0
+        cy = -lvl * V_GAP
+        rect_height = V_GAP * 0.75
+        rect_y = cy - rect_height / 2.0 + V_GAP * 0.1
+        ax.add_patch(FancyBboxPatch(
+            (xmin - pad/2.0, rect_y),
+            width,
+            rect_height,
+            boxstyle="round,pad=0,rounding_size=0.1",
+            facecolor="#fd8e8e",
+            edgecolor="#ff5656",
+            linewidth=1.5,
+            alpha=0.6,
+            zorder=0,
+        ))
+        if house is not None:
+            label_y = cy + rect_height/2.0 - rect_height*0.15
+            ax.text(cx, label_y, f"{house}H",
+                    ha='center', va='bottom', fontsize=house_font_size, fontweight="bold",
+                    path_effects=[pe.withStroke(linewidth=2, foreground="white")],
+                    zorder=100)
 
-        # finally draw planets & labels above everything
-        for name, nid in td['nodes']:
-            xy = pos[nid]
-            is_sov, is_dup, is_loop = name in sovereigns, name in duplicated_planets, name in rulership_loops
-            if is_sov: ax.scatter(xy[0], xy[1], s=2300, c="#59A54A", zorder=2)
-            elif is_dup and is_loop:
-                ax.scatter(xy[0], xy[1], s=2300, c="#FF8656", zorder=2)
-                ax.scatter(xy[0], xy[1], s=1380, c="#B386D8", zorder=3)
-            elif is_dup: ax.scatter(xy[0], xy[1], s=2300, c="#FF8656", zorder=2)
-            elif is_loop: ax.scatter(xy[0], xy[1], s=2300, c="#B386D8", zorder=2)
-            else: ax.scatter(xy[0], xy[1], s=2300, c="#5F6FFF", zorder=2)
+    # draw planets & labels
+    for name, nid in merged_nodes:
+        xy = merged_pos[nid]
+        is_sov, is_dup, is_loop = name in sovereigns, name in duplicated_planets, name in rulership_loops
+        if is_sov:
+            ax.scatter(xy[0], xy[1], s=marker_s, c="#59A54A", zorder=2)
+        elif is_dup and is_loop:
+            ax.scatter(xy[0], xy[1], s=marker_s, c="#FF8656", zorder=2)
+            ax.scatter(xy[0], xy[1], s=marker_s * 0.6, c="#B386D8", zorder=3)
+        elif is_dup:
+            ax.scatter(xy[0], xy[1], s=marker_s, c="#FF8656", zorder=2)
+        elif is_loop:
+            ax.scatter(xy[0], xy[1], s=marker_s, c="#B386D8", zorder=2)
+        else:
+            ax.scatter(xy[0], xy[1], s=marker_s, c="#5F6FFF", zorder=2)
 
-            ax.text(xy[0], xy[1], ABREVIATED_PLANET_NAMES.get(name, name), ha='center', va='center', fontsize=11, fontweight="bold", zorder=4)
-            if name in self_ruling or name in sovereigns:
-                ax.text(xy[0], xy[1]-0.08, "↻", ha='center', va='top', fontsize=16, zorder=3)
+        ax.text(xy[0], xy[1], ABREVIATED_PLANET_NAMES.get(name, name), ha='center', va='center', fontsize=font_size, fontweight="bold", zorder=4)
+        if name in self_ruling or name in sovereigns:
+            ax.text(xy[0], xy[1]-0.08, "↻", ha='center', va='top', fontsize=symbol_font_size, zorder=3)
 
-        for p_id, c_id in td['edges']:
-            start, end = pos[p_id], pos[c_id]
-            ax.annotate("", xy=end, xytext=start, arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8), zorder=1)
-            p_name, c_name = p_id.split('_')[0], c_id.split('_')[0]
-            mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
-            asp_meta = next((m for p,c,m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
-            icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, chart), {}).get("by sign")
-            if icon_file and os.path.exists(os.path.join(png_dir, icon_file)):
-                img = plt.imread(os.path.join(png_dir, icon_file))
-                ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))
+    # redraw edges over planets for icon placement (same as before)
+    for p_id, c_id in merged_edges:
+        start, end = merged_pos[p_id], merged_pos[c_id]
+        ax.annotate("", xy=end, xytext=start, arrowprops=dict(arrowstyle="-|>", color="black", lw=1.8), zorder=1)
+        p_name, c_name = p_id.split('_')[0], c_id.split('_')[0]
+        mid_x, mid_y = (start[0]+end[0])/2, (start[1]+end[1])/2
+        asp_meta = next((m for p,c,m in edges_major if (p==p_name and c==c_name) or (p==c_name and c==p_name)), None)
+        icon_file = RECEPTION_SYMBOLS.get(asp_meta.get("aspect"), {}).get("by orb") if asp_meta else RECEPTION_SYMBOLS.get(get_sign_aspect_name(p_name, c_name, chart), {}).get("by sign")
+        if icon_file and os.path.exists(os.path.join(png_dir, icon_file)):
+            img = plt.imread(os.path.join(png_dir, icon_file))
+            ax.add_artist(AnnotationBbox(OffsetImage(img, zoom=0.6), (mid_x, mid_y), frameon=False, zorder=10))
 
-        ax.set_xlim(-1.0, td['width'] + 1.0 + H_GAP)
-        ax.set_ylim(-global_max_h - 2.5, 2.5)
-        ax.axis("off")
+    ax.set_xlim(-1.0, total_width + 1.0 + H_GAP)
+    ax.set_ylim(-global_max_h - 2.5, 2.5)
+    ax.axis("off")
 
     plt.subplots_adjust(left=0.02, right=0.98, top=0.92 if header_info else 0.98, bottom=0.05)
     if header_info: _draw_dispositor_header(fig, header_info)
