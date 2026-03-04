@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Union, List, Optional, Any, Dict, Literal # Added Literal here
 import pandas as pd
-from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, SABIAN_SYMBOLS, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SABIAN_SYMBOLS, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS
+from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, SABIAN_SYMBOLS, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SABIAN_SYMBOLS, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS, OBJECT_SIGN_COMBO, OBJECT_HOUSE_COMBO
 
 PatternNode = Union['ChartObject', 'Cluster']
 
@@ -1023,6 +1023,35 @@ class StaticLookup:
     compass_axes: Dict[str, CompassAxis] = field(default_factory=dict)
     shapes: Dict[str, Shape] = field(default_factory=dict)
     sabian_symbols: Dict[str, Dict[int, SabianSymbol]] = field(default_factory=dict)
+    object_sign_combos: Dict[str, "ObjectSign"] = field(default_factory=dict)
+    object_house_combos: Dict[str, "ObjectHouse"] = field(default_factory=dict)
+
+@dataclass
+class ObjectSign:
+    object: Object
+    sign: Sign
+    short_meaning: str
+    behavioral_style: str = ""
+    dignity: Optional[Union[Dignity, str]] = None
+    dignity_interp: Optional[str] = None
+    somatic_signature: Optional[str] = None 
+    shadow_expression: Optional[str] = None
+    strengths: Optional[str] = None
+    challenges: Optional[str] = None
+    keywords: List[str] = field(default_factory=list)
+    remediation_tips: List[str] = field(default_factory=list)
+
+@dataclass
+class ObjectHouse:
+    object: Object
+    house: House  # Changed from 'sign' to 'house'
+    short_meaning: str
+    environmental_impact: str = ""
+    concrete_manifestation: str = ""
+    strengths: Optional[str] = None
+    challenges: Optional[str] = None
+    objective: str = ""
+    keywords: List[str] = field(default_factory=list)
 
 def migrate_lookup_data():
     static = StaticLookup()
@@ -1537,6 +1566,105 @@ def migrate_lookup_data():
             nodes=node_count,
             configuration=configuration,
             meaning=meaning
+        )
+
+    # --- 9. MIGRATING OBJECT-SIGN COMBOS (Using OBJECT_SIGN_COMBO) ---
+    # OBJECT_SIGN_COMBO maps "Object_Sign" -> { object, sign, short_meaning, ... keywords, remediation_tips }
+    for combo_key, data in OBJECT_SIGN_COMBO.items():
+        if not isinstance(data, dict):
+            continue
+        
+        obj_name = data.get('object')
+        sign_name = data.get('sign')
+        
+        # Resolve object and sign from static lookups
+        obj = static.objects.get(obj_name) if obj_name else None
+        sign = static.signs.get(sign_name) if sign_name else None
+        
+        # Extract dignity and dignity_interp - both plain strings or None
+        dignity_val = data.get('dignity')  # e.g. "Domicile", "Exalted", "Fall", "Detriment"
+        if dignity_val is not None and not isinstance(dignity_val, str):
+            dignity_val = None
+        dignity_interp_val = data.get('dignity_interp') if dignity_val else None
+        if dignity_interp_val is not None and not isinstance(dignity_interp_val, str):
+            dignity_interp_val = None
+
+        # Extract and normalize keywords
+        raw_keywords = data.get('keywords', [])
+        if isinstance(raw_keywords, str):
+            keywords = [k.strip() for k in raw_keywords.split(',') if k.strip()]
+        elif isinstance(raw_keywords, (list, tuple, set)):
+            keywords = [str(k).strip() for k in raw_keywords if str(k).strip()]
+        else:
+            keywords = []
+        
+        # Extract and normalize remediation_tips
+        raw_tips = data.get('remediation_tips', [])
+        if isinstance(raw_tips, str):
+            remediation_tips = [t.strip() for t in raw_tips.split('\n') if t.strip()]
+        elif isinstance(raw_tips, (list, tuple, set)):
+            remediation_tips = [str(t).strip() for t in raw_tips if str(t).strip()]
+        else:
+            remediation_tips = []
+        
+        static.object_sign_combos[combo_key] = ObjectSign(
+            object=obj,
+            sign=sign,
+            short_meaning=data.get('short_meaning', ''),
+            dignity=dignity_val,
+            dignity_interp=dignity_interp_val,
+            behavioral_style=data.get('behavioral_style', ''),
+            somatic_signature=data.get('somatic_signature'),
+            shadow_expression=data.get('shadow_expression'),
+            strengths=data.get('strengths'),
+            challenges=data.get('challenges'),
+            keywords=keywords,
+            remediation_tips=remediation_tips
+        )
+
+    # --- 10. MIGRATING OBJECT-HOUSE COMBOS (Using OBJECT_HOUSE_COMBO) ---
+    # OBJECT_HOUSE_COMBO maps "Object_House_N" -> { object, house, short_meaning, ... keywords }
+    for combo_key, data in OBJECT_HOUSE_COMBO.items():
+        if not isinstance(data, dict):
+            continue
+        
+        obj_name = data.get('object')
+        house_name = data.get('house')
+        
+        # Resolve object and house from static lookups
+        obj = static.objects.get(obj_name) if obj_name else None
+        
+        # Parse house number from "Nth House" string
+        house_num = None
+        if isinstance(house_name, str):
+            # Extract number from "1st House", "2nd House", "3rd House", etc.
+            import re as re_module
+            match = re_module.match(r'(\d+)(?:st|nd|rd|th)?\s+House', house_name)
+            house_num = int(match.group(1)) if match else None
+        elif isinstance(house_name, int):
+            house_num = house_name
+        
+        house = static.houses.get(house_num) if house_num else None
+        
+        # Extract and normalize keywords
+        raw_keywords = data.get('keywords', [])
+        if isinstance(raw_keywords, str):
+            keywords = [k.strip() for k in raw_keywords.split(',') if k.strip()]
+        elif isinstance(raw_keywords, (list, tuple, set)):
+            keywords = [str(k).strip() for k in raw_keywords if str(k).strip()]
+        else:
+            keywords = []
+        
+        static.object_house_combos[combo_key] = ObjectHouse(
+            object=obj,
+            house=house,
+            short_meaning=data.get('short_meaning', ''),
+            environmental_impact=data.get('environmental_impact', ''),
+            concrete_manifestation=data.get('concrete_manifestation', ''),
+            strengths=data.get('strengths'),
+            challenges=data.get('challenges'),
+            objective=data.get('objective', ''),
+            keywords=keywords
         )
 
     # ------------------------------------------------------------------

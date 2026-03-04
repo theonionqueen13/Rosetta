@@ -139,6 +139,35 @@ TABLE_STATEMENTS = [
         keywords TEXT[],
         PRIMARY KEY (sign, degree)
     );""",
+
+    """CREATE TABLE IF NOT EXISTS object_sign_combos (
+        combo_key TEXT PRIMARY KEY,
+        object_name TEXT,
+        sign_name TEXT,
+        short_meaning TEXT,
+        behavioral_style TEXT,
+        dignity TEXT,
+        dignity_interp TEXT,
+        somatic_signature TEXT,
+        shadow_expression TEXT,
+        strengths TEXT,
+        challenges TEXT,
+        keywords TEXT[],
+        remediation_tips TEXT[]
+    );""",
+
+    """CREATE TABLE IF NOT EXISTS object_house_combos (
+        combo_key TEXT PRIMARY KEY,
+        object_name TEXT,
+        house_number INTEGER,
+        short_meaning TEXT,
+        environmental_impact TEXT,
+        concrete_manifestation TEXT,
+        strengths TEXT,
+        challenges TEXT,
+        objective TEXT,
+        keywords TEXT[]
+    );""",
 ]
 
 
@@ -151,6 +180,10 @@ def init_schema(cur):
         ADD COLUMN IF NOT EXISTS short_meaning TEXT,
         ADD COLUMN IF NOT EXISTS long_meaning TEXT,
         ADD COLUMN IF NOT EXISTS keywords TEXT[];
+    """)
+    cur.execute("""
+        ALTER TABLE object_sign_combos
+        ADD COLUMN IF NOT EXISTS dignity_interp TEXT;
     """)
 
 
@@ -279,6 +312,17 @@ def insert_static_data(cur):
                    rows)
 
     # sabian symbols
+    # *new* lookup data has been completed for the second half of the zodiac
+    # (Leo through Pisces).  Older migrations may have inserted placeholder
+    # or partial data for those signs; we want to completely overwrite
+    # whatever is in the database with the fresh information from
+    # ``static_db.sabian_symbols``.  To avoid stale rows lingering we delete
+    # the existing entries for that range before writing.
+    half_zodiac = ['Leo','Virgo','Libra','Scorpio','Sagittarius',
+                   'Capricorn','Aquarius','Pisces']
+    cur.execute("DELETE FROM sabian_symbols WHERE sign = ANY(%s)",
+                (half_zodiac,))
+
     rows = []
     for sign, table in static_db.sabian_symbols.items():
         for deg, sym in table.items():
@@ -298,6 +342,110 @@ def insert_static_data(cur):
                    "long_meaning = EXCLUDED.long_meaning, "
                    "keywords = EXCLUDED.keywords",
                    rows)
+
+    # object_sign_combos
+    rows = []
+    for combo_key, combo in static_db.object_sign_combos.items():
+        rows.append((
+            combo_key,
+            combo.object.name if combo.object else None,
+            combo.sign.name if combo.sign else None,
+            combo.short_meaning,
+            combo.behavioral_style,
+            combo.dignity if isinstance(combo.dignity, str) else None,
+            combo.dignity_interp if isinstance(combo.dignity_interp, str) else None,
+            combo.somatic_signature,
+            combo.shadow_expression,
+            combo.strengths,
+            combo.challenges,
+            _to_list(combo.keywords),
+            _to_list(combo.remediation_tips)
+        ))
+    execute_values(cur,
+                   "INSERT INTO object_sign_combos "
+                   "(combo_key, object_name, sign_name, short_meaning, behavioral_style, "
+                   "dignity, dignity_interp, somatic_signature, shadow_expression, "
+                   "strengths, challenges, keywords, remediation_tips) "
+                   "VALUES %s ON CONFLICT (combo_key) DO UPDATE SET "
+                   "object_name = EXCLUDED.object_name, "
+                   "sign_name = EXCLUDED.sign_name, "
+                   "short_meaning = EXCLUDED.short_meaning, "
+                   "behavioral_style = EXCLUDED.behavioral_style, "
+                   "dignity = EXCLUDED.dignity, "
+                   "dignity_interp = EXCLUDED.dignity_interp, "
+                   "somatic_signature = EXCLUDED.somatic_signature, "
+                   "shadow_expression = EXCLUDED.shadow_expression, "
+                   "strengths = EXCLUDED.strengths, "
+                   "challenges = EXCLUDED.challenges, "
+                   "keywords = EXCLUDED.keywords, "
+                   "remediation_tips = EXCLUDED.remediation_tips",
+                   rows)
+    # post-insert sanity: ensure all combos from lookup exist in the table
+    cur.execute("SELECT combo_key FROM object_sign_combos")
+    db_sign_keys = {r[0] for r in cur.fetchall()}
+    expected_sign_keys = set(static_db.object_sign_combos.keys())
+    missing_sign = expected_sign_keys - db_sign_keys
+    if missing_sign:
+        raise RuntimeError(f"Missing object_sign_combos after migration: {sorted(missing_sign)}")
+    else:
+        print(f"object_sign_combos in DB after upsert: {len(db_sign_keys)}")
+
+    # object_house_combos
+    # make sure any prior North/South Node placements are removed before
+    # we start; historically a previous migration run didn't include these
+    # keys at all so some databases may have zero rows for them. deleting
+    # first guarantees they'll be recreated by the bulk operation below.
+    cur.execute("DELETE FROM object_house_combos WHERE object_name = ANY(%s)",
+                (['North Node', 'South Node'],))
+
+    # previously we used DO NOTHING on conflict; that meant updates to
+    # existing combos were ignored.  New keys would still be inserted, but
+    # since we now occasionally tweak meanings or add keywords to existing
+    # placements it's safer to upsert all fields just like object_sign_combos.
+    rows = []
+    for combo_key, combo in static_db.object_house_combos.items():
+        rows.append((
+            combo_key,
+            combo.object.name if combo.object else None,
+            combo.house.number if combo.house else None,
+            combo.short_meaning,
+            combo.environmental_impact,
+            combo.concrete_manifestation,
+            combo.strengths,
+            combo.challenges,
+            combo.objective,
+            _to_list(combo.keywords)
+        ))
+    execute_values(cur,
+                   "INSERT INTO object_house_combos "
+                   "(combo_key, object_name, house_number, short_meaning, "
+                   "environmental_impact, concrete_manifestation, strengths, "
+                   "challenges, objective, keywords) VALUES %s "
+                   "ON CONFLICT (combo_key) DO UPDATE SET "
+                   "object_name = EXCLUDED.object_name, "
+                   "house_number = EXCLUDED.house_number, "
+                   "short_meaning = EXCLUDED.short_meaning, "
+                   "environmental_impact = EXCLUDED.environmental_impact, "
+                   "concrete_manifestation = EXCLUDED.concrete_manifestation, "
+                   "strengths = EXCLUDED.strengths, "
+                   "challenges = EXCLUDED.challenges, "
+                   "objective = EXCLUDED.objective, "
+                   "keywords = EXCLUDED.keywords",
+                   rows)
+
+    # post-insert sanity: make sure all north/south node combos landed
+    cur.execute("SELECT combo_key FROM object_house_combos "
+                "WHERE object_name IN ('North Node','South Node')")
+    db_keys = {r[0] for r in cur.fetchall()}
+    expected_keys = {k for k in static_db.object_house_combos
+                     if k.startswith('NorthNode') or k.startswith('SouthNode')}
+    missing = expected_keys - db_keys
+    if missing:
+        # this is unexpected; abort so the issue is visible
+        raise RuntimeError(f"Migration inserted {len(db_keys)} node combos, "
+                           f"missing: {sorted(missing)}")
+    else:
+        print(f"node combos in DB after upsert: {len(db_keys)}")
 
 
 def main():
@@ -336,6 +484,15 @@ def main():
                 # sample house keywords to verify normalization
                 cur.execute("SELECT number, keywords FROM houses ORDER BY number LIMIT 3")
                 print('house keyword sample:', cur.fetchall())
+                # New stats for object_sign_combos and object_house_combos
+                cur.execute("SELECT COUNT(*) FROM object_sign_combos")
+                sign_cnt = cur.fetchone()[0]
+                print('object_sign_combos count:', sign_cnt)
+                cur.execute("SELECT COUNT(*) FROM object_house_combos")
+                cnt = cur.fetchone()[0]
+                print('object_house_combos count:', cnt)
+                cur.execute("SELECT COUNT(*) FROM object_house_combos WHERE object_name IN ('North Node','South Node')")
+                print('node combos present:', cur.fetchone()[0])
     finally:
         conn.close()
 

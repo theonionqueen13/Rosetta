@@ -25,7 +25,7 @@ from datetime import datetime
 from profiles_v2 import format_object_profile_html, ordered_objects
 import os, streamlit as st
 import matplotlib.pyplot as plt
-from interp_v2 import ChartInterpreter
+from interp_base_natal import NatalInterpreter
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
@@ -616,14 +616,14 @@ if chart_cached is not None:
 		# the new interpreter works directly against the RenderResult returned
 		# by ``_refresh_chart_figure`` rather than a dictionary.
 		if rr is not None:
-			interp = ChartInterpreter(rr)
+			interp = NatalInterpreter(rr)
 		else:
 			# fallback, will raise a helpful error
-			interp = ChartInterpreter(rr)
+			interp = NatalInterpreter(rr)
 		interp_output = interp.generate()
 		st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
 	except Exception as e:
-		print(f"Error during ChartInterpreter instantiation: {e}")
+		print(f"Error during NatalInterpreter instantiation: {e}")
 
 	# --- Dispositor Graph (moved from popover) ---
 	render_dispositor_section(st, chart_cached)
