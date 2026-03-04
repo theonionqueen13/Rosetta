@@ -253,11 +253,16 @@ def calculate_chart(
 		}
 
 	# -------- Combine MAJOR_OBJECTS with extras --------
-	base_objects = MAJOR_OBJECTS
+	# Exclude DC and IC from base_objects since they're always calculated as extras
+	base_objects = {
+		name: ident
+		for name, ident in MAJOR_OBJECTS.items()
+		if name not in {"DC", "IC"}
+	}
 	if unknown_time:
 		base_objects = {
 			name: ident
-			for name, ident in MAJOR_OBJECTS.items()
+			for name, ident in base_objects.items()
 			if name not in {"AC", "MC", "Part of Fortune", "Vertex"}
 		}
 

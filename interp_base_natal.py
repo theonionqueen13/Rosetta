@@ -53,10 +53,64 @@ AXIS_MAP: Dict[str, str] = {
     "IC": "IC",
     "North Node": "North Node",
     "South Node": "South Node",
+    "NorthNode": "North Node",  # Variant without space
+    "SouthNode": "South Node",  # Variant without space
 }
 
 
-# --- helper functions for formatting ----------------------------------------
+# --- axis display formatting -----------------------------------------------
+AXIS_FULL_NAMES = {
+    "AC": "Ascendant",
+    "DC": "Descendant",
+    "MC": "Midheaven",
+    "IC": "Immum Coeli",
+}
+
+AXIS_ABBREVIATIONS = {v: k for k, v in AXIS_FULL_NAMES.items()}
+AXIS_ABBREVIATIONS.update({k: k for k in AXIS_FULL_NAMES.keys()})  # Add abbrev -> abbrev
+
+
+def _format_axis_for_display(obj_name: str) -> str:
+    """Format axis object name as 'Full Name (Abbreviation)'.
+    
+    Handles all forms: "AC", "Ascendant", "AC Ascendant", etc.
+    Returns "Ascendant (AC)", "Descendant (DC)", etc.
+    For non-axis objects, returns the name unchanged.
+    """
+    # Map of all known axis forms to their canonical (abbrev, full_name) pair
+    axis_mapping = {
+        # Abbreviations
+        "AC": ("AC", "Ascendant"),
+        "DC": ("DC", "Descendant"),
+        "MC": ("MC", "Midheaven"),
+        "IC": ("IC", "Immum Coeli"),
+        # Full names
+        "Ascendant": ("AC", "Ascendant"),
+        "Descendant": ("DC", "Descendant"),
+        "Midheaven": ("MC", "Midheaven"),
+        "Immum Coeli": ("IC", "Immum Coeli"),
+    }
+    
+    # Try exact match first
+    if obj_name in axis_mapping:
+        abbrev, full_name = axis_mapping[obj_name]
+        return f"{full_name} ({abbrev})"
+    
+    # Handle hybrid forms by splitting on space
+    # e.g., "AC Ascendant" -> ["AC", "Ascendant"]
+    parts = obj_name.split()
+    if len(parts) >= 2:
+        # Check if first part is a 2-letter axis abbreviation
+        potential_abbrev = parts[0]
+        if potential_abbrev in ("AC", "DC", "MC", "IC"):
+            # The rest is the full name
+            full_name = " ".join(parts[1:])
+            return f"{full_name} ({potential_abbrev})"
+    
+    # Not an axis - return as-is
+    return obj_name
+
+
 
 def _format_house_label(house_num: float | int | str | None) -> str:
     """Format a house number as ordinal (e.g., '1st House', '2nd House')."""
@@ -83,6 +137,7 @@ def _format_house_label(house_num: float | int | str | None) -> str:
     }
     suffix = ordinals.get(h, f"{h}th")
     return f"{suffix} House"
+
 
 
 # ---------------------------------------------------------------------------
@@ -185,21 +240,35 @@ class NatalInterpreter:
         
         * Axes use two-letter abbreviations ("AC", "DC", "IC", "MC").
         * Lunar nodes and other multi-word objects drop spaces ("NorthNode").
+        * Some objects use shortened names (e.g., "Lilith" for "Black Moon Lilith (Mean)").
 
         The chart dataframe (and user inputs) may supply more human-readable
         names such as "Ascendant" or "North Node", so we translate those here.
         """
         # explicit mapping for known variants
         mapping = {
+            # Axes
             "Ascendant": "AC",
             "Descendant": "DC",
+            "Midheaven": "MC",
+            "Immum Coeli": "IC",
+            # Lunar nodes
             "North Node": "NorthNode",
             "South Node": "SouthNode",
-            # keep the abbreviations intact
+            # Special shortened names
+            "Black Moon Lilith (Mean)": "Lilith",
+            "Black Moon Lilith (True)": "Lilith",
+            "Part of Fortune": "PartOfFortune",
+            "Vertex": "Vertex",  # May not have combos, but handle it anyway
+            # keep the abbreviations and direct names intact
             "AC": "AC",
             "DC": "DC",
             "MC": "MC",
             "IC": "IC",
+            "NorthNode": "NorthNode",
+            "SouthNode": "SouthNode",
+            "Lilith": "Lilith",
+            "PartOfFortune": "PartOfFortune",
         }
         if obj_name in mapping:
             return mapping[obj_name]
@@ -267,52 +336,94 @@ class NatalInterpreter:
         1. [glyph] [object] (Rx) in [sign]: [short_meaning] (ObjectSign)
         2. [dignity]: [object_name] [dignity_interp]  (only if dignity exists)
         3. [behavioral_style]
-        4. [blank line]
-        5. [object_name] in the [house_number]: [short_meaning] (ObjectHouse)
-        6. Environmental Impact: [environmental_impact]
-        7. Concrete Manifestations: [concrete_manifestation]
-        8. [blank line]
-        9. [sign] [DMS]
-        10. Sabian Symbol: [symbol]
-        11. Sabian Symbol Meaning: [short_meaning]
-        12. Fixed star conjunction(s): [star names]
+        4. 𑁋   # mini‑divider
+        5. [sign] [DMS]
+        6. Sabian Symbol: [symbol]
+        7. Sabian Symbol Meaning: [short_meaning]
+        8. Fixed star conjunction(s): [star names]
+        9. 𑁋   # mini‑divider
+        10. [object_name] in the [house_number]: [short_meaning] (ObjectHouse)
+        11. Environmental Impact: [environmental_impact]
+        12. Concrete Manifestations: [concrete_manifestation]
+
         """
         lines: List[str] = []
 
         obj_name = row.get("Object", "")
+        display_name = _format_axis_for_display(obj_name)
         sign_name = row.get("Sign", "")
         house_num = self._extract_house_num(row)
 
-        # Line 1: first line (glyph, object, sign, DMS)
-        lines.append(self._format_first_line(row))
-
-        # Line 2: ObjectSign short_meaning
+        # Line 1: glyph/object/retrograde in sign, plus short meaning if available
         obj_sign_combo = self._get_object_sign_combo(obj_name, sign_name)
+        glyph = glyph_for(obj_name)
+        
+        # For axes, don't include the glyph since it's just a text abbreviation and we're already
+        # including the abbreviation in the display format (e.g., "Ascendant (AC)")
+        is_axis = obj_name in {"Ascendant", "Descendant", "Midheaven", "Immum Coeli", "MC", "IC", "AC", "DC"}
+        first_line = f"{display_name}" if is_axis else f"{glyph} {display_name}"
+        if row.get("Retrograde Bool", False):
+            first_line += " (Rx)"
+        first_line += f" in {sign_name}"
         if obj_sign_combo and obj_sign_combo.short_meaning:
-            lines.append(obj_sign_combo.short_meaning)
+            first_line += f": {obj_sign_combo.short_meaning}"
         else:
+            # record missing meaning so it can be logged elsewhere
             self.missing.append(f"object_sign_combo:{obj_name}_{sign_name}")
+        lines.append(first_line)
 
-        # Line 3: Dignity (only if it exists)
+        # Line 2: Dignity (only if it exists)
         if obj_sign_combo and obj_sign_combo.dignity:
-            dignity_line = f"{obj_sign_combo.dignity}: {obj_name}"
+            dignity_line = f"{obj_sign_combo.dignity}: {display_name}"
             if obj_sign_combo.dignity_interp:
                 dignity_line += f" {obj_sign_combo.dignity_interp}"
             lines.append(dignity_line)
 
-        # Line 4: Behavioral style
+        # Line 3: Behavioral style
         if obj_sign_combo and obj_sign_combo.behavioral_style:
             lines.append(obj_sign_combo.behavioral_style)
 
+        # Before house info, insert any Sabian/fixed-star details separated by a divider
+        # sabian logic: either computed from degree or supplied manually
+        manual_sabian = row.get("Sabian Symbol")
+        degree_in_sign = row.get("Degree In Sign")
+        sabian_obj = None
+        if degree_in_sign is not None:
+            try:
+                sabian_obj = static_db.sabian_symbols.get(sign_name, {}).get(int(float(degree_in_sign)) + 1)
+            except (TypeError, ValueError):
+                pass
+
+        fixed_star = row.get("Fixed Star Conj") or row.get("Fixed Star Conjunctions")
+        if manual_sabian or sabian_obj or fixed_star:
+            lines.append("𑁋")
+            # always show sign+dms line when any sabian info exists
+            dms = row.get("DMS", "")
+            lines.append(f"{sign_name} {dms}")
+            # symbol text: prefer manual if provided
+            if manual_sabian:
+                lines.append(f"Sabian Symbol: {manual_sabian}")
+            elif sabian_obj and sabian_obj.symbol:
+                lines.append(f"Sabian Symbol: {sabian_obj.symbol}")
+            # meaning (only from lookup; manual intent is usually just symbol)
+            if sabian_obj and sabian_obj.short_meaning:
+                lines.append(f"Sabian Symbol Meaning: {sabian_obj.short_meaning}")
+            # Fixed star line
+            if fixed_star:
+                lines.append(f"Fixed star conjunction(s): {fixed_star}")
+
         # Lines 5-7: Combined house line with short meaning + additional house details
         # Format: [object_name] in the [house_number]: [short_meaning]
-        if house_num is not None:
-            # insert blank separator before house section
-            lines.append("")
+        # Do not show a house section for AC/DC; those are implicitly 1st/7th and add
+        # no extra interpretive text. Avoid printing a dangling divider in that case.
+        is_acdc = self._normalize_obj_name_for_combo(obj_name) in {"AC", "DC"}
+        if house_num is not None and not is_acdc:
+            # separator before house section
+            lines.append("𑁋")
             obj_house_combo = self._get_object_house_combo(obj_name, house_num)
             if obj_house_combo and obj_house_combo.short_meaning:
                 house_label = _format_house_label(house_num)
-                house_line = f"{obj_name} in the {house_label}: {obj_house_combo.short_meaning}"
+                house_line = f"{display_name} in the {house_label}: {obj_house_combo.short_meaning}"
                 lines.append(house_line)
             else:
                 self.missing.append(f"object_house_combo:{obj_name}_House_{house_num}")
@@ -325,23 +436,6 @@ class NatalInterpreter:
             if obj_house_combo and obj_house_combo.concrete_manifestation:
                 lines.append(f"Concrete Manifestations: {obj_house_combo.concrete_manifestation}")
 
-        # Lines 9-11: Sabian Symbol section
-        # Use degree_in_sign (same lookup key as ChartObject.from_dict) to retrieve the SabianSymbol
-        degree_in_sign = row.get("Degree In Sign")
-        sabian_obj = None
-        if degree_in_sign is not None:
-            try:
-                sabian_obj = static_db.sabian_symbols.get(sign_name, {}).get(int(float(degree_in_sign)) + 1)
-            except (TypeError, ValueError):
-                pass
-        if sabian_obj:
-            lines.append("")
-            dms = row.get("DMS", "")
-            lines.append(f"{sign_name} {dms}")
-            if sabian_obj.symbol:
-                lines.append(f"Sabian Symbol: {sabian_obj.symbol}")
-            if sabian_obj.short_meaning:
-                lines.append(f"Sabian Symbol Meaning: {sabian_obj.short_meaning}")
 
         return "\n".join([line for line in lines if line])
 
@@ -350,9 +444,8 @@ class NatalInterpreter:
         Format object interpretation in focus mode (detailed multi-block format).
 
         Block 1 (Sign Placement):
-        - Line 1: [glyph] [object] (Rx) in [sign] [DMS]
-        - Line 2: [short_meaning] (ObjectSign)
-        - Line 3: Dignity: [dignity]: [object_name] [dignity_interp]  (if exists)
+        - Line 1: [glyph] [object] (Rx) in [sign]: [short_meaning] (ObjectSign)
+        - Line 2: Dignity: [dignity]: [object_name] [dignity_interp]  (if exists)
         - Line 4: Style: [behavioral_style]
         - Line 5: Strengths: [strengths]
         - Line 6: Challenges: [challenges]
@@ -376,6 +469,7 @@ class NatalInterpreter:
             return f"Object '{self.object_name}' not found in chart."
 
         obj_name = row.get("Object", "")
+        display_name = _format_axis_for_display(obj_name)
         sign_name = row.get("Sign", "")
         house_num = self._extract_house_num(row)
 
@@ -384,17 +478,26 @@ class NatalInterpreter:
         # ===== BLOCK 1: Sign Placement =====
         sign_lines: List[str] = []
 
-        # Sign Block Line 1
-        sign_lines.append(self._format_first_line(row))
-
-        # Sign Block Line 2: short_meaning
+        # Sign Block Line 1: combine glyph/object/(Rx)/sign and short meaning
         obj_sign_combo = self._get_object_sign_combo(obj_name, sign_name)
+        glyph = glyph_for(obj_name)
+        
+        # For axes, don't include the glyph since it's just a text abbreviation and we're already
+        # including the abbreviation in the display format (e.g., "Ascendant (AC)")
+        is_axis = obj_name in {"Ascendant", "Descendant", "Midheaven", "Immum Coeli", "MC", "IC", "AC", "DC"}
+        first = f"{display_name}" if is_axis else f"{glyph} {display_name}"
+        if row.get("Retrograde Bool", False):
+            first += " (Rx)"
+        first += f" in {sign_name}"
         if obj_sign_combo and obj_sign_combo.short_meaning:
-            sign_lines.append(obj_sign_combo.short_meaning)
+            first += f": {obj_sign_combo.short_meaning}"
+        else:
+            self.missing.append(f"object_sign_combo:{obj_name}_{sign_name}")
+        sign_lines.append(first)
 
         # Sign Block Line 3: Dignity (only if exists)
         if obj_sign_combo and obj_sign_combo.dignity:
-            dignity_line = f"Dignity: {obj_sign_combo.dignity}: {obj_name}"
+            dignity_line = f"Dignity: {obj_sign_combo.dignity}: {display_name}"
             if obj_sign_combo.dignity_interp:
                 dignity_line += f" {obj_sign_combo.dignity_interp}"
             sign_lines.append(dignity_line)
@@ -422,11 +525,14 @@ class NatalInterpreter:
         blocks.append("\n".join([line for line in sign_lines if line]))
 
         # ===== BLOCK 2: House Placement =====
-        if house_num is not None:
+        # skip the house block for AC/DC since those are implicitly 1st/7th and we
+        # don't want to display redundant/empty information
+        is_acdc = self._normalize_obj_name_for_combo(obj_name) in {"AC", "DC"}
+        if house_num is not None and not is_acdc:
             house_lines: List[str] = []
 
             # House Block Line 1
-            house_lines.append(f"{obj_name} in {_format_house_label(house_num)}")
+            house_lines.append(f"{display_name} in {_format_house_label(house_num)}")
 
             # House Block Line 2: short_meaning
             obj_house_combo = self._get_object_house_combo(obj_name, house_num)
