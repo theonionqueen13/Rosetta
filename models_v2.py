@@ -266,10 +266,6 @@ class ChartObject:
     house_ruler_equal: List[Object] = field(default_factory=list)
     house_ruler_whole: List[Object] = field(default_factory=list)
     
-    # House-system specific rulers
-    placidus_ruler: List[Object] = field(default_factory=list)
-    equal_ruler: List[Object] = field(default_factory=list)
-
     # Dynamic Connections
     reception: List[ReceptionLink] = field(default_factory=list)
     afflictions: List[Union[Object, Aspect]] = field(default_factory=list) 
@@ -404,6 +400,21 @@ class ChartObject:
         equal_house_num = _int_or_none(row.get("Equal House"))
         whole_house_num = _int_or_none(row.get("Whole Sign House"))
 
+        # Populate rules_signs and rules_houses from static object data
+        # The Object contains the planetary rulerships (e.g., Mars rules Aries and Scorpio)
+        rules_sign_objs = []
+        rules_house_objs = []
+        if obj and obj.rules_signs:
+            for sign_name in obj.rules_signs:
+                sign_obj = static.signs.get(sign_name)
+                if sign_obj:
+                    rules_sign_objs.append(sign_obj)
+                    # Each ruled sign also corresponds to a house (Aries/1st, Taurus/2nd, etc.)
+                    if sign_obj.sign_index and 1 <= sign_obj.sign_index <= 12:
+                        house_obj = static.houses.get(sign_obj.sign_index)
+                        if house_obj:
+                            rules_house_objs.append(house_obj)
+
         return cls(
             object_name=obj,
             glyph=_str(row.get("Glyph")) or obj.glyph,
@@ -425,6 +436,8 @@ class ChartObject:
             retrograde=bool(row.get("Retrograde Bool", False)),
             station=_str(row.get("Station")) or None,
             oob_status=_str(row.get("OOB Status")) or "No",
+            rules_signs=rules_sign_objs,
+            rules_houses=rules_house_objs,
             sign_ruler=_obj_list(row.get("Ruled by (sign)")),
             house_ruler_placidus=_obj_list(row.get("Placidus House Rulers")),
             house_ruler_equal=_obj_list(row.get("Equal House Rulers")),
@@ -865,6 +878,8 @@ class AstrologicalChart:
     latitude: float
     longitude: float
     patterns: ChartPatterns = field(default_factory=ChartPatterns)
+    chart_signs: List["ChartSign"] = field(default_factory=list)
+    chart_houses: List["ChartHouse"] = field(default_factory=list)
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -916,7 +931,132 @@ class AstrologicalChart:
         """Returns only the highly anomalous 'Extreme' OOB objects."""
         return [obj for obj in self.objects if obj.oob_status == "Extreme"]
 
-    @classmethod
+    def _build_chart_signs(self, static: Optional["StaticLookup"] = None) -> List["ChartSign"]:
+        """Build ChartSign objects from chart's objects and static data."""
+        if not static:
+            return []
+        
+        chart_signs = []
+        for sign_name, sign_obj in static.signs.items():
+            # Find all objects in this sign
+            objs_in_sign = [
+                obj for obj in self.objects
+                if obj.sign and obj.sign.name == sign_name
+            ]
+            
+            # Find rulers of this sign
+            rulers = []
+            if sign_obj.rulers:
+                for ruler_name in sign_obj.rulers:
+                    ruler = static.objects.get(ruler_name)
+                    if ruler:
+                        # Find if this ruler is in the chart
+                        chart_ruler = self.get_object(ruler_name)
+                        if chart_ruler:
+                            rulers.append(chart_ruler)
+            
+            # Create ChartSign
+            chart_sign = ChartSign(
+                name=sign_obj,
+                glyph=sign_obj.glyph,
+                ruled_by=rulers,
+                contains=objs_in_sign,
+            )
+            chart_signs.append(chart_sign)
+        
+        return chart_signs
+
+    def _build_chart_houses(self, static: Optional["StaticLookup"] = None, house_system: str = "placidus") -> List["ChartHouse"]:
+        """Build ChartHouse objects from chart's objects, house cusps, and static data.
+        
+        Args:
+            static: StaticLookup database (optional)
+            house_system: Which house system to use ("placidus", "equal", "whole")
+        
+        Returns:
+            List of ChartHouse objects for all 12 houses
+        """
+        if not static:
+            return []
+        
+        chart_houses = []
+        house_system_key = house_system.lower().strip()
+        
+        for house_num in range(1, 13):
+            house_obj = static.houses.get(house_num)
+            if not house_obj:
+                continue
+            
+            # Find the house cusp matching this system and number
+            house_cusp = None
+            for cusp in self.house_cusps:
+                if cusp.cusp_number == house_num and cusp.house_system.lower().startswith(house_system_key[0]):
+                    house_cusp = cusp
+                    break
+            
+            if not house_cusp:
+                continue
+            
+            # Determine which attribute to use based on house_system
+            if house_system_key.startswith("p"):  # Placidus
+                house_attr = "placidus_house"
+            elif house_system_key.startswith("e"):  # Equal
+                house_attr = "equal_house"
+            else:  # Whole Sign
+                house_attr = "whole_sign_house"
+            
+            # Find all objects in this house
+            objs_in_house = [
+                obj for obj in self.objects
+                if getattr(obj, house_attr, None) and 
+                   getattr(getattr(obj, house_attr), "number", None) == house_num
+            ]
+            
+            # Find the sign on the cusp
+            cusp_degree = house_cusp.absolute_degree % 360
+            cusp_sign = None
+            for sign in static.signs.values():
+                sign_start = (sign.sign_index - 1) * 30
+                sign_end = sign_start + 30
+                if sign_start <= cusp_degree < sign_end:
+                    cusp_sign = sign
+                    break
+            
+            if not cusp_sign:
+                # Default to first sign if not found
+                cusp_sign = static.signs.get("Aries", Sign(name="Aries", glyph="♈", sign_index=1, element=Element(name="Fire", glyph="🔥"), modality=Modality(name="Cardinal", glyph="→"), polarity=Polarity(name="Masculine", glyph="+")))
+            
+            # Create HouseSystem object if needed
+            house_system_obj = HouseSystem(name=house_system.capitalize())
+            
+            # Create ChartHouse
+            chart_house = ChartHouse(
+                number=house_obj,
+                house_system=house_system_obj,
+                cusp=house_cusp,
+                cusp_deg=cusp_degree % 30,
+                cusp_sign=cusp_sign,
+                end_deg=((cusp_degree + 30) % 360),
+                occupying_sign=cusp_sign,
+                intercepts_sign=Sign(name="", glyph="", sign_index=0, element=Element(name="", glyph=""), modality=Modality(name="", glyph=""), polarity=Polarity(name="", glyph="")),
+                intercepted_by=Sign(name="", glyph="", sign_index=0, element=Element(name="", glyph=""), modality=Modality(name="", glyph=""), polarity=Polarity(name="", glyph="")),
+                contains=objs_in_house,
+            )
+            chart_houses.append(chart_house)
+        
+        return chart_houses
+
+    def populate_chart_structure(self, static: Optional["StaticLookup"] = None, house_system: str = "placidus") -> None:
+        """Populate chart_signs and chart_houses from chart objects and static data.
+        
+        Call this after creating the chart to enable access to organized sign/house data.
+        
+        Args:
+            static: StaticLookup database (if None, structures will be empty)
+            house_system: Which house system to use ("placidus", "equal", "whole")
+        """
+        self.chart_signs = self._build_chart_signs(static)
+        self.chart_houses = self._build_chart_houses(static, house_system)
     def from_dataframe(
         cls,
         df: pd.DataFrame,
@@ -966,6 +1106,32 @@ class AstrologicalChart:
             latitude=latitude,
             longitude=longitude,
         )
+
+    @classmethod
+    def from_dataframe_with_signs_houses(
+        cls,
+        df: pd.DataFrame,
+        chart_datetime: str = "",
+        timezone: str = "",
+        latitude: float = 0.0,
+        longitude: float = 0.0,
+        static: Optional["StaticLookup"] = None,
+        house_system: str = "placidus",
+    ) -> "AstrologicalChart":
+        """Create chart and populate chart_signs and chart_houses.
+        
+        This is the recommended method when you need access to organized sign/house data.
+        """
+        chart = cls.from_dataframe(
+            df,
+            chart_datetime=chart_datetime,
+            timezone=timezone,
+            latitude=latitude,
+            longitude=longitude,
+            static=static,
+        )
+        chart.populate_chart_structure(static=static, house_system=house_system)
+        return chart
 
 @dataclass
 class RenderResult:
@@ -1313,6 +1479,17 @@ def migrate_lookup_data():
         except Exception:
             pass
 
+        # Determine which signs this object rules by reverse-lookup in PLANETARY_RULERS
+        ruled_signs = []
+        if isinstance(PLANETARY_RULERS, dict):
+            for sign_name, rulers_list in PLANETARY_RULERS.items():
+                if isinstance(rulers_list, (list, tuple, set)):
+                    if name in rulers_list:
+                        ruled_signs.append(sign_name)
+                elif isinstance(rulers_list, str) and name == rulers_list:
+                    # Handle single string rulers (though PLANETARY_RULERS typically uses lists)
+                    ruled_signs.append(sign_name)
+
         static.objects[name] = Object(
             name=name,
             swisseph_id=sw_id,
@@ -1324,7 +1501,8 @@ def migrate_lookup_data():
             narrative_interp=narrative_interp_val,
             object_type=obj_type,
             influence=influence_list,
-            keywords=kw_list
+            keywords=kw_list,
+            rules_signs=ruled_signs
         )
 
     # --- 4. ASPECTS (Using ASPECTS and ASPECT_INTERP) ---

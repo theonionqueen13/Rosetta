@@ -820,11 +820,10 @@ def render_chart(
 		visible_objects=visible_names or [],
 		drawn_major_edges=major_edges_drawn,
 		drawn_minor_edges=minor_edges_drawn,
-		
-		# ⬇️ ADD THESE ⬇️
 		patterns=patterns,
 		shapes=shapes,
 		singleton_map=singleton_map,
+		plot_data={"chart": chart},
 	)
 
 # --- CHART RENDERER (full; calls your new helpers) -------------------------
@@ -1054,7 +1053,8 @@ def render_chart_with_shapes(
 		patterns=patterns,
 		shapes=active_shapes,
 		singleton_map=singleton_map,
-		out_text=out_text # Added this to the dataclass above
+		out_text=out_text, # Added this to the dataclass above
+		plot_data={"chart": chart},
 	)
 
 # ---------------------------------------------------------------------------

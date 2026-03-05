@@ -40,6 +40,13 @@ from profiles_v2 import (
 )
 from drawing_v2 import RenderResult
 
+try:
+    import streamlit as st  # type: ignore
+except ImportError:
+    st = None
+
+from house_selector_v2 import _selected_house_system
+
 
 # --- constants ------------------------------------------------------------
 AXIS_MAP: Dict[str, str] = {
@@ -145,8 +152,7 @@ class NatalInterpreter:
     """Generate natal chart interpretation text in default or focus mode.
 
     ``result`` should be the ``RenderResult`` from :mod:`drawing_v2`.
-    The object must contain at least ``visible_objects``, ``drawn_major_edges``,
-    and a ``plot_data`` mapping with an ``'ordered_df'`` key.
+    The result should contain the AstrologicalChart in result.plot_data['chart'].
 
     ``mode`` is either "default" (concise, all objects) or "focus" (detailed,
     single object). For focus mode, ``object_name`` must be specified.
@@ -176,7 +182,36 @@ class NatalInterpreter:
             result, "drawn_major_edges", []
         ) or []
 
-        # build ordered_df using the same helper as elsewhere in the application
+        # Get the AstrologicalChart from result.plot_data
+        self.chart: Optional[Any] = None
+        if result.plot_data and "chart" in result.plot_data:
+            self.chart = result.plot_data["chart"]
+        
+        # Fallback to session state if chart not in RenderResult
+        if self.chart is None:
+            try:
+                import streamlit as st  # type: ignore
+                self.chart = st.session_state.get("last_chart")
+            except Exception:
+                pass
+        
+        # Build list of ChartObject instances filtered to visible objects
+        self.chart_objects: List[Any] = []
+        if self.chart and hasattr(self.chart, "objects"):
+            if self.visible_objects:
+                # Filter to visible objects
+                visible_canon = {_canon(obj) for obj in self.visible_objects}
+                self.chart_objects = [
+                    obj for obj in self.chart.objects
+                    if _canon(obj.object_name.name if hasattr(obj.object_name, "name") else str(obj.object_name)) 
+                    in visible_canon
+                ]
+            else:
+                # Use all objects
+                self.chart_objects = list(self.chart.objects)
+
+        # Build DataFrame for reference/display (not primary source)
+        # This is for convenience in finding objects by name for house lookups
         raw_df: Optional[pd.DataFrame] = None
         if result.plot_data:
             raw_df = result.plot_data.get("ordered_df")
@@ -206,6 +241,20 @@ class NatalInterpreter:
         else:
             self.ordered_df = None
 
+        # If we don't have a proper chart but we do have an ordered dataframe,
+        # create ChartObject instances via ChartObject.from_dict() so that
+        # rulership data and all other fields are properly populated from the static database.
+        # This makes the class usable in unit tests and any other context where only the
+        # dataframe is available.
+        if not self.chart_objects and self.ordered_df is not None:
+            # import here to avoid circular imports
+            from models_v2 import ChartObject
+            # iterate rows and convert using the proper from_dict method
+            self.chart_objects = [
+                ChartObject.from_dict(row.to_dict(), static_db) 
+                for _, row in self.ordered_df.iterrows()
+            ]
+
     # internal helpers -------------------------------------------------------
 
     def _default_lookup(self) -> Dict[str, Any]:
@@ -214,24 +263,6 @@ class NatalInterpreter:
             "object_sign_combos": getattr(static_db, "object_sign_combos", {}),
             "object_house_combos": getattr(static_db, "object_house_combos", {}),
         }
-
-    def _get_object_row(self, obj_name: str) -> Optional[pd.Series]:
-        """Locate the DataFrame row for ``obj_name`` (handles AXIS_MAP variants)."""
-        if self.ordered_df is None:
-            return None
-
-        # build variant set including AXIS_MAP mappings
-        variants = {obj_name}
-        for key, val in AXIS_MAP.items():
-            if val == obj_name:
-                variants.add(key)
-
-        canon_variants = {_canon(v) for v in variants}
-
-        for _, row in self.ordered_df.iterrows():
-            if _canon(row.get("Object", "")) in canon_variants:
-                return row
-        return None
 
     def _normalize_obj_name_for_combo(self, obj_name: str) -> str:
         """Return an object name suitable for combo dictionary keys.
@@ -313,24 +344,170 @@ class NatalInterpreter:
         line += f" in {sign} {dms}"
         return line
 
-    def _extract_house_num(self, row: pd.Series) -> Optional[int]:
-        """Extract house number from row, handling multiple house field options."""
-        house = (
-            row.get("Placidus House")
-            or row.get("House")
-            or row.get("Equal House")
-            or row.get("Whole Sign House")
-        )
-        if house is None:
-            return None
-        try:
-            return int(float(house))
-        except (ValueError, TypeError):
-            return None
-
-    def _format_default_object(self, row: pd.Series) -> str:
+    def _format_other_stats(self, chart_obj: Any) -> List[str]:
+        """Format the 'Other stats' section with OOB, Reception, Rules, and Ruled by.
+        
+        Returns a list of strings to append to the output.
         """
-        Format object interpretation in default mode (6-line concise format).
+        lines: List[str] = []
+        
+        obj_name = self._get_object_name(chart_obj)
+        display_name = _format_axis_for_display(obj_name)
+        
+        # Check if there's anything to show at all
+        has_oob = chart_obj.oob_status and chart_obj.oob_status != "No"
+        has_reception = bool(chart_obj.reception and len(chart_obj.reception) > 0)
+        has_rules = bool((chart_obj.rules_signs and len(chart_obj.rules_signs) > 0) or 
+                        (chart_obj.rules_houses and len(chart_obj.rules_houses) > 0))
+        
+        # For ruled_by, we need to format the reception list into a string
+        has_ruled_by_sign = bool(chart_obj.sign_ruler and len(chart_obj.sign_ruler) > 0)
+        has_ruled_by_house = bool(
+            (chart_obj.house_ruler_placidus and len(chart_obj.house_ruler_placidus) > 0) or
+            (chart_obj.house_ruler_equal and len(chart_obj.house_ruler_equal) > 0) or
+            (chart_obj.house_ruler_whole and len(chart_obj.house_ruler_whole) > 0)
+        )
+        
+        if not (has_oob or has_reception or has_rules or has_ruled_by_sign or has_ruled_by_house):
+            return []
+        
+        # Add divider and header
+        lines.append("𑁋")
+        lines.append("Other stats:")
+        
+        # Out of bounds
+        if has_oob:
+            lines.append(f"Out of bounds: {chart_obj.oob_status}")
+        
+        # Reception - format the ReceptionLink list into a readable string
+        if has_reception:
+            reception_strs = []
+            for reception_link in chart_obj.reception:
+                if reception_link and reception_link.other and reception_link.aspect:
+                    aspect_verb = {
+                        "Conjunction": "Conjunct",
+                        "Opposition": "Opposite",
+                        "Trine": "Trine",
+                        "Square": "Square",
+                        "Sextile": "Sextile",
+                    }.get(reception_link.aspect.name, reception_link.aspect.name)
+                    mode_suffix = " (by orb)" if reception_link.mode == "orb" else " (by sign)"
+                    reception_strs.append(f"{aspect_verb} {reception_link.other.name}{mode_suffix}")
+            if reception_strs:
+                lines.append(f"Reception: {', '.join(reception_strs)}")
+        
+        # Rules (signs and houses)
+        if has_rules:
+            rules_parts = []
+            
+            # Rules by sign
+            if chart_obj.rules_signs:
+                sign_rules: List[str] = []
+                for sign in chart_obj.rules_signs:
+                    sign_name = sign.name if hasattr(sign, "name") else str(sign)
+                    
+                    # Try to use chart_signs if available (more efficient)
+                    objs_in_sign = []
+                    if self.chart and hasattr(self.chart, "chart_signs") and self.chart.chart_signs:
+                        # Find matching ChartSign
+                        for chart_sign in self.chart.chart_signs:
+                            if chart_sign.name.name == sign_name:
+                                objs_in_sign = [
+                                    self._get_object_name(o) for o in chart_sign.contains
+                                ]
+                                break
+                    
+                    # Fallback to searching through objects if chart_signs not populated
+                    if not objs_in_sign:
+                        objs_in_sign = [
+                            self._get_object_name(o) for o in self.chart_objects
+                            if hasattr(o, "sign") and (o.sign.name if hasattr(o.sign, "name") else str(o.sign)) == sign_name
+                        ]
+                    
+                    if objs_in_sign:
+                        objs_str = ", ".join(objs_in_sign)
+                        sign_rules.append(f'{sign_name} ({objs_str})')
+                    else:
+                        # still include the sign name even if no objects are present
+                        sign_rules.append(f'{sign_name}')
+                if sign_rules:
+                    rules_parts.append("; ".join(sign_rules))
+            
+            # Rules by house
+            if chart_obj.rules_houses:
+                house_rules: List[str] = []
+                for house in chart_obj.rules_houses:
+                    house_num = house.number if hasattr(house, "number") else int(house)
+                    house_label = _format_house_label(house_num)
+                    
+                    # Try to use chart_houses if available (more efficient)
+                    objs_in_house: List[str] = []
+                    if self.chart and hasattr(self.chart, "chart_houses") and self.chart.chart_houses:
+                        # Find matching ChartHouse
+                        for chart_house in self.chart.chart_houses:
+                            if hasattr(chart_house.number, "number") and chart_house.number.number == house_num:
+                                objs_in_house = [
+                                    self._get_object_name(o) for o in chart_house.contains
+                                ]
+                                break
+                    
+                    # Fallback to searching through objects if chart_houses not populated
+                    if not objs_in_house:
+                        for obj in self.chart_objects:
+                            obj_house = None
+                            if hasattr(obj, "placidus_house"):
+                                house_obj = obj.placidus_house
+                                obj_house = house_obj.number if hasattr(house_obj, "number") else int(house_obj)
+                            if obj_house == house_num:
+                                objs_in_house.append(self._get_object_name(obj))
+                    
+                    if objs_in_house:
+                        objs_str = ", ".join(objs_in_house)
+                        house_rules.append(f'{house_label} ({objs_str})')
+                    else:
+                        # still include the house label on its own
+                        house_rules.append(f'{house_label}')
+                if house_rules:
+                    rules_parts.append("; ".join(house_rules))
+            
+            if rules_parts:
+                rules_line = f"Rules: {'; '.join(rules_parts)}"
+                lines.append(rules_line)
+        
+        # Ruled by (by sign)
+        if has_ruled_by_sign:
+            ruler_names = [r.name if hasattr(r, "name") else str(r) for r in chart_obj.sign_ruler]
+            if ruler_names:
+                lines.append(f'Ruled by (by sign): {", ".join(ruler_names)}')
+        
+        # Ruled by (by house system)
+        if has_ruled_by_house:
+            # Determine which house system to use
+            house_system = _selected_house_system()
+            if house_system == "placidus":
+                house_rulers = chart_obj.house_ruler_placidus
+            elif house_system == "whole":
+                house_rulers = chart_obj.house_ruler_whole
+            else:  # equal or default
+                house_rulers = chart_obj.house_ruler_equal
+            
+            if house_rulers:
+                ruler_names = [r.name if hasattr(r, "name") else str(r) for r in house_rulers]
+                if ruler_names:
+                    lines.append(f'Ruled by (by house): {", ".join(ruler_names)}')
+        
+        return lines
+
+    def _get_object_name(self, chart_obj: Any) -> str:
+        """Extract the object name from a ChartObject."""
+        if hasattr(chart_obj, "object_name"):
+            obj = chart_obj.object_name
+            return obj.name if hasattr(obj, "name") else str(obj)
+        return ""
+
+    def _format_default_object(self, chart_obj: Any) -> str:
+        """
+        Format object interpretation in default mode from a ChartObject.
 
         Lines:
         1. [glyph] [object] (Rx) in [sign]: [short_meaning] (ObjectSign)
@@ -345,14 +522,26 @@ class NatalInterpreter:
         10. [object_name] in the [house_number]: [short_meaning] (ObjectHouse)
         11. Environmental Impact: [environmental_impact]
         12. Concrete Manifestations: [concrete_manifestation]
+        13. 𑁋   # mini‑divider
+        14. Other stats:
+        15. Out of bounds: [oob_status] (only if object is out of bounds)
+        16. Reception: [reception] (only if reception exists)
+        17. Rules: "[rules_signs] ([object_name], [object_name],...)"; "[rules_houses] ([object_name], [object_name],...)" (only if it is a ruler)
+        18. Ruled by (by sign): "[sign_ruler] ([object_name], [object_name],...)"
+        19. Ruled by (by house): "[house_ruler_placidus, house_ruler_equal, or house_ruler_whole based on house system] ([object_name], [object_name],...)"
 
         """
         lines: List[str] = []
 
-        obj_name = row.get("Object", "")
+        obj_name = self._get_object_name(chart_obj)
         display_name = _format_axis_for_display(obj_name)
-        sign_name = row.get("Sign", "")
-        house_num = self._extract_house_num(row)
+        sign_name = chart_obj.sign.name if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
+        
+        # Extract house number - prefer direct house object's number property
+        house_num = None
+        if hasattr(chart_obj, "placidus_house") and chart_obj.placidus_house:
+            house_obj = chart_obj.placidus_house
+            house_num = house_obj.number if hasattr(house_obj, "number") else int(house_obj)
 
         # Line 1: glyph/object/retrograde in sign, plus short meaning if available
         obj_sign_combo = self._get_object_sign_combo(obj_name, sign_name)
@@ -362,7 +551,7 @@ class NatalInterpreter:
         # including the abbreviation in the display format (e.g., "Ascendant (AC)")
         is_axis = obj_name in {"Ascendant", "Descendant", "Midheaven", "Immum Coeli", "MC", "IC", "AC", "DC"}
         first_line = f"{display_name}" if is_axis else f"{glyph} {display_name}"
-        if row.get("Retrograde Bool", False):
+        if chart_obj.retrograde:
             first_line += " (Rx)"
         first_line += f" in {sign_name}"
         if obj_sign_combo and obj_sign_combo.short_meaning:
@@ -385,8 +574,8 @@ class NatalInterpreter:
 
         # Before house info, insert any Sabian/fixed-star details separated by a divider
         # sabian logic: either computed from degree or supplied manually
-        manual_sabian = row.get("Sabian Symbol")
-        degree_in_sign = row.get("Degree In Sign")
+        manual_sabian = chart_obj.sabian_symbol.symbol if chart_obj.sabian_symbol and hasattr(chart_obj.sabian_symbol, "symbol") else None
+        degree_in_sign = chart_obj.degree_in_sign if hasattr(chart_obj, "degree_in_sign") else None
         sabian_obj = None
         if degree_in_sign is not None:
             try:
@@ -394,11 +583,11 @@ class NatalInterpreter:
             except (TypeError, ValueError):
                 pass
 
-        fixed_star = row.get("Fixed Star Conj") or row.get("Fixed Star Conjunctions")
+        fixed_star = chart_obj.fixed_star_conj if hasattr(chart_obj, "fixed_star_conj") else None
         if manual_sabian or sabian_obj or fixed_star:
             lines.append("𑁋")
             # always show sign+dms line when any sabian info exists
-            dms = row.get("DMS", "")
+            dms = chart_obj.dms if hasattr(chart_obj, "dms") else ""
             lines.append(f"{sign_name} {dms}")
             # symbol text: prefer manual if provided
             if manual_sabian:
@@ -436,6 +625,10 @@ class NatalInterpreter:
             if obj_house_combo and obj_house_combo.concrete_manifestation:
                 lines.append(f"Concrete Manifestations: {obj_house_combo.concrete_manifestation}")
 
+        # ===== Other Stats Section =====
+        other_stats = self._format_other_stats(chart_obj)
+        if other_stats:
+            lines.extend(other_stats)
 
         return "\n".join([line for line in lines if line])
 
@@ -464,14 +657,25 @@ class NatalInterpreter:
         if self.object_name is None:
             return "Focus mode requires object_name to be specified."
 
-        row = self._get_object_row(self.object_name)
-        if row is None:
+        # Find the chart object by name
+        chart_obj = None
+        for obj in self.chart_objects:
+            if self._get_object_name(obj) == self.object_name:
+                chart_obj = obj
+                break
+        
+        if chart_obj is None:
             return f"Object '{self.object_name}' not found in chart."
 
-        obj_name = row.get("Object", "")
+        obj_name = self._get_object_name(chart_obj)
         display_name = _format_axis_for_display(obj_name)
-        sign_name = row.get("Sign", "")
-        house_num = self._extract_house_num(row)
+        sign_name = chart_obj.sign.name if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
+        
+        # Extract house number
+        house_num = None
+        if hasattr(chart_obj, "placidus_house") and chart_obj.placidus_house:
+            house_obj = chart_obj.placidus_house
+            house_num = house_obj.number if hasattr(house_obj, "number") else int(house_obj)
 
         blocks: List[str] = []
 
@@ -486,7 +690,7 @@ class NatalInterpreter:
         # including the abbreviation in the display format (e.g., "Ascendant (AC)")
         is_axis = obj_name in {"Ascendant", "Descendant", "Midheaven", "Immum Coeli", "MC", "IC", "AC", "DC"}
         first = f"{display_name}" if is_axis else f"{glyph} {display_name}"
-        if row.get("Retrograde Bool", False):
+        if chart_obj.retrograde:
             first += " (Rx)"
         first += f" in {sign_name}"
         if obj_sign_combo and obj_sign_combo.short_meaning:
@@ -565,6 +769,11 @@ class NatalInterpreter:
 
             blocks.append("\n".join([line for line in house_lines if line]))
 
+        # ===== BLOCK 3: Other Stats =====
+        other_stats = self._format_other_stats(chart_obj)
+        if other_stats:
+            blocks.append("\n".join(other_stats))
+
         return "\n\n".join(blocks)
 
     # public ----------------------------------------------------------------
@@ -574,13 +783,13 @@ class NatalInterpreter:
         if self.mode == "focus":
             return self._format_focus_object()
 
-        # Default mode
-        if self.ordered_df is None or self.ordered_df.empty:
+        # Default mode - use chart_objects as primary source
+        if not self.chart_objects:
             return "No active objects selected to interpret."
 
         obj_texts: List[str] = []
-        for _, row in self.ordered_df.iterrows():
-            text = self._format_default_object(row)
+        for chart_obj in self.chart_objects:
+            text = self._format_default_object(chart_obj)
             if text:
                 # collapse excessive blank lines
                 text = re.sub(r"\n{3,}", "\n\n", text.strip())
