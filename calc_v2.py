@@ -474,6 +474,10 @@ def calculate_chart(
 		latitude=lat,
 		longitude=lon,
 	)
+	
+	# Populate chart_signs, chart_houses, and rules_houses
+	chart.populate_chart_structure(static=static_db, house_system="placidus")
+	
 	combined_df = chart.to_dataframe()
 
 	# --- Remove any legacy Sign:/House: columns if present ---

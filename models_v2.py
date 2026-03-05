@@ -409,11 +409,6 @@ class ChartObject:
                 sign_obj = static.signs.get(sign_name)
                 if sign_obj:
                     rules_sign_objs.append(sign_obj)
-                    # Each ruled sign also corresponds to a house (Aries/1st, Taurus/2nd, etc.)
-                    if sign_obj.sign_index and 1 <= sign_obj.sign_index <= 12:
-                        house_obj = static.houses.get(sign_obj.sign_index)
-                        if house_obj:
-                            rules_house_objs.append(house_obj)
 
         return cls(
             object_name=obj,
@@ -1046,6 +1041,60 @@ class AstrologicalChart:
         
         return chart_houses
 
+    def _populate_rules_houses(self, static: Optional["StaticLookup"] = None, house_system: str = "placidus") -> None:
+        """Populate rules_houses for each object based on which houses have their ruled signs on cusps.
+        
+        For example, if Mars rules Aries and Scorpio, and Aries is on your 5th house cusp
+        and Scorpio is on your 11th, then Mars rules houses 5 and 11 (not 1 and 8).
+        
+        Args:
+            static: StaticLookup database for sign/object lookups
+            house_system: Which system to use ("placidus", "equal", "whole")
+        """
+        if not static:
+            return
+        
+        # Determine which attribute to use based on house_system
+        house_system_key = house_system.lower().strip()
+        if house_system_key.startswith("p"):  # Placidus
+            house_attr = "placidus_house"
+        elif house_system_key.startswith("e"):  # Equal
+            house_attr = "equal_house"
+        else:  # Whole Sign
+            house_attr = "whole_sign_house"
+        
+        # Build a map of sign name -> house number for this system
+        sign_to_house: dict[str, int] = {}
+        for cusp in self.house_cusps:
+            if cusp.house_system.lower().startswith(house_system_key[0]):
+                # Determine which sign is on this cusp
+                cusp_degree = cusp.absolute_degree % 360
+                for sign in static.signs.values():
+                    sign_start = (sign.sign_index - 1) * 30
+                    sign_end = sign_start + 30
+                    if sign_start <= cusp_degree < sign_end:
+                        sign_to_house[sign.name] = cusp.cusp_number
+                        break
+        
+        # For each object, find which houses it rules based on its ruled signs
+        for obj in self.objects:
+            if not obj.object_name:
+                continue
+            
+            obj_static = static.objects.get(obj.object_name.name)
+            if not obj_static or not obj_static.rules_signs:
+                continue
+            
+            ruled_houses = []
+            for ruled_sign_name in obj_static.rules_signs:
+                if ruled_sign_name in sign_to_house:
+                    house_num = sign_to_house[ruled_sign_name]
+                    house_obj = static.houses.get(house_num)
+                    if house_obj and house_obj not in ruled_houses:
+                        ruled_houses.append(house_obj)
+            
+            obj.rules_houses = ruled_houses
+
     def populate_chart_structure(self, static: Optional["StaticLookup"] = None, house_system: str = "placidus") -> None:
         """Populate chart_signs and chart_houses from chart objects and static data.
         
@@ -1057,6 +1106,7 @@ class AstrologicalChart:
         """
         self.chart_signs = self._build_chart_signs(static)
         self.chart_houses = self._build_chart_houses(static, house_system)
+        self._populate_rules_houses(static, house_system)
     def from_dataframe(
         cls,
         df: pd.DataFrame,
