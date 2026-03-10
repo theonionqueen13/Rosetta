@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Dict
+from typing import Any, List, Dict
 from models_v2 import AstrologicalChart, ChartObject, ReceptionLink, SabianSymbol
 from collections import defaultdict
 import pandas as pd
@@ -213,6 +213,11 @@ STAR_CATALOG = load_fixed_star_catalog(star_path)
 # ----- Profile ordering helpers -------------------------------------------------
 
 _CLUSTER_MEMBER_ORDER = [
+    # Chart axes first — these are the foundational coordinate reference frame
+    "Ascendant", "Descendant", "MC", "IC",
+    # Lunar nodes second — the compass needle, referenced against the axes
+    "North Node", "South Node",
+    # Luminaries and planets in traditional order
     "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus",
     "Neptune", "Pluto", "Eris", "Ceres", "Pallas", "Juno", "Vesta", "Eros",
     "Psyche", "Chiron", "Nessus", "Ixion", "Hidalgo", "Varuna", "Typhon",
@@ -225,8 +230,7 @@ _CLUSTER_MEMBER_ORDER = [
     "Koussevitzky", "Osiris", "Lucifer", "Anteros", "Tezcatlipoca", "West",
     "Bacchus", "Hephaistos", "Panacea", "Orpheus", "Kafka", "Pamela",
     "Dionysus", "Kaali", "Asclepius", "Singer", "Angel", "Black Moon Lilith (Mean)",
-    "Part of Fortune", "Vertex", "Anti-Vertex", "East Point", "Ascendant",
-    "Descendant", "MC", "IC", "North Node", "South Node",
+    "Part of Fortune", "Vertex", "Anti-Vertex", "East Point",
 ]
 
 _FALLBACK_OBJECT_ORDER = [
@@ -398,6 +402,15 @@ def _min_rank(names: List[str], ranks: dict[str, int]) -> float:
     return float(min(filtered)) if filtered else float("inf")
 
 
+def _extract_aspect(meta: Any) -> str | None:
+    """Extract aspect name from edge metadata (dict, object, or plain string)."""
+    if isinstance(meta, str):
+        return meta
+    if isinstance(meta, dict):
+        return meta.get("aspect")
+    return getattr(meta, "aspect", None)
+
+
 def _build_clusters(edges_major: List[tuple], visible_canons: set[str]) -> List[set[str]]:
     adjacency: dict[str, set[str]] = defaultdict(set)
     for edge in edges_major or []:
@@ -405,11 +418,7 @@ def _build_clusters(edges_major: List[tuple], visible_canons: set[str]) -> List[
             a, b, meta = edge
         except ValueError:
             continue
-        aspect = None
-        if isinstance(meta, dict):
-            aspect = meta.get("aspect")
-        else:
-            aspect = getattr(meta, "aspect", None)
+        aspect = _extract_aspect(meta)
         if not isinstance(aspect, str) or aspect.lower() != "conjunction":
             continue
         ca = _canon(a)
@@ -489,11 +498,7 @@ def _units_with_aspects(
             a, b, meta = edge
         except ValueError:
             continue
-        aspect = None
-        if isinstance(meta, dict):
-            aspect = meta.get("aspect")
-        else:
-            aspect = getattr(meta, "aspect", None)
+        aspect = _extract_aspect(meta)
         if not isinstance(aspect, str):
             continue
         aspect_key = aspect.strip().lower()
@@ -611,7 +616,6 @@ def ordered_objects(
     _AC_CANONS = {"ac", "asc", "ascendant"}
     _DC_CANONS = {"dc", "dsc", "desc", "descendant"}
 
-    names_in_order = [(obj.object_name.name, idx) for idx, obj in enumerate(objects)]
     if visible_objects:
         # Build visible_canon: plain canon + hardcoded AC/DC expansions
         visible_canon: set[str] = set()
@@ -626,47 +630,105 @@ def ordered_objects(
                 visible_canon.update(_DC_CANONS)
         if visible_canon:
             objects = [obj for obj in objects if _canon(obj.object_name.name) in visible_canon]
-            names_in_order = [(obj.object_name.name, idx) for idx, obj in enumerate(objects)]
 
     if not objects:
         return []
 
-    ordered_names = _determine_visible_order_from_names(names_in_order, edges_major or [])
+    # name -> list of ChartObject
     name_to_objs: dict[str, List[ChartObject]] = {}
     for obj in objects:
         name_to_objs.setdefault(obj.object_name.name, []).append(obj)
 
-    # Hardcoded canonical forms for AC and DC (don't rely on alias system)
-    _AC_CANONS = {"ac", "asc", "ascendant"}
-    _DC_CANONS = {"dc", "dsc", "desc", "descendant"}
+    all_names = list(name_to_objs.keys())
+    name_to_canon = {name: _canon(name) for name in all_names}
 
+    # ── Build conjunction clusters from edges_major ──────────────────────────
+    # Union-find over canon keys.
+    parent: dict[str, str] = {}
+
+    def _find(x: str) -> str:
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent.get(x, x), parent.get(x, x))
+            x = parent.get(x, x)
+        return x
+
+    def _union(a: str, b: str) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    visible_canon_set = {name_to_canon[n] for n in all_names}
+    for edge in (edges_major or []):
+        try:
+            a, b, meta = edge
+        except ValueError:
+            continue
+        aspect = _extract_aspect(meta)
+        if not isinstance(aspect, str) or aspect.lower() != "conjunction":
+            continue
+        ca, cb = _canon(a), _canon(b)
+        # Only cluster objects that are actually visible
+        if ca in visible_canon_set and cb in visible_canon_set:
+            _union(ca, cb)
+
+    # cluster_root(name) -> which union-find root the object belongs to (None = singleton)
+    canon_set = {name_to_canon[n] for n in all_names}
+    root_counts: dict[str, int] = {}
+    for c in canon_set:
+        r = _find(c)
+        root_counts[r] = root_counts.get(r, 0) + 1
+    # canon -> root  (only for canons that share a root with ≥1 other)
+    canon_to_root: dict[str, str] = {
+        c: _find(c) for c in canon_set if root_counts.get(_find(c), 0) >= 2
+    }
+
+    # ── Sort all names by natural rank (AC/DC pinned, then _FALLBACK_RANKS) ─
+    def _natural_sort_key(name: str) -> tuple:
+        c = name_to_canon[name]
+        if c in _AC_CANONS:
+            return (0, 0, name)
+        if c in _DC_CANONS:
+            return (0, 1, name)
+        rank = _get_rank(name, _FALLBACK_RANKS)
+        return (1, rank if rank is not None else float("inf"), name.lower())
+
+    sorted_names = sorted(all_names, key=_natural_sort_key)
+
+    # ── Walk sorted list; burst each conjunction cluster on first encounter ──
+    result_names: List[str] = []
+    placed_canons: set[str] = set()
+
+    for name in sorted_names:
+        c = name_to_canon[name]
+        if c in placed_canons:
+            continue
+        root = canon_to_root.get(c)
+        if root is not None:
+            # Collect all visible names that share this cluster root
+            cluster_names = [
+                n for n in all_names
+                if canon_to_root.get(name_to_canon[n]) == root
+                and name_to_canon[n] not in placed_canons
+            ]
+            # Order cluster members by _CLUSTER_RANKS
+            cluster_names.sort(key=lambda n: _sort_key(n, _CLUSTER_RANKS))
+            for cn in cluster_names:
+                result_names.append(cn)
+                placed_canons.add(name_to_canon[cn])
+        else:
+            result_names.append(name)
+            placed_canons.add(c)
+
+    # ── Materialise ChartObjects in the computed order ────────────────────────
     ordered: List[ChartObject] = []
-    seen = set()
-
-    # Ensure AC/Ascendant comes first
-    for name, objs in name_to_objs.items():
-        if _canon(name) in _AC_CANONS:
-            for obj in objs:
-                if id(obj) not in seen:
-                    ordered.append(obj)
-                    seen.add(id(obj))
-
-    # Then DC/Descendant comes second
-    for name, objs in name_to_objs.items():
-        if _canon(name) in _DC_CANONS:
-            for obj in objs:
-                if id(obj) not in seen:
-                    ordered.append(obj)
-                    seen.add(id(obj))
-
-    # Add remaining objects in their determined order
-    for name in ordered_names:
+    seen: set[int] = set()
+    for name in result_names:
         for obj in name_to_objs.get(name, []):
             if id(obj) not in seen:
                 ordered.append(obj)
                 seen.add(id(obj))
 
-    # Catch any remaining objects
+    # Catch any stragglers (shouldn't normally happen)
     for obj in objects:
         if id(obj) not in seen:
             ordered.append(obj)
@@ -786,29 +848,83 @@ def ordered_object_rows(
         print("[ordered_object_rows] Final sidebar DataFrame is EMPTY after filtering.")
         return objs_only.drop(columns=["__canon"], errors="ignore")
 
-    order_names = _determine_visible_order(objs_only, edges_major or [])
+    # ── Walk-and-burst ordering (mirrors ordered_objects logic) ──────────────
+    all_names = objs_only["Object"].tolist()
+    name_to_canon_row = dict(zip(objs_only["Object"], objs_only["__canon"]))
 
+    # Union-find over canon keys
+    uf_parent: dict[str, str] = {}
+
+    def _uf_find(x: str) -> str:
+        while uf_parent.get(x, x) != x:
+            uf_parent[x] = uf_parent.get(uf_parent.get(x, x), uf_parent.get(x, x))
+            x = uf_parent.get(x, x)
+        return x
+
+    canon_set_row = set(name_to_canon_row.values())
+    for edge in (edges_major or []):
+        try:
+            a, b, meta = edge
+        except ValueError:
+            continue
+        aspect = _extract_aspect(meta)
+        if not isinstance(aspect, str) or aspect.lower() != "conjunction":
+            continue
+        ca, cb = _canon(a), _canon(b)
+        if ca in canon_set_row and cb in canon_set_row:
+            ra, rb = _uf_find(ca), _uf_find(cb)
+            if ra != rb:
+                uf_parent[rb] = ra
+
+    root_cnt: dict[str, int] = {}
+    for c in canon_set_row:
+        r = _uf_find(c)
+        root_cnt[r] = root_cnt.get(r, 0) + 1
+    canon_to_cluster_root: dict[str, str] = {
+        c: _uf_find(c) for c in canon_set_row if root_cnt.get(_uf_find(c), 0) >= 2
+    }
+
+    def _row_sort_key(name: str) -> tuple:
+        c = name_to_canon_row.get(name, "")
+        if c in _AC_CANONS:
+            return (0, 0, name)
+        if c in _DC_CANONS:
+            return (0, 1, name)
+        rank = _get_rank(name, _FALLBACK_RANKS)
+        return (1, rank if rank is not None else float("inf"), name.lower())
+
+    sorted_row_names = sorted(dict.fromkeys(all_names), key=_row_sort_key)
+
+    result_names: List[str] = []
+    placed_row_canons: set[str] = set()
+
+    for name in sorted_row_names:
+        c = name_to_canon_row.get(name, "")
+        if c in placed_row_canons:
+            continue
+        root = canon_to_cluster_root.get(c)
+        if root is not None:
+            cluster_names = [
+                n for n in dict.fromkeys(all_names)
+                if canon_to_cluster_root.get(name_to_canon_row.get(n, "")) == root
+                and name_to_canon_row.get(n, "") not in placed_row_canons
+            ]
+            cluster_names.sort(key=lambda n: _sort_key(n, _CLUSTER_RANKS))
+            for cn in cluster_names:
+                result_names.append(cn)
+                placed_row_canons.add(name_to_canon_row.get(cn, ""))
+        else:
+            result_names.append(name)
+            placed_row_canons.add(c)
+
+    # Map names back to DataFrame indices in order
     ordered_indices: List[int] = []
     seen_indices: set[int] = set()
-
-    # Pin Ascendant (AC) rows first, then Descendant (DC) rows
-    for idx in objs_only.index:
-        if idx not in seen_indices and objs_only.at[idx, "__canon"] in _AC_CANONS:
-            ordered_indices.append(idx)
-            seen_indices.add(idx)
-    for idx in objs_only.index:
-        if idx not in seen_indices and objs_only.at[idx, "__canon"] in _DC_CANONS:
-            ordered_indices.append(idx)
-            seen_indices.add(idx)
-
-    if order_names:
-        for name in order_names:
-            idxs = objs_only.index[objs_only["Object"] == name].tolist()
-            for idx in idxs:
-                if idx not in seen_indices:
-                    ordered_indices.append(idx)
-                    seen_indices.add(idx)
-
+    for name in result_names:
+        for idx in objs_only.index[objs_only["Object"] == name].tolist():
+            if idx not in seen_indices:
+                ordered_indices.append(idx)
+                seen_indices.add(idx)
     for idx in objs_only.index:
         if idx not in seen_indices:
             ordered_indices.append(idx)
