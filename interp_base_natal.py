@@ -35,6 +35,7 @@ import pandas as pd
 from models_v2 import static_db, ObjectSign, ObjectHouse
 from profiles_v2 import (
     ordered_object_rows,
+    ordered_objects,
     _canon,
     glyph_for,
 )
@@ -195,20 +196,15 @@ class NatalInterpreter:
             except Exception:
                 pass
         
-        # Build list of ChartObject instances filtered to visible objects
+        # Build ordered list of ChartObject instances filtered to visible objects.
+        # Use ordered_objects() so AC/DC pinning and cluster ordering match the sidebar.
         self.chart_objects: List[Any] = []
         if self.chart and hasattr(self.chart, "objects"):
-            if self.visible_objects:
-                # Filter to visible objects
-                visible_canon = {_canon(obj) for obj in self.visible_objects}
-                self.chart_objects = [
-                    obj for obj in self.chart.objects
-                    if _canon(obj.object_name.name if hasattr(obj.object_name, "name") else str(obj.object_name)) 
-                    in visible_canon
-                ]
-            else:
-                # Use all objects
-                self.chart_objects = list(self.chart.objects)
+            self.chart_objects = ordered_objects(
+                self.chart,
+                visible_objects=self.visible_objects or None,
+                edges_major=self.drawn_major_edges or None,
+            )
 
         # Build DataFrame for reference/display (not primary source)
         # This is for convenience in finding objects by name for house lookups
@@ -335,8 +331,13 @@ class NatalInterpreter:
         dms = row.get("DMS", "")
         retrograde = row.get("Retrograde Bool", False)
 
-        glyph = glyph_for(obj)
-        line = f"{glyph} {obj}"
+        display_name = _format_axis_for_display(obj)
+        if display_name != obj:
+            # Axis object: display_name is already "Full Name (ABBREV)", skip glyph prefix
+            line = display_name
+        else:
+            glyph = glyph_for(obj)
+            line = f"{glyph} {obj}"
 
         if retrograde:
             line += " (Rx)"

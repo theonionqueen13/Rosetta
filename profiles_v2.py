@@ -332,6 +332,32 @@ def _canon_variants(name: str | None) -> set[str]:
     return variants
 
 
+def _format_axis_for_display(obj_name: str) -> str:
+    """Format axis object name as 'Full Name (Abbreviation)'.
+
+    Handles all forms: "AC", "Ascendant", "AC Ascendant", etc.
+    Returns "Ascendant (AC)", "Descendant (DC)", etc.
+    For non-axis objects, returns the name unchanged.
+    """
+    axis_mapping = {
+        "AC": ("AC", "Ascendant"),
+        "DC": ("DC", "Descendant"),
+        "MC": ("MC", "Midheaven"),
+        "IC": ("IC", "Immum Coeli"),
+        "Ascendant": ("AC", "Ascendant"),
+        "Descendant": ("DC", "Descendant"),
+        "Midheaven": ("MC", "Midheaven"),
+        "Immum Coeli": ("IC", "Immum Coeli"),
+    }
+    if obj_name in axis_mapping:
+        abbrev, full_name = axis_mapping[obj_name]
+        return f"{full_name} ({abbrev})"
+    parts = obj_name.split()
+    if len(parts) >= 2 and parts[0] in ("AC", "DC", "MC", "IC"):
+        return f"{' '.join(parts[1:])} ({parts[0]})"
+    return obj_name
+
+
 def _build_rank_map(order_list: List[str]) -> dict[str, int]:
     ranks: dict[str, int] = {}
     for idx, name in enumerate(order_list):
@@ -581,9 +607,23 @@ def ordered_objects(
     if not objects:
         return []
 
+    # Hardcoded canonical sets for AC/DC aliases (don't rely on alias system at import time)
+    _AC_CANONS = {"ac", "asc", "ascendant"}
+    _DC_CANONS = {"dc", "dsc", "desc", "descendant"}
+
     names_in_order = [(obj.object_name.name, idx) for idx, obj in enumerate(objects)]
     if visible_objects:
-        visible_canon = {_canon(name) for name in visible_objects if name}
+        # Build visible_canon: plain canon + hardcoded AC/DC expansions
+        visible_canon: set[str] = set()
+        for name in visible_objects:
+            if not name:
+                continue
+            c = _canon(name)
+            visible_canon.add(c)
+            if c in _AC_CANONS:
+                visible_canon.update(_AC_CANONS)
+            elif c in _DC_CANONS:
+                visible_canon.update(_DC_CANONS)
         if visible_canon:
             objects = [obj for obj in objects if _canon(obj.object_name.name) in visible_canon]
             names_in_order = [(obj.object_name.name, idx) for idx, obj in enumerate(objects)]
@@ -596,16 +636,41 @@ def ordered_objects(
     for obj in objects:
         name_to_objs.setdefault(obj.object_name.name, []).append(obj)
 
+    # Hardcoded canonical forms for AC and DC (don't rely on alias system)
+    _AC_CANONS = {"ac", "asc", "ascendant"}
+    _DC_CANONS = {"dc", "dsc", "desc", "descendant"}
+
     ordered: List[ChartObject] = []
     seen = set()
+
+    # Ensure AC/Ascendant comes first
+    for name, objs in name_to_objs.items():
+        if _canon(name) in _AC_CANONS:
+            for obj in objs:
+                if id(obj) not in seen:
+                    ordered.append(obj)
+                    seen.add(id(obj))
+
+    # Then DC/Descendant comes second
+    for name, objs in name_to_objs.items():
+        if _canon(name) in _DC_CANONS:
+            for obj in objs:
+                if id(obj) not in seen:
+                    ordered.append(obj)
+                    seen.add(id(obj))
+
+    # Add remaining objects in their determined order
     for name in ordered_names:
         for obj in name_to_objs.get(name, []):
             if id(obj) not in seen:
                 ordered.append(obj)
                 seen.add(id(obj))
+
+    # Catch any remaining objects
     for obj in objects:
         if id(obj) not in seen:
             ordered.append(obj)
+
     return ordered
 
 def _determine_visible_order_from_names(
@@ -677,52 +742,13 @@ def ordered_object_rows(
 ) -> pd.DataFrame:
     """Return object rows ordered according to visibility and pattern rules."""
 
-
     if df is None or "Object" not in df:
         return pd.DataFrame()
+    
     # Ensure all AC/DC are renamed to Ascendant/Descendant for canonical filtering
     df["Object"] = df["Object"].replace({"AC": "Ascendant", "DC": "Descendant"})
 
-
-    # Fallback: If Compass Rose is toggled and AC/DC missing, inject from Equal House cusps BEFORE any filtering
-    compass_rose_on = False
-    if visible_objects:
-        compass_rose_on = any(
-            _canon(name) in {"compassrose", "compass rose"}
-            for name in visible_objects
-        )
-        ac_aliases = {"ac", "ascendant", "asc"}
-        dc_aliases = {"dc", "descendant", "dsc"}
-        obj_series_pre = df["Object"].astype("string")
-        missing_ac = not any(_canon(name) in ac_aliases for name in obj_series_pre)
-        missing_dc = not any(_canon(name) in dc_aliases for name in obj_series_pre)
-        rows_to_add = []
-        if compass_rose_on and (missing_ac or missing_dc):
-            eq1 = df[df["Object"].astype(str).str.fullmatch(r"Equal 1H cusp", case=False)]
-            eq7 = df[df["Object"].astype(str).str.fullmatch(r"Equal 7H cusp", case=False)]
-            if missing_ac and not eq1.empty:
-                ac_row = eq1.iloc[0].copy()
-                ac_row["Object"] = "Ascendant"
-                rows_to_add.append(ac_row)
-            if missing_dc and not eq7.empty:
-                dc_row = eq7.iloc[0].copy()
-                dc_row["Object"] = "Descendant"
-                rows_to_add.append(dc_row)
-        if rows_to_add:
-            print("[ordered_object_rows] Injecting AC/DC rows:", [r["Object"] for r in rows_to_add])
-            add_df = pd.DataFrame(rows_to_add)
-            df = pd.concat([df, add_df], ignore_index=True)
-
-    # If Compass Rose is on, ensure all AC/DC canonical variants are in visible_objects
-    if compass_rose_on:
-        ac_variants = ["Ascendant", "AC", "Asc"]
-        dc_variants = ["Descendant", "DC"]
-        # Add to visible_objects if not present
-        if visible_objects is not None:
-            for v in ac_variants + dc_variants:
-                if v not in visible_objects:
-                    visible_objects.append(v)
-
+    # Filter out cusp rows
     obj_series = df["Object"].astype("string")
     mask = ~obj_series.str.contains("cusp", case=False, na=False)
     objs_only = df.loc[mask].copy()
@@ -734,8 +760,23 @@ def ordered_object_rows(
 
     print("[ordered_object_rows] Canonical names after filtering:", objs_only["Object"].tolist(), objs_only["__canon"].tolist())
 
+    # Hardcoded canonical sets for AC/DC aliases (don't rely on alias system at import time)
+    _AC_CANONS = {"ac", "asc", "ascendant"}
+    _DC_CANONS = {"dc", "dsc", "desc", "descendant"}
+
+    # Apply visibility filter if provided
     if visible_objects:
-        visible_canon = {_canon(name) for name in visible_objects if name}
+        # Build visible_canon: plain canon + hardcoded AC/DC expansions
+        visible_canon: set[str] = set()
+        for name in visible_objects:
+            if not name:
+                continue
+            c = _canon(name)
+            visible_canon.add(c)
+            if c in _AC_CANONS:
+                visible_canon.update(_AC_CANONS)
+            elif c in _DC_CANONS:
+                visible_canon.update(_DC_CANONS)
         print("[ordered_object_rows] Filtering for visible_canon:", visible_canon)
         if visible_canon:
             objs_only = objs_only[objs_only["__canon"].isin(visible_canon)]
@@ -749,6 +790,16 @@ def ordered_object_rows(
 
     ordered_indices: List[int] = []
     seen_indices: set[int] = set()
+
+    # Pin Ascendant (AC) rows first, then Descendant (DC) rows
+    for idx in objs_only.index:
+        if idx not in seen_indices and objs_only.at[idx, "__canon"] in _AC_CANONS:
+            ordered_indices.append(idx)
+            seen_indices.add(idx)
+    for idx in objs_only.index:
+        if idx not in seen_indices and objs_only.at[idx, "__canon"] in _DC_CANONS:
+            ordered_indices.append(idx)
+            seen_indices.add(idx)
 
     if order_names:
         for name in order_names:
@@ -967,7 +1018,13 @@ def format_object_profile_html(
     lines: list[str] = []
 
     # Title line (slightly larger/bold—your CSS controls exact look)
-    lines.append(f"<div class='pf-title'><strong>{glyph} {obj_name}{paren}</strong></div>")
+    display_title = _format_axis_for_display(obj_name)
+    if display_title != obj_name:
+        # Axis object (AC, DC, MC, IC): "Full Name (ABBREV)" format, no separate glyph prefix
+        title_content = f"{display_title}{paren}"
+    else:
+        title_content = f"{glyph} {obj_name}{paren}"
+    lines.append(f"<div class='pf-title'><strong>{title_content}</strong></div>")
 
     # Meaning line directly under the title
     if meaning:
