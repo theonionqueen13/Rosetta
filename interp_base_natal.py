@@ -37,6 +37,7 @@ from profiles_v2 import (
     ordered_object_rows,
     ordered_objects,
     _canon,
+    _extract_aspect,
     glyph_for,
 )
 from drawing_v2 import RenderResult
@@ -777,6 +778,51 @@ class NatalInterpreter:
 
         return "\n\n".join(blocks)
 
+    def _build_conjunction_cluster_map(self) -> dict[str, list[str]]:
+        """Return a mapping of canon-root -> [ordered object names] for conjunction clusters.
+
+        Only clusters with ≥2 members (among the visible chart objects) are included.
+        Members are listed in the same order they appear in self.chart_objects.
+        """
+        obj_names = [
+            (obj.object_name.name if hasattr(obj.object_name, "name") else str(obj.object_name))
+            for obj in self.chart_objects
+        ]
+        canon_of = {name: _canon(name) for name in obj_names}
+        canon_set = set(canon_of.values())
+
+        # Union-find
+        parent: dict[str, str] = {}
+
+        def _find(x: str) -> str:
+            while parent.get(x, x) != x:
+                parent[x] = parent.get(parent.get(x, x), parent.get(x, x))
+                x = parent.get(x, x)
+            return x
+
+        for edge in (self.drawn_major_edges or []):
+            try:
+                a, b, meta = edge
+            except ValueError:
+                continue
+            aspect = _extract_aspect(meta)
+            if not isinstance(aspect, str) or aspect.lower() != "conjunction":
+                continue
+            ca, cb = _canon(a), _canon(b)
+            if ca in canon_set and cb in canon_set:
+                ra, rb = _find(ca), _find(cb)
+                if ra != rb:
+                    parent[rb] = ra
+
+        # Group names by root, preserving chart_objects order
+        root_to_names: dict[str, list[str]] = {}
+        for name in obj_names:
+            root = _find(canon_of[name])
+            root_to_names.setdefault(root, []).append(name)
+
+        # Only return groups with ≥2 members
+        return {root: names for root, names in root_to_names.items() if len(names) >= 2}
+
     # public ----------------------------------------------------------------
 
     def generate(self) -> str:
@@ -788,19 +834,39 @@ class NatalInterpreter:
         if not self.chart_objects:
             return "No active objects selected to interpret."
 
+        # Pre-build conjunction cluster map: canon-root -> ordered names list
+        cluster_map = self._build_conjunction_cluster_map()
+        # canon -> root (for fast lookup per object)
+        canon_to_root: dict[str, str] = {}
+        for root, names in cluster_map.items():
+            for name in names:
+                canon_to_root[_canon(name)] = root
+        # Track which cluster roots have already had their header emitted
+        emitted_roots: set[str] = set()
+
         obj_texts: List[str] = []
+        divider = "─" * 50
+
         for chart_obj in self.chart_objects:
+            obj_name = (
+                chart_obj.object_name.name
+                if hasattr(chart_obj.object_name, "name")
+                else str(chart_obj.object_name)
+            )
+            root = canon_to_root.get(_canon(obj_name))
+            if root is not None and root not in emitted_roots:
+                emitted_roots.add(root)
+                members = cluster_map[root]
+                header = f"Conjunction: {', '.join(members)}"
+                # Insert divider + header as its own block so it sits between dividers
+                obj_texts.append(header)
+
             text = self._format_default_object(chart_obj)
             if text:
-                # collapse excessive blank lines
                 text = re.sub(r"\n{3,}", "\n\n", text.strip())
                 obj_texts.append(text)
 
-        # Build body with divider lines between profiles
-        divider = "─" * 50
         body = f"\n{divider}\n".join(obj_texts)
-
-        # Final pass to collapse any excessive blank lines
         body = re.sub(r"\n{3,}", "\n\n", body)
         return body
 
