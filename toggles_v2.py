@@ -4,8 +4,10 @@ from models_v2 import static_db
 
 GLYPHS = static_db.GLYPHS
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
+ASPECTS = static_db.ASPECTS
 
 COMPASS_KEY = "ui_compass_overlay"
+COMPASS_KEY_2 = "ui_compass_overlay_2"  # separate overlay toggle for second chart (biwheel)
 
 def render_circuit_toggles(
 	patterns,
@@ -25,6 +27,15 @@ def render_circuit_toggles(
 		for planet in singleton_map.keys():
 			st.session_state.setdefault(f"singleton_{planet}", False)
 
+	# Pre-init Connected Circuits Chart 2 shape toggle keys.
+	# These must exist before any widget render so Streamlit doesn't complain
+	# about missing keys when the circuit expanders open.
+	if st.session_state.get("synastry_mode") and st.session_state.get("circuit_submode") == "Connected Circuits":
+		_cc_shapes2_init = st.session_state.get("circuit_connected_shapes2", {})
+		for _ci in range(len(patterns)):
+			for _sh2 in _cc_shapes2_init.get(_ci, []):
+				st.session_state.setdefault(f"cc_shape_{_ci}_{_sh2['id']}", False)
+
 	st.session_state.setdefault(COMPASS_KEY, True)
 	"""
 	Renders the Circuits UI (checkboxes, expanders, bulk buttons, compass rose, sub-shapes)
@@ -40,6 +51,13 @@ def render_circuit_toggles(
 	singleton_map = singleton_map or {}
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
+
+	# ensure compass keys exist before any widgets render
+	st.session_state.setdefault(COMPASS_KEY, True)
+	st.session_state.setdefault(COMPASS_KEY_2, True)
+	# track previous checkbox values for delayed rerun
+	st.session_state.setdefault("_last_compass_value", st.session_state.get(COMPASS_KEY, False))
+	st.session_state.setdefault("_last_compass_value_2", st.session_state.get(COMPASS_KEY_2, False))
 
 	# --- Chart Mode Selector ---
 	st.session_state.setdefault("chart_mode", "Circuits")
@@ -67,6 +85,7 @@ def render_circuit_toggles(
 			for planet in singleton_map.keys():
 				updates[f"singleton_{planet}"] = False
 		updates[COMPASS_KEY] = False  # safe now; checkbox not yet instantiated
+		updates[COMPASS_KEY_2] = False
 		st.session_state.update(updates)
 		st.session_state["__pending_hide_all__"] = False
 		st.rerun()
@@ -80,6 +99,7 @@ def render_circuit_toggles(
 			for planet in singleton_map.keys():
 				updates[f"singleton_{planet}"] = True
 		updates[COMPASS_KEY] = True  # safe here, checkbox not yet instantiated
+		updates[COMPASS_KEY_2] = True
 		st.session_state.update(updates)
 		st.session_state["__pending_show_all__"] = False
 		st.rerun()
@@ -122,21 +142,57 @@ def render_circuit_toggles(
 	
 	# ---------- Circuits Mode-Specific UI ----------
 	if chart_mode == "Circuits":
+		# Allow two circuit view modes when in Circuit chart mode
+		st.session_state.setdefault("circuit_submode", "Combined Circuits")
+		submode = st.radio(
+			"Circuit View Mode",
+			["Combined Circuits", "Connected Circuits"],
+			index=0 if st.session_state.get("circuit_submode") == "Combined Circuits" else 1,
+			key="__circuit_submode_radio",
+			horizontal=False,
+		)
+		if submode != st.session_state.get("circuit_submode"):
+			st.session_state["circuit_submode"] = submode
+			st.rerun()
+
 		c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
 
 		with c1:
-			unknown_time = bool(
+			synastry_mode = st.session_state.get("synastry_mode", False)
+			# chart names for labeling
+			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
+			if chart1_name == "Custom":
+				chart1_name = "Chart 1"
+			unknown_time1 = bool(
 				st.session_state.get("chart_unknown_time")
 				or st.session_state.get("profile_unknown_time")
 			)
-			label = "Compass Needle" if unknown_time else "Compass Rose"
-			new_value = st.checkbox(label, key=COMPASS_KEY)
+			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
+			new_value = st.checkbox(label1, key=COMPASS_KEY)
+			
+			# second chart toggle if synastry
+			if synastry_mode:
+				chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+				if chart2_name == "Custom":
+					chart2_name = "Chart 2"
+				unknown_time2 = bool(
+					st.session_state.get("chart_unknown_time_2")
+					or st.session_state.get("profile_unknown_time")
+				)
+				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
+				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
 
 		# Track compass value change but do not rerun immediately
 		prev_value = st.session_state.get("_last_compass_value")
 		if new_value != prev_value:
 			st.session_state["_last_compass_value"] = new_value
 			st.session_state["_pending_compass_rerun"] = True
+		# track second
+		if synastry_mode:
+			prev2 = st.session_state.get("_last_compass_value_2")
+			if new_value2 != prev2:
+				st.session_state["_last_compass_value_2"] = new_value2
+				st.session_state["_pending_compass_rerun"] = True
 
 		with c2:
 			if st.button("Show All", key="btn_show_all_main"):
@@ -188,19 +244,41 @@ def render_circuit_toggles(
 		compass_col, swap_col = st.columns([1, 1])
 		
 		with compass_col:
-			unknown_time = bool(
+			# use chart names for labels
+			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
+			if chart1_name == "Custom":
+				chart1_name = "Chart 1"
+			unknown_time1 = bool(
 				st.session_state.get("chart_unknown_time")
 				or st.session_state.get("profile_unknown_time")
 			)
-			label = "Compass Needle" if unknown_time else "Compass Rose"
-			new_value = st.checkbox(label, key=COMPASS_KEY)
-
+			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
+			new_value = st.checkbox(label1, key=COMPASS_KEY)
+			
+			# optionally show second chart toggle
+			synastry_mode = st.session_state.get("synastry_mode", False)
+			if synastry_mode:
+				chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+				if chart2_name == "Custom":
+					chart2_name = "Chart 2"
+				unknown_time2 = bool(
+					st.session_state.get("chart_unknown_time_2")
+					or st.session_state.get("profile_unknown_time")
+				)
+				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
+				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
+		
 			# Track compass value change but do not rerun immediately
 			prev_value = st.session_state.get("_last_compass_value")
 			if new_value != prev_value:
 				st.session_state["_last_compass_value"] = new_value
 				st.session_state["_pending_compass_rerun"] = True
-		
+			# second
+			if synastry_mode:
+				prev2 = st.session_state.get("_last_compass_value_2")
+				if new_value2 != prev2:
+					st.session_state["_last_compass_value_2"] = new_value2
+					st.session_state["_pending_compass_rerun"] = True
 		with swap_col:
 			if synastry_mode:
 				# Define swap function that runs in the on_click callback
@@ -314,8 +392,150 @@ def render_circuit_toggles(
 		st.write("")  # just a spacer
 
 	with circuits_col:
-		# Only show circuit patterns in Circuits mode
-		if chart_mode == "Circuits":
+		# Get synastry and circuit mode state
+		synastry_mode = st.session_state.get("synastry_mode", False)
+		circuit_submode = st.session_state.get("circuit_submode", "Combined Circuits")
+		
+		# Combined Circuits mode in synastry: show only shapes, grouped by type
+		if chart_mode == "Circuits" and synastry_mode and circuit_submode == "Combined Circuits":
+			# Get current label style
+			label_style = st.session_state.get("label_style", "glyph")
+			want_glyphs = label_style == "glyph"
+			
+			if shapes:
+				st.subheader("Combined Shapes")
+				
+				# Group shapes by type
+				shapes_by_type: dict[str, list] = {}
+				for sh in shapes:
+					shape_type = sh.get("type", "Unknown")
+					if shape_type not in shapes_by_type:
+						shapes_by_type[shape_type] = []
+					shapes_by_type[shape_type].append(sh)
+				
+				# Node counts from patterns_v2.py shape detection:
+				# - Envelope: combinations(R, 5) → 5 nodes
+				# - Grand Cross, Mystic Rectangle, Cradle, Kite: combinations(R, 4) → 4 nodes
+				# - Lightning Bolt: [q1, q2, r1, r2] → 4 nodes
+				# - Grand Trine, T-Square, Wedge, Sextile Wedge: combinations(R, 3) → 3 nodes
+				# - Yod, Wide Yod, Unnamed: [a, b, c] → 3 nodes
+				SHAPE_NODE_COUNTS = {
+					"Envelope": 5,
+					"Grand Cross": 4,
+					"Mystic Rectangle": 4,
+					"Cradle": 4,
+					"Kite": 4,
+					"Lightning Bolt": 4,
+					"Grand Trine": 3,
+					"T-Square": 3,
+					"Wedge": 3,
+					"Sextile Wedge": 3,
+					"Yod": 3,
+					"Wide Yod": 3,
+					"Unnamed": 3,
+					"Remainder": 2,  # variable, but listed last
+				}
+				
+				# Sort shape types by node count (descending), then alphabetically
+				sorted_types = sorted(
+					shapes_by_type.keys(),
+					key=lambda t: (-SHAPE_NODE_COUNTS.get(t, 1), t)
+				)
+				
+				# Render shapes grouped by type in two columns of expanders
+				half = (len(sorted_types) + 1) // 2
+				col_left, col_right = st.columns(2)
+				for idx, shape_type in enumerate(sorted_types):
+					type_shapes = shapes_by_type[shape_type]
+					node_count = SHAPE_NODE_COUNTS.get(shape_type, len(type_shapes[0].get("members", [])) if type_shapes else 2)
+					# choose column
+					target_col = col_left if idx < half else col_right
+					with target_col:
+						with st.expander(f"**{shape_type}** – {len(type_shapes)} found", expanded=False):
+							for sh in type_shapes:
+								# Format members by chart origin
+								members = sh.get("members", [])
+								# determine chart names
+								chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
+								if chart1_name == "Custom":
+									chart1_name = "Chart 1"
+								chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+								if chart2_name == "Custom":
+									chart2_name = "Chart 2"
+								
+								members1 = [m for m in members if not m.endswith("_2")]
+								members2 = [m[:-2] for m in members if m.endswith("_2")]
+								
+								def fmt_list(lst):
+									if want_glyphs:
+										return ", ".join(GLYPHS.get(m, m) for m in lst)
+									else:
+										return ", ".join(lst)
+								
+								members_label = f"{chart1_name}: {fmt_list(members1)}"
+								if members2:
+									members_label += f"; {chart2_name}: {fmt_list(members2)}"
+								# Create unique key for this shape
+								parent = sh.get("parent", 0)
+								shape_id = sh["id"]
+								unique_key = f"shape_{parent}_{shape_id}"
+								
+								st.session_state.setdefault(unique_key, False)
+								st.checkbox(
+									members_label,
+									key=unique_key,
+									value=st.session_state.get(unique_key, False),
+								)
+				
+				# Store shape toggle map for compatibility
+				shape_toggle_map = st.session_state.setdefault("shape_toggles_by_parent", {})
+				for sh in shapes:
+					parent = sh.get("parent", 0)
+					if parent not in shape_toggle_map:
+						shape_toggle_map[parent] = []
+					unique_key = f"shape_{parent}_{sh['id']}"
+					shape_toggle_map[parent].append({
+						"id": sh["id"],
+						"on": st.session_state.get(unique_key, False)
+					})
+			else:
+				st.info("No shapes detected in combined charts.")
+			
+			# Empty toggles/pattern_labels for Combined Circuits mode
+			toggles = []
+			pattern_labels = []
+		
+		# Regular Circuits mode (single chart or Connected Circuits in synastry)
+		elif chart_mode == "Circuits":
+			# Compute circuit_connected_shapes2 fresh here so it is always ready
+			# when the expander loop runs below.  Reading it from session state
+			# would be stale because _refresh_chart_figure runs AFTER this function.
+			circuit_connected_shapes2: dict[int, list] = {}
+			if synastry_mode and circuit_submode == "Connected Circuits":
+				_pos_inner = st.session_state.get("chart_positions") or {}
+				_pos_outer = st.session_state.get("chart_positions_2") or {}
+				_shapes_2  = st.session_state.get("shapes_2") or []
+				# Build all inter-chart aspects (Chart 1 × Chart 2 bodies)
+				_edges_inter: list[tuple[str, str, str]] = []
+				for _ep1, _d1 in _pos_inner.items():
+					for _ep2, _d2 in _pos_outer.items():
+						_angle = abs(_d1 - _d2) % 360
+						if _angle > 180:
+							_angle = 360 - _angle
+						for _asp_name, _asp_data in ASPECTS.items():
+							if abs(_angle - _asp_data["angle"]) <= _asp_data["orb"]:
+								_edges_inter.append((_ep1, _ep2, _asp_name))
+								break
+				for _ci, _component in enumerate(patterns):
+					_comp_set = set(_component)
+					_connected = {_ep2 for (_ep1, _ep2, _) in _edges_inter if _ep1 in _comp_set}
+					_linked = [sh for sh in _shapes_2 if set(sh.get("members", [])) & _connected]
+					if _linked:
+						circuit_connected_shapes2[_ci] = _linked
+				# Persist for the drawing function in _refresh_chart_figure
+				st.session_state["circuit_connected_shapes2"] = circuit_connected_shapes2
+				st.session_state["edges_inter_chart_cc"] = _edges_inter
+
 			# Pattern checkboxes + expanders
 			half = (len(patterns) + 1) // 2
 			left_patterns, right_patterns = st.columns(2)
@@ -389,6 +609,28 @@ def render_circuit_toggles(
 						)
 						shape_toggle_map[i] = shape_entries
 
+						# ---------- Chart 2 Connections (Connected Circuits + synastry only) ----------
+						# Show connections when the circuit itself OR any of its sub-shapes is active.
+						any_shape_on = any(e["on"] for e in shape_entries)
+						if synastry_mode and circuit_submode == "Connected Circuits" and (cbox or any_shape_on):
+							cc_shapes_for_circuit = circuit_connected_shapes2.get(i, [])
+							st.markdown("---")
+							if cc_shapes_for_circuit:
+								st.markdown("**Chart 2 Connections:**")
+								if not cbox:
+									st.caption("_Enable the circuit above to draw connections._")
+								for sh2 in cc_shapes_for_circuit:
+									sh2_members = sh2.get("members", [])
+									if want_glyphs:
+										members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
+									else:
+										members_str = ", ".join(sh2_members)
+									sh2_label = f"{sh2['type']}: {members_str}"
+									cc_key = f"cc_shape_{i}_{sh2['id']}"
+									st.session_state.setdefault(cc_key, False)
+									st.checkbox(sh2_label, key=cc_key)
+							else:
+								st.markdown("_No Chart 2 connections found._")
 			# Save Circuit Names (only if edits exist)
 			if st.session_state.get("current_profile"):
 				saved = st.session_state.get("saved_circuit_names", {})
@@ -448,6 +690,7 @@ def render_circuit_toggles(
 
 	# return AFTER both columns render
 	chart_mode = st.session_state.get("chart_mode", "Circuits")
+	circuit_submode = st.session_state.get("circuit_submode", "Combined Circuits")
 	
 	# Collect aspect toggles for Standard Chart mode
 	aspect_toggles = {}
@@ -456,5 +699,5 @@ def render_circuit_toggles(
 			key = f"aspect_toggle_{body_name}"
 			aspect_toggles[body_name] = st.session_state.get(key, False)
 	
-	return toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles
+	return toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles, circuit_submode
 

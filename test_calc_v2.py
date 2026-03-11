@@ -453,11 +453,21 @@ with col_right:
 # is active.  derive that suffix here rather than reaching for
 # "last_df" which belonged to the old DataFrame-centric API.
 synastry_mode = st.session_state.get("synastry_mode", False)
-suffix = "_2" if synastry_mode else ""
+chart_mode = st.session_state.get("chart_mode", "Circuits")
+circuit_submode = st.session_state.get("circuit_submode", "Combined Circuits")
 
-patterns = st.session_state.get(f"patterns{suffix}", []) or []
-shapes = st.session_state.get(f"shapes{suffix}", []) or []
-singleton_map = st.session_state.get(f"singleton_map{suffix}", {}) or {}
+# For Combined Circuits in synastry mode, use the combined patterns
+if synastry_mode and chart_mode == "Circuits" and circuit_submode == "Combined Circuits":
+	patterns = st.session_state.get("patterns_combined", []) or []
+	shapes = st.session_state.get("shapes_combined", []) or []
+	singleton_map = st.session_state.get("singleton_map_combined", {}) or {}
+else:
+	# Connected Circuits (synastry) and single-chart mode both use Chart 1 data.
+	# Chart 1 is always stored without a suffix. Never use _2 here — the Chart 2
+	# connection data is surfaced separately inside the circuit expanders.
+	patterns = st.session_state.get("patterns", []) or []
+	shapes = st.session_state.get("shapes", []) or []
+	singleton_map = st.session_state.get("singleton_map", {}) or {}
 
 # --- Bottom-of-page popovers ---
 chart_cached = st.session_state.get("last_chart")
@@ -521,7 +531,7 @@ if chart_cached is not None:
 	shapes = shapes or []
 	singleton_map = singleton_map or {}
 	
-	toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles = render_circuit_toggles(
+	toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles, circuit_submode = render_circuit_toggles(
 		patterns=patterns,
 		shapes=shapes,
 		singleton_map=singleton_map,
@@ -645,6 +655,7 @@ if chart_cached is not None:
 			'find_fixed_star_conjunctions': find_fixed_star_conjunctions,
 		},
 		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
+		'compass_rose_on_2': st.session_state.get('ui_compass_overlay_2', False),
 	}
 	# Debugging: Log chart_state before instantiation (no longer used)
 	print(f"chart_state: {chart_state}")

@@ -551,6 +551,7 @@ def draw_compass_rose(
 	pos: Mapping[str, float],
 	asc_deg: float,
 	*,
+	radius: float = 1.0,
 	colors: Mapping[str, str] | None = None,
 	linewidth_base: float = 2.0,
 	zorder: int = 100,
@@ -596,7 +597,7 @@ def draw_compass_rose(
 			r2 = deg_to_rad(dc, asc_deg)
 			ax.plot(
 				[r1, r2],
-				[1, 1],
+				[radius, radius],
 				color=colors.get("acdc", "#4E83AF"),
 				linewidth=linewidth_base,
 				zorder=z_axes,
@@ -613,7 +614,7 @@ def draw_compass_rose(
 			r2 = deg_to_rad(ic, asc_deg)
 			ax.plot(
 				[r1, r2],
-				[1, 1],
+				[radius, radius],
 				color=colors.get("mcic", "#4E83AF"),
 				linewidth=linewidth_base,
 				zorder=z_axes,
@@ -621,8 +622,8 @@ def draw_compass_rose(
 
 	sn_rad = deg_to_rad(sn, asc_deg)
 	nn_rad = deg_to_rad(nn, asc_deg)
-	x1, y1 = math.cos(sn_rad) * 1.0, math.sin(sn_rad) * 1.0
-	x2, y2 = math.cos(nn_rad) * 1.0, math.sin(nn_rad) * 1.0
+	x1, y1 = math.cos(sn_rad) * radius, math.sin(sn_rad) * radius
+	x2, y2 = math.cos(nn_rad) * radius, math.sin(nn_rad) * radius
 	vx, vy = (x2 - x1), (y2 - y1)
 	head_trim_frac = 0.05
 	x2_trim = x2 - head_trim_frac * vx
@@ -632,15 +633,15 @@ def draw_compass_rose(
 
 	ax.plot(
 		[sn_rad, r2_trim_theta],
-		[1.0, r2_trim_rad],
+		[radius, r2_trim_rad],
 		color=colors.get("nodal", "purple"),
 		linewidth=linewidth_base * nodal_width_multiplier,
 		zorder=z_nodal_line,
 	)
 	ax.annotate(
 		"",
-		xy=(nn_rad, 1.0),
-		xytext=(sn_rad, 1.0),
+		xy=(nn_rad, radius),
+		xytext=(sn_rad, radius),
 		arrowprops=dict(
 			arrowstyle="-|>",
 			mutation_scale=arrow_mutation_scale,
@@ -653,9 +654,7 @@ def draw_compass_rose(
 	)
 	ax.plot(
 		[sn_rad],
-		[1.0],
-		marker="o",
-		markersize=sn_dot_markersize,
+			[radius],
 		color=colors.get("nodal", "purple"),
 		zorder=z_nodal_top,
 	)
@@ -1337,6 +1336,36 @@ def render_biwheel_chart(
 			
 			_draw_gradient_line(ax, r1, r2, start_color, end_color, lw, style, radius=INNER_CIRCLE_R)
 
+	# Draw compass overlays if requested
+	# inner chart uses normal colors, outer gets darker variants
+	compass_inner = st.session_state.get("ui_compass_overlay", True)
+	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
+	if compass_inner:
+		compass_positions = _chart_compass_positions(chart_inner)
+		# same orientation as everything else (based on inner ascendant)
+		draw_compass_rose(
+			ax,
+			compass_positions,
+			asc_deg_inner,
+			radius=INNER_CIRCLE_R,
+			include_axes=not unknown_time_inner,
+		)
+	if compass_outer:
+		compass_positions2 = _chart_compass_positions(chart_outer)
+		# darker color scheme for outer compass lines
+		draw_compass_rose(
+			ax,
+			compass_positions2,
+			asc_deg_inner,
+			radius=INNER_CIRCLE_R,
+			include_axes=not unknown_time_outer,
+			colors={
+				"nodal": "#4B0082",     # dark indigo
+				"acdc": "#203A59",      # deep blue
+				"mcic": "#203A59",
+			},
+		)
+
 	# Draw center earth
 	draw_center_earth(ax, size=0.18)
 
@@ -1399,6 +1428,586 @@ def render_biwheel_chart(
 		drawn_major_edges=[],
 		drawn_minor_edges=[],
 	)
+
+
+# ---------------------------------------------------------------------------
+# Bi-wheel Combined Circuits renderer
+# ---------------------------------------------------------------------------
+
+def render_biwheel_chart_with_circuits(
+	chart_inner: AstrologicalChart,
+	chart_outer: AstrologicalChart,
+	*,
+	pos_combined: dict[str, float],
+	patterns: list[set[str]],
+	pattern_labels: list[str],
+	toggles: list[bool],
+	filaments: list,
+	combo_toggles: dict,
+	singleton_map: dict,
+	singleton_toggles: dict,
+	shapes: list,
+	shape_toggles_by_parent: dict,
+	major_edges_all: list,
+	house_system: str = "placidus",
+	dark_mode: bool = False,
+	label_style: str = "glyph",
+	figsize: tuple[float, float] = (5.0, 5.0),
+	dpi: int = 144,
+	unknown_time_inner: bool | None = None,
+	unknown_time_outer: bool | None = None,
+):
+	"""
+	Render a bi-wheel chart with Combined Circuits mode:
+	- Inner chart objects: chart_inner (no suffix)
+	- Outer chart objects: chart_outer (with "_2" suffix in pos_combined)
+	- Circuits connect objects across both charts based on all aspects
+	"""
+	plt.close('all')  # Clean up any lingering figures
+	
+	# Resolve unknown-time flags
+	if unknown_time_inner is None:
+		unknown_time_inner = bool(st.session_state.get("chart_unknown_time", False))
+	if unknown_time_outer is None:
+		unknown_time_outer = bool(st.session_state.get("chart_unknown_time_2", False))
+
+	# Rotation is always based on Chart 1 (inner) ascendant
+	asc_deg_inner = _get_ascendant_degree(chart_inner)
+	if unknown_time_inner:
+		asc_deg_inner = 0.0
+
+	# Extract positions for both charts (for label drawing)
+	pos_inner = _chart_positions(chart_inner)
+	pos_outer = _chart_positions(chart_outer)
+
+	# Setup figure
+	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
+	if dark_mode:
+		ax.set_facecolor("black")
+		fig.patch.set_facecolor("black")
+
+	ax.set_theta_zero_location("N")
+	ax.set_theta_direction(-1)
+	ax.set_rlim(0, 1.70)
+	ax.axis("off")
+	ax.set_anchor("C")
+	ax.set_aspect("equal", adjustable="box")
+	fig.subplots_adjust(left=0, right=1.0, top=0.95, bottom=0.05)
+
+	# Draw zodiac signs
+	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
+
+	# --- KEY RADIUS CONTROLS FOR BIWHEEL LAYOUT ---
+	INNER_CIRCLE_R = 0.9
+	OUTER_CIRCLE_R = 1.2
+	INNER_LABEL_R = 1.1
+	INNER_DEGREE_R = 1.0
+	OUTER_LABEL_R = 1.4
+	OUTER_DEGREE_R = 1.31
+	OUTER_CUSP_R = 1.45
+
+	# Draw degree marker circles
+	base_color = "white" if dark_mode else "black"
+	
+	# Inner degree circle
+	circle_inner = plt.Circle((0, 0), INNER_CIRCLE_R, transform=ax.transData._b,
+							  fill=False, color=base_color, linewidth=1.5)
+	ax.add_artist(circle_inner)
+	
+	# Draw ticks on inner circle
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
+
+	# Outer degree circle
+	circle_outer = plt.Circle((0, 0), OUTER_CIRCLE_R, transform=ax.transData._b,
+							  fill=False, color=base_color, linewidth=1.5)
+	ax.add_artist(circle_outer)
+	
+	# Draw ticks on outer circle
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
+
+	# Draw house cusps
+	cusps_inner = []
+	if not unknown_time_inner:
+		cusps_inner = draw_house_cusps_biwheel(
+			ax, chart_inner, asc_deg_inner, house_system, dark_mode,
+			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
+		)
+	
+	if not unknown_time_outer:
+		draw_house_cusps_biwheel(
+			ax, chart_outer, asc_deg_inner, house_system, dark_mode,
+			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
+		)
+
+	# Draw planet labels for both charts
+	draw_planet_labels_biwheel(
+		ax, pos_inner, asc_deg_inner, label_style, dark_mode, chart_inner,
+		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
+	)
+	draw_planet_labels_biwheel(
+		ax, pos_outer, asc_deg_inner, label_style, dark_mode, chart_outer,
+		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
+	)
+
+	# --- CIRCUIT DRAWING LOGIC ---
+	# Determine which circuits are toggled on
+	active_parents = set(i for i, show in enumerate(toggles) if show)
+	active_shape_ids = [
+		s["id"] for s in shapes if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+	]
+	active_shapes = [s for s in shapes if s["id"] in active_shape_ids]
+	
+	active_toggle_count = len(active_parents) + len(active_shapes)
+	layered_mode = active_toggle_count > 1
+	
+	active_singletons = {obj for obj, on in singleton_toggles.items() if on}
+	visible_objects = set()
+	
+	shape_edges = {
+		frozenset((u, v))
+		for s in active_shapes
+		for (u, v), asp in s.get("edges", [])
+	}
+	
+	edge_keys: set[tuple[frozenset[str], str]] = set()
+
+	# Draw circuit edges - for biwheel, we draw all aspect lines to INNER_CIRCLE_R
+	for idx in active_parents:
+		if idx < len(patterns):
+			visible_objects.update(patterns[idx])
+
+			# Get edges within this circuit
+			edges = [((p1, p2), asp_name)
+					for ((p1, p2), asp_name) in major_edges_all
+					if p1 in patterns[idx] and p2 in patterns[idx]]
+
+			color = group_color_for(idx) if layered_mode else None
+			
+			# Draw major edges in this circuit's color
+			draw_aspect_lines(
+				ax,
+				pos_combined,  # Use combined positions
+				edges,
+				asc_deg_inner,
+				color_override=color,
+				drawn_keys=edge_keys,
+				radius=INNER_CIRCLE_R,
+			)
+
+	# Draw sub-shapes edges
+	for s in active_shapes:
+		visible_objects.update(s.get("members", []))
+		color = shape_color_for(s["id"]) if layered_mode else None
+		draw_aspect_lines(
+			ax,
+			pos_combined,
+			s.get("edges", []),
+			asc_deg_inner,
+			color_override=color,
+			drawn_keys=edge_keys,
+			radius=INNER_CIRCLE_R,
+		)
+
+	# Draw singletons
+	visible_objects.update(active_singletons)
+	if active_singletons:
+		draw_singleton_dots(ax, pos_combined, active_singletons, shape_edges, asc_deg_inner, line_width=2.0)
+
+	# Draw compass overlays if requested
+	compass_inner = st.session_state.get("ui_compass_overlay", True)
+	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
+	
+	if compass_inner:
+		compass_positions = _chart_compass_positions(chart_inner)
+		draw_compass_rose(
+			ax,
+			compass_positions,
+			asc_deg_inner,
+			radius=INNER_CIRCLE_R,
+			include_axes=not unknown_time_inner,
+		)
+	
+	if compass_outer:
+		compass_positions2 = _chart_compass_positions(chart_outer)
+		draw_compass_rose(
+			ax,
+			compass_positions2,
+			asc_deg_inner,
+			radius=INNER_CIRCLE_R,
+			include_axes=not unknown_time_outer,
+			colors={
+				"nodal": "#4B0082",  # dark indigo
+				"acdc": "#203A59",   # deep blue
+				"mcic": "#203A59",
+			},
+		)
+
+	# Draw center earth
+	draw_center_earth(ax, size=0.18)
+
+	# Draw chart headers
+	name1 = st.session_state.get("test_chart_radio", "Chart 1")
+	if name1 == "Custom":
+		name1 = "Chart 1"
+	month1 = st.session_state.get("month_name", "")
+	day1 = st.session_state.get("day", "")
+	year1 = st.session_state.get("year", "")
+	hour_12_1 = st.session_state.get("hour_12")
+	minute_str_1 = st.session_state.get("minute_str")
+	ampm_1 = st.session_state.get("ampm")
+	city1 = st.session_state.get("city", "")
+	date_line1 = f"{month1} {day1}, {year1}".strip()
+	time_line1 = ""
+	if hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--":
+		time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}"
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+
+	name2 = st.session_state.get("test_chart_2", "Chart 2")
+	if name2 == "Custom":
+		name2 = "Chart 2"
+	month2 = st.session_state.get("month_name_2", "")
+	day2 = st.session_state.get("day_2", "")
+	year2 = st.session_state.get("year_2", "")
+	hour_12_2 = st.session_state.get("hour_12_2")
+	minute_str_2 = st.session_state.get("minute_str_2")
+	ampm_2 = st.session_state.get("ampm_2")
+	city2 = st.session_state.get("city_2", "")
+	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
+	time_line2 = ""
+	if hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--":
+		time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}"
+	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, "", dark_mode)
+
+	return RenderResult(
+		fig=fig,
+		ax=ax,
+		positions=pos_combined,
+		cusps=cusps_inner,
+		visible_objects=list(visible_objects),
+		drawn_major_edges=[],
+		drawn_minor_edges=[],
+		patterns=patterns,
+		shapes=active_shapes,
+		singleton_map=singleton_map,
+		plot_data={"chart": chart_inner, "chart_2": chart_outer},
+	)
+
+
+# ---------------------------------------------------------------------------
+# Bi-wheel Connected Circuits renderer
+# ---------------------------------------------------------------------------
+
+def render_biwheel_connected_circuits(
+	chart_inner: AstrologicalChart,
+	chart_outer: AstrologicalChart,
+	*,
+	pos_inner: dict[str, float],
+	pos_outer: dict[str, float],
+	patterns: list[set[str]],
+	shapes: list,
+	shapes_2: list,
+	circuit_connected_shapes2: dict[int, list],
+	edges_inter_chart: list,
+	major_edges_all: list,
+	pattern_labels: list[str],
+	toggles: list[bool],
+	singleton_map: dict,
+	singleton_toggles: dict,
+	shape_toggles_by_parent: dict,
+	filaments: list,
+	house_system: str = "placidus",
+	dark_mode: bool = False,
+	label_style: str = "glyph",
+	figsize: tuple[float, float] = (5.0, 5.0),
+	dpi: int = 144,
+	unknown_time_inner: bool | None = None,
+	unknown_time_outer: bool | None = None,
+):
+	"""
+	Render a bi-wheel chart in Connected Circuits mode.
+
+	Chart 1 (inner) circuits are drawn exactly as in single-chart Circuits mode.
+	When a Chart 1 circuit is toggled on, any Chart 2 shapes whose members are
+	connected to that circuit via inter-chart aspects can be further toggled on
+	(via cc_shape_{i}_{shape2_id} session keys).  When active, those Chart 2
+	shape edges and the filtered inter-chart lines (only the pairs linking that
+	circuit to that Chart 2 shape) are drawn — all inside the inner circle,
+	exactly like every other edge on the wheel.
+
+	Color-coding follows the existing layered_mode scheme: all edges belonging
+	to circuit i (including its Chart 2 connections) share the same circuit color.
+	"""
+	plt.close('all')
+
+	if unknown_time_inner is None:
+		unknown_time_inner = bool(st.session_state.get("chart_unknown_time", False))
+	if unknown_time_outer is None:
+		unknown_time_outer = bool(st.session_state.get("chart_unknown_time_2", False))
+
+	asc_deg_inner = _get_ascendant_degree(chart_inner)
+	if unknown_time_inner:
+		asc_deg_inner = 0.0
+
+	# Chart 2 positions are stored under names with a "_2" suffix so that
+	# bodies sharing a name with Chart 1 (e.g. "Sun") don't collide.
+	# This mirrors exactly how Combined Circuits mode handles pos_combined.
+	pos_outer_2 = {f"{k}_2": v for k, v in pos_outer.items()}
+	pos_draw = {**pos_inner, **pos_outer_2}
+
+	# Setup figure identical to the other biwheel functions
+	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
+	if dark_mode:
+		ax.set_facecolor("black")
+		fig.patch.set_facecolor("black")
+
+	ax.set_theta_zero_location("N")
+	ax.set_theta_direction(-1)
+	ax.set_rlim(0, 1.70)
+	ax.axis("off")
+	ax.set_anchor("C")
+	ax.set_aspect("equal", adjustable="box")
+	fig.subplots_adjust(left=0, right=1.0, top=0.95, bottom=0.05)
+
+	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
+
+	INNER_CIRCLE_R = 0.9
+	OUTER_CIRCLE_R = 1.2
+	INNER_LABEL_R = 1.1
+	INNER_DEGREE_R = 1.0
+	OUTER_LABEL_R = 1.4
+	OUTER_DEGREE_R = 1.31
+	OUTER_CUSP_R = 1.45
+
+	base_color = "white" if dark_mode else "black"
+
+	# Inner degree circle + ticks
+	circle_inner = plt.Circle((0, 0), INNER_CIRCLE_R, transform=ax.transData._b,
+							  fill=False, color=base_color, linewidth=1.5)
+	ax.add_artist(circle_inner)
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
+
+	# Outer degree circle + ticks
+	circle_outer = plt.Circle((0, 0), OUTER_CIRCLE_R, transform=ax.transData._b,
+							  fill=False, color=base_color, linewidth=1.5)
+	ax.add_artist(circle_outer)
+	for deg in range(0, 360, 1):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
+	for deg in range(0, 360, 5):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
+	for deg in range(0, 360, 10):
+		r = deg_to_rad(deg, asc_deg_inner)
+		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
+
+	# House cusps
+	cusps_inner = []
+	if not unknown_time_inner:
+		cusps_inner = draw_house_cusps_biwheel(
+			ax, chart_inner, asc_deg_inner, house_system, dark_mode,
+			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
+		)
+	if not unknown_time_outer:
+		draw_house_cusps_biwheel(
+			ax, chart_outer, asc_deg_inner, house_system, dark_mode,
+			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
+		)
+
+	# Planet labels: Chart 1 at inner ring, Chart 2 at outer ring
+	draw_planet_labels_biwheel(
+		ax, pos_inner, asc_deg_inner, label_style, dark_mode, chart_inner,
+		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
+	)
+	draw_planet_labels_biwheel(
+		ax, pos_outer, asc_deg_inner, label_style, dark_mode, chart_outer,
+		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
+	)
+
+	# --- CONNECTED CIRCUITS DRAWING ---
+	active_parents = {i for i, show in enumerate(toggles) if show}
+
+	# Chart 1 sub-shapes toggled on independently
+	active_shapes_1 = [
+		s for s in shapes
+		if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+	]
+	# circuits that have at least one sub-shape active (even without the full circuit on)
+	circuits_with_active_shapes = {s["parent"] for s in active_shapes_1}
+	shape_edges_1 = {
+		frozenset((u, v))
+		for s in active_shapes_1
+		for (u, v), _ in s.get("edges", [])
+	}
+
+	# Count everything for layered_mode threshold
+	num_active_cc = sum(
+		1
+		for i in (active_parents | circuits_with_active_shapes)
+		for sh2 in circuit_connected_shapes2.get(i, [])
+		if st.session_state.get(f"cc_shape_{i}_{sh2['id']}", False)
+	)
+	active_toggle_count = len(active_parents) + len(active_shapes_1) + num_active_cc
+	layered_mode = active_toggle_count > 1
+
+	active_singletons = {obj for obj, on in singleton_toggles.items() if on}
+	visible_objects: set[str] = set()
+	edge_keys: set[tuple[frozenset[str], str]] = set()
+
+	# Draw each active Chart 1 circuit and its selected Chart 2 connections.
+	# Also iterate over circuits where only a sub-shape is on (for Chart 2 connections).
+	for idx in sorted(active_parents | circuits_with_active_shapes):
+		if idx >= len(patterns):
+			continue
+		circuit_members = set(patterns[idx])
+		color = group_color_for(idx) if layered_mode else None
+
+		if idx in active_parents:
+			visible_objects.update(circuit_members)
+			# Chart 1 internal circuit edges
+			circuit_edges = [
+				((p1, p2), asp)
+				for ((p1, p2), asp) in major_edges_all
+				if p1 in circuit_members and p2 in circuit_members
+			]
+			draw_aspect_lines(
+				ax, pos_draw, circuit_edges, asc_deg_inner,
+				color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
+			)
+
+		# Chart 2 shape connections for this circuit
+		for sh2 in circuit_connected_shapes2.get(idx, []):
+			cc_key = f"cc_shape_{idx}_{sh2['id']}"
+			if not st.session_state.get(cc_key, False):
+				continue
+
+			# Chart 2 member names need _2 suffix to match pos_draw keys.
+			# shapes_2 stores members under plain names (no suffix) because
+			# they were detected from Chart 2's internal aspects in isolation.
+			sh2_members_plain = sh2.get("members", [])
+			sh2_members_2 = {f"{m}_2" for m in sh2_members_plain}
+			visible_objects.update(sh2_members_2)
+
+			# Chart 2 shape internal edges: suffix both endpoints
+			sh2_edges_2 = [
+				((f"{p1}_2", f"{p2}_2"), asp)
+				for ((p1, p2), asp) in sh2.get("edges", [])
+			]
+			draw_aspect_lines(
+				ax, pos_draw, sh2_edges_2, asc_deg_inner,
+				color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
+			)
+
+			# Inter-chart lines: p1 is Chart 1 (plain), p2 is Chart 2 (needs _2).
+			# edges_inter_chart stores p2 with plain names so suffix here.
+			inter_edges = [
+				(p1, f"{p2}_2", asp)
+				for (p1, p2, asp) in edges_inter_chart
+				if p1 in circuit_members and f"{p2}_2" in sh2_members_2
+			]
+			draw_aspect_lines(
+				ax, pos_draw, inter_edges, asc_deg_inner,
+				color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
+			)
+
+	# Chart 1 sub-shapes
+	for s in active_shapes_1:
+		visible_objects.update(s.get("members", []))
+		color = shape_color_for(s["id"]) if layered_mode else None
+		draw_aspect_lines(
+			ax, pos_draw, s.get("edges", []), asc_deg_inner,
+			color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
+		)
+
+	# Chart 1 singletons
+	visible_objects.update(active_singletons)
+	if active_singletons:
+		draw_singleton_dots(ax, pos_draw, active_singletons, shape_edges_1, asc_deg_inner, line_width=2.0)
+
+	# Compass overlays
+	compass_inner = st.session_state.get("ui_compass_overlay", True)
+	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
+	if compass_inner:
+		draw_compass_rose(
+			ax, _chart_compass_positions(chart_inner), asc_deg_inner,
+			radius=INNER_CIRCLE_R, include_axes=not unknown_time_inner,
+		)
+	if compass_outer:
+		draw_compass_rose(
+			ax, _chart_compass_positions(chart_outer), asc_deg_inner,
+			radius=INNER_CIRCLE_R, include_axes=not unknown_time_outer,
+			colors={"nodal": "#4B0082", "acdc": "#203A59", "mcic": "#203A59"},
+		)
+
+	draw_center_earth(ax, size=0.18)
+
+	# Chart header — Chart 1 (left)
+	name1 = st.session_state.get("test_chart_radio", "Chart 1")
+	if name1 == "Custom":
+		name1 = "Chart 1"
+	month1 = st.session_state.get("month_name", "")
+	day1 = st.session_state.get("day", "")
+	year1 = st.session_state.get("year", "")
+	hour_12_1 = st.session_state.get("hour_12")
+	minute_str_1 = st.session_state.get("minute_str")
+	ampm_1 = st.session_state.get("ampm")
+	city1 = st.session_state.get("city", "")
+	date_line1 = f"{month1} {day1}, {year1}".strip()
+	time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}" if (hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--") else ""
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+
+	# Chart header — Chart 2 (right)
+	name2 = st.session_state.get("test_chart_2", "Chart 2")
+	if name2 == "Custom":
+		name2 = "Chart 2"
+	month2 = st.session_state.get("month_name_2", "")
+	day2 = st.session_state.get("day_2", "")
+	year2 = st.session_state.get("year_2", "")
+	hour_12_2 = st.session_state.get("hour_12_2")
+	minute_str_2 = st.session_state.get("minute_str_2")
+	ampm_2 = st.session_state.get("ampm_2")
+	city2 = st.session_state.get("city_2", "")
+	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
+	time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}" if (hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--") else ""
+	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, "", dark_mode)
+
+	return RenderResult(
+		fig=fig,
+		ax=ax,
+		positions=pos_draw,
+		cusps=cusps_inner,
+		visible_objects=list(visible_objects),
+		drawn_major_edges=[],
+		drawn_minor_edges=[],
+		patterns=patterns,
+		shapes=active_shapes_1,
+		singleton_map=singleton_map,
+		plot_data={"chart": chart_inner, "chart_2": chart_outer},
+	)
+
 
 # Helper functions for biwheel
 
@@ -1557,6 +2166,8 @@ __all__ = [
 	"render_chart",
 	"render_chart_with_shapes",
 	"render_biwheel_chart",
+	"render_biwheel_chart_with_circuits",
+	"render_biwheel_connected_circuits",
 	"group_color_for",
 	"draw_house_cusps",
 	"draw_degree_markers",
