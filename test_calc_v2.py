@@ -118,6 +118,28 @@ st.session_state.setdefault("render_fig", None)
 if st.session_state.get("__pending_swap_charts__"):
 	swap_primary_and_secondary_charts()
 
+# --- Handle pending Calculate (deferred so preset data is applied BEFORE widgets) ---
+_pending_calc = st.session_state.pop("__pending_calculate__", None)
+if _pending_calc:
+	_ch1_sel = _pending_calc["ch1_sel"]
+	_ch2_sel = _pending_calc["ch2_sel"]
+	_syn     = _pending_calc["synastry"]
+	_custom2_snapshot = _pending_calc.get("custom2_snapshot")
+
+	# -- Chart 1 --
+	if _ch1_sel != "Custom":
+		apply_test_chart_to_session(_ch1_sel)
+	run_chart(suffix="")
+
+	# -- Chart 2 (synastry only) --
+	if _syn:
+		if _ch2_sel != "Custom":
+			apply_test_chart_to_session(_ch2_sel, suffix="_2")
+		elif _custom2_snapshot:
+			for _k, _v in _custom2_snapshot.items():
+				st.session_state[_k] = _v
+		run_chart(suffix="_2")
+
 synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
 
 # Primary chart selector
@@ -321,18 +343,33 @@ with col_left:
 			submitted = st.form_submit_button("Calculate Chart")
 
 			if submitted:
-				# Trigger the calculation for Chart 1 (no suffix).
-				# This function now handles everything: Geocoding, Time Parsing, Core Calc, Post-Processing, and State Saving.
-				success = run_chart(suffix="")
+				# Defer the actual calculation to the NEXT rerun so that
+				# preset data can be written to session state BEFORE the
+				# form widgets are instantiated (Streamlit forbids writing
+				# to a widget-bound key after the widget exists).
+				_syn = st.session_state.get("synastry_mode", False)
+				_ch1_sel = st.session_state.get("test_chart_radio", "Custom")
+				_ch2_sel = st.session_state.get("test_chart_2", "Custom") if _syn else None
 
-				if success:
-					st.success(f"Chart successfully calculated for {st.session_state.get('city')}.")
+				# Snapshot Custom Chart 2 data now (form values are still
+				# available), since _2 keys aren't widget-bound.
+				_custom2_snap = None
+				if _syn and _ch2_sel == "Custom":
+					_custom2_snap = {}
+					for _key in ["year", "month_name", "day", "hour_12",
+								 "minute_str", "ampm", "city"]:
+						_custom2_snap[f"{_key}_2"] = st.session_state.get(_key)
+					_custom2_snap["profile_unknown_time_2"] = st.session_state.get(
+						"profile_unknown_time", False
+					)
 
-					# Use st.rerun() to immediately display the chart if needed
-					st.rerun() # Using rerun to see the result immediately
-				else:
-					# This message appears if geocoding failed or date/time parsing failed
-					st.error(f"Calculation failed! Please ensure all date/time fields are valid and the city lookup succeeds.")
+				st.session_state["__pending_calculate__"] = {
+					"ch1_sel": _ch1_sel,
+					"ch2_sel": _ch2_sel,
+					"synastry": _syn,
+					"custom2_snapshot": _custom2_snap,
+				}
+				st.rerun()
 
 
 chart_cached = st.session_state.get("last_chart")
