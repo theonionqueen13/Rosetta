@@ -953,15 +953,26 @@ SHORT_ASPECT_MEANINGS = {
     "Semisextile": "the sneaky, frictionless backway"
 }
 
+SETNENCE_ASPECT_NAMES = {
+    "Trine": "trines",
+    "Sextile": "sextiles",
+    "Square": "squares",
+    "Conjunction": "conjunct",
+    "Opposition": "opposite",
+    "Sesquisquare": "sesquisquares",
+    "Quincunx": "quincunxes",
+    "Semisextile": "semisextiles"
+}
+
 SENTENCE_ASPECT_MEANINGS = {
-    "Trine": "share complete, automatic, instantaneous connectivity, for better or for worse.",
-    "Sextile": "have the opportunity for harmonious integration.",
-    "Square": "may feel at odds with each other; they require integration through work.",
-    "Conjunction": "share the same perspective, and take action from the same place.",
-    "Opposition": "are two opposite polarities, striving to balance each other.",
-    "Sesquisquare": "cannot help but connect, like the itch that must be scratched.",
-    "Quincunx": "want to connect, but it will always result in failure, like the itch that can never be scratched.",
-    "Semisextile": "like to rendezvous via the sneaky, frictionless backway."
+    "Trine": "share complete, automatic, instantaneous connectivity, for better or for worse. On the positive side, they work together perfectly as a team, which is a major strength. However, these parts of yourself are so connected, that you may not be able to relate to others who have a hard time integrating the same placements due to a hard aspect in their own chart.",
+    "Sextile": "have the opportunity for harmonious integration if actively connected, and represents a potential talent that you can develop if you choose.",
+    "Square": "may feel at odds with each other; they require ongoing integration through work. This may express as conflict at times; however, the work of squares is the engine that powers the whole chart. You would get nowhere without them.",
+    "Conjunction": "share the same perspective, and take action from the same place, like roommates. As long as they are getting along and well integrated, they will function as one unit, combining the traits of both.",
+    "Opposition": "are two opposite polarities, striving to balance each other, and represent an over-arching theme in your life. They have a tendency to want to compete, but they can be complementary if they recognize their differences and honor them, reaching across the spanse and building a bridge of collaboration. The opposition is the only aspect in the astrology that touches the Earth; it is the only aspect that can truly ground you. Embrace the balancing of opposites.",
+    "Sesquisquare": 'cannot help but connect, like the itch that must be scratched. This is like an overflow path; whenever one planet is charged up to "overflowing", it will spill over and connect across this aspect automatically, activating this talent. Watch out for exploitation here, as others may be able to use this to manipulate you.',
+    "Quincunx": "want to connect, but it will always result in failure, like the itch that can never be scratched. Go around; these energies will have to balance through indirect connections. Trying harder to connect them dirctly will only make the failure more epic and painful.",
+    "Semisextile": 'like to rendezvous via the sneaky, frictionless backway of the semi-sextile. While other connections to these two points may be more intense or triggering when dealing with hard subjects, the semi-sextile provides a sort of "spiritual anesthesia" that makes it light-hearted and safe.'
 }
 
 SIGN_AXIS_INTERP = {

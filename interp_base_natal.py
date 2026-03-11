@@ -33,6 +33,7 @@ import re
 import pandas as pd
 
 from models_v2 import static_db, ObjectSign, ObjectHouse
+from lookup_v2 import SETNENCE_ASPECT_NAMES, SENTENCE_ASPECT_MEANINGS
 from profiles_v2 import (
     ordered_object_rows,
     ordered_objects,
@@ -48,23 +49,6 @@ except ImportError:
     st = None
 
 from house_selector_v2 import _selected_house_system
-
-
-# --- constants ------------------------------------------------------------
-AXIS_MAP: Dict[str, str] = {
-    "AC": "Ascendant",
-    "DC": "Descendant",
-    "Mc": "MC",
-    "Ic": "IC",
-    "Ascendant": "Ascendant",
-    "Descendant": "Descendant",
-    "MC": "MC",
-    "IC": "IC",
-    "North Node": "North Node",
-    "South Node": "South Node",
-    "NorthNode": "North Node",  # Variant without space
-    "SouthNode": "South Node",  # Variant without space
-}
 
 
 # --- axis display formatting -----------------------------------------------
@@ -119,6 +103,23 @@ def _format_axis_for_display(obj_name: str) -> str:
     # Not an axis - return as-is
     return obj_name
 
+
+
+_AXIS_TO_ABBREV: dict[str, str] = {
+    "Ascendant": "AC",
+    "Descendant": "DC",
+    "Midheaven": "MC",
+    "Immum Coeli": "IC",
+    "AC": "AC",
+    "DC": "DC",
+    "MC": "MC",
+    "IC": "IC",
+}
+
+
+def _aspect_display_name(name: str) -> str:
+    """Return axis abbreviation for aspect lines; other objects unchanged."""
+    return _AXIS_TO_ABBREV.get(name, name)
 
 
 def _format_house_label(house_num: float | int | str | None) -> str:
@@ -183,6 +184,9 @@ class NatalInterpreter:
         self.drawn_major_edges: List[Tuple[str, str, Any]] = getattr(
             result, "drawn_major_edges", []
         ) or []
+        self.drawn_minor_edges: List[Tuple[str, str, Any]] = getattr(
+            result, "drawn_minor_edges", []
+        ) or []
 
         # Get the AstrologicalChart from result.plot_data
         self.chart: Optional[Any] = None
@@ -233,6 +237,10 @@ class NatalInterpreter:
                 active = set(self.ordered_df["Object"].tolist())
                 self.drawn_major_edges = [
                     e for e in self.drawn_major_edges
+                    if e[0] in active and e[1] in active
+                ]
+                self.drawn_minor_edges = [
+                    e for e in self.drawn_minor_edges
                     if e[0] in active and e[1] in active
                 ]
         else:
@@ -324,27 +332,6 @@ class NatalInterpreter:
         norm_name = self._normalize_obj_name_for_combo(obj_name)
         key = f"{norm_name}_House_{house_num}"
         return combos_dict.get(key)
-
-    def _format_first_line(self, row: pd.Series) -> str:
-        """Format the first line: [glyph] [object] (Rx) in [sign] [DMS]"""
-        obj = row.get("Object", "")
-        sign = row.get("Sign", "")
-        dms = row.get("DMS", "")
-        retrograde = row.get("Retrograde Bool", False)
-
-        display_name = _format_axis_for_display(obj)
-        if display_name != obj:
-            # Axis object: display_name is already "Full Name (ABBREV)", skip glyph prefix
-            line = display_name
-        else:
-            glyph = glyph_for(obj)
-            line = f"{glyph} {obj}"
-
-        if retrograde:
-            line += " (Rx)"
-
-        line += f" in {sign} {dms}"
-        return line
 
     def _format_other_stats(self, chart_obj: Any) -> List[str]:
         """Format the 'Other stats' section with OOB, Reception, Rules, and Ruled by.
@@ -823,6 +810,79 @@ class NatalInterpreter:
         # Only return groups with ≥2 members
         return {root: names for root, names in root_to_names.items() if len(names) >= 2}
 
+    def _format_aspects_section(
+        self,
+        cluster_map: dict[str, list[str]],
+        canon_to_root: dict[str, str],
+    ) -> str:
+        """Format the aspects section listing all drawn major and minor edges."""
+
+        def node_label(name: str) -> str:
+            """Return display label for a node, substituting cluster notation if applicable."""
+            root = canon_to_root.get(_canon(name))
+            if root is not None:
+                members = cluster_map.get(root, [])
+                if len(members) >= 2:
+                    inner = " + ".join(
+                        _aspect_display_name(m) for m in members
+                    )
+                    return f"[{inner}]"
+            return _aspect_display_name(name)
+
+        all_edges = list(self.drawn_major_edges or []) + list(self.drawn_minor_edges or [])
+        if not all_edges:
+            return ""
+
+        divider = "─" * 50
+        aspect_lines: list[str] = []
+        seen_edges: set[tuple[frozenset, str]] = set()
+
+        for edge in all_edges:
+            try:
+                a, b, meta = edge
+            except (ValueError, TypeError):
+                continue
+            aspect = _extract_aspect(meta)
+            if not aspect:
+                continue
+            if aspect.lower() == "conjunction":
+                continue
+
+            label_a = node_label(a)
+            label_b = node_label(b)
+            dedup_key = (frozenset({label_a, label_b}), aspect)
+            if dedup_key in seen_edges:
+                continue
+            seen_edges.add(dedup_key)
+
+            # Skip bare compass-rose axis oppositions (e.g. "AC opposite DC")
+            # unless at least one node is a conjunction cluster (label starts with "[")
+            _COMPASS_OPP_PAIRS = {
+                frozenset({"AC", "DC"}),
+                frozenset({"MC", "IC"}),
+                frozenset({"North Node", "South Node"}),
+            }
+            is_cluster = label_a.startswith("[") or label_b.startswith("[")
+            if (
+                aspect.lower() == "opposition"
+                and not is_cluster
+                and frozenset({label_a, label_b}) in _COMPASS_OPP_PAIRS
+            ):
+                continue
+
+            verb = SETNENCE_ASPECT_NAMES.get(aspect, aspect.lower() + "s")
+            meaning = SENTENCE_ASPECT_MEANINGS.get(aspect, "")
+
+            aspect_lines.append(f"{label_a} {verb} {label_b}")
+            if meaning:
+                aspect_lines.append(f"{label_a} and {label_b} {meaning}")
+            aspect_lines.append(divider)
+
+        if not aspect_lines:
+            return ""
+
+        return f"\n{divider}\nAspects:\n{divider}\n" + "\n".join(aspect_lines)
+
     # public ----------------------------------------------------------------
 
     def generate(self) -> str:
@@ -868,6 +928,12 @@ class NatalInterpreter:
 
         body = f"\n{divider}\n".join(obj_texts)
         body = re.sub(r"\n{3,}", "\n\n", body)
+
+        # Append aspects section after all object profiles
+        aspects_section = self._format_aspects_section(cluster_map, canon_to_root)
+        if aspects_section:
+            body += aspects_section
+
         return body
 
 

@@ -168,6 +168,16 @@ TABLE_STATEMENTS = [
         objective TEXT,
         keywords TEXT[]
     );""",
+
+    """CREATE TABLE IF NOT EXISTS ordered_objects (
+        position INTEGER PRIMARY KEY,
+        object_name TEXT NOT NULL
+    );""",
+
+    """CREATE TABLE IF NOT EXISTS house_system_interp (
+        name TEXT PRIMARY KEY,
+        description TEXT
+    );""",
 ]
 
 
@@ -184,6 +194,14 @@ def init_schema(cur):
     cur.execute("""
         ALTER TABLE object_sign_combos
         ADD COLUMN IF NOT EXISTS dignity_interp TEXT;
+    """)
+    cur.execute("""
+        ALTER TABLE aspects
+        ADD COLUMN IF NOT EXISTS sign_interval INTEGER;
+    """)
+    cur.execute("""
+        ALTER TABLE aspects
+        ADD COLUMN IF NOT EXISTS sentence_name TEXT;
     """)
 
 
@@ -276,10 +294,29 @@ def insert_static_data(cur):
     for a in static_db.aspects.values():
         rows.append((
             a.name, a.glyph, a.angle, a.orb, a.line_color, a.line_style,
-            a.short_meaning, a.long_meaning, _to_list(a.keywords), a.sentence_meaning
+            a.short_meaning, a.long_meaning, _to_list(a.keywords), a.sentence_meaning,
+            getattr(a, 'sign_interval', None), getattr(a, 'sentence_name', None)
         ))
     execute_values(cur,
-                   "INSERT INTO aspects VALUES %s ON CONFLICT (name) DO NOTHING",
+                   """
+                   INSERT INTO aspects
+                   (name, glyph, angle, orb, line_color, line_style,
+                    short_meaning, long_meaning, keywords, sentence_meaning,
+                    sign_interval, sentence_name)
+                   VALUES %s
+                   ON CONFLICT (name) DO UPDATE SET
+                       glyph = EXCLUDED.glyph,
+                       angle = EXCLUDED.angle,
+                       orb = EXCLUDED.orb,
+                       line_color = EXCLUDED.line_color,
+                       line_style = EXCLUDED.line_style,
+                       short_meaning = EXCLUDED.short_meaning,
+                       long_meaning = EXCLUDED.long_meaning,
+                       keywords = EXCLUDED.keywords,
+                       sentence_meaning = EXCLUDED.sentence_meaning,
+                       sign_interval = EXCLUDED.sign_interval,
+                       sentence_name = EXCLUDED.sentence_name
+                   """,
                    rows)
 
     # axes
@@ -433,6 +470,22 @@ def insert_static_data(cur):
                    "keywords = EXCLUDED.keywords",
                    rows)
 
+    # ordered_objects — full replace each run so position changes are picked up
+    cur.execute("DELETE FROM ordered_objects")
+    rows = [(pos, name) for pos, name in enumerate(static_db.ordered_objects)]
+    if rows:
+        execute_values(cur, "INSERT INTO ordered_objects (position, object_name) VALUES %s", rows)
+    print(f"ordered_objects rows: {len(rows)}")
+
+    # house_system_interp
+    rows = [(name, desc) for name, desc in static_db.house_system_interp.items()]
+    if rows:
+        execute_values(cur,
+                       "INSERT INTO house_system_interp (name, description) VALUES %s "
+                       "ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description",
+                       rows)
+    print(f"house_system_interp rows: {len(rows)}")
+
     # post-insert sanity: make sure all north/south node combos landed
     cur.execute("SELECT combo_key FROM object_house_combos "
                 "WHERE object_name IN ('North Node','South Node')")
@@ -493,6 +546,12 @@ def main():
                 print('object_house_combos count:', cnt)
                 cur.execute("SELECT COUNT(*) FROM object_house_combos WHERE object_name IN ('North Node','South Node')")
                 print('node combos present:', cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM ordered_objects")
+                print('ordered_objects count:', cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM house_system_interp")
+                print('house_system_interp count:', cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM aspects WHERE sign_interval IS NOT NULL")
+                print('aspects with sign_interval:', cur.fetchone()[0])
     finally:
         conn.close()
 

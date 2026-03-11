@@ -1048,8 +1048,16 @@ def render_chart_with_shapes(
 		positions=pos,
 		cusps=cusps,
 		visible_objects=list(visible_objects), # Ensure it's a list
-		drawn_major_edges=[], # Or populate if you track these in this function
-		drawn_minor_edges=[],
+		drawn_major_edges=[
+			(p1, p2, asp_name)
+			for (p1, p2), asp_name in major_edges_all
+			if isinstance(asp_name, str) and asp_name.lower() == "conjunction"
+			and p1 in visible_objects and p2 in visible_objects
+		],
+		drawn_minor_edges=[
+			(item["from"], item["to"], {"aspect": item["aspect"]})
+			for item in aspects_for_context
+		],
 		patterns=patterns,
 		shapes=active_shapes,
 		singleton_map=singleton_map,
@@ -1073,6 +1081,8 @@ def render_biwheel_chart(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
+	unknown_time_inner: bool | None = None,
+	unknown_time_outer: bool | None = None,
 ):
 	"""
 	Render a bi-wheel chart with two concentric rings:
@@ -1081,12 +1091,23 @@ def render_biwheel_chart(
 	- edges_inter_chart: Aspects between inner and outer chart planets
 	- edges_chart1: Internal aspects within inner chart
 	- edges_chart2: Internal aspects within outer chart
+	- unknown_time_inner: If True, inner chart has no birth time (no houses, ASC=0)
+	- unknown_time_outer: If True, outer chart has no birth time (no houses)
 	"""
-	# Get ascendant for inner chart (rotation reference)
-	unknown_time_inner = bool(
-		st.session_state.get("chart_unknown_time")
-		or st.session_state.get("profile_unknown_time")
-	)
+	# Resolve unknown-time flags.  The caller (chart_core) passes these
+	# explicitly using the per-chart session keys (chart_unknown_time vs
+	# chart_unknown_time_2).  Fall back to the *calculated* chart_unknown_time
+	# keys only — NOT profile_unknown_time which is a live UI widget.
+	if unknown_time_inner is None:
+		unknown_time_inner = bool(
+			st.session_state.get("chart_unknown_time", False)
+		)
+	if unknown_time_outer is None:
+		unknown_time_outer = bool(
+			st.session_state.get("chart_unknown_time_2", False)
+		)
+
+	# Rotation is always based on Chart 1 (inner) ascendant
 	asc_deg_inner = _get_ascendant_degree(chart_inner)
 	if unknown_time_inner:
 		asc_deg_inner = 0.0
@@ -1173,7 +1194,6 @@ def render_biwheel_chart(
 		cusps_inner = []
 
 	# Draw outer chart house cusps (between outer circle and zodiac)
-	unknown_time_outer = False  # For now, assume outer chart has time
 	asc_deg_outer = _get_ascendant_degree(chart_outer)
 	if not unknown_time_outer:
 		cusps_outer = draw_house_cusps_biwheel(

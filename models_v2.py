@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Union, List, Optional, Any, Dict, Literal # Added Literal here
 import pandas as pd
-from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, EPHE_MAJOR_OBJECTS, ALL_MAJOR_PLACEMENTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, SABIAN_SYMBOLS, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SABIAN_SYMBOLS, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS, OBJECT_SIGN_COMBO, OBJECT_HOUSE_COMBO
+from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, EPHE_MAJOR_OBJECTS, ALL_MAJOR_PLACEMENTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, SABIAN_SYMBOLS, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SABIAN_SYMBOLS, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS, OBJECT_SIGN_COMBO, OBJECT_HOUSE_COMBO, ORDERED_OBJECTS_FOCUS, SETNENCE_ASPECT_NAMES
 
 PatternNode = Union['ChartObject', 'Cluster']
 
@@ -159,6 +159,12 @@ class Aspect:
     # New: Reception (to match RECEPTION_SYMBOLS in lookup_v2.py)
     reception_icon_orb: Optional[str] = None # e.g., "blue_trine.png"
     reception_icon_sign: Optional[str] = None # e.g., "green_trine.png"
+
+    # Sign-interval number (from ASPECTS_BY_SIGN; e.g. Trine=4, Square=3)
+    sign_interval: Optional[int] = None
+
+    # Verb form used in sentences (from SETNENCE_ASPECT_NAMES; e.g. "trines", "is conjunct")
+    sentence_name: Optional[str] = None
 
 @dataclass
 class Axis:
@@ -1241,6 +1247,9 @@ class StaticLookup:
     sabian_symbols: Dict[str, Dict[int, SabianSymbol]] = field(default_factory=dict)
     object_sign_combos: Dict[str, "ObjectSign"] = field(default_factory=dict)
     object_house_combos: Dict[str, "ObjectHouse"] = field(default_factory=dict)
+    # Flat lookup tables not absorbed into other models
+    ordered_objects: List[str] = field(default_factory=list)
+    house_system_interp: Dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class ObjectSign:
@@ -1572,6 +1581,13 @@ def migrate_lookup_data():
             long_meaning = interp if isinstance(interp, str) else ""
             keywords = []
 
+        # ASPECTS_BY_SIGN maps aspect name -> sign-interval string ("0","2","3","4","6")
+        raw_interval = ASPECTS_BY_SIGN.get(name)
+        sign_interval_val = int(raw_interval) if raw_interval is not None else None
+
+        # SETNENCE_ASPECT_NAMES maps aspect name -> verb form (e.g. "trines", "is conjunct")
+        sentence_name_val = SETNENCE_ASPECT_NAMES.get(name)
+
         recv = RECEPTION_SYMBOLS.get(name, {}) if 'RECEPTION_SYMBOLS' in globals() else {}
         static.aspects[name] = Aspect(
             name=name,
@@ -1589,7 +1605,9 @@ def migrate_lookup_data():
             risks=data.get('risks', ''),
             harmonic=data.get('harmonic', 1),
             reception_icon_orb=recv.get('by orb'),
-            reception_icon_sign=recv.get('by sign')
+            reception_icon_sign=recv.get('by sign'),
+            sign_interval=sign_interval_val,
+            sentence_name=sentence_name_val
         )
 
     # --- 5. MIGRATING HOUSES (Using HOUSE_INTERP and HOUSE_MEANINGS) ---
@@ -1769,6 +1787,10 @@ def migrate_lookup_data():
             definition=definition,
             instructions=instructions
         )
+
+    # --- 7.5 ORDERED OBJECTS & HOUSE SYSTEM INTERP ---
+    static.ordered_objects = list(ORDERED_OBJECTS_FOCUS)
+    static.house_system_interp = {k: v for k, v in HOUSE_SYSTEM_INTERP.items()}
 
     # --- 8. MIGRATING SHAPE TEMPLATES (Using SHAPES) ---
     # SHAPES is a mapping from shape name -> {glyph, meaning, configuration}
