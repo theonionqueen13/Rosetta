@@ -254,7 +254,7 @@ with col_left:
 		st.session_state.setdefault("ampm", "AM")
 
 		def _apply_unknown_time():
-			if st.session_state["profile_unknown_time"]:
+			if st.session_state.get("profile_unknown_time", False):
 				st.session_state["hour_12"]    = "--"
 				st.session_state["minute_str"] = "--"
 				st.session_state["ampm"]       = "--"

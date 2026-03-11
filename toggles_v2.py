@@ -142,18 +142,23 @@ def render_circuit_toggles(
 	
 	# ---------- Circuits Mode-Specific UI ----------
 	if chart_mode == "Circuits":
-		# Allow two circuit view modes when in Circuit chart mode
-		st.session_state.setdefault("circuit_submode", "Combined Circuits")
-		submode = st.radio(
-			"Circuit View Mode",
-			["Combined Circuits", "Connected Circuits"],
-			index=0 if st.session_state.get("circuit_submode") == "Combined Circuits" else 1,
-			key="__circuit_submode_radio",
-			horizontal=False,
-		)
-		if submode != st.session_state.get("circuit_submode"):
-			st.session_state["circuit_submode"] = submode
-			st.rerun()
+		# Only offer Combined / Connected sub-modes when a second chart exists.
+		_synastry_now = st.session_state.get("synastry_mode", False)
+		if _synastry_now:
+			st.session_state.setdefault("circuit_submode", "Combined Circuits")
+			submode = st.radio(
+				"Circuit View Mode",
+				["Combined Circuits", "Connected Circuits"],
+				index=0 if st.session_state.get("circuit_submode") == "Combined Circuits" else 1,
+				key="__circuit_submode_radio",
+				horizontal=False,
+			)
+			if submode != st.session_state.get("circuit_submode"):
+				st.session_state["circuit_submode"] = submode
+				st.rerun()
+		else:
+			# Single-chart: always use normal circuit view; clear any stale submode
+			st.session_state["circuit_submode"] = "single"
 
 		c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
 
