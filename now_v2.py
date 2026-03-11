@@ -238,7 +238,7 @@ def render_now_widget(
 					tz = pytz.timezone(stored_tz)
 					now = dt.datetime.now(tz)
 
-					# update only the profile_* inputs
+					# update profile_* inputs
 					st.session_state["profile_year"]        = now.year
 					st.session_state["profile_month_name"]  = MONTH_NAMES[now.month - 1]
 					st.session_state["profile_day"]         = now.day
@@ -248,13 +248,31 @@ def render_now_widget(
 					if "profile_unknown_time" not in st.session_state:
 						st.session_state["profile_unknown_time"] = False
 
+					# Store chart inputs under an override key (widget keys can't be
+					# written after widgets are instantiated)
+					_h = now.hour
+					_ampm = "PM" if _h >= 12 else "AM"
+					_h12 = _h % 12 or 12
+					st.session_state["_now_chart_inputs"] = {
+						"year":             now.year,
+						"month_name":       MONTH_NAMES[now.month - 1],
+						"day":              now.day,
+						"hour_12":          f"{_h12:02d}",
+						"minute_str":       f"{now.minute:02d}",
+						"ampm":             _ampm,
+						"city":             city_name,
+						"house_system":     st.session_state.get("house_system", "placidus"),
+						"unknown_time_flag": False,
+					}
+
 					# ensure current_* cache
 					st.session_state["current_lat"]     = stored_lat
 					st.session_state["current_lon"]     = stored_lon
 					st.session_state["current_tz_name"] = stored_tz
 
 					# compute planets (house system is used later at render)
-					run_chart(stored_lat, stored_lon, stored_tz)
+					run_chart()
+					st.session_state.pop("_now_chart_inputs", None)
 
 					st.session_state["chart_ready"] = True
 					st.rerun()
@@ -337,9 +355,7 @@ def render_now_widget(
 			else:
 
 				try:
-					# Use OpenCage API key from Streamlit secrets
-					opencage_key = st.secrets["opencage"]["api_key"]
-					lat, lon, tz_name, formatted_address = geocode_city_with_timezone(city_str, opencage_key)
+					lat, lon, tz_name, formatted_address = geocode_city_with_timezone(city_str)
 
 					# Make the location visible to drawing_v2
 					if lat is not None and lon is not None:
@@ -376,8 +392,25 @@ def render_now_widget(
 						st.session_state["profile_hour"]        = now.hour
 						st.session_state["profile_minute"]      = now.minute
 
+						# Store chart inputs under an override key
+						_h = now.hour
+						_ampm = "PM" if _h >= 12 else "AM"
+						_h12 = _h % 12 or 12
+						st.session_state["_now_chart_inputs"] = {
+							"year":             now.year,
+							"month_name":       MONTH_NAMES[now.month - 1],
+							"day":              now.day,
+							"hour_12":          f"{_h12:02d}",
+							"minute_str":       f"{now.minute:02d}",
+							"ampm":             _ampm,
+							"city":             city_str,
+							"house_system":     st.session_state.get("house_system", "placidus"),
+							"unknown_time_flag": False,
+						}
+
 						try:
-							run_chart(lat, lon, tz_name)
+							run_chart()
+							st.session_state.pop("_now_chart_inputs", None)
 							st.session_state["chart_ready"] = True
 							st.session_state["show_now_city_field"] = False
 							st.rerun()
