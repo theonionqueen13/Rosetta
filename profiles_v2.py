@@ -1,6 +1,7 @@
 # profiles_v2.py
 
 from __future__ import annotations
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, List, Dict
 from models_v2 import AstrologicalChart, ChartObject, ReceptionLink, SabianSymbol
@@ -33,6 +34,7 @@ ALIASES_MEANINGS = getattr(static_db, 'ALIASES_MEANINGS', {})
 # prepopulation block at the top of the file handles that, so we no longer
 # need the complex fallback logic that used to live here.
 
+@lru_cache(maxsize=256)
 def glyph_for(obj: str) -> str:
     """
     Return a display glyph for an object name.
@@ -65,6 +67,7 @@ def glyph_for(obj: str) -> str:
 
     return GLYPHS.get(key, "")
 
+@lru_cache(maxsize=256)
 def meaning_for(obj: str) -> str:
     """Return the long-form meaning string for an object name."""
     if not obj:
@@ -93,6 +96,7 @@ def meaning_for(obj: str) -> str:
     key = alias.get(obj, alias.get(base, base))
     return OBJECT_MEANINGS.get(key, "")
 
+@lru_cache(maxsize=512)
 def sabian_for(sign: str, lon_abs: float) -> str:
     """
     Return Sabian symbol text for an object at absolute longitude `lon_abs`

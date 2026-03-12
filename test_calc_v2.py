@@ -145,7 +145,7 @@ synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
 # Primary chart selector
 test_chart = st.radio(
 	"Test Charts" if not synastry_mode else "Chart 1 (Inner)",
-	["Custom", "Wildhorse", "Joylin", "Terra", "Jessica"],
+	["Custom", "Wildhorse", "Wildhorse bf Michael", "Joylin", "Terra", "Jessica"],
 	horizontal=True,
 	key="test_chart_radio",
 	label_visibility="collapsed"

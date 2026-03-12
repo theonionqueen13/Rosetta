@@ -21,8 +21,8 @@ LUMINARIES_AND_PLANETS = static_db.LUMINARIES_AND_PLANETS
 GLYPHS = static_db.GLYPHS
 from profiles_v2 import glyph_for
 from patterns_v2 import detect_shapes
+from house_selector_v2 import _selected_house_system
 from src.ui_state_helpers import (
-	_selected_house_system,
 	reset_chart_state, resolve_visible_objects,
 )
 from src.drawing_primitives import (
@@ -40,7 +40,6 @@ from data_helpers import (
 	_canonical_name,
 )
 from models_v2 import AstrologicalChart
-_cache_shapes = {}
 
 def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
 	if chart is None:
@@ -106,14 +105,11 @@ def extract_positions(df: pd.DataFrame, visible_names: Collection[str] | None = 
 
 def get_ascendant_degree(df: pd.DataFrame) -> float:
 	return _dh.get_ascendant_degree(df)
-def get_shapes(pos, patterns, major_edges_all):
-	pos_items_tuple = tuple(sorted(pos.items()))
-	patterns_key = tuple(tuple(sorted(p)) for p in patterns)
-	edges_tuple = tuple(major_edges_all)
-	key = (pos_items_tuple, patterns_key, edges_tuple)
-	if key not in _cache_shapes:
-		_cache_shapes[key] = detect_shapes(pos, patterns, major_edges_all)
-	return _cache_shapes[key]
+def get_shapes(pos, patterns, major_edges_all, *, chart: AstrologicalChart = None):
+	"""Return shapes. Uses chart.shapes if available, otherwise computes."""
+	if chart is not None and chart.shapes:
+		return chart.shapes
+	return detect_shapes(pos, patterns, major_edges_all)
 
 def shape_color_for(shape_id: Any) -> str:
 	"""Return a stable solid colour for the given shape identifier."""

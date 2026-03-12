@@ -1,36 +1,19 @@
 # patterns_v2.py — refactored to source data from calc_v2/profiles_v2
 from __future__ import annotations
 
-import importlib.util
-import pathlib
 from itertools import combinations, permutations
 from typing import Sequence
 
 import networkx as nx
 
 import profiles_v2 as _profiles_mod
-
-
-def _load_calc_module():
-    """Dynamically load calc_v2.py from this folder (like test_calc_v2)."""
-
-    here = pathlib.Path(__file__).resolve()
-    calc_path = here.with_name("calc_v2.py")
-    spec = importlib.util.spec_from_file_location("calc_v2_local", str(calc_path))
-    module = importlib.util.module_from_spec(spec)
-    if spec.loader is None:  # pragma: no cover - safety guard
-        raise ImportError("Unable to load calc_v2 module")
-    spec.loader.exec_module(module)
-    return module
-
-
-_calc_mod = _load_calc_module()
+import calc_v2 as _calc_mod
 
 
 # Mirror the ASPECTS dict structure expected by the legacy pattern logic.
 ASPECTS = {
     name: {"angle": data["angle"], "orb": data["orb"]}
-    for name, data in getattr(_calc_mod, "_ASPECTS_ALL").items()
+    for name, data in _calc_mod._ASPECTS_ALL.items()
 }
 
 # Re-export a few helpers from calc_v2 so downstream callers can use the

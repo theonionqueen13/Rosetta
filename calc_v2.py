@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 import swisseph as swe
 import networkx as nx
 import datetime
@@ -6,7 +7,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 import matplotlib.gridspec as gridspec
-import importlib.util, pathlib
 from zoneinfo import ZoneInfo
 from collections import defaultdict, deque
 from profiles_v2 import sabian_for, find_fixed_star_conjunctions, STAR_CATALOG, glyph_for
@@ -15,6 +15,8 @@ from models_v2 import static_db
 SIGNS = static_db.SIGNS
 PLANETARY_RULERS = static_db.PLANETARY_RULERS
 ABREVIATED_PLANET_NAMES = static_db.ABREVIATED_PLANET_NAMES
+DIGNITIES = static_db.DIGNITIES
+MAJOR_OBJECTS = static_db.MAJOR_OBJECTS
 from models_v2 import ChartObject, HouseCusp, AstrologicalChart, ReceptionLink, static_db
 
 OOB_LIMIT = 23.44  # degrees declination
@@ -33,10 +35,12 @@ def deg_to_sign(lon):
 	sabian_index = sign_index * 30 + int(degree) + 1
 	return sign, f"{d}°{m:02d}'{s:02d}\"", sabian_index
 
+@lru_cache(maxsize=512)
 def _sign_index(deg: float) -> int:
 	"""0..11 index of the sign for ecliptic longitude deg."""
 	return int((deg % 360.0) // 30)
 
+@lru_cache(maxsize=512)
 def _sign_from_degree(deg: float) -> str:
 	"""Return sign name from absolute degree."""
 	return SIGNS[_sign_index(deg)]
@@ -169,22 +173,6 @@ def calculate_chart(
 	city: str = "",
 	display_datetime: "datetime.datetime | None" = None,
 ):
-	# ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
-	# This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
-	global DIGNITIES, PLANETARY_RULERS, MAJOR_OBJECTS, SIGNS
-
-	here = pathlib.Path(__file__).resolve()
-	lookup_path = here.with_name("lookup_v2.py")
-
-	spec = importlib.util.spec_from_file_location("lookup_v2_local", str(lookup_path))
-	mod = importlib.util.module_from_spec(spec)
-	spec.loader.exec_module(mod)
-
-	DIGNITIES = mod.DIGNITIES
-	PLANETARY_RULERS = mod.PLANETARY_RULERS
-	MAJOR_OBJECTS = mod.MAJOR_OBJECTS
-	SIGNS = mod.SIGNS
-
 	"""
 	Build the chart using Swiss Ephemeris.
 

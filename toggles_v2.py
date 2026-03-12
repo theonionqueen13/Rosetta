@@ -681,7 +681,7 @@ def render_circuit_toggles(
 				_cc_chart_2 = st.session_state.get("last_chart_2")
 				_pos_inner = (_cc_chart_1.positions if _cc_chart_1 else {}) or {}
 				_pos_outer = (_cc_chart_2.positions if _cc_chart_2 else {}) or {}
-				_shapes_2  = st.session_state.get("shapes_2") or []
+				_shapes_2  = (_cc_chart_2.shapes if _cc_chart_2 else []) or []
 				# Build all inter-chart aspects (Chart 1 × Chart 2 bodies)
 				_edges_inter: list[tuple[str, str, str]] = []
 				for _ep1, _d1 in _pos_inner.items():

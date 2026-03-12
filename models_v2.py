@@ -1,9 +1,75 @@
 import re
 import datetime
+import json
+import os
 from dataclasses import dataclass, field
 from typing import Union, List, Optional, Any, Dict, Literal # Added Literal here
 import pandas as pd
-from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, EPHE_MAJOR_OBJECTS, ALL_MAJOR_PLACEMENTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, SABIAN_SYMBOLS, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SABIAN_SYMBOLS, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS, OBJECT_SIGN_COMBO, OBJECT_HOUSE_COMBO, ORDERED_OBJECTS_FOCUS, SETNENCE_ASPECT_NAMES
+from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, EPHE_MAJOR_OBJECTS, ALL_MAJOR_PLACEMENTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS, ORDERED_OBJECTS_FOCUS, SETNENCE_ASPECT_NAMES
+
+# --- Lazy-loaded JSON data (much faster than parsing Python dicts) ---
+_JSON_DIR = os.path.dirname(__file__)
+_CACHED_SABIAN_SYMBOLS = None
+_CACHED_OBJECT_SIGN_COMBO = None
+_CACHED_OBJECT_HOUSE_COMBO = None
+
+def _load_sabian_symbols_json() -> dict:
+    """Load Sabian symbols from JSON file. Returns dict keyed by (sign, degree) tuples."""
+    global _CACHED_SABIAN_SYMBOLS
+    if _CACHED_SABIAN_SYMBOLS is not None:
+        return _CACHED_SABIAN_SYMBOLS
+    
+    json_path = os.path.join(_JSON_DIR, "sabian_symbols.json")
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        # Convert "Aries_1" keys back to ("Aries", 1) tuples
+        _CACHED_SABIAN_SYMBOLS = {}
+        for key, value in raw.items():
+            parts = key.rsplit("_", 1)
+            if len(parts) == 2:
+                sign, deg = parts[0], int(parts[1])
+                _CACHED_SABIAN_SYMBOLS[(sign, deg)] = value
+        return _CACHED_SABIAN_SYMBOLS
+    
+    # Fallback to lookup_v2 if JSON doesn't exist
+    from lookup_v2 import SABIAN_SYMBOLS
+    _CACHED_SABIAN_SYMBOLS = SABIAN_SYMBOLS
+    return _CACHED_SABIAN_SYMBOLS
+
+def _load_object_sign_combo_json() -> dict:
+    """Load object-sign combos from JSON file."""
+    global _CACHED_OBJECT_SIGN_COMBO
+    if _CACHED_OBJECT_SIGN_COMBO is not None:
+        return _CACHED_OBJECT_SIGN_COMBO
+    
+    json_path = os.path.join(_JSON_DIR, "object_sign_combo.json")
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            _CACHED_OBJECT_SIGN_COMBO = json.load(f)
+        return _CACHED_OBJECT_SIGN_COMBO
+    
+    # Fallback to lookup_v2 if JSON doesn't exist
+    from lookup_v2 import OBJECT_SIGN_COMBO
+    _CACHED_OBJECT_SIGN_COMBO = OBJECT_SIGN_COMBO
+    return _CACHED_OBJECT_SIGN_COMBO
+
+def _load_object_house_combo_json() -> dict:
+    """Load object-house combos from JSON file."""
+    global _CACHED_OBJECT_HOUSE_COMBO
+    if _CACHED_OBJECT_HOUSE_COMBO is not None:
+        return _CACHED_OBJECT_HOUSE_COMBO
+    
+    json_path = os.path.join(_JSON_DIR, "object_house_combo.json")
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            _CACHED_OBJECT_HOUSE_COMBO = json.load(f)
+        return _CACHED_OBJECT_HOUSE_COMBO
+    
+    # Fallback to lookup_v2 if JSON doesn't exist
+    from lookup_v2 import OBJECT_HOUSE_COMBO
+    _CACHED_OBJECT_HOUSE_COMBO = OBJECT_HOUSE_COMBO
+    return _CACHED_OBJECT_HOUSE_COMBO
 
 PatternNode = Union['ChartObject', 'Cluster']
 
@@ -1722,15 +1788,16 @@ def migrate_lookup_data():
             instructions=instructions_val
         )
 
-    # --- 6. MIGRATING SABIAN SYMBOLS (Using SABIAN_SYMBOLS) ---
+    # --- 6. MIGRATING SABIAN SYMBOLS (Using JSON/SABIAN_SYMBOLS) ---
     # We store these in a nested dict or a flat list for quick lookup
     # Structure: static.sabian_symbols[sign_name][degree]
     static.sabian_symbols = {} # Adding a dynamic attribute for the lookup
     
-    # SABIAN_SYMBOLS may be keyed as (sign, degree) tuples OR as sign -> {degree: text}
+    # Load from JSON file (fast) or fallback to lookup_v2 (slow)
     # Normalize both forms into static.sabian_symbols[sign][degree]
     static.sabian_symbols = {}
-    for key, value in SABIAN_SYMBOLS.items():
+    _sabian_data = _load_sabian_symbols_json()
+    for key, value in _sabian_data.items():
         def _extract_fields(symbol_entry):
             # symbol_entry may be a simple string or a dict with extra metadata
             if isinstance(symbol_entry, dict):
@@ -1795,6 +1862,13 @@ def migrate_lookup_data():
                 except Exception:
                     # fallback: leave empty for this sign
                     continue
+    
+    # Backward compatibility: populate static.SABIAN_SYMBOLS with tuple keys
+    # for code that uses SABIAN_SYMBOLS.get((sign, degree), "")
+    static.SABIAN_SYMBOLS = {}
+    for sign_name, degrees_dict in static.sabian_symbols.items():
+        for degree, sabian_obj in degrees_dict.items():
+            static.SABIAN_SYMBOLS[(sign_name, degree)] = sabian_obj.symbol if hasattr(sabian_obj, 'symbol') else str(sabian_obj)
 
     # --- 6.1 MIGRATING SIGN & HOUSE AXES ---
     # `static.axes` should include both the zodiacal axis interpretations defined
@@ -1887,9 +1961,10 @@ def migrate_lookup_data():
             meaning=meaning
         )
 
-    # --- 9. MIGRATING OBJECT-SIGN COMBOS (Using OBJECT_SIGN_COMBO) ---
-    # OBJECT_SIGN_COMBO maps "Object_Sign" -> { object, sign, short_meaning, ... keywords, remediation_tips }
-    for combo_key, data in OBJECT_SIGN_COMBO.items():
+    # --- 9. MIGRATING OBJECT-SIGN COMBOS (Using JSON/OBJECT_SIGN_COMBO) ---
+    # Load from JSON file (fast) or fallback to lookup_v2 (slow)
+    _object_sign_data = _load_object_sign_combo_json()
+    for combo_key, data in _object_sign_data.items():
         if not isinstance(data, dict):
             continue
         
@@ -1941,9 +2016,10 @@ def migrate_lookup_data():
             remediation_tips=remediation_tips
         )
 
-    # --- 10. MIGRATING OBJECT-HOUSE COMBOS (Using OBJECT_HOUSE_COMBO) ---
-    # OBJECT_HOUSE_COMBO maps "Object_House_N" -> { object, house, short_meaning, ... keywords }
-    for combo_key, data in OBJECT_HOUSE_COMBO.items():
+    # --- 10. MIGRATING OBJECT-HOUSE COMBOS (Using JSON/OBJECT_HOUSE_COMBO) ---
+    # Load from JSON file (fast) or fallback to lookup_v2 (slow)
+    _object_house_data = _load_object_house_combo_json()
+    for combo_key, data in _object_house_data.items():
         if not isinstance(data, dict):
             continue
         
