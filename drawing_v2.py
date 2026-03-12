@@ -654,7 +654,9 @@ def draw_compass_rose(
 	)
 	ax.plot(
 		[sn_rad],
-			[radius],
+		[radius],
+		marker="o",
+		markersize=sn_dot_markersize,
 		color=colors.get("nodal", "purple"),
 		zorder=z_nodal_top,
 	)
