@@ -552,6 +552,17 @@ def render_circuit_toggles(
 					_comp_set = set(_component)
 					_connected = {_ep2 for (_ep1, _ep2, _) in _edges_inter if _ep1 in _comp_set}
 					_linked = [sh for sh in _shapes_2 if set(sh.get("members", [])) & _connected]
+					# Also add singleton entries for connected Chart 2 planets
+					# that aren't already covered by a linked shape.
+					_covered = set()
+					for sh in _linked:
+						_covered.update(sh.get("members", []))
+					for _planet in sorted(_connected - _covered):
+						_linked.append({
+							"type": "Single object",
+							"members": [_planet],
+							"id": f"singleton_{_ci}_{_planet}",
+						})
 					if _linked:
 						circuit_connected_shapes2[_ci] = _linked
 				# Persist for the drawing function in _refresh_chart_figure
