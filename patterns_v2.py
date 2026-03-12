@@ -626,11 +626,19 @@ def detect_shapes(pos, patterns, major_edges_all):
         if key in seen:
             return
         parent_idx = assign_parent_for_special(collapsed)
+        # Expand collapsed representatives back to all cluster members
+        # so that Chart 2 objects (with _2 suffix) are not lost.
+        expanded_members = []
+        for n in collapsed:
+            if n in rep_map:
+                expanded_members.extend(rep_map[n])
+            else:
+                expanded_members.append(n)
         shape = {
             "id": sid,
             "type": sh_type,
             "parent": parent_idx,
-            "members": list(collapsed),
+            "members": expanded_members,
             "edges": edges,
         }
         if suppresses is not None:
@@ -638,7 +646,7 @@ def detect_shapes(pos, patterns, major_edges_all):
         shapes.append(shape)
         sid += 1
         seen.add(key)
-        used_members.update(collapsed)
+        used_members.update(expanded_members)
         for (u, v), asp in edges:
             used_edges.add((tuple(sorted((u, v))), asp))
 

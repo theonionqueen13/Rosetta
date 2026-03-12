@@ -234,10 +234,14 @@ class HouseCusp:
 
 
 def _object_names_from_lookup() -> tuple[list[str], list[str], list[str]]:
-    """Derive planet/angle/asteroid names from lookup_v2.MAJOR_OBJECTS."""
+    """Derive planet/angle/asteroid names from lookup_v2.ALL_MAJOR_PLACEMENTS.
+    
+    Note: all_names below is currently unused; placements are hardcoded to maintain
+    explicit categorization (planets, angles, asteroids).
+    """
     try:
         from models_v2 import static_db
-        all_names = list(static_db.MAJOR_OBJECTS.keys())
+        all_names = list(static_db.ALL_MAJOR_PLACEMENTS.keys())
     except ImportError:
         all_names = []
     planets = [

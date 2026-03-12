@@ -478,9 +478,47 @@ if (synastry_mode or _transit_mode) and circuit_submode == "single":
 	st.session_state["circuit_submode"] = "Combined Circuits"
 	circuit_submode = "Combined Circuits"
 if (synastry_mode or _transit_mode) and chart_mode == "Circuits" and circuit_submode == "Combined Circuits":
-	patterns = st.session_state.get("patterns_combined", []) or []
-	shapes = st.session_state.get("shapes_combined", []) or []
-	singleton_map = st.session_state.get("singleton_map_combined", {}) or {}
+	# Compute combined data eagerly so it is available on the FIRST rerun
+	# (previously it only existed after _refresh_chart_figure ran, which is too late).
+	from src.chart_core import _positions_from_chart
+	from patterns_v2 import connected_components_from_edges, detect_shapes as _detect_shapes
+	_chart_1 = st.session_state.get("last_chart")
+	_chart_2 = st.session_state.get("last_chart_2")
+	if _chart_1 is not None and _chart_2 is not None:
+		_pos_inner = _positions_from_chart(_chart_1)
+		_pos_outer = _positions_from_chart(_chart_2)
+		_pos_comb = dict(_pos_inner)
+		for _n, _d in _pos_outer.items():
+			_pos_comb[f"{_n}_2"] = _d
+		_comb_edges = []
+		_bodies = list(_pos_comb.keys())
+		for _i in range(len(_bodies)):
+			for _j in range(_i + 1, len(_bodies)):
+				_p1, _p2 = _bodies[_i], _bodies[_j]
+				_ang = abs(_pos_comb[_p1] - _pos_comb[_p2]) % 360
+				if _ang > 180:
+					_ang = 360 - _ang
+				for _aname, _adata in ASPECTS.items():
+					if abs(_ang - _adata["angle"]) <= _adata["orb"]:
+						_comb_edges.append(((_p1, _p2), _aname))
+						break
+		patterns = connected_components_from_edges(_bodies, _comb_edges)
+		shapes = _detect_shapes(_pos_comb, patterns, _comb_edges)
+		_conn_objs = set()
+		for (_p1, _p2), _ in _comb_edges:
+			_conn_objs.add(_p1)
+			_conn_objs.add(_p2)
+		singleton_map = {n: {"deg": d} for n, d in _pos_comb.items() if n not in _conn_objs}
+		# Persist so _refresh_chart_figure and toggles stay in sync
+		st.session_state["patterns_combined"] = patterns
+		st.session_state["shapes_combined"] = shapes
+		st.session_state["singleton_map_combined"] = singleton_map
+		st.session_state["pos_combined"] = _pos_comb
+		st.session_state["combined_edges_formatted"] = _comb_edges
+	else:
+		patterns = st.session_state.get("patterns_combined", []) or []
+		shapes = st.session_state.get("shapes_combined", []) or []
+		singleton_map = st.session_state.get("singleton_map_combined", {}) or {}
 else:
 	# Connected Circuits (synastry) and single-chart mode both use Chart 1 data.
 	# Chart 1 is always stored without a suffix. Never use _2 here — the Chart 2

@@ -163,8 +163,11 @@ def calculate_chart(
 	tz_name: str | None = None,
 	# house_system kept for back-compat but ignored
 	house_system: str | None = None,
-	include_aspects: bool = False,   # <-- NEW
+	include_aspects: bool = False,
 	unknown_time: bool = False,
+	display_name: str = "",
+	city: str = "",
+	display_datetime: "datetime.datetime | None" = None,
 ):
 	# ---- Lazy import of lookup tables from the SAME FOLDER as this file ----
 	# This avoids package/sys.path headaches (Rosetta_v2 vs rosetta, etc.)
@@ -192,6 +195,14 @@ def calculate_chart(
 	"""
 
 	# -------- Time -> UTC --------
+	# Capture the raw input datetime for display purposes BEFORE unknown_time
+	# overrides it to noon UTC.  This is what goes into AstrologicalChart.display_datetime
+	# so that header rendering never needs to read back from session state.
+	try:
+		_display_dt = datetime.datetime(year, month, day, hour, minute)
+	except (ValueError, OverflowError):
+		_display_dt = None
+
 	calc_hour = hour
 	calc_minute = minute
 	calc_tz_offset = tz_offset
@@ -473,6 +484,10 @@ def calculate_chart(
 		timezone=tz_str,
 		latitude=lat,
 		longitude=lon,
+		display_name=display_name,
+		city=city,
+		unknown_time=unknown_time,
+		display_datetime=display_datetime if display_datetime is not None else _display_dt,
 	)
 	
 	# Populate chart_signs, chart_houses, and rules_houses

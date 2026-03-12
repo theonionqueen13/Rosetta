@@ -1,4 +1,5 @@
 import re
+import datetime
 from dataclasses import dataclass, field
 from typing import Union, List, Optional, Any, Dict, Literal # Added Literal here
 import pandas as pd
@@ -878,6 +879,12 @@ class AstrologicalChart:
     timezone: str
     latitude: float
     longitude: float
+    # Header/display metadata — populated at chart creation time so renderers
+    # never need to reach back into session state for label data.
+    display_name: str = field(default="")
+    city: str = field(default="")
+    unknown_time: bool = field(default=False)
+    display_datetime: Optional[datetime.datetime] = field(default=None)
     patterns: ChartPatterns = field(default_factory=ChartPatterns)
     chart_signs: List["ChartSign"] = field(default_factory=list)
     chart_houses: List["ChartHouse"] = field(default_factory=list)
@@ -931,6 +938,39 @@ class AstrologicalChart:
     def get_extreme_oob_objects(self) -> List[ChartObject]:
         """Returns only the highly anomalous 'Extreme' OOB objects."""
         return [obj for obj in self.objects if obj.oob_status == "Extreme"]
+
+    def header_lines(self) -> tuple[str, str, str, str, str]:
+        """Return (name, date_line, time_line, city, extra_line) for chart header rendering.
+
+        Replaces the session-state reads previously scattered across drawing
+        functions.  The returned tuple matches the _draw_header_on_figure*()
+        call signature exactly.
+        """
+        name = self.display_name or "Untitled Chart"
+        city_val = self.city or ""
+
+        dt_obj = self.display_datetime
+        if dt_obj:
+            month_name = dt_obj.strftime("%B")
+            day_str    = str(dt_obj.day)
+            year_str   = str(dt_obj.year)
+            date_str   = f"{month_name} {day_str}, {year_str}"
+            h          = dt_obj.hour
+            m          = dt_obj.minute
+            ampm       = "AM" if h < 12 else "PM"
+            h12        = 12 if (h % 12 == 0) else (h % 12)
+            time_str   = f"{h12}:{m:02d} {ampm}"
+        else:
+            date_str = ""
+            time_str = ""
+
+        if self.unknown_time:
+            # Special layout for charts with unknown birth time:
+            # line1 = name, line2 = "AC = Aries 0° (default)",
+            # line3 = date, line4 = "12:00 PM"
+            return name, "AC = Aries 0° (default)", date_str, "12:00 PM", ""
+
+        return name, date_str, time_str, city_val, ""
 
     def _build_chart_signs(self, static: Optional["StaticLookup"] = None) -> List["ChartSign"]:
         """Build ChartSign objects from chart's objects and static data."""

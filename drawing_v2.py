@@ -22,8 +22,8 @@ GLYPHS = static_db.GLYPHS
 from profiles_v2 import glyph_for
 from patterns_v2 import detect_shapes
 from src.ui_state_helpers import (
-	_selected_house_system, _current_chart_header_lines, 
-	reset_chart_state, resolve_visible_objects, 
+	_selected_house_system,
+	reset_chart_state, resolve_visible_objects,
 )
 from src.drawing_primitives import (
 	deg_to_rad, _draw_gradient_line, draw_center_earth, 
@@ -711,10 +711,7 @@ def render_chart(
 	shapes = shapes or []
 	singleton_map = singleton_map or {}
 	"""Render the chart wheel using already-curated data."""
-	unknown_time_chart = bool(
-		st.session_state.get("chart_unknown_time")
-		or st.session_state.get("profile_unknown_time")
-	)
+	unknown_time_chart = chart.unknown_time
 	asc_deg = _get_ascendant_degree(chart)
 	if unknown_time_chart:
 		asc_deg = 0.0
@@ -741,7 +738,7 @@ def render_chart(
 
 	# Header and moon phase
 	try:
-		name, date_line, time_line, city, extra_line = _current_chart_header_lines()
+		name, date_line, time_line, city, extra_line = chart.header_lines()
 		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
 		_draw_moon_phase_on_axes(ax, chart, dark_mode, icon_frac=0.10)
 	except Exception:
@@ -836,10 +833,7 @@ def render_chart_with_shapes(
 ):
 	plt.close('all')  # Kill any background figures before starting
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
-	unknown_time_chart = bool(
-		st.session_state.get("chart_unknown_time")
-		or st.session_state.get("profile_unknown_time")
-	)
+	unknown_time_chart = chart.unknown_time
 	asc_deg = _get_ascendant_degree(chart)
 	if unknown_time_chart:
 		asc_deg = 0.0
@@ -858,10 +852,10 @@ def render_chart_with_shapes(
 	ax.set_aspect("equal", adjustable="box")
 	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
 
-	# Header helpers (no-ops if not present elsewhere)
+	# Header and moon phase
 	try:
-		name, date_line, time_line, city, extra_line = _current_chart_header_lines()  # type: ignore
-		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)  # type: ignore
+		name, date_line, time_line, city, extra_line = chart.header_lines()
+		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
 		_draw_moon_phase_on_axes(ax, chart, dark_mode, icon_frac=0.10)
 	except Exception:
 		pass
@@ -1069,8 +1063,8 @@ def render_chart_with_shapes(
 # ---------------------------------------------------------------------------
 
 def render_biwheel_chart(
-	chart_inner: AstrologicalChart,
-	chart_outer: AstrologicalChart,
+	chart_1: AstrologicalChart,
+	chart_2: AstrologicalChart,
 	*,
 	edges_inter_chart: Sequence[Any] | None = None,
 	edges_chart1: Sequence[Any] | None = None,
@@ -1080,40 +1074,26 @@ def render_biwheel_chart(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
-	unknown_time_inner: bool | None = None,
-	unknown_time_outer: bool | None = None,
 ):
 	"""
 	Render a bi-wheel chart with two concentric rings:
-	- Inner chart: chart_inner (between the two degree circles)
-	- Outer chart: chart_outer (outside the outer degree circle)
+	- Inner chart: chart_1 (between the two degree circles)
+	- Outer chart: chart_2 (outside the outer degree circle)
 	- edges_inter_chart: Aspects between inner and outer chart planets
 	- edges_chart1: Internal aspects within inner chart
 	- edges_chart2: Internal aspects within outer chart
-	- unknown_time_inner: If True, inner chart has no birth time (no houses, ASC=0)
-	- unknown_time_outer: If True, outer chart has no birth time (no houses)
 	"""
-	# Resolve unknown-time flags.  The caller (chart_core) passes these
-	# explicitly using the per-chart session keys (chart_unknown_time vs
-	# chart_unknown_time_2).  Fall back to the *calculated* chart_unknown_time
-	# keys only — NOT profile_unknown_time which is a live UI widget.
-	if unknown_time_inner is None:
-		unknown_time_inner = bool(
-			st.session_state.get("chart_unknown_time", False)
-		)
-	if unknown_time_outer is None:
-		unknown_time_outer = bool(
-			st.session_state.get("chart_unknown_time_2", False)
-		)
+	unknown_time_1 = chart_1.unknown_time
+	unknown_time_2 = chart_2.unknown_time
 
 	# Rotation is always based on Chart 1 (inner) ascendant
-	asc_deg_inner = _get_ascendant_degree(chart_inner)
-	if unknown_time_inner:
-		asc_deg_inner = 0.0
+	asc_deg_1 = _get_ascendant_degree(chart_1)
+	if unknown_time_1:
+		asc_deg_1 = 0.0
 
 	# Extract positions for both charts
-	pos_inner = _chart_positions(chart_inner)
-	pos_outer = _chart_positions(chart_outer)
+	pos_1 = _chart_positions(chart_1)
+	pos_2 = _chart_positions(chart_2)
 
 	# Setup figure
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
@@ -1130,7 +1110,7 @@ def render_biwheel_chart(
 	fig.subplots_adjust(left=0, right=1.0, top=0.95, bottom=0.05)
 
 	# Draw zodiac signs (outermost ring - unchanged)
-	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
+	draw_zodiac_signs(ax, asc_deg_1, dark_mode)
 
 	# --- KEY RADIUS CONTROLS FOR BIWHEEL LAYOUT ---
 	# Adjust these values independently to control spacing:
@@ -1158,13 +1138,13 @@ def render_biwheel_chart(
 	
 	# Draw ticks on inner circle
 	for deg in range(0, 360, 1):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
 	for deg in range(0, 360, 5):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
 	for deg in range(0, 360, 10):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
 
 	# Outer degree circle
@@ -1174,43 +1154,43 @@ def render_biwheel_chart(
 	
 	# Draw ticks on outer circle
 	for deg in range(0, 360, 1):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
 	for deg in range(0, 360, 5):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
 	for deg in range(0, 360, 10):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
 
 	# Draw inner chart house cusps (between inner and outer circles)
-	if not unknown_time_inner:
-		cusps_inner = draw_house_cusps_biwheel(
-			ax, chart_inner, asc_deg_inner, house_system, dark_mode,
+	if not unknown_time_1:
+		cusps_1 = draw_house_cusps_biwheel(
+			ax, chart_1, asc_deg_1, house_system, dark_mode,
 			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
 		)
 	else:
-		cusps_inner = []
+		cusps_1 = []
 
 	# Draw outer chart house cusps (between outer circle and zodiac)
-	asc_deg_outer = _get_ascendant_degree(chart_outer)
-	if not unknown_time_outer:
-		cusps_outer = draw_house_cusps_biwheel(
-			ax, chart_outer, asc_deg_inner, house_system, dark_mode,
+	asc_deg_2 = _get_ascendant_degree(chart_2)
+	if not unknown_time_2:
+		cusps_2 = draw_house_cusps_biwheel(
+			ax, chart_2, asc_deg_1, house_system, dark_mode,
 			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
 		)
 	else:
-		cusps_outer = []
+		cusps_2 = []
 
 	# Draw planet labels for inner chart (between the circles)
 	draw_planet_labels_biwheel(
-		ax, pos_inner, asc_deg_inner, label_style, dark_mode, chart_inner,
+		ax, pos_1, asc_deg_1, label_style, dark_mode, chart_1,
 		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
 	)
 
 	# Draw planet labels for outer chart (outside outer circle)
 	draw_planet_labels_biwheel(
-		ax, pos_outer, asc_deg_inner, label_style, dark_mode, chart_outer,
+		ax, pos_2, asc_deg_1, label_style, dark_mode, chart_2,
 		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
 	)
 
@@ -1232,8 +1212,8 @@ def render_biwheel_chart(
 			else:
 				continue
 			
-			d1 = pos_inner.get(p1)
-			d2 = pos_inner.get(p2)
+			d1 = pos_1.get(p1)
+			d2 = pos_1.get(p2)
 			
 			if d1 is None or d2 is None:
 				continue
@@ -1243,8 +1223,8 @@ def render_biwheel_chart(
 			if not canon_aspect:
 				continue
 			
-			r1 = deg_to_rad(d1, asc_deg_inner)
-			r2 = deg_to_rad(d2, asc_deg_inner)
+			r1 = deg_to_rad(d1, asc_deg_1)
+			r2 = deg_to_rad(d2, asc_deg_1)
 			
 			# Use group color or standard color
 			if chart1_color:
@@ -1270,8 +1250,8 @@ def render_biwheel_chart(
 			else:
 				continue
 			
-			d1 = pos_outer.get(p1)
-			d2 = pos_outer.get(p2)
+			d1 = pos_2.get(p1)
+			d2 = pos_2.get(p2)
 			
 			if d1 is None or d2 is None:
 				continue
@@ -1281,8 +1261,8 @@ def render_biwheel_chart(
 			if not canon_aspect:
 				continue
 			
-			r1 = deg_to_rad(d1, asc_deg_inner)
-			r2 = deg_to_rad(d2, asc_deg_inner)
+			r1 = deg_to_rad(d1, asc_deg_1)
+			r2 = deg_to_rad(d2, asc_deg_1)
 			
 			# Use group color or standard color
 			if chart2_color:
@@ -1306,8 +1286,8 @@ def render_biwheel_chart(
 				continue
 			
 			# p1 is from inner chart, p2 is from outer chart
-			d1 = pos_inner.get(p1)
-			d2 = pos_outer.get(p2)
+			d1 = pos_1.get(p1)
+			d2 = pos_2.get(p2)
 			
 			if d1 is None or d2 is None:
 				continue
@@ -1317,8 +1297,8 @@ def render_biwheel_chart(
 			if not canon_aspect:
 				continue
 			
-			r1 = deg_to_rad(d1, asc_deg_inner)
-			r2 = deg_to_rad(d2, asc_deg_inner)
+			r1 = deg_to_rad(d1, asc_deg_1)
+			r2 = deg_to_rad(d2, asc_deg_1)
 			
 			base_color = spec.get("color", "gray")
 			if is_approx:
@@ -1341,24 +1321,24 @@ def render_biwheel_chart(
 	compass_inner = st.session_state.get("ui_compass_overlay", True)
 	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
 	if compass_inner:
-		compass_positions = _chart_compass_positions(chart_inner)
+		compass_positions = _chart_compass_positions(chart_1)
 		# same orientation as everything else (based on inner ascendant)
 		draw_compass_rose(
 			ax,
 			compass_positions,
-			asc_deg_inner,
+			asc_deg_1,
 			radius=INNER_CIRCLE_R,
-			include_axes=not unknown_time_inner,
+			include_axes=not unknown_time_1,
 		)
 	if compass_outer:
-		compass_positions2 = _chart_compass_positions(chart_outer)
+		compass_positions2 = _chart_compass_positions(chart_2)
 		# darker color scheme for outer compass lines
 		draw_compass_rose(
 			ax,
 			compass_positions2,
-			asc_deg_inner,
+			asc_deg_1,
 			radius=INNER_CIRCLE_R,
-			include_axes=not unknown_time_outer,
+			include_axes=not unknown_time_2,
 			colors={
 				"nodal": "#4B0082",     # dark indigo
 				"acdc": "#203A59",      # deep blue
@@ -1370,61 +1350,19 @@ def render_biwheel_chart(
 	draw_center_earth(ax, size=0.18)
 
 	# Draw chart headers for both charts
-	# Chart 1 (inner) - top left - use test_chart_radio to get the correct name
-	name1 = st.session_state.get("test_chart_radio", "Chart 1")
-	if name1 == "Custom":
-		name1 = "Chart 1"
-	
-	month1 = st.session_state.get("month_name", "")
-	day1 = st.session_state.get("day", "")
-	year1 = st.session_state.get("year", "")
-	hour_12_1 = st.session_state.get("hour_12")
-	minute_str_1 = st.session_state.get("minute_str")
-	ampm_1 = st.session_state.get("ampm")
-	city1 = st.session_state.get("city", "")
-	
-	# Build Chart 1 header lines
-	date_line1 = f"{month1} {day1}, {year1}".strip()
-	time_line1 = ""
-	if hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--":
-		time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}"
-	
-	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+	# Chart headers read directly from AstrologicalChart.header_lines()
+	name1, date_line1, time_line1, city1, extra_line1 = chart_1.header_lines()
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, extra_line1, dark_mode)
 
-	# Chart 2 (outer) - top right in maroon
-	# Get chart 2 data from session state (using _2 suffix keys)
-	name2 = st.session_state.get("test_chart_2", "Chart 2")
-	if name2 == "Custom":
-		name2 = "Chart 2"
-	
-	month2 = st.session_state.get("month_name_2", "")
-	day2 = st.session_state.get("day_2", "")
-	year2 = st.session_state.get("year_2", "")
-	hour_12_2 = st.session_state.get("hour_12_2")
-	minute_str_2 = st.session_state.get("minute_str_2")
-	ampm_2 = st.session_state.get("ampm_2")
-	city2 = st.session_state.get("city_2", "")
-	
-	# Build date line
-	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
-	
-	# Build time line
-	time_line2 = ""
-	if hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--":
-		try:
-			time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}"
-		except (ValueError, TypeError):
-			pass
-	
-	extra_line2 = ""
+	name2, date_line2, time_line2, city2, extra_line2 = chart_2.header_lines()
 	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, extra_line2, dark_mode)
 
 	return RenderResult(
 		fig=fig,
 		ax=ax,
-		positions=pos_inner,  # Return inner positions as primary
-		cusps=cusps_inner,
-		visible_objects=sorted(pos_inner.keys()),
+		positions=pos_1,  # Return inner positions as primary
+		cusps=cusps_1,
+		visible_objects=sorted(pos_1.keys()),
 		drawn_major_edges=[],
 		drawn_minor_edges=[],
 	)
@@ -1435,8 +1373,8 @@ def render_biwheel_chart(
 # ---------------------------------------------------------------------------
 
 def render_biwheel_chart_with_circuits(
-	chart_inner: AstrologicalChart,
-	chart_outer: AstrologicalChart,
+	chart_1: AstrologicalChart,
+	chart_2: AstrologicalChart,
 	*,
 	pos_combined: dict[str, float],
 	patterns: list[set[str]],
@@ -1454,31 +1392,25 @@ def render_biwheel_chart_with_circuits(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
-	unknown_time_inner: bool | None = None,
-	unknown_time_outer: bool | None = None,
 ):
 	"""
 	Render a bi-wheel chart with Combined Circuits mode:
-	- Inner chart objects: chart_inner (no suffix)
-	- Outer chart objects: chart_outer (with "_2" suffix in pos_combined)
+	- Inner chart objects: chart_1 (no suffix)
+	- Outer chart objects: chart_2 (with "_2" suffix in pos_combined)
 	- Circuits connect objects across both charts based on all aspects
 	"""
 	plt.close('all')  # Clean up any lingering figures
-	
-	# Resolve unknown-time flags
-	if unknown_time_inner is None:
-		unknown_time_inner = bool(st.session_state.get("chart_unknown_time", False))
-	if unknown_time_outer is None:
-		unknown_time_outer = bool(st.session_state.get("chart_unknown_time_2", False))
+	unknown_time_1 = chart_1.unknown_time
+	unknown_time_2 = chart_2.unknown_time
 
 	# Rotation is always based on Chart 1 (inner) ascendant
-	asc_deg_inner = _get_ascendant_degree(chart_inner)
-	if unknown_time_inner:
-		asc_deg_inner = 0.0
+	asc_deg_1 = _get_ascendant_degree(chart_1)
+	if unknown_time_1:
+		asc_deg_1 = 0.0
 
 	# Extract positions for both charts (for label drawing)
-	pos_inner = _chart_positions(chart_inner)
-	pos_outer = _chart_positions(chart_outer)
+	pos_1 = _chart_positions(chart_1)
+	pos_2 = _chart_positions(chart_2)
 
 	# Setup figure
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
@@ -1495,7 +1427,7 @@ def render_biwheel_chart_with_circuits(
 	fig.subplots_adjust(left=0, right=1.0, top=0.95, bottom=0.05)
 
 	# Draw zodiac signs
-	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
+	draw_zodiac_signs(ax, asc_deg_1, dark_mode)
 
 	# --- KEY RADIUS CONTROLS FOR BIWHEEL LAYOUT ---
 	INNER_CIRCLE_R = 0.9
@@ -1516,13 +1448,13 @@ def render_biwheel_chart_with_circuits(
 	
 	# Draw ticks on inner circle
 	for deg in range(0, 360, 1):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
 	for deg in range(0, 360, 5):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
 	for deg in range(0, 360, 10):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
 
 	# Outer degree circle
@@ -1532,36 +1464,36 @@ def render_biwheel_chart_with_circuits(
 	
 	# Draw ticks on outer circle
 	for deg in range(0, 360, 1):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
 	for deg in range(0, 360, 5):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
 	for deg in range(0, 360, 10):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
 
 	# Draw house cusps
-	cusps_inner = []
-	if not unknown_time_inner:
-		cusps_inner = draw_house_cusps_biwheel(
-			ax, chart_inner, asc_deg_inner, house_system, dark_mode,
+	cusps_1 = []
+	if not unknown_time_1:
+		cusps_1 = draw_house_cusps_biwheel(
+			ax, chart_1, asc_deg_1, house_system, dark_mode,
 			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
 		)
 	
-	if not unknown_time_outer:
+	if not unknown_time_2:
 		draw_house_cusps_biwheel(
-			ax, chart_outer, asc_deg_inner, house_system, dark_mode,
+			ax, chart_2, asc_deg_1, house_system, dark_mode,
 			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
 		)
 
 	# Draw planet labels for both charts
 	draw_planet_labels_biwheel(
-		ax, pos_inner, asc_deg_inner, label_style, dark_mode, chart_inner,
+		ax, pos_1, asc_deg_1, label_style, dark_mode, chart_1,
 		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
 	)
 	draw_planet_labels_biwheel(
-		ax, pos_outer, asc_deg_inner, label_style, dark_mode, chart_outer,
+		ax, pos_2, asc_deg_1, label_style, dark_mode, chart_2,
 		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
 	)
 
@@ -1604,7 +1536,7 @@ def render_biwheel_chart_with_circuits(
 				ax,
 				pos_combined,  # Use combined positions
 				edges,
-				asc_deg_inner,
+				asc_deg_1,
 				color_override=color,
 				drawn_keys=edge_keys,
 				radius=INNER_CIRCLE_R,
@@ -1618,7 +1550,7 @@ def render_biwheel_chart_with_circuits(
 			ax,
 			pos_combined,
 			s.get("edges", []),
-			asc_deg_inner,
+			asc_deg_1,
 			color_override=color,
 			drawn_keys=edge_keys,
 			radius=INNER_CIRCLE_R,
@@ -1627,30 +1559,30 @@ def render_biwheel_chart_with_circuits(
 	# Draw singletons
 	visible_objects.update(active_singletons)
 	if active_singletons:
-		draw_singleton_dots(ax, pos_combined, active_singletons, shape_edges, asc_deg_inner, line_width=2.0)
+		draw_singleton_dots(ax, pos_combined, active_singletons, shape_edges, asc_deg_1, line_width=2.0)
 
 	# Draw compass overlays if requested
 	compass_inner = st.session_state.get("ui_compass_overlay", True)
 	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
 	
 	if compass_inner:
-		compass_positions = _chart_compass_positions(chart_inner)
+		compass_positions = _chart_compass_positions(chart_1)
 		draw_compass_rose(
 			ax,
 			compass_positions,
-			asc_deg_inner,
+			asc_deg_1,
 			radius=INNER_CIRCLE_R,
-			include_axes=not unknown_time_inner,
+			include_axes=not unknown_time_1,
 		)
 	
 	if compass_outer:
-		compass_positions2 = _chart_compass_positions(chart_outer)
+		compass_positions2 = _chart_compass_positions(chart_2)
 		draw_compass_rose(
 			ax,
 			compass_positions2,
-			asc_deg_inner,
+			asc_deg_1,
 			radius=INNER_CIRCLE_R,
-			include_axes=not unknown_time_outer,
+			include_axes=not unknown_time_2,
 			colors={
 				"nodal": "#4B0082",  # dark indigo
 				"acdc": "#203A59",   # deep blue
@@ -1662,50 +1594,25 @@ def render_biwheel_chart_with_circuits(
 	draw_center_earth(ax, size=0.18)
 
 	# Draw chart headers
-	name1 = st.session_state.get("test_chart_radio", "Chart 1")
-	if name1 == "Custom":
-		name1 = "Chart 1"
-	month1 = st.session_state.get("month_name", "")
-	day1 = st.session_state.get("day", "")
-	year1 = st.session_state.get("year", "")
-	hour_12_1 = st.session_state.get("hour_12")
-	minute_str_1 = st.session_state.get("minute_str")
-	ampm_1 = st.session_state.get("ampm")
-	city1 = st.session_state.get("city", "")
-	date_line1 = f"{month1} {day1}, {year1}".strip()
-	time_line1 = ""
-	if hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--":
-		time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}"
-	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+	# Chart headers read directly from AstrologicalChart.header_lines()
+	name1, date_line1, time_line1, city1, extra_line1 = chart_1.header_lines()
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, extra_line1, dark_mode)
 
-	name2 = st.session_state.get("test_chart_2", "Chart 2")
-	if name2 == "Custom":
-		name2 = "Chart 2"
-	month2 = st.session_state.get("month_name_2", "")
-	day2 = st.session_state.get("day_2", "")
-	year2 = st.session_state.get("year_2", "")
-	hour_12_2 = st.session_state.get("hour_12_2")
-	minute_str_2 = st.session_state.get("minute_str_2")
-	ampm_2 = st.session_state.get("ampm_2")
-	city2 = st.session_state.get("city_2", "")
-	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
-	time_line2 = ""
-	if hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--":
-		time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}"
-	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, "", dark_mode)
+	name2, date_line2, time_line2, city2, extra_line2 = chart_2.header_lines()
+	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, extra_line2, dark_mode)
 
 	return RenderResult(
 		fig=fig,
 		ax=ax,
 		positions=pos_combined,
-		cusps=cusps_inner,
+		cusps=cusps_1,
 		visible_objects=list(visible_objects),
 		drawn_major_edges=[],
 		drawn_minor_edges=[],
 		patterns=patterns,
 		shapes=active_shapes,
 		singleton_map=singleton_map,
-		plot_data={"chart": chart_inner, "chart_2": chart_outer},
+		plot_data={"chart": chart_1, "chart_2": chart_2},
 	)
 
 
@@ -1714,11 +1621,11 @@ def render_biwheel_chart_with_circuits(
 # ---------------------------------------------------------------------------
 
 def render_biwheel_connected_circuits(
-	chart_inner: AstrologicalChart,
-	chart_outer: AstrologicalChart,
+	chart_1: AstrologicalChart,
+	chart_2: AstrologicalChart,
 	*,
-	pos_inner: dict[str, float],
-	pos_outer: dict[str, float],
+	pos_1: dict[str, float],
+	pos_2: dict[str, float],
 	patterns: list[set[str]],
 	shapes: list,
 	shapes_2: list,
@@ -1736,8 +1643,6 @@ def render_biwheel_connected_circuits(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
-	unknown_time_inner: bool | None = None,
-	unknown_time_outer: bool | None = None,
 ):
 	"""
 	Render a bi-wheel chart in Connected Circuits mode.
@@ -1755,20 +1660,18 @@ def render_biwheel_connected_circuits(
 	"""
 	plt.close('all')
 
-	if unknown_time_inner is None:
-		unknown_time_inner = bool(st.session_state.get("chart_unknown_time", False))
-	if unknown_time_outer is None:
-		unknown_time_outer = bool(st.session_state.get("chart_unknown_time_2", False))
+	unknown_time_1 = chart_1.unknown_time
+	unknown_time_2 = chart_2.unknown_time
 
-	asc_deg_inner = _get_ascendant_degree(chart_inner)
-	if unknown_time_inner:
-		asc_deg_inner = 0.0
+	asc_deg_1 = _get_ascendant_degree(chart_1)
+	if unknown_time_1:
+		asc_deg_1 = 0.0
 
 	# Chart 2 positions are stored under names with a "_2" suffix so that
 	# bodies sharing a name with Chart 1 (e.g. "Sun") don't collide.
 	# This mirrors exactly how Combined Circuits mode handles pos_combined.
-	pos_outer_2 = {f"{k}_2": v for k, v in pos_outer.items()}
-	pos_draw = {**pos_inner, **pos_outer_2}
+	pos_outer_2 = {f"{k}_2": v for k, v in pos_2.items()}
+	pos_draw = {**pos_1, **pos_outer_2}
 
 	# Setup figure identical to the other biwheel functions
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
@@ -1784,7 +1687,7 @@ def render_biwheel_connected_circuits(
 	ax.set_aspect("equal", adjustable="box")
 	fig.subplots_adjust(left=0, right=1.0, top=0.95, bottom=0.05)
 
-	draw_zodiac_signs(ax, asc_deg_inner, dark_mode)
+	draw_zodiac_signs(ax, asc_deg_1, dark_mode)
 
 	INNER_CIRCLE_R = 0.9
 	OUTER_CIRCLE_R = 1.2
@@ -1801,13 +1704,13 @@ def render_biwheel_connected_circuits(
 							  fill=False, color=base_color, linewidth=1.5)
 	ax.add_artist(circle_inner)
 	for deg in range(0, 360, 1):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
 	for deg in range(0, 360, 5):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
 	for deg in range(0, 360, 10):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [INNER_CIRCLE_R, INNER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
 
 	# Outer degree circle + ticks
@@ -1815,35 +1718,35 @@ def render_biwheel_connected_circuits(
 							  fill=False, color=base_color, linewidth=1.5)
 	ax.add_artist(circle_outer)
 	for deg in range(0, 360, 1):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.015], color=base_color, linewidth=0.5)
 	for deg in range(0, 360, 5):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.03], color=base_color, linewidth=0.8)
 	for deg in range(0, 360, 10):
-		r = deg_to_rad(deg, asc_deg_inner)
+		r = deg_to_rad(deg, asc_deg_1)
 		ax.plot([r, r], [OUTER_CIRCLE_R, OUTER_CIRCLE_R + 0.05], color=base_color, linewidth=1.2)
 
 	# House cusps
-	cusps_inner = []
-	if not unknown_time_inner:
-		cusps_inner = draw_house_cusps_biwheel(
-			ax, chart_inner, asc_deg_inner, house_system, dark_mode,
+	cusps_1 = []
+	if not unknown_time_1:
+		cusps_1 = draw_house_cusps_biwheel(
+			ax, chart_1, asc_deg_1, house_system, dark_mode,
 			r_inner=INNER_CIRCLE_R, r_outer=OUTER_CIRCLE_R, draw_labels=True, label_frac=0.50
 		)
-	if not unknown_time_outer:
+	if not unknown_time_2:
 		draw_house_cusps_biwheel(
-			ax, chart_outer, asc_deg_inner, house_system, dark_mode,
+			ax, chart_2, asc_deg_1, house_system, dark_mode,
 			r_inner=OUTER_CIRCLE_R, r_outer=OUTER_CUSP_R, draw_labels=True, label_frac=0.50
 		)
 
 	# Planet labels: Chart 1 at inner ring, Chart 2 at outer ring
 	draw_planet_labels_biwheel(
-		ax, pos_inner, asc_deg_inner, label_style, dark_mode, chart_inner,
+		ax, pos_1, asc_deg_1, label_style, dark_mode, chart_1,
 		label_r=INNER_LABEL_R, degree_r=INNER_DEGREE_R, is_outer_chart=False
 	)
 	draw_planet_labels_biwheel(
-		ax, pos_outer, asc_deg_inner, label_style, dark_mode, chart_outer,
+		ax, pos_2, asc_deg_1, label_style, dark_mode, chart_2,
 		label_r=OUTER_LABEL_R, degree_r=OUTER_DEGREE_R, is_outer_chart=True
 	)
 
@@ -1894,7 +1797,7 @@ def render_biwheel_connected_circuits(
 				if p1 in circuit_members and p2 in circuit_members
 			]
 			draw_aspect_lines(
-				ax, pos_draw, circuit_edges, asc_deg_inner,
+				ax, pos_draw, circuit_edges, asc_deg_1,
 				color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
 			)
 
@@ -1917,7 +1820,7 @@ def render_biwheel_connected_circuits(
 				for ((p1, p2), asp) in sh2.get("edges", [])
 			]
 			draw_aspect_lines(
-				ax, pos_draw, sh2_edges_2, asc_deg_inner,
+				ax, pos_draw, sh2_edges_2, asc_deg_1,
 				color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
 			)
 
@@ -1929,7 +1832,7 @@ def render_biwheel_connected_circuits(
 				if p1 in circuit_members and f"{p2}_2" in sh2_members_2
 			]
 			draw_aspect_lines(
-				ax, pos_draw, inter_edges, asc_deg_inner,
+				ax, pos_draw, inter_edges, asc_deg_1,
 				color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
 			)
 
@@ -1938,74 +1841,51 @@ def render_biwheel_connected_circuits(
 		visible_objects.update(s.get("members", []))
 		color = shape_color_for(s["id"]) if layered_mode else None
 		draw_aspect_lines(
-			ax, pos_draw, s.get("edges", []), asc_deg_inner,
+			ax, pos_draw, s.get("edges", []), asc_deg_1,
 			color_override=color, drawn_keys=edge_keys, radius=INNER_CIRCLE_R,
 		)
 
 	# Chart 1 singletons
 	visible_objects.update(active_singletons)
 	if active_singletons:
-		draw_singleton_dots(ax, pos_draw, active_singletons, shape_edges_1, asc_deg_inner, line_width=2.0)
+		draw_singleton_dots(ax, pos_draw, active_singletons, shape_edges_1, asc_deg_1, line_width=2.0)
 
 	# Compass overlays
 	compass_inner = st.session_state.get("ui_compass_overlay", True)
 	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
 	if compass_inner:
 		draw_compass_rose(
-			ax, _chart_compass_positions(chart_inner), asc_deg_inner,
-			radius=INNER_CIRCLE_R, include_axes=not unknown_time_inner,
+			ax, _chart_compass_positions(chart_1), asc_deg_1,
+			radius=INNER_CIRCLE_R, include_axes=not unknown_time_1,
 		)
 	if compass_outer:
 		draw_compass_rose(
-			ax, _chart_compass_positions(chart_outer), asc_deg_inner,
-			radius=INNER_CIRCLE_R, include_axes=not unknown_time_outer,
+			ax, _chart_compass_positions(chart_2), asc_deg_1,
+			radius=INNER_CIRCLE_R, include_axes=not unknown_time_2,
 			colors={"nodal": "#4B0082", "acdc": "#203A59", "mcic": "#203A59"},
 		)
 
 	draw_center_earth(ax, size=0.18)
 
-	# Chart header — Chart 1 (left)
-	name1 = st.session_state.get("test_chart_radio", "Chart 1")
-	if name1 == "Custom":
-		name1 = "Chart 1"
-	month1 = st.session_state.get("month_name", "")
-	day1 = st.session_state.get("day", "")
-	year1 = st.session_state.get("year", "")
-	hour_12_1 = st.session_state.get("hour_12")
-	minute_str_1 = st.session_state.get("minute_str")
-	ampm_1 = st.session_state.get("ampm")
-	city1 = st.session_state.get("city", "")
-	date_line1 = f"{month1} {day1}, {year1}".strip()
-	time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}" if (hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--") else ""
-	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+	# Chart headers read directly from AstrologicalChart.header_lines()
+	name1, date_line1, time_line1, city1, extra_line1 = chart_1.header_lines()
+	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, extra_line1, dark_mode)
 
-	# Chart header — Chart 2 (right)
-	name2 = st.session_state.get("test_chart_2", "Chart 2")
-	if name2 == "Custom":
-		name2 = "Chart 2"
-	month2 = st.session_state.get("month_name_2", "")
-	day2 = st.session_state.get("day_2", "")
-	year2 = st.session_state.get("year_2", "")
-	hour_12_2 = st.session_state.get("hour_12_2")
-	minute_str_2 = st.session_state.get("minute_str_2")
-	ampm_2 = st.session_state.get("ampm_2")
-	city2 = st.session_state.get("city_2", "")
-	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
-	time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}" if (hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--") else ""
-	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, "", dark_mode)
+	name2, date_line2, time_line2, city2, extra_line2 = chart_2.header_lines()
+	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, extra_line2, dark_mode)
 
 	return RenderResult(
 		fig=fig,
 		ax=ax,
 		positions=pos_draw,
-		cusps=cusps_inner,
+		cusps=cusps_1,
 		visible_objects=list(visible_objects),
 		drawn_major_edges=[],
 		drawn_minor_edges=[],
 		patterns=patterns,
 		shapes=active_shapes_1,
 		singleton_map=singleton_map,
-		plot_data={"chart": chart_inner, "chart_2": chart_outer},
+		plot_data={"chart": chart_1, "chart_2": chart_2},
 	)
 
 

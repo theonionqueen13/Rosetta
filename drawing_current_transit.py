@@ -419,49 +419,6 @@ def shape_color_for(shape_id: Any) -> str:
 
 _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
 
-def _current_chart_header_lines():
-	name = (
-		st.session_state.get("current_profile_title")
-		or st.session_state.get("current_profile")
-		or "Untitled Chart"
-	)
-	if isinstance(name, str) and name.startswith("community:"):
-		name = "Community Chart"
-
-	month  = st.session_state.get("profile_month_name", "")
-	day    = st.session_state.get("profile_day", "")
-	year   = st.session_state.get("profile_year", "")
-	hour   = st.session_state.get("profile_hour")
-	minute = st.session_state.get("profile_minute")
-	city   = st.session_state.get("profile_city", "")
-	unknown_time = bool(
-		st.session_state.get("chart_unknown_time")
-		or st.session_state.get("profile_unknown_time")
-	)
-
-	date_line = f"{month} {day}, {year}".strip()
-
-	if unknown_time:
-		# Desired render order:
-		# Line 1: AC = Aries 0° (default)
-		# Line 2: date_line
-		# Line 3: 12:00 PM
-		extra_line = ""
-		date_line  = "AC = Aries 0° (default)"
-		time_line  = f"{month} {day}, {year}".strip()
-		city       = "12:00 PM"
-	else:
-		extra_line = ""
-		time_line = ""
-		if hour is not None and minute is not None:
-			h = int(hour)
-			m = int(minute)
-			ampm = "AM" if h < 12 else "PM"
-			h12 = 12 if (h % 12 == 0) else (h % 12)
-			time_line = f"{h12}:{m:02d} {ampm}"
-
-	return name, date_line, time_line, city, extra_line
-
 import matplotlib.patheffects as pe
 
 def _draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode):
@@ -1556,10 +1513,8 @@ def render_chart(
 	ax.set_aspect("equal", adjustable="box")
 	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
 
-	# Header and moon phase
+	# Moon phase
 	try:
-		name, date_line, time_line, city, extra_line = _current_chart_header_lines()
-		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
 		_draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
 	except Exception:
 		pass
@@ -1645,10 +1600,8 @@ def render_chart_with_shapes(
 	ax.set_aspect("equal", adjustable="box")
 	fig.subplots_adjust(left=0, right=0.85, top=0.95, bottom=0.05)
 
-	# Header helpers (no-ops if not present elsewhere)
+	# Moon phase
 	try:
-		name, date_line, time_line, city, extra_line = _current_chart_header_lines()  # type: ignore
-		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)  # type: ignore
 		_draw_moon_phase_on_axes(ax, df, dark_mode, icon_frac=0.10)
 	except Exception:
 		pass
@@ -2115,54 +2068,53 @@ def render_biwheel_chart(
 	draw_center_earth(ax, size=0.18)
 
 	# Draw chart headers for both charts
-	# Chart 1 (inner) - top left - use test_chart_radio to get the correct name
-	name1 = st.session_state.get("test_chart_radio", "Chart 1")
-	if name1 == "Custom":
-		name1 = "Chart 1"
-	
-	month1 = st.session_state.get("month_name", "")
-	day1 = st.session_state.get("day", "")
-	year1 = st.session_state.get("year", "")
-	hour_12_1 = st.session_state.get("hour_12")
-	minute_str_1 = st.session_state.get("minute_str")
-	ampm_1 = st.session_state.get("ampm")
-	city1 = st.session_state.get("city", "")
-	
-	# Build Chart 1 header lines
-	date_line1 = f"{month1} {day1}, {year1}".strip()
-	time_line1 = ""
-	if hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--":
-		time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}"
-	
-	_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+	# Chart headers read from AstrologicalChart.header_lines() when available,
+	# falling back to session state for older callers that don't pass chart objects.
+	_chart_inner_obj = st.session_state.get("last_chart")
+	_chart_outer_obj = st.session_state.get("last_chart_2")
 
-	# Chart 2 (outer) - top right in maroon
-	# Get chart 2 data from session state (using _2 suffix keys)
-	name2 = st.session_state.get("test_chart_2", "Chart 2")
-	if name2 == "Custom":
-		name2 = "Chart 2"
-	
-	month2 = st.session_state.get("month_name_2", "")
-	day2 = st.session_state.get("day_2", "")
-	year2 = st.session_state.get("year_2", "")
-	hour_12_2 = st.session_state.get("hour_12_2")
-	minute_str_2 = st.session_state.get("minute_str_2")
-	ampm_2 = st.session_state.get("ampm_2")
-	city2 = st.session_state.get("city_2", "")
-	
-	# Build date line
-	date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
-	
-	# Build time line
-	time_line2 = ""
-	if hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--":
-		try:
-			time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}"
-		except (ValueError, TypeError):
-			pass
-	
-	extra_line2 = ""
-	_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, extra_line2, dark_mode)
+	if _chart_inner_obj is not None and hasattr(_chart_inner_obj, "header_lines"):
+		name1, date_line1, time_line1, city1, _ex1 = _chart_inner_obj.header_lines()
+		_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, _ex1, dark_mode)
+	else:
+		name1 = st.session_state.get("test_chart_radio", "Chart 1")
+		if name1 == "Custom":
+			name1 = "Chart 1"
+		month1 = st.session_state.get("month_name", "")
+		day1 = st.session_state.get("day", "")
+		year1 = st.session_state.get("year", "")
+		hour_12_1 = st.session_state.get("hour_12")
+		minute_str_1 = st.session_state.get("minute_str")
+		ampm_1 = st.session_state.get("ampm")
+		city1 = st.session_state.get("city", "")
+		date_line1 = f"{month1} {day1}, {year1}".strip()
+		time_line1 = ""
+		if hour_12_1 and minute_str_1 and ampm_1 and hour_12_1 != "--":
+			time_line1 = f"{hour_12_1}:{minute_str_1} {ampm_1}"
+		_draw_header_on_figure(fig, name1, date_line1, time_line1, city1, "", dark_mode)
+
+	if _chart_outer_obj is not None and hasattr(_chart_outer_obj, "header_lines"):
+		name2, date_line2, time_line2, city2, _ex2 = _chart_outer_obj.header_lines()
+		_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, _ex2, dark_mode)
+	else:
+		name2 = st.session_state.get("test_chart_2", "Chart 2")
+		if name2 == "Custom":
+			name2 = "Chart 2"
+		month2 = st.session_state.get("month_name_2", "")
+		day2 = st.session_state.get("day_2", "")
+		year2 = st.session_state.get("year_2", "")
+		hour_12_2 = st.session_state.get("hour_12_2")
+		minute_str_2 = st.session_state.get("minute_str_2")
+		ampm_2 = st.session_state.get("ampm_2")
+		city2 = st.session_state.get("city_2", "")
+		date_line2 = f"{month2} {day2}, {year2}".strip() if (month2 or day2 or year2) else ""
+		time_line2 = ""
+		if hour_12_2 and minute_str_2 and ampm_2 and hour_12_2 != "--" and minute_str_2 != "--":
+			try:
+				time_line2 = f"{hour_12_2}:{minute_str_2} {ampm_2}"
+			except (ValueError, TypeError):
+				pass
+		_draw_header_on_figure_right(fig, name2, date_line2, time_line2, city2, "", dark_mode)
 
 	return RenderResult(
 		fig=fig,

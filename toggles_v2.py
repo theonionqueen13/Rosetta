@@ -193,9 +193,10 @@ def render_circuit_toggles(
 			key="__chart_mode_radio",
 			horizontal=False,
 		)
-		if chart_mode != st.session_state.get("chart_mode"):
-			st.session_state["chart_mode"] = chart_mode
-			st.rerun()
+		# Always sync the derived key; avoid st.rerun() here because it would
+		# abort before later widgets (e.g. transit_mode checkbox) render,
+		# causing Streamlit to drop those keys from session state.
+		st.session_state["chart_mode"] = chart_mode
 
 	# --- Handle pending "Hide All" (from previous run) safely ---
 	if st.session_state.get("__pending_hide_all__"):
@@ -858,6 +859,14 @@ def render_circuit_toggles(
 				# --- Transit date navigator (only when transits are active) ---
 				if st.session_state.get("transit_mode", False):
 					_render_transit_date_nav()
+
+				# --- Now-mode date navigator (single chart, Now button was used) ---
+				if (
+					st.session_state.get("now_mode_active", False)
+					and not st.session_state.get("transit_mode", False)
+				):
+					from now_v2 import render_now_date_nav
+					render_now_date_nav()
 
 	# If compass value changed, trigger a single safe rerun *after* all widgets exist
 	if st.session_state.get("_pending_compass_rerun"):
