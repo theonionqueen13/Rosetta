@@ -603,9 +603,6 @@ def render_now_widget(
 							st.session_state["chart_ready"] = True
 							st.session_state["show_now_city_field"] = False
 							st.rerun()
-							# after a successful chart compute:
-							st.session_state["last_df"] = df  # (your existing assignment)
-							st.session_state["chart_dt_utc"] = jd_dt  # or whatever you already set
 
 							# ✅ Force compass back on for a fresh chart
 							st.session_state[COMPASS_KEY] = True

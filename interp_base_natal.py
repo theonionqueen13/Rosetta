@@ -221,9 +221,9 @@ class NatalInterpreter:
         if raw_df is None or (isinstance(raw_df, pd.DataFrame) and raw_df.empty):
             try:
                 import streamlit as st  # type: ignore
-                last = st.session_state.get("last_df")
-                if last is not None and isinstance(last, pd.DataFrame):
-                    raw_df = last
+                last_chart = st.session_state.get("last_chart")
+                if last_chart is not None and last_chart.df_positions is not None:
+                    raw_df = last_chart.df_positions
             except Exception:
                 pass
 

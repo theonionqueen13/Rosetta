@@ -477,13 +477,13 @@ if _transit_mode and (st.session_state.get("last_chart_2") is None or not _chart
 if (synastry_mode or _transit_mode) and circuit_submode == "single":
 	st.session_state["circuit_submode"] = "Combined Circuits"
 	circuit_submode = "Combined Circuits"
+_chart_1 = st.session_state.get("last_chart")
+_chart_2 = st.session_state.get("last_chart_2")
 if (synastry_mode or _transit_mode) and chart_mode == "Circuits" and circuit_submode == "Combined Circuits":
 	# Compute combined data eagerly so it is available on the FIRST rerun
 	# (previously it only existed after _refresh_chart_figure ran, which is too late).
 	from src.chart_core import _positions_from_chart
 	from patterns_v2 import connected_components_from_edges, detect_shapes as _detect_shapes
-	_chart_1 = st.session_state.get("last_chart")
-	_chart_2 = st.session_state.get("last_chart_2")
 	if _chart_1 is not None and _chart_2 is not None:
 		_pos_inner = _positions_from_chart(_chart_1)
 		_pos_outer = _positions_from_chart(_chart_2)
@@ -523,9 +523,9 @@ else:
 	# Connected Circuits (synastry) and single-chart mode both use Chart 1 data.
 	# Chart 1 is always stored without a suffix. Never use _2 here — the Chart 2
 	# connection data is surfaced separately inside the circuit expanders.
-	patterns = st.session_state.get("patterns", []) or []
-	shapes = st.session_state.get("shapes", []) or []
-	singleton_map = st.session_state.get("singleton_map", {}) or {}
+	patterns = (_chart_1.aspect_groups if _chart_1 else []) or []
+	shapes = (_chart_1.shapes if _chart_1 else []) or []
+	singleton_map = (_chart_1.singleton_map if _chart_1 else {}) or {}
 
 # --- Bottom-of-page popovers ---
 chart_cached = st.session_state.get("last_chart")
@@ -534,9 +534,9 @@ if chart_cached is not None:
 	df_cached = chart_cached.to_dataframe()
 else:
 	df_cached = None
-aspect_cached = st.session_state.get("last_aspect_df")
-sect_cached   = st.session_state.get("last_sect")
-sect_err      = st.session_state.get("last_sect_error")
+aspect_cached = chart_cached.aspect_df if chart_cached else None
+sect_cached   = chart_cached.sect if chart_cached else None
+sect_err      = chart_cached.sect_error if chart_cached else None
 
 st.markdown(
 	"""
@@ -622,7 +622,7 @@ if chart_cached is not None:
 	visible_objects = st.session_state.get('visible_objects', [])
 	chart_cached = st.session_state.get('last_chart')
 	last_df = chart_cached.to_dataframe() if chart_cached is not None else None
-	edges_major = st.session_state.get('edges_major', [])
+	edges_major = chart_cached.edges_major if chart_cached else []
 	# Filter DataFrame rows to visible objects
 	if chart_cached is not None and visible_objects:
 		ordered = ordered_objects(chart_cached, visible_objects=visible_objects, edges_major=edges_major)
@@ -640,9 +640,9 @@ if chart_cached is not None:
 	chart_state = {
 		'ordered_df': filtered_df,
 		'edges_major': filtered_edges_major,
-		'edges_minor': st.session_state.get('edges_minor', []),
+		'edges_minor': (chart_cached.edges_minor if chart_cached else []),
 		'mode': interp_mode,
-		'raw_links': st.session_state.get('plot_data', {}),
+		'raw_links': (chart_cached.plot_data if chart_cached else {}),
 		'lookup': {
 			'GLYPHS': static_db.GLYPHS,
 			'OBJECT_MEANINGS': static_db.OBJECT_MEANINGS,
@@ -678,7 +678,7 @@ if chart_cached is not None:
 
 	st.subheader("🤓 Nerdy Chart Specs 📋")
 	unknown_time_chart = bool(
-		st.session_state.get("chart_unknown_time")
+		(chart_cached.unknown_time if chart_cached else False)
 		or st.session_state.get("profile_unknown_time")
 	)
 
@@ -701,7 +701,7 @@ if chart_cached is not None:
 
 	with st.popover("Conjunctions", use_container_width=True):
 		st.subheader("Conjunction Clusters")
-		st.dataframe(st.session_state.get("conj_clusters_rows") or [], use_container_width=True)
+		st.dataframe((chart_cached.conj_clusters_rows if chart_cached else []) or [], use_container_width=True)
 
 	with st.popover("Aspects Graph", use_container_width=True):
 		if aspect_cached is not None:
@@ -712,8 +712,8 @@ if chart_cached is not None:
 
 	with st.popover("Aspects List", use_container_width=True):
 		st.subheader("Aspect Lists")
-		edges_major = st.session_state.get("edges_major") or []
-		edges_minor = st.session_state.get("edges_minor") or []
+		edges_major = chart_cached.edges_major if chart_cached else []
+		edges_minor = chart_cached.edges_minor if chart_cached else []
 		chart_cached = st.session_state.get("last_chart")
 		# Use the new clustered aspect edge builder
 		from calc_v2 import build_clustered_aspect_edges
@@ -762,9 +762,9 @@ with st.sidebar:
 		# Get visible_objects from render_result, with fallback to session state
 		rr = st.session_state.get("render_result")
 		visible_objects = (rr.visible_objects if rr and hasattr(rr, "visible_objects") else None) or st.session_state.get("visible_objects", [])
-		edges_major = st.session_state.get("edges_major") or []
+		edges_major = chart_cached.edges_major if chart_cached else []
 		unknown_time_chart = bool(
-			st.session_state.get("chart_unknown_time")
+			(chart_cached.unknown_time if chart_cached else False)
 			or st.session_state.get("profile_unknown_time")
 		)
 		ordered_rows = ordered_objects(

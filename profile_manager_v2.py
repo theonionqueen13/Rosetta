@@ -107,15 +107,17 @@ def render_profile_manager(
                 st.error("Please enter a name for the profile.")
             else:
                 # keep or initialize circuit names
-                if profile_name in saved_profiles and "patterns" in st.session_state:
+                _last_chart = st.session_state.get("last_chart")
+                _patterns = _last_chart.aspect_groups if _last_chart else []
+                if profile_name in saved_profiles and _patterns:
                     circuit_names = {
                         f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
-                        for i in range(len(st.session_state.patterns))
+                        for i in range(len(_patterns))
                     }
-                elif "patterns" in st.session_state:
+                elif _patterns:
                     circuit_names = {
                         f"circuit_name_{i}": f"Circuit {i+1}"
-                        for i in range(len(st.session_state.patterns))
+                        for i in range(len(_patterns))
                     }
                 else:
                     circuit_names = {}
@@ -197,11 +199,13 @@ def render_profile_manager(
                                 st.rerun()
 
             # quick-save circuit names into current profile
-            if st.session_state.get("current_profile") and "patterns" in st.session_state:
+            _last_chart = st.session_state.get("last_chart")
+            _patterns = _last_chart.aspect_groups if _last_chart else []
+            if st.session_state.get("current_profile") and _patterns:
                 if st.button("💾 Save Circuit Names to Current Profile", key="save_names_only"):
                     circuit_names = {
                         f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
-                        for i in range(len(st.session_state.patterns))
+                        for i in range(len(_patterns))
                     }
                     profiles = load_user_profiles_db(current_user_id)
                     prof_name = st.session_state["current_profile"]

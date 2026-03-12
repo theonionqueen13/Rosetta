@@ -38,7 +38,7 @@ def donate_chart(
         Title for the enclosing expander.
     """
     if chart_ready is None:
-        chart_ready = st.session_state.get("last_df") is not None
+        chart_ready = st.session_state.get("last_chart") is not None
 
     if not chart_ready:
         return  # nothing to show yet
@@ -82,9 +82,10 @@ def donate_chart(
                     valid = False
 
                 if valid:
+                    _last_chart = st.session_state.get("last_chart")
                     circuit_names = {
                         f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
-                        for i in range(len(st.session_state.get("patterns", [])))
+                        for i in range(len(_last_chart.aspect_groups if _last_chart else []))
                     }
                     payload = {
                         "year":   int(st.session_state.get("profile_year", 1990)),

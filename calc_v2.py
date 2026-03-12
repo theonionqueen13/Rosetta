@@ -1109,7 +1109,7 @@ def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> 
 	if chart is None:
 		return [], []
 	# Backward-compatible: accept a DataFrame if passed accidentally
-	if hasattr(chart, "iterrows"):
+	if isinstance(chart, pd.DataFrame):
 		objs  = _extract_object_rows(chart)
 		names = list(objs["Object"])
 		lons  = dict(zip(objs["Object"], objs["Longitude"]))
@@ -1381,7 +1381,7 @@ def build_conjunction_clusters(chart: AstrologicalChart, edges_major: list[tuple
 	Also returns a mapping: object_name → cluster_id, and a list of clusters (each as a set of names).
 	"""
 	# Objects in chart order
-	if hasattr(chart, "iterrows"):
+	if isinstance(chart, pd.DataFrame):
 		objs = _extract_object_rows(chart)
 		names = list(objs["Object"])
 	else:
@@ -1448,7 +1448,7 @@ def build_clustered_aspect_edges(chart: AstrologicalChart, edges_major: list[tup
 	Output: list of tuples (A, B, meta), where A and B are either cluster names (comma-joined) or singleton names.
 	"""
 	clusters, cluster_map, cluster_sets = build_conjunction_clusters(chart, edges_major)
-	if hasattr(chart, "iterrows"):
+	if isinstance(chart, pd.DataFrame):
 		objs = _extract_object_rows(chart)
 		names = list(objs["Object"])
 	else:

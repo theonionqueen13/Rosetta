@@ -269,8 +269,9 @@ def render_circuit_toggles(
 		events_placeholder = st.empty()
 
 		# Always compute and blank/overwrite first on every rerun
+		_chart_for_events = st.session_state.get("last_chart")
 		update_events_html_state(
-				st.session_state.get("chart_dt_utc"),
+				_chart_for_events.utc_datetime if _chart_for_events else None,
 				events_path="events.jsonl",
 				show_no_events=False,   # flip True if you want a soft message on no results
 		)
@@ -320,8 +321,9 @@ def render_circuit_toggles(
 			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
 			if chart1_name == "Custom":
 				chart1_name = "Chart 1"
+			_chart_1 = st.session_state.get("last_chart")
 			unknown_time1 = bool(
-				st.session_state.get("chart_unknown_time")
+				(_chart_1.unknown_time if _chart_1 else False)
 				or st.session_state.get("profile_unknown_time")
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
@@ -335,7 +337,8 @@ def render_circuit_toggles(
 						chart2_name = "Chart 2"
 				else:
 					chart2_name = "Transits"
-				unknown_time2 = bool(st.session_state.get("chart_unknown_time_2", False))
+				_chart_2 = st.session_state.get("last_chart_2")
+				unknown_time2 = bool(_chart_2.unknown_time if _chart_2 else False)
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
 				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
 
@@ -405,8 +408,9 @@ def render_circuit_toggles(
 			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
 			if chart1_name == "Custom":
 				chart1_name = "Chart 1"
+			_chart_1 = st.session_state.get("last_chart")
 			unknown_time1 = bool(
-				st.session_state.get("chart_unknown_time")
+				(_chart_1.unknown_time if _chart_1 else False)
 				or st.session_state.get("profile_unknown_time")
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
@@ -422,7 +426,8 @@ def render_circuit_toggles(
 						chart2_name = "Chart 2"
 				else:
 					chart2_name = "Transits"
-				unknown_time2 = bool(st.session_state.get("chart_unknown_time_2", False))
+				_chart_2 = st.session_state.get("last_chart_2")
+				unknown_time2 = bool(_chart_2.unknown_time if _chart_2 else False)
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
 				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
 
@@ -463,10 +468,7 @@ def render_circuit_toggles(
 						("minute_str", "minute_str_2"),
 						("ampm", "ampm_2"),
 						("city", "city_2"),
-						("last_df", "last_df_2"),
 						("plot_data", "plot_data_2"),
-						("chart_dt_utc", "chart_dt_utc_2"),
-						("chart_unknown_time", "chart_unknown_time_2"),
 					]
 					
 					# Perform the swap
@@ -675,8 +677,10 @@ def render_circuit_toggles(
 			# would be stale because _refresh_chart_figure runs AFTER this function.
 			circuit_connected_shapes2: dict[int, list] = {}
 			if (synastry_mode or st.session_state.get("transit_mode", False)) and circuit_submode == "Connected Circuits":
-				_pos_inner = st.session_state.get("chart_positions") or {}
-				_pos_outer = st.session_state.get("chart_positions_2") or {}
+				_cc_chart_1 = st.session_state.get("last_chart")
+				_cc_chart_2 = st.session_state.get("last_chart_2")
+				_pos_inner = (_cc_chart_1.positions if _cc_chart_1 else {}) or {}
+				_pos_outer = (_cc_chart_2.positions if _cc_chart_2 else {}) or {}
 				_shapes_2  = st.session_state.get("shapes_2") or []
 				# Build all inter-chart aspects (Chart 1 × Chart 2 bodies)
 				_edges_inter: list[tuple[str, str, str]] = []
@@ -825,7 +829,7 @@ def render_circuit_toggles(
 	# ---------- RIGHT: house system / label style / dark mode ----------
 	with options_col:
 		# Only show these after a chart exists
-		if st.session_state.get("last_df") is not None:
+		if st.session_state.get("last_chart") is not None:
 			# House selector moved to dispositor graph section
 			# from house_selector_v2 import render_house_system_selector
 			# render_house_system_selector()

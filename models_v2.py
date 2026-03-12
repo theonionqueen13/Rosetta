@@ -889,6 +889,35 @@ class AstrologicalChart:
     chart_signs: List["ChartSign"] = field(default_factory=list)
     chart_houses: List["ChartHouse"] = field(default_factory=list)
 
+    # -----------------------------------------------------------------
+    # Computed chart data — all post-processing results live here so that
+    # session state only ever stores the AstrologicalChart object itself,
+    # not a parallel bag of individual data fragments.
+    # -----------------------------------------------------------------
+    df_positions: Optional[pd.DataFrame] = field(default=None)        # was session "last_df"
+    aspect_df: Optional[pd.DataFrame] = field(default=None)           # was "last_aspect_df"
+    edges_major: list = field(default_factory=list)                    # was "edges_major"
+    edges_minor: list = field(default_factory=list)                    # was "edges_minor"
+    aspect_groups: list = field(default_factory=list)                  # was session "patterns" (connected components)
+    shapes: list = field(default_factory=list)                         # was "shapes"
+    filaments: list = field(default_factory=list)                      # was "filaments"
+    singleton_map: dict = field(default_factory=dict)                  # was "singleton_map"
+    combos: list = field(default_factory=list)                         # was "combos"
+    positions: dict = field(default_factory=dict)                      # was "chart_positions" {name: degree}
+    major_edges_all: list = field(default_factory=list)                # was "major_edges_all"
+    dispositor_summary_rows: list = field(default_factory=list)        # was "dispositor_summary_rows"
+    dispositor_chains_rows: list = field(default_factory=list)         # was "dispositor_chains_rows"
+    conj_clusters_rows: list = field(default_factory=list)             # was "conj_clusters_rows"
+    sect: Optional[str] = field(default=None)                          # was "last_sect"
+    sect_error: Optional[str] = field(default=None)                    # was "last_sect_error"
+    plot_data: Any = field(default=None)                               # was "DISPOSITOR_GRAPH_DATA"
+    utc_datetime: Optional[datetime.datetime] = field(default=None)    # was "chart_dt_utc"
+
+    def __getattr__(self, name: str):
+        # Gracefully return None for fields that don't exist on cached instances
+        # (e.g. after schema additions between hot-reloads / session resumes).
+        return None
+
     def to_dataframe(self) -> pd.DataFrame:
         """
         Convert the chart to a pandas DataFrame.
