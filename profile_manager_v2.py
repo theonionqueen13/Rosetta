@@ -131,13 +131,35 @@ def render_profile_manager(
                     st.error(f"Unrecognized timezone '{tz_name}'. Please refine the city and try again.")
                     st.stop()
 
+                # Read birth data from the main birth form keys (with profile_ fallbacks)
+                _save_yr   = int(st.session_state.get("year")         or st.session_state.get("profile_year", 1990))
+                _save_mname = st.session_state.get("month_name")       or st.session_state.get("profile_month_name", "July")
+                _save_day  = int(st.session_state.get("day")           or st.session_state.get("profile_day", 1))
+                _save_city = st.session_state.get("city")              or st.session_state.get("profile_city", "")
+                # Convert 12-hour form time to 24-hour for storage
+                _h12_raw  = st.session_state.get("hour_12")
+                _min_raw  = st.session_state.get("minute_str")
+                _ampm_raw = st.session_state.get("ampm")
+                if _h12_raw and str(_h12_raw) != "--" and _min_raw and str(_min_raw) != "--" and _ampm_raw and str(_ampm_raw) != "--":
+                    _h12 = int(_h12_raw)
+                    _save_min = int(_min_raw)
+                    if _ampm_raw == "PM" and _h12 != 12:
+                        _save_hour = _h12 + 12
+                    elif _ampm_raw == "AM" and _h12 == 12:
+                        _save_hour = 0
+                    else:
+                        _save_hour = _h12
+                else:
+                    _save_hour = int(st.session_state.get("profile_hour", 0))
+                    _save_min  = int(st.session_state.get("profile_minute", 0))
+
                 profile_data = {
-                    "year":   int(st.session_state.get("profile_year", 1990)),
-                    "month":  int(MONTH_NAMES.index(st.session_state.get("profile_month_name", "July")) + 1),
-                    "day":    int(st.session_state.get("profile_day", 1)),
-                    "hour":   int(st.session_state.get("profile_hour", 0)),
-                    "minute": int(st.session_state.get("profile_minute", 0)),
-                    "city":   st.session_state.get("profile_city", ""),
+                    "year":   _save_yr,
+                    "month":  int(MONTH_NAMES.index(_save_mname) + 1),
+                    "day":    _save_day,
+                    "hour":   _save_hour,
+                    "minute": _save_min,
+                    "city":   _save_city,
                     "lat":    lat,
                     "lon":    lon,
                     "tz_name": tz_name,
@@ -174,6 +196,24 @@ def render_profile_manager(
                             st.session_state["profile_minute"] = data["minute"]
                             st.session_state["profile_city"] = data["city"]
 
+                            # also sync main birth-form keys so the form reflects the profile
+                            st.session_state["year"] = data["year"]
+                            st.session_state["month_name"] = MONTH_NAMES[data["month"] - 1]
+                            st.session_state["day"] = data["day"]
+                            st.session_state["city"] = data["city"]
+                            # convert stored 24h hour back to 12h form widgets
+                            _load_h24 = data["hour"]
+                            _load_h12 = _load_h24 % 12 or 12
+                            _load_ampm = "AM" if _load_h24 < 12 else "PM"
+                            st.session_state["hour_12"]    = f"{_load_h12:02d}"
+                            st.session_state["minute_str"] = f"{data['minute']:02d}"
+                            st.session_state["ampm"]       = _load_ampm
+
+                            # cache geocode result so profile manager & other widgets can read it
+                            st.session_state["current_lat"]     = data.get("lat")
+                            st.session_state["current_lon"]     = data.get("lon")
+                            st.session_state["current_tz_name"] = data.get("tz_name")
+
                             st.session_state["hour_val"] = data["hour"]
                             st.session_state["minute_val"] = data["minute"]
                             st.session_state["city_input"] = data["city"]
@@ -193,10 +233,14 @@ def render_profile_manager(
                             if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
                                 st.error(f"Profile '{name}' is missing location/timezone info. Re-save it after a successful city lookup.")
                             else:
-                                run_chart(data["lat"], data["lon"], data["tz_name"],)
-                                st.session_state["chart_ready"] = True
-                                st.success(f"Profile '{name}' loaded and chart calculated!")
-                                st.rerun()
+                                # run_chart() reads city from session state and re-geocodes
+                                success = run_chart()
+                                if success:
+                                    st.session_state["chart_ready"] = True
+                                    st.success(f"Profile '{name}' loaded and chart calculated!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Chart calculation failed for '{name}'. Check that the city resolves correctly.")
 
             # quick-save circuit names into current profile
             _last_chart = st.session_state.get("last_chart")
