@@ -550,9 +550,6 @@ def render_circuit_toggles(
 								break
 				for _ci, _component in enumerate(patterns):
 					_comp_set = set(_component)
-					# Show Chart 2 shapes/planets whose members aspect this circuit.
-					# For transit mode, shapes_2 is pre-populated with per-planet entries
-					# so this path works identically for both synastry and transit.
 					_connected = {_ep2 for (_ep1, _ep2, _) in _edges_inter if _ep1 in _comp_set}
 					_linked = [sh for sh in _shapes_2 if set(sh.get("members", [])) & _connected]
 					if _linked:
@@ -644,16 +641,16 @@ def render_circuit_toggles(
 								st.markdown("**Chart 2 Connections:**")
 								for sh2 in cc_shapes_for_circuit:
 									sh2_members = sh2.get("members", [])
-								if want_glyphs:
-									members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
-								else:
-									members_str = ", ".join(sh2_members)
-								sh2_label = f"{sh2['type']}: {members_str}"
-								cc_key = f"cc_shape_{i}_{sh2['id']}"
-								st.session_state.setdefault(cc_key, False)
-								st.checkbox(sh2_label, key=cc_key)
-						else:
-							st.markdown("_No Chart 2 connections found._")
+									if want_glyphs:
+										members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
+									else:
+										members_str = ", ".join(sh2_members)
+									sh2_label = f"{sh2['type']}: {members_str}"
+									cc_key = f"cc_shape_{i}_{sh2['id']}"
+									st.session_state.setdefault(cc_key, False)
+									st.checkbox(sh2_label, key=cc_key)
+							else:
+								st.markdown("_No Chart 2 connections found._")
 			# Save Circuit Names (only if edits exist)
 			if st.session_state.get("current_profile"):
 				saved = st.session_state.get("saved_circuit_names", {})

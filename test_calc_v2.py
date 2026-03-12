@@ -464,11 +464,11 @@ circuit_submode = (
 	or st.session_state.get("circuit_submode", "Combined Circuits")
 )
 
-# Ensure transit chart (Chart 2) is always fresh when transit mode is on.
-# Re-run every time so the current sky positions stay up-to-date and
-# shapes_2 is never stale from a prior session.
+# Ensure transit chart (Chart 2) is always populated when transit mode is on.
+# This is the authoritative call — the on_change callback is a nice-to-have but
+# on_change can fire before session state is fully ready on the very first click.
 _transit_mode = st.session_state.get("transit_mode", False)
-if _transit_mode:
+if _transit_mode and st.session_state.get("last_chart_2") is None:
 	from src.chart_core import run_transit_chart
 	run_transit_chart()
 
