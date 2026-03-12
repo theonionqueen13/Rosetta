@@ -62,7 +62,13 @@ def apply_test_chart_to_session(chart_name: str, suffix: str = "") -> bool:
     
     for key, value in data.items():
         st.session_state[key + suffix] = value
-        
+
+    # Saved test charts always have a known birth time — explicitly clear the
+    # unknown-time flag so a previously-checked "Unknown Time" checkbox can't
+    # bleed into this chart's calculation or display.
+    st.session_state[f"profile_unknown_time{suffix}"] = False
+    st.session_state[f"chart_unknown_time{suffix}"] = False
+
     # Set a flag indicating defaults were loaded for Chart 1
     if not suffix:
         st.session_state["defaults_loaded"] = True

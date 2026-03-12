@@ -1,3 +1,5 @@
+import datetime as dt
+from dateutil.relativedelta import relativedelta
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db
@@ -8,6 +10,123 @@ ASPECTS = static_db.ASPECTS
 
 COMPASS_KEY = "ui_compass_overlay"
 COMPASS_KEY_2 = "ui_compass_overlay_2"  # separate overlay toggle for second chart (biwheel)
+
+# ---------------------------------------------------------------------------
+# Transit Date Navigation Intervals
+# ---------------------------------------------------------------------------
+
+_TRANSIT_INTERVALS = {
+	"1 day":    dt.timedelta(days=1),
+	"1 week":   dt.timedelta(weeks=1),
+	"1 month":  None,   # handled via relativedelta
+	"1 year":   None,   # handled via relativedelta
+	"1 decade": None,   # handled via relativedelta
+}
+
+def _apply_transit_offset(direction: int):
+	"""Shift transit_dt_utc forward (+1) or backward (-1) by the selected interval."""
+	from src.chart_core import run_transit_chart
+
+	current = st.session_state.get("transit_dt_utc")
+	if current is None:
+		current = dt.datetime.utcnow()
+
+	interval_label = st.session_state.get("transit_nav_interval", "1 day")
+
+	if interval_label == "1 day":
+		delta = dt.timedelta(days=1)
+		new_dt = current + (delta if direction > 0 else -delta)
+	elif interval_label == "1 week":
+		delta = dt.timedelta(weeks=1)
+		new_dt = current + (delta if direction > 0 else -delta)
+	elif interval_label == "1 month":
+		new_dt = current + relativedelta(months=direction)
+	elif interval_label == "1 year":
+		new_dt = current + relativedelta(years=direction)
+	elif interval_label == "1 decade":
+		new_dt = current + relativedelta(years=10 * direction)
+	else:
+		new_dt = current + dt.timedelta(days=direction)
+
+	st.session_state["transit_dt_utc"] = new_dt
+	run_transit_chart()
+
+
+def _set_transit_now():
+	"""Reset transit time to the current moment and recalculate."""
+	from src.chart_core import run_transit_chart
+	st.session_state["transit_dt_utc"] = dt.datetime.utcnow()
+	run_transit_chart()
+
+
+def _apply_direct_transit_date():
+	"""Apply the direct date/time inputs from the expander to transit_dt_utc."""
+	from src.chart_core import run_transit_chart
+
+	d = st.session_state.get("transit_direct_date")
+	t = st.session_state.get("transit_direct_time", dt.time(12, 0))
+	if d is not None:
+		new_dt = dt.datetime.combine(d, t)
+		st.session_state["transit_dt_utc"] = new_dt
+		run_transit_chart()
+
+
+def _render_transit_date_nav():
+	"""Render the transit date navigator: fwd/back buttons, interval dropdown, date display, and direct input expander."""
+	# Ensure a transit datetime exists
+	if st.session_state.get("transit_dt_utc") is None:
+		st.session_state["transit_dt_utc"] = dt.datetime.utcnow()
+
+	transit_dt = st.session_state["transit_dt_utc"]
+
+	# Display current transit date/time
+	st.caption(f"Transit: **{transit_dt.strftime('%b %d, %Y  %H:%M')} UTC**")
+
+	# --- Forward / Back buttons + Interval dropdown ---
+	nav_cols = st.columns([1, 1, 1, 2])
+
+	with nav_cols[0]:
+		st.button("◀", key="transit_nav_back",
+				  on_click=_apply_transit_offset, args=(-1,),
+				  use_container_width=True)
+	with nav_cols[1]:
+		st.button("▶", key="transit_nav_fwd",
+				  on_click=_apply_transit_offset, args=(1,),
+				  use_container_width=True)
+	with nav_cols[2]:
+		st.button("Now", key="transit_nav_now",
+				  on_click=_set_transit_now,
+				  use_container_width=True)
+	with nav_cols[3]:
+		st.session_state.setdefault("transit_nav_interval", "1 day")
+		st.selectbox(
+			"Step",
+			options=list(_TRANSIT_INTERVALS.keys()),
+			key="transit_nav_interval",
+			label_visibility="collapsed",
+		)
+
+	# --- Direct date/time input (collapsed expander) ---
+	with st.expander("Set date & time directly", expanded=False):
+		d_col, t_col = st.columns(2)
+		with d_col:
+			st.date_input(
+				"Date",
+				value=transit_dt.date(),
+				key="transit_direct_date",
+				min_value=dt.date(1, 1, 1),
+				max_value=dt.date(9999, 12, 31),
+			)
+		with t_col:
+			st.time_input(
+				"Time (UTC)",
+				value=transit_dt.time().replace(second=0, microsecond=0),
+				key="transit_direct_time",
+			)
+		st.button("Apply", key="transit_direct_apply",
+				  on_click=_apply_direct_transit_date,
+				  use_container_width=True)
+
 
 def render_circuit_toggles(
 	patterns,
@@ -720,11 +839,14 @@ def render_circuit_toggles(
 				def _on_transit_toggle():
 					from src.chart_core import run_transit_chart
 					if st.session_state.get("transit_mode", False):
-						# Just activated — always fetch fresh transits
+						# Just activated — start from current time
+						st.session_state["transit_dt_utc"] = dt.datetime.utcnow()
 						run_transit_chart()
 					else:
 						# Just deactivated — clear stale Chart 2 so next activation recalculates
 						st.session_state.pop("last_chart_2", None)
+						st.session_state.pop("transit_dt_utc", None)
+						st.session_state.pop("chart_2_source", None)
 
 				st.session_state.setdefault("transit_mode", False)
 				st.checkbox(
@@ -732,6 +854,10 @@ def render_circuit_toggles(
 					key="transit_mode",
 					on_change=_on_transit_toggle,
 				)
+
+				# --- Transit date navigator (only when transits are active) ---
+				if st.session_state.get("transit_mode", False):
+					_render_transit_date_nav()
 
 	# If compass value changed, trigger a single safe rerun *after* all widgets exist
 	if st.session_state.get("_pending_compass_rerun"):

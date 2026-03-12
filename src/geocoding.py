@@ -6,47 +6,45 @@ import streamlit as st
 from opencage.geocoder import OpenCageGeocode
 from timezonefinder import TimezoneFinder
 
-# --- Configuration (Moved from top of test_calc_v2.py) ---
+# --- Configuration ---
 try:
-    # ⚠️ Check this line and the corresponding entry in your .streamlit/secrets.toml
-    _OPENCAGE_KEY = st.secrets["opencage"]["api_key"] 
+    _OPENCAGE_KEY = st.secrets["opencage"]["api_key"]
 except KeyError:
     _OPENCAGE_KEY = None
-    # ⚠️ This st.error is important for debugging!
-    st.error("Error: OpenCage API key not found in st.secrets.") 
+    st.error("Error: OpenCage API key not found in st.secrets.")
 
-# Create a single, reusable geocoder instance
-# ⚠️ This line will fail if _OPENCAGE_KEY is None, which is fine, 
-# but it could be the source of your "Please enter a valid city" message 
-# if the code proceeds with a failed geocoder object.
-if _OPENCAGE_KEY:
-    _geolocator = OpenCageGeocode(_OPENCAGE_KEY)
-else:
-    _geolocator = None
-    
-_tzfinder = TimezoneFinder(in_memory=True)
+# Use cache_resource so these are constructed ONCE per server process and
+# survive Streamlit hot-reloads without re-opening all their file handles.
+@st.cache_resource(show_spinner=False)
+def _get_geolocator() -> Optional[OpenCageGeocode]:
+    return OpenCageGeocode(_OPENCAGE_KEY) if _OPENCAGE_KEY else None
 
-# Create a single, reusable geocoder instance
-_geolocator = OpenCageGeocode(_OPENCAGE_KEY)
-_tzfinder = TimezoneFinder()
+@st.cache_resource(show_spinner=False)
+def _get_tzfinder() -> TimezoneFinder:
+    return TimezoneFinder(in_memory=True)
 
+
+@st.cache_data(show_spinner=False)
 def geocode_city_with_timezone(
     city_query: str,
 ) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
     """
     Geocodes a city query, extracts latitude, longitude, timezone name,
-    and the formatted address.
+    and the formatted address.  Results are cached so repeated reruns for
+    the same city string do not open new SSL connections.
     """
-    lat = lon = tz_name = None
-    formatted_address = None
+    lat = lon = tz_name = formatted_address = None
 
     if not city_query or not _OPENCAGE_KEY:
         return lat, lon, tz_name, formatted_address
 
+    geolocator = _get_geolocator()
+    if geolocator is None:
+        return lat, lon, tz_name, formatted_address
+
     try:
-        results = _geolocator.geocode(city_query, no_annotations='1', limit=1)
+        results = geolocator.geocode(city_query, no_annotations='1', limit=1)
     except Exception as e:
-        # Catch potential API key or connection errors
         st.error(f"Geocoding API failed: {e}")
         return lat, lon, tz_name, formatted_address
 
@@ -55,8 +53,6 @@ def geocode_city_with_timezone(
         lat = first_result['geometry']['lat']
         lon = first_result['geometry']['lng']
         formatted_address = first_result['formatted']
-        
-        # Use TimezoneFinder on the geocoded coordinates
-        tz_name = _tzfinder.timezone_at(lng=lon, lat=lat)
+        tz_name = _get_tzfinder().timezone_at(lng=lon, lat=lat)
 
     return lat, lon, tz_name, formatted_address

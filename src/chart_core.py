@@ -4,15 +4,17 @@ import matplotlib.pyplot as plt
 import datetime as dt
 from zoneinfo import ZoneInfo
 from typing import Dict, Any
-from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart
+from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, render_biwheel_chart_with_circuits, render_biwheel_connected_circuits
 from drawing_v2 import RenderResult as result
-from toggles_v2 import COMPASS_KEY
+from toggles_v2 import COMPASS_KEY, COMPASS_KEY_2
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups
 from src.geocoding import geocode_city_with_timezone
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db
 
-MAJOR_OBJECTS = static_db.MAJOR_OBJECTS
+EPHE_MAJOR_OBJECTS = static_db.EPHE_MAJOR_OBJECTS
+ALL_MAJOR_PLACEMENTS = static_db.ALL_MAJOR_PLACEMENTS  # Use this for filtering all major chart placements
+MAJOR_OBJECTS = static_db.MAJOR_OBJECTS  # Backward compat (alias to ALL_MAJOR_PLACEMENTS)
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
 ASPECTS = static_db.ASPECTS
 PLANETS_PLUS = static_db.PLANETS_PLUS
@@ -25,6 +27,12 @@ from src.dispositor_graph import plot_dispositor_graph
 
 def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
 	"""Extracts all necessary birth data inputs from session state."""
+	# Allow a direct override (used by the Now button to bypass widget-key restrictions)
+	if not suffix:
+		override = st.session_state.get("_now_chart_inputs")
+		if override:
+			return override
+
 	# This structure mirrors the inputs used in your original file.
 	data = {}
 	data["year"] = st.session_state.get(f"year{suffix}")
@@ -56,10 +64,13 @@ def _positions_from_chart(chart):
 
 def _refresh_chart_figure():
 	"""Rebuild the chart figure using the current session-state toggles."""
-	# Check if we're in synastry mode
+	# Check if we're in synastry or transit mode (both use the biwheel renderer).
+	# Transit mode only activates the biwheel path in Standard Chart mode so it
+	# doesn't interfere with the Circuits-mode biwheel renderers.
 	synastry_mode = st.session_state.get("synastry_mode", False)
+	transit_mode  = st.session_state.get("transit_mode", False)
 	
-	if synastry_mode:
+	if synastry_mode or transit_mode:
 		# Synastry/biwheel mode: need both charts
 		chart_inner = st.session_state.get("last_chart")
 		chart_outer = st.session_state.get("last_chart_2")
@@ -74,12 +85,248 @@ def _refresh_chart_figure():
 		label_style = st.session_state.get("label_style", "glyph")
 		dark_mode = st.session_state.get("dark_mode", False)
 		chart_mode = st.session_state.get("chart_mode", "Circuits")
+		# Prefer the radio widget key (set by Streamlit before script runs) so the
+		# correct submode is used on the very first rerun after the user clicks.
+		circuit_submode = (
+			st.session_state.get("__circuit_submode_radio")
+			or st.session_state.get("circuit_submode", "Combined Circuits")
+		)
 		
 		# Compute aspects for Standard Chart mode
 		edges_inter_chart = []
 		edges_chart1 = []
 		edges_chart2 = []
 		
+		# Handle Circuits mode with Combined Circuits submode
+		if chart_mode == "Circuits" and circuit_submode == "Combined Circuits":
+			# Combined Circuits: merge both charts into one and build circuits
+			pos_inner = _positions_from_chart(chart_inner)
+			pos_outer = _positions_from_chart(chart_outer)
+			
+			# Combine positions: Chart 2 objects get "_2" suffix to distinguish
+			pos_combined = dict(pos_inner)
+			for name, deg in pos_outer.items():
+				pos_combined[f"{name}_2"] = deg
+			
+			# Build all aspect edges across combined positions
+			combined_edges_formatted = []  # Format: ((p1, p2), aspect_name)
+			bodies_list = list(pos_combined.keys())
+			for i in range(len(bodies_list)):
+				for j in range(i + 1, len(bodies_list)):
+					p1, p2 = bodies_list[i], bodies_list[j]
+					d1, d2 = pos_combined[p1], pos_combined[p2]
+					angle = abs(d1 - d2) % 360
+					if angle > 180:
+						angle = 360 - angle
+					
+					# Check all aspect types
+					for aspect_name, aspect_data in ASPECTS.items():
+						if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+							combined_edges_formatted.append(((p1, p2), aspect_name))
+							break  # Only one aspect per pair
+			
+			# Find connected patterns/circuits from combined edges
+			from patterns_v2 import connected_components_from_edges, detect_shapes
+			patterns_combined = connected_components_from_edges(bodies_list, combined_edges_formatted)
+			
+			# Detect shapes within the combined patterns
+			shapes_combined = detect_shapes(pos_combined, patterns_combined, combined_edges_formatted)
+			
+			# Identify singletons (objects with no aspects)
+			connected_objects = set()
+			for (p1, p2), _ in combined_edges_formatted:
+				connected_objects.add(p1)
+				connected_objects.add(p2)
+			singleton_map_combined = {
+				name: {"deg": deg}
+				for name, deg in pos_combined.items()
+				if name not in connected_objects
+			}
+			
+			# Store combined circuit data in session state for toggles
+			st.session_state["patterns_combined"] = patterns_combined
+			st.session_state["shapes_combined"] = shapes_combined
+			st.session_state["singleton_map_combined"] = singleton_map_combined
+			st.session_state["pos_combined"] = pos_combined
+			st.session_state["combined_edges_formatted"] = combined_edges_formatted
+			
+			# Get toggle states for circuits
+			toggles = [
+				st.session_state.get(f"toggle_pattern_{i}", False)
+				for i in range(len(patterns_combined))
+			]
+			singleton_toggles = {
+				planet: st.session_state.get(f"singleton_{planet}", False)
+				for planet in singleton_map_combined
+			}
+			shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
+			
+			# Build major_edges_all format for rendering: [((p1, p2), aspect), ...]
+			major_edges_all = combined_edges_formatted
+			
+			# Build filaments (minor aspect links between circuits)
+			filaments = []  # For now, keep empty; can be computed later
+			
+			pattern_labels = [
+				st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+				for i in range(len(patterns_combined))
+			]
+			combo_toggles = {}
+			
+			# Determine unknown-time flags
+			_unknown_time_inner = bool(st.session_state.get("chart_unknown_time", False))
+			_unknown_time_outer = bool(st.session_state.get("chart_unknown_time_2", False))
+			
+			try:
+				rr = render_biwheel_chart_with_circuits(
+					chart_inner,
+					chart_outer,
+					pos_combined=pos_combined,
+					patterns=patterns_combined,
+					pattern_labels=pattern_labels,
+					toggles=toggles,
+					filaments=filaments,
+					combo_toggles=combo_toggles,
+					singleton_map=singleton_map_combined,
+					singleton_toggles=singleton_toggles,
+					shapes=shapes_combined,
+					shape_toggles_by_parent=shape_toggles_by_parent,
+					major_edges_all=major_edges_all,
+					house_system=house_system,
+					dark_mode=dark_mode,
+					label_style=label_style,
+					figsize=(6.0, 6.0),
+					dpi=144,
+					unknown_time_inner=_unknown_time_inner,
+					unknown_time_outer=_unknown_time_outer,
+				)
+				st.session_state["render_fig"] = rr.fig
+				st.session_state["render_result"] = rr
+				st.session_state["visible_objects"] = rr.visible_objects
+				st.session_state["active_shapes"] = getattr(rr, "shapes", [])
+				st.session_state["last_cusps"] = rr.cusps
+				st.session_state["ai_text"] = getattr(rr, "out_text", None)
+				return rr
+			except Exception as e:
+				st.error(f"Combined Circuits biwheel rendering failed: {e}")
+				# Fall through to standard biwheel
+
+		# Connected Circuits biwheel mode
+		if chart_mode == "Circuits" and circuit_submode == "Connected Circuits":
+			pos_inner = _positions_from_chart(chart_inner)
+			pos_outer = _positions_from_chart(chart_outer)
+
+			# Compute ALL inter-chart aspects (no visibility gating).
+			# These are used for detecting circuit-to-chart2-shape connections
+			# and for drawing filtered aspect lines on the wheel.
+			edges_inter_chart_cc: list[tuple[str, str, str]] = []
+			for ep1, d1 in pos_inner.items():
+				for ep2, d2 in pos_outer.items():
+					angle = abs(d1 - d2) % 360
+					if angle > 180:
+						angle = 360 - angle
+					for aspect_name, aspect_data in ASPECTS.items():
+						if abs(angle - aspect_data["angle"]) <= aspect_data["orb"]:
+							edges_inter_chart_cc.append((ep1, ep2, aspect_name))
+							break
+
+			# Build circuit_connected_shapes2:
+			# maps Chart 1 circuit index -> list of Chart 2 shapes whose members
+			# are connected to that circuit by at least one inter-chart aspect.
+			patterns_1 = st.session_state.get("patterns") or []
+			shapes_2 = st.session_state.get("shapes_2") or []
+			shapes_1 = st.session_state.get("shapes") or []
+			major_edges_all_1 = st.session_state.get("major_edges_all") or []
+			singleton_map_1 = st.session_state.get("singleton_map") or {}
+			filaments_1 = st.session_state.get("filaments") or []
+
+			circuit_connected_shapes2: dict[int, list] = {}
+			for ci, component in enumerate(patterns_1):
+				component_set = set(component)
+				connected_chart2_bodies: set[str] = set()
+				for (ep1, ep2, _) in edges_inter_chart_cc:
+					if ep1 in component_set:
+						connected_chart2_bodies.add(ep2)
+				linked_shapes2 = [
+					sh for sh in shapes_2
+					if set(sh.get("members", [])) & connected_chart2_bodies
+				]
+				# Add singleton entries for connected Chart 2 planets not
+				# already covered by a linked shape.
+				covered = set()
+				for sh in linked_shapes2:
+					covered.update(sh.get("members", []))
+				for planet in sorted(connected_chart2_bodies - covered):
+					linked_shapes2.append({
+						"type": "Singleton",
+						"members": [planet],
+						"id": f"singleton_{ci}_{planet}",
+					})
+				if linked_shapes2:
+					circuit_connected_shapes2[ci] = linked_shapes2
+
+			st.session_state["circuit_connected_shapes2"] = circuit_connected_shapes2
+			st.session_state["edges_inter_chart_cc"] = edges_inter_chart_cc
+
+			pattern_labels = [
+				st.session_state.get(f"circuit_name_{ci}", f"Circuit {ci+1}")
+				for ci in range(len(patterns_1))
+			]
+			toggles = [
+				st.session_state.get(f"toggle_pattern_{ci}", False)
+				for ci in range(len(patterns_1))
+			]
+			singleton_toggles = {
+				planet: st.session_state.get(f"singleton_{planet}", False)
+				for planet in singleton_map_1
+			}
+			shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
+
+			_unknown_time_inner = bool(st.session_state.get("chart_unknown_time", False))
+			_unknown_time_outer = bool(st.session_state.get("chart_unknown_time_2", False))
+
+			try:
+				rr = render_biwheel_connected_circuits(
+					chart_inner,
+					chart_outer,
+					pos_inner=pos_inner,
+					pos_outer=pos_outer,
+					patterns=patterns_1,
+					shapes=shapes_1,
+					shapes_2=shapes_2,
+					circuit_connected_shapes2=circuit_connected_shapes2,
+					edges_inter_chart=edges_inter_chart_cc,
+					major_edges_all=major_edges_all_1,
+					pattern_labels=pattern_labels,
+					toggles=toggles,
+					singleton_map=singleton_map_1,
+					singleton_toggles=singleton_toggles,
+					shape_toggles_by_parent=shape_toggles_by_parent,
+					filaments=filaments_1,
+					house_system=house_system,
+					dark_mode=dark_mode,
+					label_style=label_style,
+					figsize=(6.0, 6.0),
+					dpi=144,
+					unknown_time_inner=_unknown_time_inner,
+					unknown_time_outer=_unknown_time_outer,
+				)
+				st.session_state["render_fig"] = rr.fig
+				st.session_state["render_result"] = rr
+				st.session_state["visible_objects"] = rr.visible_objects
+				st.session_state["active_shapes"] = getattr(rr, "shapes", [])
+				st.session_state["last_cusps"] = rr.cusps
+				st.session_state["ai_text"] = getattr(rr, "out_text", None)
+				return rr
+			except Exception as e:
+				st.error(f"Connected Circuits biwheel rendering failed: {e}")
+				# Fall through to standard biwheel
+
+		# --- Catch-all biwheel render ---
+		# If we are in biwheel mode (synastry or transit) and all mode-specific
+		# renderers above either fell through or didn't apply (e.g. Standard Chart
+		# with no edges yet), ALWAYS render a plain biwheel here.  This guarantees
+		# we never fall through to the single-chart renderer while biwheel is live.
 		if chart_mode == "Standard Chart":
 			# Get positions for both charts
 			pos_inner = _positions_from_chart(chart_inner)
@@ -156,6 +403,16 @@ def _refresh_chart_figure():
 								edges_chart2.append((p1, p2, aspect_name))
 								break
 		
+		# Determine unknown-time flags for each chart explicitly.
+		# Use only the *calculated* chart_unknown_time keys (set by run_chart)
+		# rather than profile_unknown_time which is a live UI widget and may
+		# reflect whichever chart the user last edited, not necessarily chart 1.
+		_unknown_time_inner = bool(
+			st.session_state.get("chart_unknown_time", False)
+		)
+		_unknown_time_outer = bool(
+			st.session_state.get("chart_unknown_time_2", False)
+		)
 		try:
 			rr = render_biwheel_chart(
 				chart_inner,
@@ -168,6 +425,8 @@ def _refresh_chart_figure():
 				label_style=label_style,
 				figsize=(6.0, 6.0),
 				dpi=144,
+				unknown_time_inner=_unknown_time_inner,
+				unknown_time_outer=_unknown_time_outer,
 			)
 			st.session_state["render_fig"] = rr.fig
 			st.session_state["render_result"] = rr
@@ -188,8 +447,9 @@ def _refresh_chart_figure():
 			return rr
 		except Exception as e:
 			st.error(f"Biwheel chart rendering failed: {e}")
-			# Fall through to regular chart rendering
-	
+			# This is the last resort — if even render_biwheel_chart fails, return
+			# without falling through to single-chart mode.
+			return
 
 	# Regular single-chart mode
 	chart = st.session_state.get("last_chart")
@@ -271,8 +531,8 @@ def _refresh_chart_figure():
 		# Filter positions to only include aspect-enabled bodies
 		standard_pos = {name: deg for name, deg in pos.items() if name in aspect_bodies}
 		
-		# Get all MAJOR_OBJECTS that exist in the chart for display
-		major_pos = {name: deg for name, deg in pos.items() if name in MAJOR_OBJECTS}
+		# Get all major placements (including AC, DC, IC, MC) that exist in the chart for display
+		major_pos = {name: deg for name, deg in pos.items() if name in ALL_MAJOR_PLACEMENTS}
 		
 		# Debugging: Log standard_pos and ASPECTS
 		print(f"[DEBUG] standard_pos: {standard_pos}")
@@ -402,7 +662,21 @@ def run_chart(suffix: str = "") -> bool:
 	city = inputs.get("city")
 	chart_unknown_time = inputs.get("unknown_time_flag")
 	
-	# 1. Input Validation and Time Parsing (UNCHANGED)
+	# 1. Input Validation and Time Parsing
+	# When unknown_time is flagged, the form stores "--" placeholders.
+	# Default to noon so the chart can still be calculated (houses will
+	# be suppressed later by the unknown_time flag).
+	if chart_unknown_time:
+		inputs["hour_12"] = inputs.get("hour_12") or "12"
+		inputs["minute_str"] = inputs.get("minute_str") or "00"
+		inputs["ampm"] = inputs.get("ampm") or "PM"
+		if inputs["hour_12"] == "--":
+			inputs["hour_12"] = "12"
+		if inputs["minute_str"] == "--":
+			inputs["minute_str"] = "00"
+		if inputs["ampm"] == "--":
+			inputs["ampm"] = "PM"
+
 	try:
 		year = int(inputs.get("year"))
 		month = dt.datetime.strptime(inputs.get("month_name"), "%B").month
@@ -440,6 +714,7 @@ def run_chart(suffix: str = "") -> bool:
 	# ⬇️ ADDED: OLD RUN_CHART STATE UPDATES (before calc) ⬇️
 	st.session_state["chart_dt_utc"] = utc_dt # Store new UTC time
 	st.session_state[COMPASS_KEY] = True     # Default Compass Rose On
+	st.session_state.setdefault(COMPASS_KEY_2, True)  # also ensure second chart toggle exists
 	update_events_html_state(utc_dt)
 		
 	# 4. Core Calculation (include_aspects=False is intentional for new flow)
@@ -580,9 +855,15 @@ def run_chart(suffix: str = "") -> bool:
 		f"dispositor_summary_rows{suffix}": dispositor_summary_rows,
 		f"dispositor_chains_rows{suffix}": dispositor_chains_rows,
 	})
+	# Track whether chart_2 holds synastry data (so transit mode knows to overwrite it)
+	if suffix == "_2":
+		st.session_state["chart_2_source"] = "synastry"
 
 	# 8. Trigger Figure Refresh (MISSING CALL FROM run_chart)
-	_refresh_chart_figure()
+	_rr = _refresh_chart_figure()
+	if _rr is not None and getattr(_rr, 'fig', None) is not None:
+		import matplotlib.pyplot as _plt
+		_plt.close(_rr.fig)
 	
 	# 9. UI State Defaults (MISSING BLOCK FROM run_chart)
 	for i in range(len(patterns)):
@@ -593,4 +874,88 @@ def run_chart(suffix: str = "") -> bool:
 		for planet in singleton_map.keys():
 			st.session_state.setdefault(f"singleton_{planet}", False)
 
+	return True
+
+
+def run_transit_chart() -> bool:
+	"""
+	Calculate the current planetary positions (transits) and store them
+	as Chart 2 (suffix="_2") so the biwheel renderer can use them.
+
+	Uses the user's stored lat/lon/tz from session state.
+	Falls back to 0°N 0°E / UTC if no location is stored.
+	"""
+	import datetime as dt
+
+	# --- Location: prefer what's already stored from the main chart ---
+	lat     = st.session_state.get("current_lat")
+	lon     = st.session_state.get("current_lon")
+	tz_name = st.session_state.get("current_tz_name", "UTC")
+
+	if lat is None or lon is None:
+		# Fall back: no location available, use 0/0 so planetary positions
+		# are still accurate (houses will just be meaningless).
+		lat, lon, tz_name = 0.0, 0.0, "UTC"
+
+	# --- Transit time: use custom datetime if set, else current time ---
+	custom_dt = st.session_state.get("transit_dt_utc")
+	if custom_dt is not None:
+		if isinstance(custom_dt, dt.datetime):
+			ut = custom_dt.replace(tzinfo=dt.timezone.utc)
+		else:
+			ut = dt.datetime.now(dt.timezone.utc)
+	else:
+		ut = dt.datetime.now(dt.timezone.utc)
+		# Store it so the UI shows the time we actually used
+		st.session_state["transit_dt_utc"] = ut.replace(tzinfo=None)
+
+	try:
+		(
+			df_positions,
+			aspect_df_result,
+			plot_data,
+			chart,
+		) = calculate_chart(
+			year=ut.year, month=ut.month, day=ut.day,
+			hour=ut.hour, minute=ut.minute,
+			tz_offset=0,
+			lat=float(lat), lon=float(lon),
+			input_is_ut=True,
+			tz_name=tz_name,
+			house_system=st.session_state.get("house_system", "placidus"),
+			include_aspects=True,
+			unknown_time=False,
+		)
+	except Exception as e:
+		st.error(f"Transit chart calculation failed: {e}")
+		return False
+
+	# --- Minimal post-processing for Chart 2 ---
+	edges_major, edges_minor = build_aspect_edges(chart, compass_rose=False)
+	annotate_chart(chart, edges_major)
+
+	# --- Store under _2 keys so _refresh_chart_figure picks them up ---
+	# Also build Chart 2 circuit data (shapes, positions) so Connected Circuits mode works
+	try:
+		from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart
+		pos_chart2, patterns_sets2, major_edges_all2 = prepare_pattern_inputs(df_positions, edges_major)
+		patterns2 = [sorted(list(s)) for s in patterns_sets2]
+		shapes2   = detect_shapes(pos_chart2, patterns_sets2, major_edges_all2)
+	except Exception:
+		pos_chart2, patterns2, shapes2 = {}, [], []
+
+	st.session_state.update({
+		"last_chart_2":         chart,
+		"last_df_2":            df_positions,
+		"last_aspect_df_2":     aspect_df_result,
+		"edges_major_2":        edges_major,
+		"edges_minor_2":        edges_minor,
+		"chart_unknown_time_2": False,
+		"chart_dt_utc_2":       ut.replace(tzinfo=None),
+		"chart_2_source":       "transit",
+		# Circuit data for Chart 2 (needed by Connected Circuits mode)
+		"chart_positions_2":    pos_chart2,
+		"patterns_2":           patterns2,
+		"shapes_2":             shapes2,
+	})
 	return True

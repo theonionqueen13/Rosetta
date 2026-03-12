@@ -556,6 +556,8 @@ def calculate_chart(
 
 	# --- Return values ---
 	# chart is AstrologicalChart for session storage (chart_core stores as last_chart)
+	# Release Swiss Ephemeris file handles so they don't accumulate across reruns
+	swe.close()
 	if include_aspects:
 		return combined_df, aspect_df, plot_data, chart
 	return combined_df, None, plot_data, chart

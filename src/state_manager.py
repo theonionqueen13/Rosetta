@@ -9,9 +9,12 @@ from typing import List
 CHART_KEYS_TO_SWAP = [
     # Input Data
     "year", "month_name", "day", "hour_12", "minute_str", "ampm", "city",
+    "profile_unknown_time",
     
     # Calculated Data (DataFrame/Chart Objects)
+    "last_chart",
     "last_df",
+    "last_aspect_df",
     "plot_data",
     "chart_dt_utc",
     "chart_unknown_time",
