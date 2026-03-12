@@ -30,7 +30,11 @@ def render_circuit_toggles(
 	# Pre-init Connected Circuits Chart 2 shape toggle keys.
 	# These must exist before any widget render so Streamlit doesn't complain
 	# about missing keys when the circuit expanders open.
-	if st.session_state.get("synastry_mode") and st.session_state.get("circuit_submode") == "Connected Circuits":
+	_biwheel_cc = (
+		(st.session_state.get("synastry_mode") or st.session_state.get("transit_mode", False))
+		and st.session_state.get("circuit_submode") == "Connected Circuits"
+	)
+	if _biwheel_cc:
 		_cc_shapes2_init = st.session_state.get("circuit_connected_shapes2", {})
 		for _ci in range(len(patterns)):
 			for _sh2 in _cc_shapes2_init.get(_ci, []):
@@ -143,8 +147,12 @@ def render_circuit_toggles(
 	# ---------- Circuits Mode-Specific UI ----------
 	if chart_mode == "Circuits":
 		# Only offer Combined / Connected sub-modes when a second chart exists.
-		_synastry_now = st.session_state.get("synastry_mode", False)
+		_synastry_now = st.session_state.get("synastry_mode", False) or st.session_state.get("transit_mode", False)
 		if _synastry_now:
+			# Force submode to Combined Circuits whenever we enter biwheel from single-chart
+			# (setdefault would leave the stale "single" value in place)
+			if st.session_state.get("circuit_submode") == "single":
+				st.session_state["circuit_submode"] = "Combined Circuits"
 			st.session_state.setdefault("circuit_submode", "Combined Circuits")
 			submode = st.radio(
 				"Circuit View Mode",
@@ -153,9 +161,11 @@ def render_circuit_toggles(
 				key="__circuit_submode_radio",
 				horizontal=False,
 			)
-			if submode != st.session_state.get("circuit_submode"):
-				st.session_state["circuit_submode"] = submode
-				st.rerun()
+			# Just update session state — Streamlit already reruns when a widget changes,
+			# so the extra st.rerun() here is both redundant and harmful because it fires
+			# before the rest of this function (the transit checkbox) has rendered,
+			# which causes Streamlit to lose track of the transit_mode widget state.
+			st.session_state["circuit_submode"] = submode
 		else:
 			# Single-chart: always use normal circuit view; clear any stale submode
 			st.session_state["circuit_submode"] = "single"
@@ -164,6 +174,7 @@ def render_circuit_toggles(
 
 		with c1:
 			synastry_mode = st.session_state.get("synastry_mode", False)
+			biwheel_active = synastry_mode or st.session_state.get("transit_mode", False)
 			# chart names for labeling
 			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
 			if chart1_name == "Custom":
@@ -174,16 +185,16 @@ def render_circuit_toggles(
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
 			new_value = st.checkbox(label1, key=COMPASS_KEY)
-			
-			# second chart toggle if synastry
-			if synastry_mode:
-				chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-				if chart2_name == "Custom":
-					chart2_name = "Chart 2"
-				unknown_time2 = bool(
-					st.session_state.get("chart_unknown_time_2")
-					or st.session_state.get("profile_unknown_time")
-				)
+
+			# second chart toggle if biwheel is active
+			if biwheel_active:
+				if synastry_mode:
+					chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+					if chart2_name == "Custom":
+						chart2_name = "Chart 2"
+				else:
+					chart2_name = "Transits"
+				unknown_time2 = bool(st.session_state.get("chart_unknown_time_2", False))
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
 				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
 
@@ -193,7 +204,7 @@ def render_circuit_toggles(
 			st.session_state["_last_compass_value"] = new_value
 			st.session_state["_pending_compass_rerun"] = True
 		# track second
-		if synastry_mode:
+		if biwheel_active:
 			prev2 = st.session_state.get("_last_compass_value_2")
 			if new_value2 != prev2:
 				st.session_state["_last_compass_value_2"] = new_value2
@@ -259,27 +270,28 @@ def render_circuit_toggles(
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
 			new_value = st.checkbox(label1, key=COMPASS_KEY)
-			
+
 			# optionally show second chart toggle
 			synastry_mode = st.session_state.get("synastry_mode", False)
-			if synastry_mode:
-				chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-				if chart2_name == "Custom":
-					chart2_name = "Chart 2"
-				unknown_time2 = bool(
-					st.session_state.get("chart_unknown_time_2")
-					or st.session_state.get("profile_unknown_time")
-				)
+			biwheel_active = synastry_mode or st.session_state.get("transit_mode", False)
+			if biwheel_active:
+				if synastry_mode:
+					chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+					if chart2_name == "Custom":
+						chart2_name = "Chart 2"
+				else:
+					chart2_name = "Transits"
+				unknown_time2 = bool(st.session_state.get("chart_unknown_time_2", False))
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
 				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
-		
+
 			# Track compass value change but do not rerun immediately
 			prev_value = st.session_state.get("_last_compass_value")
 			if new_value != prev_value:
 				st.session_state["_last_compass_value"] = new_value
 				st.session_state["_pending_compass_rerun"] = True
 			# second
-			if synastry_mode:
+			if biwheel_active:
 				prev2 = st.session_state.get("_last_compass_value_2")
 				if new_value2 != prev2:
 					st.session_state["_last_compass_value_2"] = new_value2
@@ -337,31 +349,35 @@ def render_circuit_toggles(
 	# Add Standard Chart aspect toggles in left column
 	if chart_mode == "Standard Chart":
 		with circuits_col:
-			# Check if we're in synastry mode
+			# Check if we're in biwheel mode (synastry or transits)
 			synastry_mode = st.session_state.get("synastry_mode", False)
-			
-			if synastry_mode:
-				# Synastry mode: show aspect group toggles
+			biwheel_active = synastry_mode or st.session_state.get("transit_mode", False)
+
+			if biwheel_active:
+				# Biwheel mode: show aspect group toggles
 				st.subheader("Aspect Groups")
-				
+
 				# Get chart names
 				chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
 				if chart1_name == "Custom":
 					chart1_name = "Chart 1"
-				chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-				if chart2_name == "Custom":
-					chart2_name = "Chart 2"
-				
+				if synastry_mode:
+					chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+					if chart2_name == "Custom":
+						chart2_name = "Chart 2"
+				else:
+					chart2_name = "Transits"
+
 				# Initialize synastry aspect group toggles
-				st.session_state.setdefault("synastry_aspects_inter", True)  # Default on
+				st.session_state.setdefault("synastry_aspects_inter", True)   # Default on
 				st.session_state.setdefault("synastry_aspects_chart1", False)  # Default off
 				st.session_state.setdefault("synastry_aspects_chart2", False)  # Default off
-				
+
 				# Aspect group toggles
 				st.checkbox(f"{chart1_name} ↔ {chart2_name}", key="synastry_aspects_inter")
 				st.checkbox(f"{chart1_name} Aspects", key="synastry_aspects_chart1")
 				st.checkbox(f"{chart2_name} Aspects", key="synastry_aspects_chart2")
-				
+
 				st.markdown("---")
 			with st.expander("Additional Aspects"):
 				
@@ -399,10 +415,11 @@ def render_circuit_toggles(
 	with circuits_col:
 		# Get synastry and circuit mode state
 		synastry_mode = st.session_state.get("synastry_mode", False)
+		biwheel_active = synastry_mode or st.session_state.get("transit_mode", False)
 		circuit_submode = st.session_state.get("circuit_submode", "Combined Circuits")
-		
-		# Combined Circuits mode in synastry: show only shapes, grouped by type
-		if chart_mode == "Circuits" and synastry_mode and circuit_submode == "Combined Circuits":
+
+		# Combined Circuits mode in biwheel (synastry or transits): show only shapes, grouped by type
+		if chart_mode == "Circuits" and biwheel_active and circuit_submode == "Combined Circuits":
 			# Get current label style
 			label_style = st.session_state.get("label_style", "glyph")
 			want_glyphs = label_style == "glyph"
@@ -516,7 +533,7 @@ def render_circuit_toggles(
 			# when the expander loop runs below.  Reading it from session state
 			# would be stale because _refresh_chart_figure runs AFTER this function.
 			circuit_connected_shapes2: dict[int, list] = {}
-			if synastry_mode and circuit_submode == "Connected Circuits":
+			if (synastry_mode or st.session_state.get("transit_mode", False)) and circuit_submode == "Connected Circuits":
 				_pos_inner = st.session_state.get("chart_positions") or {}
 				_pos_outer = st.session_state.get("chart_positions_2") or {}
 				_shapes_2  = st.session_state.get("shapes_2") or []
@@ -533,6 +550,9 @@ def render_circuit_toggles(
 								break
 				for _ci, _component in enumerate(patterns):
 					_comp_set = set(_component)
+					# Show Chart 2 shapes/planets whose members aspect this circuit.
+					# For transit mode, shapes_2 is pre-populated with per-planet entries
+					# so this path works identically for both synastry and transit.
 					_connected = {_ep2 for (_ep1, _ep2, _) in _edges_inter if _ep1 in _comp_set}
 					_linked = [sh for sh in _shapes_2 if set(sh.get("members", [])) & _connected]
 					if _linked:
@@ -617,25 +637,23 @@ def render_circuit_toggles(
 						# ---------- Chart 2 Connections (Connected Circuits + synastry only) ----------
 						# Show connections when the circuit itself OR any of its sub-shapes is active.
 						any_shape_on = any(e["on"] for e in shape_entries)
-						if synastry_mode and circuit_submode == "Connected Circuits" and (cbox or any_shape_on):
+						if (synastry_mode or st.session_state.get("transit_mode", False)) and circuit_submode == "Connected Circuits" and (cbox or any_shape_on):
 							cc_shapes_for_circuit = circuit_connected_shapes2.get(i, [])
 							st.markdown("---")
 							if cc_shapes_for_circuit:
 								st.markdown("**Chart 2 Connections:**")
-								if not cbox:
-									st.caption("_Enable the circuit above to draw connections._")
 								for sh2 in cc_shapes_for_circuit:
 									sh2_members = sh2.get("members", [])
-									if want_glyphs:
-										members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
-									else:
-										members_str = ", ".join(sh2_members)
-									sh2_label = f"{sh2['type']}: {members_str}"
-									cc_key = f"cc_shape_{i}_{sh2['id']}"
-									st.session_state.setdefault(cc_key, False)
-									st.checkbox(sh2_label, key=cc_key)
-							else:
-								st.markdown("_No Chart 2 connections found._")
+								if want_glyphs:
+									members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
+								else:
+									members_str = ", ".join(sh2_members)
+								sh2_label = f"{sh2['type']}: {members_str}"
+								cc_key = f"cc_shape_{i}_{sh2['id']}"
+								st.session_state.setdefault(cc_key, False)
+								st.checkbox(sh2_label, key=cc_key)
+						else:
+							st.markdown("_No Chart 2 connections found._")
 			# Save Circuit Names (only if edits exist)
 			if st.session_state.get("current_profile"):
 				saved = st.session_state.get("saved_circuit_names", {})
@@ -687,6 +705,25 @@ def render_circuit_toggles(
 			# Dark mode → persist to session
 			st.session_state.setdefault("dark_mode", False)
 			st.checkbox("🌙 Dark Mode", key="dark_mode")
+
+			# Transits toggle — visible whenever a chart is loaded and synastry is off
+			_synastry_now = st.session_state.get("synastry_mode", False)
+			if not _synastry_now:
+				def _on_transit_toggle():
+					from src.chart_core import run_transit_chart
+					if st.session_state.get("transit_mode", False):
+						# Just activated — always fetch fresh transits
+						run_transit_chart()
+					else:
+						# Just deactivated — clear stale Chart 2 so next activation recalculates
+						st.session_state.pop("last_chart_2", None)
+
+				st.session_state.setdefault("transit_mode", False)
+				st.checkbox(
+					"🌐 Transits",
+					key="transit_mode",
+					on_change=_on_transit_toggle,
+				)
 
 	# If compass value changed, trigger a single safe rerun *after* all widgets exist
 	if st.session_state.get("_pending_compass_rerun"):
