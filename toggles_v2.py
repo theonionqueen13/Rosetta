@@ -1,5 +1,6 @@
 import datetime as dt
 from dateutil.relativedelta import relativedelta
+import pytz
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db
@@ -60,14 +61,24 @@ def _set_transit_now():
 
 
 def _apply_direct_transit_date():
-	"""Apply the direct date/time inputs from the expander to transit_dt_utc."""
+	"""Apply the direct date/time inputs from the expander to transit_dt_utc.
+
+	The user enters date/time in the location's local timezone; convert to UTC
+	before storing.
+	"""
 	from src.chart_core import run_transit_chart
 
 	d = st.session_state.get("transit_direct_date")
 	t = st.session_state.get("transit_direct_time", dt.time(12, 0))
 	if d is not None:
-		new_dt = dt.datetime.combine(d, t)
-		st.session_state["transit_dt_utc"] = new_dt
+		tz_name = st.session_state.get("current_tz_name", "UTC")
+		try:
+			tz = pytz.timezone(tz_name)
+			local_naive = dt.datetime.combine(d, t)
+			utc_dt = tz.localize(local_naive).astimezone(pytz.utc).replace(tzinfo=None)
+		except Exception:
+			utc_dt = dt.datetime.combine(d, t)
+		st.session_state["transit_dt_utc"] = utc_dt
 		run_transit_chart()
 
 
@@ -77,10 +88,20 @@ def _render_transit_date_nav():
 	if st.session_state.get("transit_dt_utc") is None:
 		st.session_state["transit_dt_utc"] = dt.datetime.utcnow()
 
-	transit_dt = st.session_state["transit_dt_utc"]
+	transit_dt_utc = st.session_state["transit_dt_utc"]
 
-	# Display current transit date/time
-	st.caption(f"Transit: **{transit_dt.strftime('%b %d, %Y  %H:%M')} UTC**")
+	# Convert UTC → local timezone for display and input pre-population
+	tz_name = st.session_state.get("current_tz_name", "UTC")
+	try:
+		tz = pytz.timezone(tz_name)
+		transit_dt = transit_dt_utc.replace(tzinfo=pytz.utc).astimezone(tz)
+		tz_abbr = transit_dt.strftime("%Z")
+	except Exception:
+		transit_dt = transit_dt_utc
+		tz_abbr = "UTC"
+
+	# Display current transit date/time (local)
+	st.caption(f"Transit: **{transit_dt.strftime('%b %d, %Y  %H:%M')} {tz_abbr}**")
 
 	# --- Forward / Back buttons + Interval dropdown ---
 	nav_cols = st.columns([1, 1, 1, 2])
@@ -119,7 +140,7 @@ def _render_transit_date_nav():
 			)
 		with t_col:
 			st.time_input(
-				"Time (UTC)",
+				f"Time ({tz_abbr})",
 				value=transit_dt.time().replace(second=0, microsecond=0),
 				key="transit_direct_time",
 			)

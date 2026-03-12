@@ -97,15 +97,25 @@ def _set_now_date_to_current() -> None:
 
 
 def _apply_direct_now_date() -> None:
-	"""Apply the direct date/time inputs from the expander and recalculate."""
+	"""Apply the direct date/time inputs from the expander and recalculate.
+
+	The user enters date/time in the location's local timezone; convert to UTC
+	before storing.
+	"""
 	from src.chart_core import run_chart as _run_chart
 
 	d = st.session_state.get("now_direct_date")
 	t = st.session_state.get("now_direct_time", dt.time(12, 0))
 	if d is not None:
-		new_dt = dt.datetime.combine(d, t)
-		st.session_state["now_chart_dt_utc"] = new_dt
-		_inject_now_chart_inputs(new_dt)
+		tz_name = st.session_state.get("current_tz_name", "UTC")
+		try:
+			tz = pytz.timezone(tz_name)
+			local_naive = dt.datetime.combine(d, t)
+			utc_dt = tz.localize(local_naive).astimezone(pytz.utc).replace(tzinfo=None)
+		except Exception:
+			utc_dt = dt.datetime.combine(d, t)
+		st.session_state["now_chart_dt_utc"] = utc_dt
+		_inject_now_chart_inputs(utc_dt)
 		_run_chart()
 
 
@@ -118,10 +128,20 @@ def render_now_date_nav() -> None:
 	if st.session_state.get("now_chart_dt_utc") is None:
 		st.session_state["now_chart_dt_utc"] = dt.datetime.utcnow()
 
-	now_dt = st.session_state["now_chart_dt_utc"]
+	now_dt_utc = st.session_state["now_chart_dt_utc"]
 
-	# Display the current chart datetime
-	st.caption(f"Chart date: **{now_dt.strftime('%b %d, %Y  %H:%M')} UTC**")
+	# Convert UTC → local timezone for display and input pre-population
+	tz_name = st.session_state.get("current_tz_name", "UTC")
+	try:
+		tz = pytz.timezone(tz_name)
+		now_dt = now_dt_utc.replace(tzinfo=pytz.utc).astimezone(tz)
+		tz_abbr = now_dt.strftime("%Z")
+	except Exception:
+		now_dt = now_dt_utc
+		tz_abbr = "UTC"
+
+	# Display the current chart datetime (local)
+	st.caption(f"Chart date: **{now_dt.strftime('%b %d, %Y  %H:%M')} {tz_abbr}**")
 
 	# --- Forward / Back / Reset buttons + interval dropdown ---
 	nav_cols = st.columns([1, 1, 1, 2])
@@ -158,7 +178,7 @@ def render_now_date_nav() -> None:
 		d_col, t_col = st.columns(2)
 		with d_col:
 			st.date_input(
-				"Date (UTC)",
+				"Date",
 				value=now_dt.date(),
 				key="now_direct_date",
 				min_value=dt.date(1, 1, 1),
@@ -166,7 +186,7 @@ def render_now_date_nav() -> None:
 			)
 		with t_col:
 			st.time_input(
-				"Time (UTC)",
+				f"Time ({tz_abbr})",
 				value=now_dt.time().replace(second=0, microsecond=0),
 				key="now_direct_time",
 			)
