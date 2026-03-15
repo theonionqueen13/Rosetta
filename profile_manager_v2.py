@@ -164,6 +164,8 @@ def render_profile_manager(
                     "lon":    lon,
                     "tz_name": tz_name,
                     "circuit_names": circuit_names,
+                    # Store the fully-computed chart so loading is instant (no recalculation)
+                    "chart": st.session_state.get("last_chart"),
                 }
 
                 try:
@@ -229,11 +231,17 @@ def render_profile_manager(
                             else:
                                 st.session_state["saved_circuit_names"] = {}
 
-                            # run chart if location is valid
-                            if any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
+                            # Restore saved chart object if present; otherwise recalculate
+                            _stored_chart = data.get("chart")
+                            if _stored_chart is not None:
+                                st.session_state["last_chart"] = _stored_chart
+                                st.session_state["chart_ready"] = True
+                                st.success(f"Profile '{name}' loaded!")
+                                st.rerun()
+                            elif any(v is None for v in (data.get("lat"), data.get("lon"), data.get("tz_name"))):
                                 st.error(f"Profile '{name}' is missing location/timezone info. Re-save it after a successful city lookup.")
                             else:
-                                # run_chart() reads city from session state and re-geocodes
+                                # Fallback: recalculate from birth data (older profiles without stored chart)
                                 success = run_chart()
                                 if success:
                                     st.session_state["chart_ready"] = True
@@ -259,6 +267,10 @@ def render_profile_manager(
                         st.error("No profile data found. Load a profile first.")
                     else:
                         profile_data["circuit_names"] = circuit_names
+                        # Refresh the stored chart object so it stays in sync
+                        _curr_chart = st.session_state.get("last_chart")
+                        if _curr_chart is not None:
+                            profile_data["chart"] = _curr_chart
                         save_user_profile_db(current_user_id, prof_name, profile_data)
                         st.session_state["saved_circuit_names"] = circuit_names.copy()
                         st.success("Circuit names updated.")
