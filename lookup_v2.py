@@ -278,11 +278,180 @@ DIGNITIES = {
 }
 
 DIGNITY_MEANINGS = {
-  "domicile": [""],
-  "detriment": [""],
-  "exaltation": [""],
-  "fall": [""],
-  },
+	"domicile": ["The planet is in its home sign — operating with full authority, comfort, and natural expression."],
+	"detriment": ["The planet is in the sign opposite its home — it must work harder, adapt, and find unconventional pathways to express itself."],
+	"exaltation": ["The planet is honored and elevated — its gifts are amplified and celebrated, though this can tip toward excess."],
+	"fall": ["The planet is in the sign opposite its exaltation — its strengths are muted and must be rebuilt through effort and humility."],
+	"triplicity": ["The planet has elemental kinship with this sign — a quiet, background support that operates through shared nature."],
+	"term": ["The planet governs this specific degree range — a localized authority, like a neighborhood steward."],
+	"face": ["The planet has minor dignity by decan — the weakest essential dignity, providing a thin but real thread of belonging."],
+	"peregrine": ["The planet has no essential dignity whatsoever — it is a stranger in a foreign land, forced to rely entirely on accidental dignity and aspects."],
+}
+
+# --- DIGNITY WEIGHT SCORES ---
+# Used by the planetary strength engine (dignity_calc.py) to compute raw authority
+DIGNITY_SCORES = {
+	"domicile": 5,
+	"exaltation": 4,
+	"triplicity": 3,
+	"term": 2,
+	"face": 1,
+	"detriment": -5,
+	"fall": -4,
+	"peregrine": 0,
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# TRIPLICITY RULERS — Dorothean system
+# Each element has a day ruler, night ruler, and participating ruler.
+# Usage: TRIPLICITY_RULERS[element][sect] → planet name
+# ═══════════════════════════════════════════════════════════════════════
+TRIPLICITY_RULERS = {
+	"Fire": {
+		"day": "Sun",
+		"night": "Jupiter",
+		"participating": "Saturn",
+	},
+	"Earth": {
+		"day": "Venus",
+		"night": "Moon",
+		"participating": "Mars",
+	},
+	"Air": {
+		"day": "Saturn",
+		"night": "Mercury",
+		"participating": "Jupiter",
+	},
+	"Water": {
+		"day": "Venus",
+		"night": "Mars",
+		"participating": "Moon",
+	},
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# EGYPTIAN TERMS (BOUNDS)
+# Each sign is divided into 5 unequal segments, each ruled by a planet.
+# Format: list of (end_degree, ruler) tuples — degree is EXCLUSIVE upper bound
+# within the sign (0–30). E.g., (6, "Jupiter") means degrees 0–5.
+# ═══════════════════════════════════════════════════════════════════════
+TERMS = {
+	"Aries": [
+		(6, "Jupiter"),
+		(12, "Venus"),
+		(20, "Mercury"),
+		(25, "Mars"),
+		(30, "Saturn"),
+	],
+	"Taurus": [
+		(8, "Venus"),
+		(14, "Mercury"),
+		(22, "Jupiter"),
+		(27, "Saturn"),
+		(30, "Mars"),
+	],
+	"Gemini": [
+		(6, "Mercury"),
+		(12, "Jupiter"),
+		(17, "Venus"),
+		(24, "Mars"),
+		(30, "Saturn"),
+	],
+	"Cancer": [
+		(7, "Mars"),
+		(13, "Venus"),
+		(19, "Mercury"),
+		(26, "Jupiter"),
+		(30, "Saturn"),
+	],
+	"Leo": [
+		(6, "Jupiter"),
+		(11, "Venus"),
+		(18, "Saturn"),
+		(24, "Mercury"),
+		(30, "Mars"),
+	],
+	"Virgo": [
+		(7, "Mercury"),
+		(17, "Venus"),
+		(21, "Jupiter"),
+		(28, "Mars"),
+		(30, "Saturn"),
+	],
+	"Libra": [
+		(6, "Saturn"),
+		(14, "Mercury"),
+		(21, "Jupiter"),
+		(28, "Venus"),
+		(30, "Mars"),
+	],
+	"Scorpio": [
+		(7, "Mars"),
+		(11, "Venus"),
+		(19, "Mercury"),
+		(24, "Jupiter"),
+		(30, "Saturn"),
+	],
+	"Sagittarius": [
+		(12, "Jupiter"),
+		(17, "Venus"),
+		(21, "Mercury"),
+		(26, "Saturn"),
+		(30, "Mars"),
+	],
+	"Capricorn": [
+		(7, "Mercury"),
+		(14, "Jupiter"),
+		(22, "Venus"),
+		(26, "Saturn"),
+		(30, "Mars"),
+	],
+	"Aquarius": [
+		(7, "Mercury"),
+		(13, "Venus"),
+		(20, "Jupiter"),
+		(25, "Mars"),
+		(30, "Saturn"),
+	],
+	"Pisces": [
+		(12, "Venus"),
+		(16, "Jupiter"),
+		(19, "Mercury"),
+		(28, "Mars"),
+		(30, "Saturn"),
+	],
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# CHALDEAN FACES (DECANS)
+# Each sign is divided into three 10-degree segments.
+# The rulers follow the Chaldean order: Saturn, Jupiter, Mars, Sun,
+# Venus, Mercury, Moon — starting from Mars (ruler of Aries decan 1).
+# Format: list of 3 planet names for degrees 0–9, 10–19, 20–29.
+# ═══════════════════════════════════════════════════════════════════════
+FACES = {
+	"Aries": ["Mars", "Sun", "Venus"],
+	"Taurus": ["Mercury", "Moon", "Saturn"],
+	"Gemini": ["Jupiter", "Mars", "Sun"],
+	"Cancer": ["Venus", "Mercury", "Moon"],
+	"Leo": ["Saturn", "Jupiter", "Mars"],
+	"Virgo": ["Sun", "Venus", "Mercury"],
+	"Libra": ["Moon", "Saturn", "Jupiter"],
+	"Scorpio": ["Mars", "Sun", "Venus"],
+	"Sagittarius": ["Mercury", "Moon", "Saturn"],
+	"Capricorn": ["Jupiter", "Mars", "Sun"],
+	"Aquarius": ["Venus", "Mercury", "Moon"],
+	"Pisces": ["Saturn", "Jupiter", "Mars"],
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# SIGN-TO-ELEMENT MAPPING (convenience reverse lookup)
+# ═══════════════════════════════════════════════════════════════════════
+SIGN_ELEMENT = {
+	sign: element
+	for element, data in ELEMENT.items()
+	for sign in data["signs"]
+}
 
 GROUP_COLORS = [
   	"#B80303", "#FF5100", "#FFAE00", "#53B800",

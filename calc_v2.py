@@ -18,6 +18,7 @@ ABREVIATED_PLANET_NAMES = static_db.ABREVIATED_PLANET_NAMES
 DIGNITIES = static_db.DIGNITIES
 MAJOR_OBJECTS = static_db.MAJOR_OBJECTS
 from models_v2 import ChartObject, HouseCusp, AstrologicalChart, ReceptionLink, static_db
+from dignity_calc import score_and_attach
 
 OOB_LIMIT = 23.44  # degrees declination
 
@@ -556,6 +557,13 @@ def calculate_chart(
 		print(f"      raw_links count: {len(data.get('raw_links', []))}")
 		print(f"      sovereigns: {data.get('sovereigns', [])}")
 		print(f"      self_ruling: {data.get('self_ruling', [])}")
+
+	# --- Planetary Strength Scoring ---
+	try:
+		chart_sect = chart_sect_from_chart(chart) if not unknown_time else "Diurnal"
+	except (ValueError, Exception):
+		chart_sect = "Diurnal"
+	score_and_attach(chart, sect=chart_sect, house_system="placidus")
 
 	# --- Return values ---
 	# chart is AstrologicalChart for session storage (chart_core stores as last_chart)

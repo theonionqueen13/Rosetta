@@ -295,6 +295,49 @@ class Dignity:
     dignity_instructions: str = ""
 
 @dataclass
+class EssentialDignity:
+    """Full essential dignity breakdown for a planet in a specific sign/degree."""
+    domicile: bool = False
+    exaltation: bool = False
+    triplicity: bool = False          # Dorothean triplicity ruler for chart sect
+    term: bool = False                # Egyptian term/bound ruler at this degree
+    face: bool = False                # Chaldean decan ruler at this degree
+    detriment: bool = False
+    fall: bool = False
+    peregrine: bool = False           # True if no positive essential dignity at all
+    primary_dignity: Optional[str] = None  # Highest-ranking dignity name, or None
+
+@dataclass
+class PlanetaryState:
+    """
+    Per-chart planetary strength assessment.
+
+    Vector A (Authority) = essential dignity score → normalized via tanh.
+    Vector B (Potency)   = accidental dignity: house angularity + motion + solar proximity.
+    Power Index          = combined magnitude of both vectors.
+    """
+    planet_name: str
+
+    # --- Essential Dignity (Vector A: Authority) ---
+    essential_dignity: EssentialDignity = field(default_factory=EssentialDignity)
+    raw_authority: float = 0.0        # Sum of weighted dignity scores
+    quality_index: float = 0.0        # tanh(raw_authority / 7), range (-1, 1)
+
+    # --- Accidental Dignity (Vector B: Potency) ---
+    house_score: float = 0.0          # Angular=5, Succedent=3, Cadent=1
+    motion_score: float = 0.0         # Station-Direct=5, Station-Rx=3.5, Direct=2, Rx=1
+    solar_proximity_score: float = 0.0  # Cazimi=+5, Combust=negative gradient, Under Beams=-1
+    solar_proximity_label: str = ""   # "cazimi", "combust", "under_beams", or ""
+    potency_score: float = 0.0       # Sum of house + motion + solar proximity
+
+    # --- Combined ---
+    power_index: float = 0.0         # sqrt((|A|*0.4)^2 + (P*0.6)^2) * mu
+
+    # --- Motion metadata ---
+    motion_label: str = ""            # "stationary_direct", "stationary_retrograde", "direct", "retrograde"
+    solar_distance: Optional[float] = None  # Angular distance from Sun (degrees)
+
+@dataclass
 class ReceptionLink:
     other: Object
     aspect: Aspect
@@ -330,6 +373,9 @@ class ChartObject:
     retrograde: bool = False
     station: Optional[str] = None # "Stationing direct", "Stationing retrograde"
     oob_status: Literal["No", "Yes", "Extreme"] = "No"
+
+    # Planetary strength (populated by dignity_calc.py)
+    planetary_state: Optional[PlanetaryState] = None
 
     # Relationships & Rulerships
     rules_signs: List[Sign] = field(default_factory=list)
@@ -978,6 +1024,11 @@ class AstrologicalChart:
     sect_error: Optional[str] = field(default=None)                    # was "last_sect_error"
     plot_data: Any = field(default=None)                               # was "DISPOSITOR_GRAPH_DATA"
     utc_datetime: Optional[datetime.datetime] = field(default=None)    # was "chart_dt_utc"
+
+    # Planetary strength states — keyed by planet name
+    planetary_states: Dict[str, "PlanetaryState"] = field(default_factory=dict)
+    # Mutual reception loops detected during strength analysis
+    mutual_receptions: list = field(default_factory=list)
 
     def __getattr__(self, name: str):
         # Gracefully return None for fields that don't exist on cached instances
