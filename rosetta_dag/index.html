@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rosetta DAG — Interactive Code Map</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Cytoscape.js core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <!-- Dagre layout for hierarchical DAG -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- ========== Header ========== -->
+        <div id="header">
+            <h1>
+                <span class="logo">✦</span>
+                Rosetta DAG
+                <span style="font-weight:400;color:var(--text-muted);font-size:12px;">Interactive Code Map</span>
+            </h1>
+            <div id="header-controls">
+                <button class="btn btn-sm" id="btn-refresh-git" title="Refresh git status (G)">⟳ Git</button>
+                <button class="btn btn-sm btn-primary" id="btn-save-layout" title="Save current node positions">💾 Save
+                    Layout</button>
+                <button class="btn btn-sm" id="btn-reset-layout" title="Clear saved layout and revert to auto dagre">↺
+                    Reset Layout</button>
+                <button class="btn btn-sm" id="btn-export-data" title="Export user data">↓ Export</button>
+                <button class="btn btn-sm" id="btn-import-data" title="Import user data">↑ Import</button>
+                <button class="btn btn-sm" id="btn-reset-data" title="Reset all user data">✕ Reset</button>
+                <button class="btn btn-sm" id="btn-toggle-theme" title="Toggle light/dark theme">◐ Theme</button>
+                <button class="btn btn-sm" id="btn-toggle-sidebar" title="Toggle sidebar">☰</button>
+            </div>
+        </div>
+
+        <!-- ========== Breadcrumb trail ========== -->
+        <div id="breadcrumb-bar">
+            <span style="color:var(--text-muted);margin-right:8px;">Trail:</span>
+            <span id="breadcrumbs"></span>
+            <button class="btn btn-sm" id="btn-copy-trail" style="margin-left:auto;" title="Copy trail as text">📋 Copy
+                Trail</button>
+        </div>
+
+        <!-- ========== Main 3-panel layout ========== -->
+        <div id="main-container">
+            <!-- Left Sidebar -->
+            <div id="left-sidebar">
+                <!-- Search -->
+                <div class="sidebar-section">
+                    <input type="text" id="search-box" placeholder="Search modules, functions…" autocomplete="off">
+                </div>
+
+                <!-- Layer Filters -->
+                <div class="sidebar-section">
+                    <h3>Layers</h3>
+                    <div id="layer-filters"></div>
+                </div>
+
+                <!-- Status Legend -->
+                <div class="sidebar-section">
+                    <h3>Status Legend</h3>
+                    <div class="legend" id="status-legend">
+                        <div class="legend-item"><span class="layer-dot"
+                                style="background:var(--status-planned);"></span> Planned</div>
+                        <div class="legend-item"><span class="layer-dot"
+                                style="background:var(--status-in-progress);"></span> In Progress</div>
+                        <div class="legend-item"><span class="layer-dot" style="background:var(--status-done);"></span>
+                            Done</div>
+                        <div class="legend-item"><span class="layer-dot"
+                                style="background:var(--status-needs-review);"></span> Needs Review</div>
+                        <div class="legend-item"><span class="layer-dot"
+                                style="background:var(--status-blocked);"></span> Blocked</div>
+                    </div>
+                </div>
+
+                <!-- Module List -->
+                <div class="sidebar-section" style="flex:1;overflow-y:auto;">
+                    <h3>Modules <span id="module-count" style="color:var(--text-muted)"></span></h3>
+                    <div id="module-list"></div>
+                </div>
+
+                <!-- Stats -->
+                <div class="sidebar-section">
+                    <div class="stats-bar">
+                        <span id="stat-modules">0 modules</span>
+                        <span id="stat-edges">0 edges</span>
+                        <span id="stat-functions">0 functions</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center: Cytoscape canvas -->
+            <div id="cy-container">
+                <div id="cy"></div>
+
+                <!-- Zoom controls -->
+                <div id="zoom-controls">
+                    <button id="btn-zoom-in" title="Zoom in (+)">+</button>
+                    <button id="btn-zoom-out" title="Zoom out (−)">−</button>
+                    <button id="btn-fit" title="Fit all (F)">⊡</button>
+                </div>
+
+                <!-- Layout controls -->
+                <div id="layout-controls">
+                    <button class="btn btn-sm" id="btn-layout-dagre" title="Hierarchical layout">↕ Dagre</button>
+                    <button class="btn btn-sm" id="btn-layout-circle" title="Circular layout">○ Circle</button>
+                    <button class="btn btn-sm" id="btn-layout-grid" title="Grid layout">▦ Grid</button>
+                    <button class="btn btn-sm" id="btn-expand-all" title="Expand all modules">⊞ Expand</button>
+                    <button class="btn btn-sm" id="btn-collapse-all" title="Collapse all modules">⊟ Collapse</button>
+                </div>
+
+                <!-- Selection toolbar (hidden by default) -->
+                <div class="selection-toolbar hidden" id="selection-toolbar">
+                    <span id="selection-count">0 selected</span>
+                    <button class="btn btn-sm" id="btn-export-selection">📋 Export Selection</button>
+                    <button class="btn btn-sm" id="btn-clear-selection">✕ Clear</button>
+                </div>
+            </div>
+
+            <!-- Right Detail Panel -->
+            <div id="detail-panel">
+                <div id="detail-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context menu (hidden, positioned dynamically) -->
+    <div class="context-menu" id="context-menu" style="display:none;"></div>
+
+    <!-- Toast notification -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Hidden file input for import -->
+    <input type="file" id="import-file-input" accept=".json" style="display:none;">
+
+    <!-- Application scripts -->
+    <script src="js/persistence.js"></script>
+    <script src="js/git-status.js"></script>
+    <script src="js/graph-renderer.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
