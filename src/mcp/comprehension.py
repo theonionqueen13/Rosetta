@@ -37,6 +37,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from src.mcp.topic_maps import resolve_factors, TopicMatch
+from src.mcp.term_registry import load_terms, match_terms, TermIntent
 
 if TYPE_CHECKING:
     from models_v2 import AstrologicalChart
@@ -80,11 +81,13 @@ class QuestionGraph:
     subtopic: str = ""
     confidence: float = 0.0
     matched_keywords: List[str] = field(default_factory=list)
-    source: str = "keyword"             # "keyword" or "llm"
+    source: str = "keyword"             # "keyword", "llm", or "term_registry"
+    question_intent: str = ""           # routing intent from term_registry (e.g. "potency_ranking")
+    paraphrase: str = ""                # one-sentence plain-language restatement of the question
     comprehension_note: str = ""        # one-line log for agent notes
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "question_type": self.question_type,
             "nodes": [{"label": n.label, "factors": n.factors, "source": n.source} for n in self.nodes],
             "edges": [{"a": e.node_a, "b": e.node_b, "rel": e.relationship} for e in self.edges],
@@ -94,7 +97,11 @@ class QuestionGraph:
             "subtopic": self.subtopic,
             "confidence": self.confidence,
             "source": self.source,
+            "question_intent": self.question_intent,
         }
+        if self.paraphrase:
+            d["paraphrase"] = self.paraphrase
+        return d
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -247,23 +254,44 @@ def _comprehend_keyword(question: str) -> QuestionGraph:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# LLM-based comprehension (structured output)
+# LLM-based comprehension (structured output, two-phase)
 # ═══════════════════════════════════════════════════════════════════════
 
 _COMPREHENSION_SYSTEM = """\
-You decompose astrological questions into structured concept nodes.
+You are the comprehension layer of an astrology chatbot. Your job is to
+understand what the user is genuinely asking BEFORE you touch any astrology.
+
+Work in two phases:
+
+─── PHASE 1: ACTIVE LISTENING — understand the human question ───
+Restate the user's question in one plain sentence. No astrology yet.
+Ask yourself: what does this person actually want to know?
+Then identify which DOMAINS from the DOMAINS list genuinely apply.
+Only pick domains that a thoughtful person would agree relate to the question.
+If it is about a structural chart concept (power, strength, timing, pattern
+analysis) rather than a life domain, leave domains empty.
+
+─── PHASE 2: ASTROLOGICAL MAPPING ───
+Given your Phase 1 understanding, select specific planets, signs, or houses
+from VALID_FACTORS that a skilled astrologer would use to answer this question.
+If the question is about a structural concept (e.g. "which planet is strongest"),
+factors MUST be empty — the engine will handle factor selection itself.
+NEVER invent factor names outside VALID_FACTORS.
 
 RULES:
-1. Each concept the user mentions becomes a node with a short label.
-2. Each node's "factors" must ONLY contain items from the VALID_FACTORS list.
-3. NEVER invent factor names — if unsure, leave factors empty.
-4. Detect the relationship between nodes: "connection", "tension", "support", or "timing".
-5. question_type is one of: "single_focus", "relationship", "multi_node", "open_exploration".
-6. Keep labels short (1-3 words, lowercase).
-7. If the question is vague or general, use question_type "open_exploration" with zero nodes.
+1. paraphrase: one sentence in plain language, no jargon.
+2. domains: list of matching domain names from DOMAINS; may be empty.
+3. question_type: "single_focus" | "relationship" | "multi_node" | "open_exploration".
+4. nodes: each concept the user mentions. label is 1-3 words lowercase.
+5. factors in each node: ONLY items from VALID_FACTORS, or empty list.
+6. NEVER guess or hallucinate factor names.
+7. If a RECOGNIZED_TERM is provided, its meaning takes precedence over your
+   own interpretation — do not contradict it.
 
-Respond with ONLY valid JSON matching this schema:
+Respond with ONLY valid JSON:
 {
+  "paraphrase": "string",
+  "domains": ["string"],
   "question_type": "string",
   "nodes": [{"label": "string", "factors": ["string"]}],
   "edges": [{"node_a": "string", "node_b": "string", "relationship": "string"}]
@@ -276,9 +304,10 @@ def _comprehend_llm(
     chart: "AstrologicalChart",
     api_key: str,
     model: str = "google/gemini-2.0-flash-001",
+    matched_term: Optional["Term"] = None,  # type: ignore[name-defined]
 ) -> Optional[QuestionGraph]:
     """
-    Use a cheap structured LLM call to decompose the question.
+    Two-phase LLM comprehension: active listening then astrological mapping.
 
     Returns None on any failure (caller should fall back to keyword path).
     """
@@ -287,11 +316,20 @@ def _comprehend_llm(
     except ImportError:
         return None
 
+    from src.mcp.topic_maps import list_domains
+    domain_names = [d["name"] for d in list_domains()]
+
     vocab = _build_vocabulary(chart)
-    user_msg = (
-        f"VALID_FACTORS:\n{json.dumps(vocab)}\n\n"
-        f"Question: {question}"
-    )
+    parts = [
+        f"DOMAINS:\n{json.dumps(domain_names)}",
+        f"VALID_FACTORS:\n{json.dumps(vocab)}",
+    ]
+    if matched_term is not None:
+        parts.append(
+            f"RECOGNIZED_TERM: \"{matched_term.canonical}\" — {matched_term.description}"
+        )
+    parts.append(f"Question: {question}")
+    user_msg = "\n\n".join(parts)
 
     try:
         client = openai.OpenAI(
@@ -309,13 +347,13 @@ def _comprehend_llm(
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.0,
-            max_tokens=300,
+            max_tokens=500,
         )
         raw = response.choices[0].message.content or ""
     except Exception:
         return None
 
-    # Parse JSON from the response (strip markdown fences if present)
+    # Strip markdown fences if present
     raw = raw.strip()
     if raw.startswith("```"):
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -326,7 +364,7 @@ def _comprehend_llm(
     except (json.JSONDecodeError, ValueError):
         return None
 
-    # Validate against vocabulary
+    # Validate factors against vocabulary
     valid_set = set(vocab)
     nodes: List[QuestionNode] = []
     for nd in data.get("nodes", []):
@@ -351,12 +389,24 @@ def _comprehend_llm(
     if q_type not in {"single_focus", "relationship", "multi_node", "open_exploration"}:
         q_type = "single_focus"
 
+    # Domain: use first item from LLM's domain list, fall back to matched term's domain
+    llm_domains: List[str] = data.get("domains") or []
+    domain = ""
+    if llm_domains:
+        domain = llm_domains[0]
+    elif matched_term is not None:
+        domain = matched_term.domain
+
+    paraphrase = str(data.get("paraphrase", "")).strip()
+
     return QuestionGraph(
         nodes=nodes,
         edges=edges,
         question_type=q_type,
+        domain=domain,
         source="llm",
-        confidence=0.85,  # LLM decomposition assumed higher base confidence
+        confidence=0.85,
+        paraphrase=paraphrase,
     )
 
 
@@ -438,8 +488,12 @@ def _anchor_to_chart(graph: QuestionGraph, chart: "AstrologicalChart") -> None:
 
     graph.focus_circuits = sorted(focus_circuits)
 
-    # If LLM path produced no factors at all, enrich from topic_maps
-    if not graph.all_factors and graph.source == "llm":
+    # If LLM path produced no factors at all, enrich from topic_maps —
+    # but only when the term registry hasn't already resolved the intent.
+    # A known intent (e.g. "potency_ranking") means the reading engine will
+    # handle factor selection itself; keyword-enrichment here would only
+    # inject spurious topic guesses.
+    if not graph.all_factors and graph.source == "llm" and not graph.question_intent:
         kw_graph = _comprehend_keyword(graph.comprehension_note or "general reading")
         for node in kw_graph.nodes:
             graph.nodes.append(node)
@@ -462,44 +516,86 @@ def comprehend(
     """
     Decompose *question* into a ``QuestionGraph`` anchored to *chart*.
 
-    Uses the LLM path if ``api_key`` is provided, falling back to
-    keyword matching.  Always validates against the chart.
+    Resolution order
+    ----------------
+    1. Term registry — always runs first; stamps ``question_intent`` when a
+       canonical astrological concept is recognised.
+    2. LLM path — two-phase active-listening call (requires ``api_key``).
+       Receives any matched term as context so it never contradicts the
+       registry.
+    3. Term-only fallback — when a term was matched but no API key is
+       available, builds a minimal graph from the term without running the
+       keyword guesser.
+    4. Keyword fallback — only runs when no term matched AND no API key.
+       Uses ``topic_maps.resolve_factors()`` for life-domain questions.
 
-    Parameters
-    ----------
-    question : str
-        User's free-text question.
-    chart : AstrologicalChart
-        A fully computed chart with circuit_simulation populated.
-    api_key : str, optional
-        OpenRouter API key.  If None, uses keyword fallback only.
-    llm_model : str
-        Model to use for the comprehension call.
+    Always anchors to the chart after resolution.
     """
+    # ── Step 1: Term registry — always runs first ──────────────────
+    _terms = load_terms()
+    _matched_term = match_terms(question, _terms)
+
     graph: Optional[QuestionGraph] = None
 
-    # Try LLM path first if key available
+    # ── Step 2: LLM path (if key available) ──────────────────────
+    # Pass the matched term as context so the LLM knows the intent is
+    # already resolved and must not contradict it.
     if api_key:
-        graph = _comprehend_llm(question, chart, api_key, model=llm_model)
+        graph = _comprehend_llm(
+            question, chart, api_key,
+            model=llm_model,
+            matched_term=_matched_term,
+        )
 
-    # Fall back to keyword path
+    # ── Step 3: Term-only fallback (term matched, no API key) ────────
+    # Build a minimal graph from the matched term without touching the
+    # keyword guesser — the keyword guesser would only introduce noise
+    # for a question whose intent is already resolved.
+    if graph is None and _matched_term is not None:
+        graph = QuestionGraph(
+            nodes=[QuestionNode(
+                label=_matched_term.canonical,
+                factors=list(_matched_term.factors),
+                source="term_registry",
+            )],
+            question_type="single_focus",
+            domain=_matched_term.domain,
+            confidence=0.9,
+            source="term_registry",
+            paraphrase=f"(term match: {_matched_term.canonical})",
+        )
+
+    # ── Step 4: Keyword fallback (no term, no API key) ──────────────
+    # Only runs when neither the term registry nor the LLM resolved the
+    # question.  Keywords remain useful for genuine life-domain questions
+    # like "tell me about my health" when no API key is configured.
     if graph is None:
         graph = _comprehend_keyword(question)
 
-    # Store original question for agent notes
-    graph.comprehension_note = question
+    # ── Stamp intent from term registry ───────────────────────────
+    if _matched_term:
+        graph.question_intent = _matched_term.intent
+        # If the term supplies specific factors, seed the first node
+        if _matched_term.factors and graph.nodes:
+            for f in _matched_term.factors:
+                if f not in graph.nodes[0].factors:
+                    graph.nodes[0].factors.append(f)
 
-    # Anchor to the chart (validate factors, find circuits)
+    # ── Anchor to chart (validate factors, find circuit shapes) ──────
+    graph.comprehension_note = question  # temp store for _anchor_to_chart
     _anchor_to_chart(graph, chart)
 
-    # Generate agent notes line
+    # ── Final comprehension note for the dev monologue ──────────────
     node_labels = [n.label for n in graph.nodes]
+    paraphrase_fragment = f" | understood: \"{graph.paraphrase}\"" if graph.paraphrase and not graph.paraphrase.startswith("(") else ""
     graph.comprehension_note = (
         f"Q: {question} → {graph.question_type} | "
+        f"intent: {graph.question_intent or 'none'} | "
         f"nodes: {node_labels} | "
         f"shapes: {graph.focus_circuits} | "
         f"source: {graph.source} | "
         f"conf: {graph.confidence:.0%}"
+        + paraphrase_fragment
     )
 
     return graph

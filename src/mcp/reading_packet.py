@@ -247,17 +247,23 @@ class PowerNodeFact:
     is_sink: bool = False       # North Node
     is_mutual_reception: bool = False
     role_note: str = ""         # e.g. "dominant", "bottleneck", "isolated"
+    # Relative tier label assigned by term_registry.assign_potency_tiers().
+    # When set, raw numerical scores are suppressed from to_dict() so the LLM
+    # never sees the underlying numbers.
+    tier_label: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
-            "planet": self.planet_name,
-            "power": round(self.power_index, 2),
-            "effective": round(self.effective_power, 2),
-        }
-        if self.friction_load > 0.01:
-            d["friction"] = round(self.friction_load, 2)
-        if self.received_power > 0.01:
-            d["received"] = round(self.received_power, 2)
+        d: Dict[str, Any] = {"planet": self.planet_name}
+        if self.tier_label:
+            # Potency-ranking mode: expose only relative tier, no raw scores
+            d["potency"] = self.tier_label
+        else:
+            d["power"] = round(self.power_index, 2)
+            d["effective"] = round(self.effective_power, 2)
+            if self.friction_load > 0.01:
+                d["friction"] = round(self.friction_load, 2)
+            if self.received_power > 0.01:
+                d["received"] = round(self.received_power, 2)
         if self.is_source:
             d["role"] = "source (South Node)"
         elif self.is_sink:
@@ -355,6 +361,8 @@ class ReadingPacket:
 
     # ── Question comprehension metadata ──────────────────────────────
     question_type: str = ""          # "single_focus" / "relationship" / etc.
+    question_intent: str = ""        # routing intent (e.g. "potency_ranking")
+    paraphrase: str = ""             # one-sentence plain-language restatement
     comprehension_note: str = ""     # LLM comprehension explanation
 
     # ── Agent notes (accumulated across conversation) ────────────────
@@ -367,6 +375,27 @@ class ReadingPacket:
     # Populated from RenderResult.visible_objects when a render exists.
     # Tells the LLM exactly which planets/points are toggled on right now.
     visible_objects: List[str] = field(default_factory=list)
+
+    # ── Full chart context — always populated regardless of active toggles ──
+    # Compact placement summary for EVERY object in AstrologicalChart,
+    # irrespective of what the user has toggled on or what the question
+    # asked about.  The LLM must consult this for any chart-wide question.
+    full_chart_placements: List[PlacementFact] = field(default_factory=list)
+
+    # ── Debug / dev-mode fields (never sent to LLM) ─────────────────────────
+    # Populated by build_reading() for the dev inner-monologue expander.
+    debug_q_graph: Dict[str, Any] = field(default_factory=dict)     # QuestionGraph.to_dict()
+    debug_comprehension_source: str = ""                             # "keyword" | "llm"
+    debug_relevant_factors: List[str] = field(default_factory=list) # merged factors list
+    debug_relevant_objects: List[str] = field(default_factory=list) # object names selected
+    debug_circuit_summary: Dict[str, Any] = field(default_factory=dict)  # circuit stats
+
+    # ── Second chart in biwheel mode ────────────────────────────────────────
+    # Populated when the app has a second chart loaded (synastry / transits).
+    chart_b_name: str = ""
+    chart_b_date: str = ""
+    chart_b_city: str = ""
+    chart_b_full_placements: List[PlacementFact] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Compact serialization for prompt building.
@@ -418,6 +447,33 @@ class ReadingPacket:
         if self.visible_objects:
             d["visible_on_chart"] = self.visible_objects
 
+        # Full chart context — always-available map of every planet/point
+        # (no combo text to keep tokens compact)
+        if self.full_chart_placements:
+            d["full_chart_context"] = [
+                {k: v for k, v in p.to_dict().items()
+                 if k not in ("sign_interp", "house_interp")}
+                for p in self.full_chart_placements
+            ]
+
+        # Biwheel second chart
+        if self.chart_b_full_placements:
+            b_header: Dict[str, str] = {}
+            if self.chart_b_name:
+                b_header["name"] = self.chart_b_name
+            if self.chart_b_date:
+                b_header["date"] = self.chart_b_date
+            if self.chart_b_city:
+                b_header["city"] = self.chart_b_city
+            d["chart_b_context"] = {
+                "header": b_header,
+                "placements": [
+                    {k: v for k, v in p.to_dict().items()
+                     if k not in ("sign_interp", "house_interp")}
+                    for p in self.chart_b_full_placements
+                ],
+            }
+
         # Circuit-aware sections
         if self.circuit_flows:
             d["circuit_flows"] = [cf.to_dict() for cf in self.circuit_flows]
@@ -435,6 +491,10 @@ class ReadingPacket:
             d["sn_nn"] = self.sn_nn_relevance
         if self.question_type:
             d["question_type"] = self.question_type
+        if self.question_intent:
+            d["question_intent"] = self.question_intent
+        if self.paraphrase:
+            d["paraphrase"] = self.paraphrase
         if self.agent_notes:
             d["agent_notes"] = self.agent_notes
 

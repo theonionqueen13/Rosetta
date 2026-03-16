@@ -28,6 +28,7 @@ if _PROJECT_ROOT not in sys.path:
 from src.mcp.topic_maps import resolve_factors, TopicMatch
 from src.mcp.comprehension import comprehend, QuestionGraph
 from src.mcp.circuit_query import query_circuit, CircuitReading
+from src.mcp.term_registry import TermIntent, assign_potency_tiers
 from src.mcp.reading_packet import (
     AspectFact,
     CircuitFlowFact,
@@ -130,6 +131,7 @@ def build_reading(
     api_key: Optional[str] = None,
     agent_notes: str = "",
     render_result: Optional[Any] = None,
+    chart_b: Optional["AstrologicalChart"] = None,
 ) -> ReadingPacket:
     """Produce a ReadingPacket for *question* against *chart*.
 
@@ -158,6 +160,11 @@ def build_reading(
         OpenRouter API key for the comprehension LLM call.
     agent_notes : str
         Accumulated agent notes from the conversation.
+    chart_b : AstrologicalChart, optional
+        Second chart when in biwheel mode (synastry / transits).  Its
+        full placements are always included in the packet under
+        ``chart_b_context`` so the LLM has complete visibility of both
+        charts regardless of active toggles.
 
     Returns
     -------
@@ -167,17 +174,60 @@ def build_reading(
 
     # ── 1. Comprehend the question ───────────────────────────────────
     q_graph: QuestionGraph = comprehend(question, chart, api_key=api_key)
-
+    # ── 1b. Potency-ranking branch ──────────────────────────
+    # When the question is about planetary power / influence, bypass the
+    # circuit-focus filter and instead rank ALL chart planets by their
+    # dignity_calc power index, returning tier labels only (no raw numbers).
+    _potency_nodes: Optional[List[PowerNodeFact]] = None
+    if q_graph.question_intent == TermIntent.POTENCY_RANKING:
+        _ps = getattr(chart, "planetary_states", None)
+        if not _ps:
+            try:
+                from dignity_calc import score_and_attach
+                score_and_attach(chart)
+                _ps = getattr(chart, "planetary_states", None)
+            except Exception:
+                pass
+        if _ps:
+            _tier_map = assign_potency_tiers(_ps)
+            _sorted_ps = sorted(
+                _ps.items(),
+                key=lambda kv: getattr(kv[1], "power_index", 0.0),
+                reverse=True,
+            )
+            _potency_nodes = [
+                PowerNodeFact(
+                    planet_name=pname,
+                    power_index=getattr(ps, "power_index", 0.0),
+                    effective_power=getattr(ps, "power_index", 0.0),
+                    is_mutual_reception=bool(
+                        getattr(ps, "mutual_reception", False)
+                    ),
+                    tier_label=_tier_map.get(pname, ""),
+                )
+                for pname, ps in _sorted_ps
+            ]
     # ── 2. Query the circuit simulation ──────────────────────────────
     circuit_reading: CircuitReading = query_circuit(q_graph, chart)
 
     # ── 3. Determine relevant factors for classical fact collection ──
-    # Merge factors from comprehension + legacy topic map
+    # When the question intent is already resolved (e.g. potency_ranking),
+    # the reading engine handles factor selection internally — injecting
+    # legacy topic_maps factors here would only add noise.  For all other
+    # questions, merge comprehension factors with topic_maps as a fallback.
     all_factors = list(q_graph.all_factors)
-    # Also run the old topic_maps for fallback coverage
-    topic: TopicMatch = resolve_factors(question)
-    legacy_factors = topic.factors or []
-    merged_factors = list(dict.fromkeys(all_factors + legacy_factors))  # dedupe, preserve order
+    if not q_graph.question_intent:
+        # Legacy topic_maps fallback: run only when intent is unresolved
+        topic: TopicMatch = resolve_factors(question)
+        legacy_factors = topic.factors or []
+        merged_factors = list(dict.fromkeys(all_factors + legacy_factors))
+    else:
+        # Intent-resolved: trust the comprehension layer, skip keyword guessing
+        topic = resolve_factors.__wrapped__(question) if hasattr(resolve_factors, "__wrapped__") else type(
+            "_T", (), {"domain": q_graph.domain, "subtopic": q_graph.subtopic,
+                       "factors": [], "matched_keywords": [], "confidence": q_graph.confidence})()
+        legacy_factors = []
+        merged_factors = list(all_factors)
 
     obj_names, sign_names, house_numbers = _classify_factors(merged_factors)
 
@@ -236,10 +286,27 @@ def build_reading(
     visible_objects: List[str] = []
     if render_result and hasattr(render_result, "visible_objects"):
         visible_objects = list(render_result.visible_objects or [])
+    # ── Full chart context — ALL objects, always included ─────────────────
+    # This gives the LLM complete chart awareness regardless of what the
+    # user has toggled on or what the question's relevance filter captured.
+    full_chart_placements = _build_full_placements(chart, house_system)
 
+    # ── Second chart (biwheel) full placements ─────────────────────────
+    chart_b_name = ""
+    chart_b_date = ""
+    chart_b_city = ""
+    chart_b_full_placements: List[PlacementFact] = []
+    if chart_b is not None:
+        chart_b_full_placements = _build_full_placements(chart_b, house_system)
+        b_hdr = chart_b.header_lines() if hasattr(chart_b, "header_lines") else ("", "", "", "", "")
+        chart_b_name = b_hdr[0] if b_hdr else ""
+        chart_b_date = b_hdr[1] if len(b_hdr) > 1 else ""
+        chart_b_city = b_hdr[3] if len(b_hdr) > 3 else ""
     # ── 7. Convert circuit reading to packet fact types ──────────────
     circuit_flows = _circuit_reading_to_flows(circuit_reading)
-    power_nodes = _circuit_reading_to_power_nodes(circuit_reading)
+    # Use tier-labelled potency nodes for potency_ranking questions;
+    # fall back to plain circuit-derived nodes otherwise.
+    power_nodes = _potency_nodes if _potency_nodes is not None else _circuit_reading_to_power_nodes(circuit_reading)
     circuit_paths = _circuit_reading_to_paths(circuit_reading)
     isolations = _circuit_reading_to_isolations(circuit_reading)
 
@@ -250,12 +317,22 @@ def build_reading(
     chart_time = hdr[2] if len(hdr) > 2 else ""
     chart_city = hdr[3] if len(hdr) > 3 else ""
 
+    # ── Debug summary for the dev inner-monologue panel ────────────
+    _circuit_debug: Dict[str, Any] = {
+        "shapes_count": len(circuit_reading.relevant_shapes),
+        "focus_nodes": [getattr(n, "planet_name", str(n)) for n in circuit_reading.focus_nodes],
+        "isolation_notes": list(circuit_reading.isolation_notes or []),
+        "sn_nn_relevance": circuit_reading.sn_nn_relevance or "",
+        "narrative_seeds": list(circuit_reading.narrative_seeds or []),
+        "power_summary": dict(circuit_reading.power_summary or {}),
+    }
+
     return ReadingPacket(
         question=question,
-        domain=q_graph.domain or topic.domain,
-        subtopic=q_graph.subtopic or topic.subtopic,
+        domain=q_graph.domain or (topic.domain if not q_graph.question_intent else ""),
+        subtopic=q_graph.subtopic or (topic.subtopic if not q_graph.question_intent else ""),
         confidence=q_graph.confidence,
-        matched_keywords=topic.matched_keywords,
+        matched_keywords=topic.matched_keywords if hasattr(topic, "matched_keywords") else [],
         chart_name=chart_name,
         chart_date=chart_date,
         chart_time=chart_time,
@@ -277,10 +354,23 @@ def build_reading(
         power_summary=circuit_reading.power_summary,
         sn_nn_relevance=circuit_reading.sn_nn_relevance,
         question_type=q_graph.question_type,
+        question_intent=q_graph.question_intent,
+        paraphrase=q_graph.paraphrase,
         comprehension_note=q_graph.comprehension_note,
         agent_notes=agent_notes,
         interp_text=interp_text,
         visible_objects=visible_objects,
+        full_chart_placements=full_chart_placements,
+        chart_b_name=chart_b_name,
+        chart_b_date=chart_b_date,
+        chart_b_city=chart_b_city,
+        chart_b_full_placements=chart_b_full_placements,
+        # ── Dev debug fields ──
+        debug_q_graph=q_graph.to_dict(),
+        debug_comprehension_source=q_graph.source,
+        debug_relevant_factors=merged_factors,
+        debug_relevant_objects=sorted(relevant_names),
+        debug_circuit_summary=_circuit_debug,
     )
 
 
@@ -348,6 +438,45 @@ def _build_placements(
             short_meaning=cobj.object_name.short_meaning if cobj.object_name else "",
             sign_combo_text=sign_text,
             house_combo_text=house_text,
+        ))
+    return out
+
+
+def _build_full_placements(
+    chart: "AstrologicalChart",
+    house_system: str,
+) -> List[PlacementFact]:
+    """Build a compact PlacementFact for **every** object in *chart*.
+
+    Unlike :func:`_build_placements`, this covers the full chart regardless
+    of question relevance.  Combo text is intentionally omitted to keep
+    the token footprint small.  The result is always serialised into
+    ``ReadingPacket.full_chart_placements`` so the LLM can answer any
+    question about a placement that the relevance filter might have missed.
+    """
+    out: List[PlacementFact] = []
+    for cobj in chart.objects:
+        name = cobj.object_name.name if cobj.object_name else ""
+        if not name:
+            continue
+        sign = cobj.sign.name if cobj.sign else ""
+        house_num = _house_number(cobj, house_system)
+        dignity_str = ""
+        if cobj.dignity:
+            dignity_str = cobj.dignity if isinstance(cobj.dignity, str) else cobj.dignity.name
+        out.append(PlacementFact(
+            object_name=name,
+            glyph=cobj.glyph or "",
+            sign=sign,
+            sign_element=cobj.sign.element if cobj.sign else "",
+            sign_modality=cobj.sign.modality if cobj.sign else "",
+            house=house_num,
+            degree=cobj.dms or "",
+            retrograde=bool(cobj.retrograde),
+            dignity=dignity_str,
+            oob=cobj.oob_status or "",
+            object_type=cobj.object_name.object_type if cobj.object_name else "",
+            # No combo text — keeps full_chart_context compact
         ))
     return out
 
