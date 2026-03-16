@@ -563,7 +563,8 @@ def calculate_chart(
 		chart_sect = chart_sect_from_chart(chart) if not unknown_time else "Diurnal"
 	except (ValueError, Exception):
 		chart_sect = "Diurnal"
-	score_and_attach(chart, sect=chart_sect, house_system="placidus")
+	_strength_edges, _ = build_aspect_edges(chart)
+	score_and_attach(chart, sect=chart_sect, house_system="placidus", edges_major=_strength_edges)
 
 	# --- Return values ---
 	# chart is AstrologicalChart for session storage (chart_core stores as last_chart)

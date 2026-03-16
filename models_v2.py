@@ -337,6 +337,19 @@ class PlanetaryState:
     motion_label: str = ""            # "stationary_direct", "stationary_retrograde", "direct", "retrograde"
     solar_distance: Optional[float] = None  # Angular distance from Sun (degrees)
 
+    # --- Conjunction bonuses (populated by dignity_calc.py) ---
+    fixed_star_bonus: float = 0.0        # Potency bonus from conjunct fixed stars
+    asteroid_bonus: float = 0.0          # Potency bonus from conjunct asteroids / BML
+    conjunction_contributors: List[str] = field(default_factory=list)
+    # ^ names of every star / asteroid that contributed a bonus to this object
+    # (used by the profile layer: "your Venus is amplified by Pallas Athena, conjunct Spica")
+
+    # --- Cluster aggregation (populated by dignity_calc.py) ---
+    cluster_id: Optional[int] = None      # Index of the conjunction cluster this object belongs to
+    cluster_potency: float = 0.0          # Aggregated potency sum across all cluster members
+    cluster_members: List[str] = field(default_factory=list)
+    # ^ all object names in this cluster (empty if singleton)
+
 @dataclass
 class ReceptionLink:
     other: Object

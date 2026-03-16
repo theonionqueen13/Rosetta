@@ -11,6 +11,8 @@ SQLAlchemy if you prefer.
 """
 
 import os
+from typing import Optional
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -73,3 +75,44 @@ def load_static_from_db() -> StaticLookup:
     finally:
         conn.close()
     return static
+
+
+_terms_cache: Optional[list] = None
+
+
+def get_terms(intent: Optional[str] = None) -> list:
+    """Fetch rows from the astrological_terms table.
+
+    Results are cached in memory for the lifetime of the process so the DB
+    is queried at most once per intake.
+
+    Parameters
+    ----------
+    intent : str, optional
+        If provided, only rows with a matching ``intent`` value are returned.
+
+    Returns
+    -------
+    list of dict
+        Each dict has keys: canonical, aliases, factors, intent, domain,
+        description.
+    """
+    global _terms_cache
+    if _terms_cache is None:
+        try:
+            conn = _connect()
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT canonical, aliases, factors, intent, domain, "
+                        "description FROM astrological_terms ORDER BY id"
+                    )
+                    _terms_cache = [dict(r) for r in cur.fetchall()]
+            finally:
+                conn.close()
+        except Exception:
+            _terms_cache = []  # Don't retry — fall back to built-ins
+
+    if intent is not None:
+        return [r for r in _terms_cache if r.get("intent") == intent]
+    return list(_terms_cache)

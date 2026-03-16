@@ -178,6 +178,16 @@ TABLE_STATEMENTS = [
         name TEXT PRIMARY KEY,
         description TEXT
     );""",
+
+    """CREATE TABLE IF NOT EXISTS astrological_terms (
+        id SERIAL PRIMARY KEY,
+        canonical TEXT NOT NULL UNIQUE,
+        aliases TEXT[],
+        factors TEXT[],
+        intent TEXT,
+        domain TEXT,
+        description TEXT
+    );""",
 ]
 
 
@@ -203,6 +213,111 @@ def init_schema(cur):
         ALTER TABLE aspects
         ADD COLUMN IF NOT EXISTS sentence_name TEXT;
     """)
+
+
+def seed_astrological_terms(cur):
+    """Upsert the built-in astrological terms vocabulary.
+
+    Each row encodes one canonical concept with its alias patterns,
+    optional astrological factors, routing intent, domain grouping, and
+    a short description.  Rows are keyed on ``canonical`` so repeated
+    runs are idempotent.
+    """
+    # Source of truth lives in src/mcp/term_registry._BUILTIN_TERMS;
+    # we duplicate minimally here to keep the migration self-contained.
+    rows = [
+        # (canonical, aliases, factors, intent, domain, description)
+        (
+            "influential planet",
+            ["most influential planet", "most influential",
+             "which planet.*most influence", "what.*most influential",
+             "planet.*most influence", "influential planet",
+             "what is.*influential", "most significant planet"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "Asks which planet(s) have the greatest overall potency per the power index.",
+        ),
+        (
+            "strongest planet",
+            ["strongest planet", "most powerful planet", "most potent planet",
+             "dominant planet", "dominant energy", "most dominant",
+             "which planet is strongest", "what.*strongest planet",
+             "planet.*greatest power", "most forceful planet"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "Asks for the planet with the highest combined power index.",
+        ),
+        (
+            "weakest planet",
+            ["weakest planet", "least powerful planet", "least active planet",
+             "least prominent planet", "least influential",
+             "which planet.*weakest", "most inactive planet",
+             "planet.*lowest power"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "Asks for the planet with the lowest power index.",
+        ),
+        (
+            "most dignified planet",
+            ["most dignified", "best dignified", "highest dignity",
+             "greatest dignity", "planet.*most dignified",
+             "which planet.*dignified", "best placed.*dignity"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "Asks which planet has the best essential dignity score.",
+        ),
+        (
+            "afflicted planet",
+            ["afflicted planet", "most afflicted", "debilitated planet",
+             "fallen planet", "planet.*in detriment", "planet.*in fall",
+             "which planet.*afflicted", "most debilitated"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "Asks about planets with negative dignity or poor accidental state.",
+        ),
+        (
+            "prominent planet",
+            ["prominent planet", "most prominent", "which planet stands out",
+             "planet.*stands out", "well.placed planet", "best placed planet",
+             "planet.*prominent", "angular planet", "which planet.*angular"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "Asks for planets that are especially active or visible in the chart.",
+        ),
+        (
+            "planet power",
+            ["planet.*power", "power.*planet", "potency of.*planet",
+             "planetary potency", "planetary power", "planetary strength",
+             "strength.*planet", "which planet.*strong",
+             "overall.*planet.*strength", "chart.*power"],
+            [],
+            "potency_ranking",
+            "Identity & Self",
+            "General inquiry about the relative power or strength of planets in the chart.",
+        ),
+    ]
+    execute_values(
+        cur,
+        """
+        INSERT INTO astrological_terms
+            (canonical, aliases, factors, intent, domain, description)
+        VALUES %s
+        ON CONFLICT (canonical) DO UPDATE SET
+            aliases     = EXCLUDED.aliases,
+            factors     = EXCLUDED.factors,
+            intent      = EXCLUDED.intent,
+            domain      = EXCLUDED.domain,
+            description = EXCLUDED.description
+        """,
+        rows,
+    )
+    print(f"astrological_terms seeded: {len(rows)} rows")
 
 
 def insert_static_data(cur):
@@ -486,6 +601,9 @@ def insert_static_data(cur):
                        rows)
     print(f"house_system_interp rows: {len(rows)}")
 
+    # astrological terms vocabulary
+    seed_astrological_terms(cur)
+
     # post-insert sanity: make sure all north/south node combos landed
     cur.execute("SELECT combo_key FROM object_house_combos "
                 "WHERE object_name IN ('North Node','South Node')")
@@ -552,6 +670,8 @@ def main():
                 print('house_system_interp count:', cur.fetchone()[0])
                 cur.execute("SELECT COUNT(*) FROM aspects WHERE sign_interval IS NOT NULL")
                 print('aspects with sign_interval:', cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM astrological_terms")
+                print('astrological_terms count:', cur.fetchone()[0])
     finally:
         conn.close()
 
