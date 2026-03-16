@@ -581,9 +581,6 @@ if chart_cached is not None:
 		unsafe_allow_html=True
 	)
 
-	# ── AI Chat widget ──────────────────────────────────────────────────
-	render_chat_widget()
-
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
 	saved_profiles = load_user_profiles_db(current_user_id)
@@ -611,6 +608,12 @@ if chart_cached is not None:
 		st.pyplot(rr.fig, clear_figure=True)
 		plt.close(rr.fig)
 
+	# --- Dispositor Graph (moved from popover) ---
+	render_dispositor_section(st, chart_cached)
+
+	# ── AI Chat widget ──────────────────────────────────────────────────
+	render_chat_widget()
+	
 	# --- Interpretation Output Section ---
 	# Auto-open when the chat widget triggers fallback mode
 	_interp_open = st.session_state.get("mcp_interp_expander_open", False)
@@ -685,9 +688,6 @@ if chart_cached is not None:
 			)
 		except Exception as e:
 			print(f"Error during NatalInterpreter instantiation: {e}")
-
-	# --- Dispositor Graph (moved from popover) ---
-	render_dispositor_section(st, chart_cached)
 
 	st.subheader("🤓 Nerdy Chart Specs 📋")
 	unknown_time_chart = bool(
