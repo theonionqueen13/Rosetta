@@ -8,6 +8,7 @@ import networkx as nx
 
 import profiles_v2 as _profiles_mod
 import calc_v2 as _calc_mod
+from models_v2 import DetectedShape
 
 
 # Mirror the ASPECTS dict structure expected by the legacy pattern logic.
@@ -836,7 +837,7 @@ def detect_shapes(pos, patterns, major_edges_all):
         return (remainder_flag, shape["id"], 0, shape["id"])
 
     shapes.sort(key=sort_key)
-    return shapes
+    return [DetectedShape.from_dict(s) for s in shapes]
 
 def detect_shapes_from_dataframe(df, edges_major: Sequence[tuple] | None = None):
     """High-level helper that plugs curated calc_v2 data into detect_shapes."""

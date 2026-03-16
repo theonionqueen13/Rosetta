@@ -23,6 +23,7 @@ from calc_v2 import calculate_chart, chart_sect_from_chart, build_aspect_edges, 
 					annotate_chart, build_dispositor_tables, \
 					build_conjunction_clusters
 from src.dispositor_graph import plot_dispositor_graph
+from circuit_sim import simulate_and_attach
 
 
 def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
@@ -733,6 +734,8 @@ def run_chart(suffix: str = "") -> bool:
 	chart.edges_minor            = edges_minor
 	chart.aspect_groups          = patterns
 	chart.shapes                 = shapes
+	# Circuit power simulation — requires both planetary_states AND shapes.
+	simulate_and_attach(chart)
 	chart.filaments              = filaments
 	chart.singleton_map          = singleton_map
 	chart.combos                 = combos

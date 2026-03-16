@@ -203,6 +203,112 @@ class SabianFact:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Circuit-aware fact types (populated by circuit_query.py)
+# ═══════════════════════════════════════════════════════════════════════
+
+@dataclass
+class CircuitFlowFact:
+    """One shape circuit's power-flow summary."""
+    shape_type: str             # "Grand Trine", "T-Square", etc.
+    shape_id: str               # unique id
+    members: List[str]          # planet names
+    resonance: float            # 0.0–1.0
+    friction: float             # 0.0–1.0
+    throughput: float
+    flow_characterization: str  # e.g. "Effortless resonance loop"
+    dominant_node: str = ""
+    bottleneck_node: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "shape": self.shape_type,
+            "members": self.members,
+            "resonance": round(self.resonance, 2),
+            "friction": round(self.friction, 2),
+            "throughput": round(self.throughput, 2),
+            "flow": self.flow_characterization,
+        }
+        if self.dominant_node:
+            d["dominant"] = self.dominant_node
+        if self.bottleneck_node:
+            d["bottleneck"] = self.bottleneck_node
+        return d
+
+
+@dataclass
+class PowerNodeFact:
+    """One planet's power stats from the circuit simulation."""
+    planet_name: str
+    power_index: float
+    effective_power: float
+    friction_load: float = 0.0
+    received_power: float = 0.0
+    is_source: bool = False     # South Node
+    is_sink: bool = False       # North Node
+    is_mutual_reception: bool = False
+    role_note: str = ""         # e.g. "dominant", "bottleneck", "isolated"
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "planet": self.planet_name,
+            "power": round(self.power_index, 2),
+            "effective": round(self.effective_power, 2),
+        }
+        if self.friction_load > 0.01:
+            d["friction"] = round(self.friction_load, 2)
+        if self.received_power > 0.01:
+            d["received"] = round(self.received_power, 2)
+        if self.is_source:
+            d["role"] = "source (South Node)"
+        elif self.is_sink:
+            d["role"] = "sink (North Node)"
+        if self.is_mutual_reception:
+            d["mutual_reception"] = True
+        if self.role_note:
+            d["note"] = self.role_note
+        return d
+
+
+@dataclass
+class CircuitPathFact:
+    """A traced conductive path between two concept clusters."""
+    from_concept: str
+    to_concept: str
+    path_planets: List[str] = field(default_factory=list)
+    path_aspects: List[str] = field(default_factory=list)
+    total_conductance: float = 0.0
+    connection_quality: str = ""   # "direct_shape", "bridged", "isolated"
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "from": self.from_concept,
+            "to": self.to_concept,
+            "quality": self.connection_quality,
+        }
+        if self.path_planets:
+            d["path"] = " → ".join(self.path_planets)
+        if self.path_aspects:
+            d["aspects"] = self.path_aspects
+        if self.total_conductance:
+            d["conductance"] = round(self.total_conductance, 3)
+        return d
+
+
+@dataclass
+class IsolationFact:
+    """Documents when queried factors are electrically isolated."""
+    concept_a: str
+    concept_b: str
+    note: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "between": f"{self.concept_a} ↔ {self.concept_b}",
+            "note": self.note,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Top-level ReadingPacket
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -238,8 +344,29 @@ class ReadingPacket:
     sabians: List[SabianFact] = field(default_factory=list)
     sect: Optional[SectFact] = None
 
+    # ── Circuit-aware facts (from circuit_query.py) ──────────────────
+    circuit_flows: List[CircuitFlowFact] = field(default_factory=list)
+    power_nodes: List[PowerNodeFact] = field(default_factory=list)
+    circuit_paths: List[CircuitPathFact] = field(default_factory=list)
+    isolations: List[IsolationFact] = field(default_factory=list)
+    narrative_seeds: List[str] = field(default_factory=list)
+    power_summary: Dict[str, Any] = field(default_factory=dict)
+    sn_nn_relevance: str = ""
+
+    # ── Question comprehension metadata ──────────────────────────────
+    question_type: str = ""          # "single_focus" / "relationship" / etc.
+    comprehension_note: str = ""     # LLM comprehension explanation
+
+    # ── Agent notes (accumulated across conversation) ────────────────
+    agent_notes: str = ""
+
     # ── Pre-baked NatalInterpreter text (for the focused objects) ────
     interp_text: str = ""
+
+    # ── Currently-visible objects from the live chart drawing ───────────
+    # Populated from RenderResult.visible_objects when a render exists.
+    # Tells the LLM exactly which planets/points are toggled on right now.
+    visible_objects: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Compact serialization for prompt building.
@@ -288,6 +415,28 @@ class ReadingPacket:
             d["sect"] = self.sect.to_dict()
         if self.interp_text:
             d["interpretation"] = self.interp_text
+        if self.visible_objects:
+            d["visible_on_chart"] = self.visible_objects
+
+        # Circuit-aware sections
+        if self.circuit_flows:
+            d["circuit_flows"] = [cf.to_dict() for cf in self.circuit_flows]
+        if self.power_nodes:
+            d["power_nodes"] = [pn.to_dict() for pn in self.power_nodes]
+        if self.circuit_paths:
+            d["circuit_paths"] = [cp.to_dict() for cp in self.circuit_paths]
+        if self.isolations:
+            d["isolations"] = [iso.to_dict() for iso in self.isolations]
+        if self.narrative_seeds:
+            d["narrative_seeds"] = self.narrative_seeds
+        if self.power_summary:
+            d["power_summary"] = self.power_summary
+        if self.sn_nn_relevance:
+            d["sn_nn"] = self.sn_nn_relevance
+        if self.question_type:
+            d["question_type"] = self.question_type
+        if self.agent_notes:
+            d["agent_notes"] = self.agent_notes
 
         return d
 
@@ -312,4 +461,12 @@ class ReadingPacket:
             parts.append(f"{len(self.dignities)} dignities")
         if self.houses:
             parts.append(f"{len(self.houses)} houses")
+        if self.circuit_flows:
+            parts.append(f"{len(self.circuit_flows)} circuits")
+        if self.power_nodes:
+            parts.append(f"{len(self.power_nodes)} power nodes")
+        if self.circuit_paths:
+            parts.append(f"{len(self.circuit_paths)} paths")
+        if self.isolations:
+            parts.append(f"{len(self.isolations)} isolations")
         return ", ".join(parts) if parts else "empty packet"

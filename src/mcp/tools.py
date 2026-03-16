@@ -21,6 +21,8 @@ from src.mcp.reading_engine import build_reading
 from src.mcp.reading_packet import ReadingPacket
 from src.mcp.prose_synthesizer import synthesize, SynthesisResult
 from src.mcp.prompt_templates import estimate_prompt_tokens
+from src.mcp.comprehension import comprehend
+from src.mcp.circuit_query import query_circuit
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -213,6 +215,48 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "required": ["domain"],
         },
     },
+    {
+        "name": "get_circuit_reading",
+        "description": (
+            "Get the circuit simulation reading for a question. Returns "
+            "the power-flow subgraph relevant to the question, including "
+            "shape circuits, power nodes, connecting paths, isolation notes, "
+            "and narrative seeds. This is the primary circuit-aware tool."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "Free-text question about the chart",
+                },
+            },
+            "required": ["question"],
+        },
+    },
+    {
+        "name": "trace_circuit_path",
+        "description": (
+            "Trace the conductive path between two planets or concepts "
+            "in the circuit simulation. Returns the connecting path, "
+            "conductance values, and whether they share a circuit shape "
+            "or are isolated from each other."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "concept_a": {
+                    "type": "string",
+                    "description": "First planet/concept (e.g. 'Venus', 'career')",
+                },
+                "concept_b": {
+                    "type": "string",
+                    "description": "Second planet/concept (e.g. 'Saturn', 'relationships')",
+                },
+            },
+            "required": ["concept_a", "concept_b"],
+        },
+    },
 ]
 
 
@@ -270,6 +314,7 @@ def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     packet = build_reading(
         question, ctx.chart,
         house_system=ctx.house_system,
+        api_key=ctx.api_key,
     )
     result = synthesize(
         packet,
@@ -397,24 +442,21 @@ def _get_patterns(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         house_system=ctx.house_system,
         include_interp_text=False,
     )
-    # Also grab patterns from shapes directly
+    # Grab patterns directly from shapes
     all_patterns: List[Dict[str, Any]] = []
     for shape in (ctx.chart.shapes or []):
-        name = getattr(shape, "name", type(shape).__name__)
-        members: List[str] = []
-        for attr in dir(shape):
-            if attr.startswith("node_") or attr in ("apex", "base_1", "base_2"):
-                node = getattr(shape, attr, None)
-                if node and hasattr(node, "name"):
-                    members.append(node.name)
-                elif node and hasattr(node, "object_name"):
-                    n = node.object_name
-                    members.append(n.name if hasattr(n, "name") else str(n))
-        meaning = getattr(shape, "meaning", "")
+        if hasattr(shape, "shape_type"):  # DetectedShape
+            shape_name = shape.shape_type
+            members = list(shape.members)
+        elif isinstance(shape, dict):  # legacy
+            shape_name = shape.get("type", "Unknown")
+            members = list(shape.get("members", []))
+        else:
+            continue
         all_patterns.append({
-            "type": name,
+            "type": shape_name,
             "members": members,
-            "meaning": meaning or "",
+            "meaning": "",
         })
     return {"patterns": all_patterns, "count": len(all_patterns)}
 
@@ -460,6 +502,58 @@ def _get_domain_factors(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any
     return {"domain": domain, "factors": factors}
 
 
+def _get_circuit_reading(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Get circuit simulation reading for a question."""
+    if not ctx.chart:
+        return {"error": "No chart loaded."}
+
+    question = args.get("question", "")
+    q_graph = comprehend(question, ctx.chart, api_key=ctx.api_key)
+    cr = query_circuit(q_graph, ctx.chart)
+
+    return {
+        "question_type": q_graph.question_type,
+        "domain": q_graph.domain,
+        "factors": q_graph.all_factors,
+        "circuit_reading": cr.to_dict(),
+    }
+
+
+def _trace_circuit_path(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Trace conductive path between two concepts."""
+    if not ctx.chart:
+        return {"error": "No chart loaded."}
+
+    concept_a = args.get("concept_a", "")
+    concept_b = args.get("concept_b", "")
+    question = f"How does {concept_a} relate to {concept_b}?"
+
+    q_graph = comprehend(question, ctx.chart, api_key=ctx.api_key)
+    cr = query_circuit(q_graph, ctx.chart)
+
+    result: Dict[str, Any] = {
+        "concept_a": concept_a,
+        "concept_b": concept_b,
+        "factors_a": q_graph.nodes[0].factors if q_graph.nodes else [],
+        "factors_b": q_graph.nodes[1].factors if len(q_graph.nodes) > 1 else [],
+    }
+
+    if cr.connecting_paths:
+        result["paths"] = [p.to_dict() for p in cr.connecting_paths]
+    if cr.isolation_notes:
+        result["isolated"] = True
+        result["isolation_notes"] = cr.isolation_notes
+    else:
+        result["isolated"] = False
+    if cr.relevant_shapes:
+        result["shared_shapes"] = [
+            {"type": s.shape_type, "members": [n.planet_name for n in s.nodes]}
+            for s in cr.relevant_shapes
+        ]
+
+    return result
+
+
 # Handler dispatch table
 _HANDLERS: Dict[str, Any] = {
     "ask_chart": _ask_chart,
@@ -473,4 +567,6 @@ _HANDLERS: Dict[str, Any] = {
     "get_patterns": _get_patterns,
     "get_chart_summary": _get_chart_summary,
     "get_domain_factors": _get_domain_factors,
+    "get_circuit_reading": _get_circuit_reading,
+    "trace_circuit_path": _trace_circuit_path,
 }

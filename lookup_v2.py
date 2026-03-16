@@ -453,6 +453,59 @@ SIGN_ELEMENT = {
 	for sign in data["signs"]
 }
 
+# ═══════════════════════════════════════════════════════════════════════
+# ASPECT CONDUCTANCE — Circuit Simulation Engine
+# Defines how each aspect type behaves when planets are treated as power
+# sources connected by conductive channels.
+#
+# conductance : 0.0–1.0  — fraction of power transmitted per unit of
+#                          source authority. 0.0 = no direct conduction.
+# flow_type   : metaphorical descriptor used in characterization strings.
+# harmonic    : the underlying harmonic number for this aspect angle.
+# ═══════════════════════════════════════════════════════════════════════
+ASPECT_CONDUCTANCE = {
+	"Conjunction": {
+		"conductance": 1.0,
+		"flow_type": "merge_amplify",
+		"harmonic": 1,
+	},
+	"Trine": {
+		"conductance": 0.9,
+		"flow_type": "effortless_flow",
+		"harmonic": 3,
+	},
+	"Sextile": {
+		"conductance": 0.7,
+		"flow_type": "engaged_flow",
+		"harmonic": 6,
+	},
+	"Opposition": {
+		"conductance": 0.5,
+		"flow_type": "polarized_split",
+		"harmonic": 2,
+	},
+	"Sesquisquare": {
+		"conductance": 0.4,
+		"flow_type": "overflow_valve",
+		"harmonic": 8,
+	},
+	"Semisextile": {
+		"conductance": 0.35,
+		"flow_type": "pressure_release",
+		"harmonic": 12,
+	},
+	"Square": {
+		"conductance": 0.3,
+		"flow_type": "friction_work",
+		"harmonic": 4,
+	},
+	"Quincunx": {
+		"conductance": 0.0,
+		"flow_type": "arc_hazard_reroute",
+		"harmonic": None,
+	},
+}
+
 GROUP_COLORS = [
   	"#B80303", "#FF5100", "#FFAE00", "#53B800",
     "#0071BD", "#1D1FC5", "#6321CE", "#440101",

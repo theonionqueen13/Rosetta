@@ -1,14 +1,11 @@
 """
-reading_engine.py — Deterministic chart → ReadingPacket orchestrator.
-
-Takes a free-text question and an AstrologicalChart, and produces a
-ReadingPacket containing *only* pre-computed, hard-coded astrological
-facts.  No LLM is involved at this stage.
+reading_engine.py — Circuit-driven chart → ReadingPacket orchestrator.
 
 Pipeline:
-  1. Route the question via topic_maps → relevant factors
-  2. Filter the chart to those factors
-  3. Collect placements, aspects, patterns, dignities, dispositors
+  1. Comprehend the question → QuestionGraph (LLM or keyword fallback)
+  2. Query the circuit simulation → CircuitReading (subgraph extraction)
+  3. Collect classical facts (placements, aspects, patterns, dignities,
+     dispositors, houses, sect, sabians) filtered to relevant factors
   4. Optionally run NatalInterpreter for pre-baked prose
   5. Pack everything into a ReadingPacket
 """
@@ -29,13 +26,19 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from src.mcp.topic_maps import resolve_factors, TopicMatch
+from src.mcp.comprehension import comprehend, QuestionGraph
+from src.mcp.circuit_query import query_circuit, CircuitReading
 from src.mcp.reading_packet import (
     AspectFact,
+    CircuitFlowFact,
+    CircuitPathFact,
     DignityFact,
     DispositorFact,
     HouseOverview,
+    IsolationFact,
     PatternFact,
     PlacementFact,
+    PowerNodeFact,
     ReadingPacket,
     SabianFact,
     SectFact,
@@ -124,8 +127,18 @@ def build_reading(
     include_sabians: bool = False,
     include_interp_text: bool = True,
     max_aspects: int = 20,
+    api_key: Optional[str] = None,
+    agent_notes: str = "",
+    render_result: Optional[Any] = None,
 ) -> ReadingPacket:
     """Produce a ReadingPacket for *question* against *chart*.
+
+    Pipeline:
+      1. Comprehend → QuestionGraph (structured LLM or keyword fallback)
+      2. Query circuit → CircuitReading (subgraph extraction)
+      3. Classical facts (placements, aspects, patterns, etc.)
+      4. Optional NatalInterpreter text
+      5. Pack into ReadingPacket
 
     Parameters
     ----------
@@ -141,6 +154,10 @@ def build_reading(
         If True, run NatalInterpreter and embed its output.
     max_aspects : int
         Cap the number of aspect facts to include.
+    api_key : str, optional
+        OpenRouter API key for the comprehension LLM call.
+    agent_notes : str
+        Accumulated agent notes from the conversation.
 
     Returns
     -------
@@ -148,13 +165,23 @@ def build_reading(
     """
     static = _get_static_db()
 
-    # ── 1. Route the question ────────────────────────────────────────
-    topic: TopicMatch = resolve_factors(question)
-    obj_names, sign_names, house_numbers = _classify_factors(topic.factors)
+    # ── 1. Comprehend the question ───────────────────────────────────
+    q_graph: QuestionGraph = comprehend(question, chart, api_key=api_key)
 
-    # ── 2. Identify matching chart objects ───────────────────────────
-    # We match objects by name, objects in requested signs, and objects
-    # in requested houses.
+    # ── 2. Query the circuit simulation ──────────────────────────────
+    circuit_reading: CircuitReading = query_circuit(q_graph, chart)
+
+    # ── 3. Determine relevant factors for classical fact collection ──
+    # Merge factors from comprehension + legacy topic map
+    all_factors = list(q_graph.all_factors)
+    # Also run the old topic_maps for fallback coverage
+    topic: TopicMatch = resolve_factors(question)
+    legacy_factors = topic.factors or []
+    merged_factors = list(dict.fromkeys(all_factors + legacy_factors))  # dedupe, preserve order
+
+    obj_names, sign_names, house_numbers = _classify_factors(merged_factors)
+
+    # ── 4. Identify matching chart objects ───────────────────────────
     relevant_objects: List["ChartObject"] = []
     relevant_names: Set[str] = set()
 
@@ -175,42 +202,48 @@ def build_reading(
             relevant_objects.append(cobj)
             relevant_names.add(name)
 
-    # If topic routing returned house numbers but no objects matched,
-    # still include the house overviews (handled below).
+    # Also include planets that appear in focus_nodes from circuit query
+    for node in circuit_reading.focus_nodes:
+        pname = node.planet_name
+        if pname not in relevant_names:
+            for cobj in chart.objects:
+                n = cobj.object_name.name if cobj.object_name else ""
+                if n == pname:
+                    relevant_objects.append(cobj)
+                    relevant_names.add(n)
+                    break
 
-    # ── 3. Build placement facts ─────────────────────────────────────
+    # ── 5. Build classical facts ─────────────────────────────────────
     placements = _build_placements(relevant_objects, house_system, static)
-
-    # ── 4. Build aspect facts ────────────────────────────────────────
     aspects = _build_aspects(chart, relevant_names, max_aspects)
-
-    # ── 5. Build pattern facts ───────────────────────────────────────
-    patterns = _build_patterns(chart, relevant_names)
-
-    # ── 6. Build dignity facts ───────────────────────────────────────
+    patterns = _build_patterns(chart, relevant_names, render_result=render_result)
     dignities = _build_dignities(relevant_objects)
-
-    # ── 7. Build dispositor facts ────────────────────────────────────
     dispositors = _build_dispositors(chart, relevant_names)
-
-    # ── 8. Build house overviews ─────────────────────────────────────
     houses = _build_house_overviews(chart, house_numbers, house_system, static)
 
-    # ── 9. Sabian symbols (optional) ─────────────────────────────────
     sabians: List[SabianFact] = []
     if include_sabians:
         sabians = _build_sabians(relevant_objects)
 
-    # ── 10. Sect ──────────────────────────────────────────────────────
     sect_fact = _build_sect(chart)
 
-    # ── 11. Optional NatalInterpreter text ────────────────────────────
+    # ── Optional NatalInterpreter text ────────────────────────────
     interp_text = ""
     if include_interp_text and relevant_names:
         interp_text = _run_interp(chart, relevant_names, house_system)
 
-    # ── 12. Pack it ──────────────────────────────────────────────────
-    # Chart header
+    # ── Visible objects from current render state ─────────────────────────
+    visible_objects: List[str] = []
+    if render_result and hasattr(render_result, "visible_objects"):
+        visible_objects = list(render_result.visible_objects or [])
+
+    # ── 7. Convert circuit reading to packet fact types ──────────────
+    circuit_flows = _circuit_reading_to_flows(circuit_reading)
+    power_nodes = _circuit_reading_to_power_nodes(circuit_reading)
+    circuit_paths = _circuit_reading_to_paths(circuit_reading)
+    isolations = _circuit_reading_to_isolations(circuit_reading)
+
+    # ── 8. Pack it ───────────────────────────────────────────────────
     hdr = chart.header_lines() if hasattr(chart, "header_lines") else ("", "", "", "", "")
     chart_name = hdr[0] if hdr else ""
     chart_date = hdr[1] if len(hdr) > 1 else ""
@@ -219,9 +252,9 @@ def build_reading(
 
     return ReadingPacket(
         question=question,
-        domain=topic.domain,
-        subtopic=topic.subtopic,
-        confidence=topic.confidence,
+        domain=q_graph.domain or topic.domain,
+        subtopic=q_graph.subtopic or topic.subtopic,
+        confidence=q_graph.confidence,
         matched_keywords=topic.matched_keywords,
         chart_name=chart_name,
         chart_date=chart_date,
@@ -236,7 +269,18 @@ def build_reading(
         houses=houses,
         sabians=sabians,
         sect=sect_fact,
+        circuit_flows=circuit_flows,
+        power_nodes=power_nodes,
+        circuit_paths=circuit_paths,
+        isolations=isolations,
+        narrative_seeds=circuit_reading.narrative_seeds,
+        power_summary=circuit_reading.power_summary,
+        sn_nn_relevance=circuit_reading.sn_nn_relevance,
+        question_type=q_graph.question_type,
+        comprehension_note=q_graph.comprehension_note,
+        agent_notes=agent_notes,
         interp_text=interp_text,
+        visible_objects=visible_objects,
     )
 
 
@@ -365,29 +409,39 @@ def _build_aspects(
 def _build_patterns(
     chart: "AstrologicalChart",
     relevant_names: Set[str],
+    render_result: Optional[Any] = None,
 ) -> List[PatternFact]:
-    """Extract patterns (shapes) involving relevant objects."""
+    """Extract shape/pattern facts from the chart.
+
+    Uses ``render_result.shapes`` when available (reflects the currently-visible
+    chart state); falls back to ``chart.shapes``.  **All** detected shapes are
+    included — no relevance filter — so the LLM always has full pattern
+    visibility regardless of query scope.
+    """
     out: List[PatternFact] = []
-    for shape in (chart.shapes or []):
-        # Shapes have varying structures but all have a `name` attr
-        shape_name = getattr(shape, "name", type(shape).__name__)
-        # Collect member names from node_* attrs
-        members: List[str] = []
-        for attr in dir(shape):
-            if attr.startswith("node_") or attr in ("apex", "base_1", "base_2"):
-                node = getattr(shape, attr, None)
-                if node and hasattr(node, "name"):
-                    members.append(node.name)
-                elif node and hasattr(node, "object_name"):
-                    n = node.object_name
-                    members.append(n.name if hasattr(n, "name") else str(n))
-        # Only include if at least one member is relevant
-        if members and (relevant_names & set(members)):
-            meaning = getattr(shape, "meaning", "")
+    # Prefer the live render state: it mirrors chart.shapes but confirms
+    # exactly what is displayed to the user right now.
+    source = (
+        getattr(render_result, "shapes", None)
+        or chart.shapes
+        or []
+    )
+    for shape in source:
+        # DetectedShape dataclass (current format)
+        if hasattr(shape, "shape_type"):
+            shape_name = shape.shape_type
+            members = list(shape.members)
+        # Legacy dict safety net (cached charts from before migration)
+        elif isinstance(shape, dict):
+            shape_name = shape.get("type", "Unknown")
+            members = list(shape.get("members", []))
+        else:
+            continue
+        if members:
             out.append(PatternFact(
                 pattern_type=shape_name,
                 members=members,
-                meaning=meaning or "",
+                meaning="",
             ))
     return out
 
@@ -585,3 +639,70 @@ def _run_interp(
         return "\n\n".join(parts)
     except Exception:
         return ""
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Circuit Reading → Packet Fact converters
+# ═══════════════════════════════════════════════════════════════════════
+
+def _circuit_reading_to_flows(cr: CircuitReading) -> List[CircuitFlowFact]:
+    """Convert CircuitReading.relevant_shapes → list of CircuitFlowFact."""
+    out: List[CircuitFlowFact] = []
+    for sc in (cr.relevant_shapes or []):
+        out.append(CircuitFlowFact(
+            shape_type=sc.shape_type,
+            shape_id=sc.shape_id,
+            members=[n.planet_name for n in sc.nodes],
+            resonance=sc.resonance_score,
+            friction=sc.friction_score,
+            throughput=sc.total_throughput,
+            flow_characterization=sc.flow_characterization,
+            dominant_node=sc.dominant_node or "",
+            bottleneck_node=sc.bottleneck_node or "",
+        ))
+    return out
+
+
+def _circuit_reading_to_power_nodes(cr: CircuitReading) -> List[PowerNodeFact]:
+    """Convert CircuitReading.focus_nodes → list of PowerNodeFact."""
+    out: List[PowerNodeFact] = []
+    for node in (cr.focus_nodes or []):
+        out.append(PowerNodeFact(
+            planet_name=node.planet_name,
+            power_index=node.power_index,
+            effective_power=node.effective_power,
+            friction_load=node.friction_load,
+            received_power=node.received_power,
+            is_source=node.is_source,
+            is_sink=node.is_sink,
+            is_mutual_reception=node.is_mutual_reception,
+        ))
+    return out
+
+
+def _circuit_reading_to_paths(cr: CircuitReading) -> List[CircuitPathFact]:
+    """Convert CircuitReading.connecting_paths → list of CircuitPathFact."""
+    out: List[CircuitPathFact] = []
+    for path in (cr.connecting_paths or []):
+        out.append(CircuitPathFact(
+            from_concept=path.from_concept,
+            to_concept=path.to_concept,
+            path_planets=path.path_planets,
+            path_aspects=path.path_aspects,
+            total_conductance=path.total_conductance,
+            connection_quality=path.connection_quality,
+        ))
+    return out
+
+
+def _circuit_reading_to_isolations(cr: CircuitReading) -> List[IsolationFact]:
+    """Convert CircuitReading.isolation_notes → list of IsolationFact."""
+    out: List[IsolationFact] = []
+    for note in (cr.isolation_notes or []):
+        # Parse concept names from the note string, or use generic labels
+        out.append(IsolationFact(
+            concept_a="",
+            concept_b="",
+            note=note,
+        ))
+    return out

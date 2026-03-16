@@ -3,7 +3,7 @@ from dateutil.relativedelta import relativedelta
 import pytz
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
-from models_v2 import static_db
+from models_v2 import static_db, DetectedShape
 
 GLYPHS = static_db.GLYPHS
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
@@ -161,8 +161,8 @@ def render_circuit_toggles(
 	# --- PRE-INIT (so keys exist before any widgets render) ---
 	for i in range(len(patterns)):
 		st.session_state.setdefault(f"toggle_pattern_{i}", False)
-		for sh in [sh for sh in shapes if sh["parent"] == i]:
-			st.session_state.setdefault(f"shape_{i}_{sh['id']}", False)
+		for sh in [sh for sh in shapes if sh.parent == i]:
+			st.session_state.setdefault(f"shape_{i}_{sh.shape_id}", False)
 	if singleton_map:
 		for planet in singleton_map.keys():
 			st.session_state.setdefault(f"singleton_{planet}", False)
@@ -178,7 +178,8 @@ def render_circuit_toggles(
 		_cc_shapes2_init = st.session_state.get("circuit_connected_shapes2", {})
 		for _ci in range(len(patterns)):
 			for _sh2 in _cc_shapes2_init.get(_ci, []):
-				st.session_state.setdefault(f"cc_shape_{_ci}_{_sh2['id']}", False)
+				_sh2_id = _sh2.shape_id if hasattr(_sh2, "shape_id") else _sh2.get("id", f"x_{_ci}")
+				st.session_state.setdefault(f"cc_shape_{_ci}_{_sh2_id}", False)
 
 	st.session_state.setdefault(COMPASS_KEY, True)
 	"""
@@ -224,8 +225,8 @@ def render_circuit_toggles(
 		updates = {}
 		for i in range(len(patterns)):
 			updates[f"toggle_pattern_{i}"] = False
-			for sh in [sh for sh in shapes if sh["parent"] == i]:
-				updates[f"shape_{i}_{sh['id']}"] = False
+		for sh in [sh for sh in shapes if sh.parent == i]:
+			updates[f"shape_{i}_{sh.shape_id}"] = False
 		if singleton_map:
 			for planet in singleton_map.keys():
 				updates[f"singleton_{planet}"] = False
@@ -573,7 +574,7 @@ def render_circuit_toggles(
 				# Group shapes by type
 				shapes_by_type: dict[str, list] = {}
 				for sh in shapes:
-					shape_type = sh.get("type", "Unknown")
+					shape_type = sh.shape_type
 					if shape_type not in shapes_by_type:
 						shapes_by_type[shape_type] = []
 					shapes_by_type[shape_type].append(sh)
@@ -612,21 +613,21 @@ def render_circuit_toggles(
 				col_left, col_right = st.columns(2)
 				for idx, shape_type in enumerate(sorted_types):
 					type_shapes = shapes_by_type[shape_type]
-					node_count = SHAPE_NODE_COUNTS.get(shape_type, len(type_shapes[0].get("members", [])) if type_shapes else 2)
+					node_count = SHAPE_NODE_COUNTS.get(shape_type, len(type_shapes[0].members) if type_shapes else 2)
 					# choose column
 					target_col = col_left if idx < half else col_right
 					with target_col:
 						with st.expander(f"**{shape_type}** – {len(type_shapes)} found", expanded=False):
 							for sh in type_shapes:
 								# Format members by chart origin
-								members = sh.get("members", [])
+									members = sh.members
 								# determine chart names
-								chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
-								if chart1_name == "Custom":
-									chart1_name = "Chart 1"
-								chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-								if chart2_name == "Custom":
-									chart2_name = "Chart 2"
+							chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
+							if chart1_name == "Custom":
+								chart1_name = "Chart 1"
+							chart2_name = st.session_state.get("test_chart_2", "Chart 2")
+							if chart2_name == "Custom":
+								chart2_name = "Chart 2"
 								
 								members1 = [m for m in members if not m.endswith("_2")]
 								members2 = [m[:-2] for m in members if m.endswith("_2")]
@@ -641,8 +642,8 @@ def render_circuit_toggles(
 								if members2:
 									members_label += f"; {chart2_name}: {fmt_list(members2)}"
 								# Create unique key for this shape
-								parent = sh.get("parent", 0)
-								shape_id = sh["id"]
+									parent = sh.parent
+									shape_id = sh.shape_id
 								unique_key = f"shape_{parent}_{shape_id}"
 								
 								st.session_state.setdefault(unique_key, False)
@@ -655,12 +656,12 @@ def render_circuit_toggles(
 				# Store shape toggle map for compatibility
 				shape_toggle_map = st.session_state.setdefault("shape_toggles_by_parent", {})
 				for sh in shapes:
-					parent = sh.get("parent", 0)
+					parent = sh.parent
 					if parent not in shape_toggle_map:
 						shape_toggle_map[parent] = []
-					unique_key = f"shape_{parent}_{sh['id']}"
+					unique_key = f"shape_{parent}_{sh.shape_id}"
 					shape_toggle_map[parent].append({
-						"id": sh["id"],
+						"id": sh.shape_id,
 						"on": st.session_state.get(unique_key, False)
 					})
 			else:
@@ -696,12 +697,12 @@ def render_circuit_toggles(
 				for _ci, _component in enumerate(patterns):
 					_comp_set = set(_component)
 					_connected = {_ep2 for (_ep1, _ep2, _) in _edges_inter if _ep1 in _comp_set}
-					_linked = [sh for sh in _shapes_2 if set(sh.get("members", [])) & _connected]
+					_linked = [sh for sh in _shapes_2 if set(sh.members) & _connected]
 					# Also add singleton entries for connected Chart 2 planets
 					# that aren't already covered by a linked shape.
 					_covered = set()
 					for sh in _linked:
-						_covered.update(sh.get("members", []))
+						_covered.update(sh.members)
 					for _planet in sorted(_connected - _covered):
 						_linked.append({
 							"type": "Single object",
@@ -766,19 +767,19 @@ def render_circuit_toggles(
 								st.session_state["saved_circuit_names"] = current.copy()
 
 						# Sub-shapes
-						parent_shapes = [sh for sh in shapes if sh["parent"] == i]
+						parent_shapes = [sh for sh in shapes if sh.parent == i]
 						shape_entries = []
 						if parent_shapes:
 							st.markdown("**Sub-shapes detected:**")
 							for sh in parent_shapes:
-								label_text = f"{sh['type']}: {', '.join(str(m) for m in sh['members'])}"
-								unique_key = f"shape_{i}_{sh['id']}"
+								label_text = f"{sh.shape_type}: {', '.join(str(m) for m in sh.members)}"
+								unique_key = f"shape_{i}_{sh.shape_id}"
 								on = st.checkbox(
 									label_text,
 									key=unique_key,
 									value=st.session_state.get(unique_key, False),
 								)
-								shape_entries.append({"id": sh["id"], "on": on})
+								shape_entries.append({"id": sh.shape_id, "on": on})
 						else:
 							st.markdown("_(no sub-shapes found)_")
 
@@ -796,13 +797,17 @@ def render_circuit_toggles(
 							if cc_shapes_for_circuit:
 								st.markdown("**Chart 2 Connections:**")
 								for sh2 in cc_shapes_for_circuit:
-									sh2_members = sh2.get("members", [])
+									# cc_shapes_for_circuit is a mix of DetectedShape (real shapes)
+									# and plain dicts (singleton UI entries)
+									sh2_members = sh2.members if hasattr(sh2, "members") and not isinstance(sh2, dict) else sh2.get("members", [])
+									sh2_type = sh2.shape_type if hasattr(sh2, "shape_type") else sh2.get("type", "Single object")
+									sh2_id = sh2.shape_id if hasattr(sh2, "shape_id") else sh2.get("id", f"x_{i}")
 									if want_glyphs:
 										members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
 									else:
 										members_str = ", ".join(sh2_members)
-									sh2_label = f"{sh2['type']}: {members_str}"
-									cc_key = f"cc_shape_{i}_{sh2['id']}"
+									sh2_label = f"{sh2_type}: {members_str}"
+									cc_key = f"cc_shape_{i}_{sh2_id}"
 									st.session_state.setdefault(cc_key, False)
 									st.checkbox(sh2_label, key=cc_key)
 							else:

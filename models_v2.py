@@ -3,7 +3,7 @@ import datetime
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Union, List, Optional, Any, Dict, Literal # Added Literal here
+from typing import Union, List, Optional, Any, Dict, Literal, ClassVar  # Added Literal here
 import pandas as pd
 from lookup_v2 import GLYPHS, SHAPES, MAJOR_OBJECTS, EPHE_MAJOR_OBJECTS, ALL_MAJOR_PLACEMENTS, ASPECTS, ASPECT_INTERP, DIGNITIES, RECEPTION_SYMBOLS, ELEMENT, MODE, SIGNS, SIGN_ANATOMY, LUMINARIES_AND_PLANETS, PLANETS_PLUS, ABREVIATED_PLANET_NAMES, PLANETARY_RULERS, DIGNITY_MEANINGS, DIGNITIES, _RECEPTION_ASPECTS, ALIASES_MEANINGS, ABREVIATED_PLANET_NAMES, OBJECT_MEANINGS, OBJECT_MEANINGS_SHORT, LONG_OBJECT_MEANINGS, ASPECTS_BY_SIGN, SIGN_MEANINGS, HOUSE_MEANINGS, ASPECT_INTERP, SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP, COMPASS_AXIS_INTERP, HOUSE_SYSTEM_INTERP, HOUSE_INTERP, SIGN_GLYPH, ZODIAC_NUMBERS, POLARITY, SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS, CATEGORY_MAP, CATEGORY_INSTRUCTIONS, LONG_HOUSE_MEANINGS, MALEFICS, BENEFICS, OBJECT_TYPE, SYNASTRY_COLORS_1, SYNASTRY_COLORS_2, ZODIAC_SIGNS, ZODIAC_COLORS, GROUP_COLORS, GROUP_COLORS_LIGHT, SUBSHAPE_COLORS, SUBSHAPE_COLORS_LIGHT, TOGGLE_ASPECTS, ORDERED_OBJECTS_FOCUS, SETNENCE_ASPECT_NAMES
 
@@ -980,7 +980,163 @@ class CircuitConnect:
     circuit_a: Circuit
     circuit_b: Circuit
     connecting_aspects: List[Union[ChartAspect, ClusterAspect]]
-    
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Circuit Power Simulation — produced by circuit_sim.py
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class CircuitNode:
+    """One planet/point inside the circuit simulation."""
+    planet_name: str
+    # Raw scores from dignity_calc (may be None for un-scored points)
+    raw_authority: float = 0.0          # Vector A
+    raw_potency: float = 0.0            # Vector B
+    power_index: float = 0.0            # combined PI from PlanetaryState
+    # Post-simulation flow values
+    received_power: float = 0.0         # total power flowing INTO this node
+    emitted_power: float = 0.0          # total power flowing OUT of this node
+    friction_load: float = 0.0          # heat dissipated by friction edges
+    # Role flags
+    is_source: bool = False             # True for South Node
+    is_sink: bool = False               # True for North Node
+    is_mutual_reception: bool = False   # True if part of a mutual reception pair
+    # Net effective power = power_index + received_power − friction_load
+    effective_power: float = 0.0
+
+
+@dataclass
+class CircuitEdge:
+    """One aspect wire connecting two CircuitNodes."""
+    node_a: str                          # planet name
+    node_b: str                          # planet name
+    aspect_type: str                     # e.g. "Trine"
+    conductance: float = 1.0             # from ASPECT_CONDUCTANCE
+    flow_direction: str = "bidirectional"  # "a→b", "b→a", or "bidirectional"
+    transmitted_power: float = 0.0       # actual power flowing through this edge
+    friction_heat: float = 0.0           # loss on Square / Opposition edges
+    # Quincunx rerouting fields
+    is_arc_hazard: bool = False          # True if this is a Quincunx edge
+    is_rerouted: bool = False            # True if alternative path was found
+    reroute_path: List[str] = field(default_factory=list)  # [nodeA, mid1, …, nodeB]
+    is_open_arc: bool = False            # True if no reroute path exists
+
+
+@dataclass
+class ShapeCircuit:
+    """Simulation result for one detected astrological shape."""
+    shape_type: str                      # "Grand Trine", "T-Square", etc.
+    shape_id: int                        # matches shape dict id from patterns_v2
+    # Participating nodes and edges
+    nodes: List[CircuitNode] = field(default_factory=list)
+    edges: List[CircuitEdge] = field(default_factory=list)
+    # Aggregate flow metrics
+    total_throughput: float = 0.0        # sum of all transmitted_power values
+    total_friction: float = 0.0          # sum of all friction_heat values
+    # Notable nodes
+    dominant_node: str = ""              # planet with highest effective_power
+    bottleneck_node: str = ""            # planet with highest friction_load
+    # Shape-level characterization
+    resonance_score: float = 0.0         # 0–1, how harmonically resonant the shape is
+    friction_score: float = 0.0          # 0–1, how much tension the shape carries
+    flow_characterization: str = ""      # human-readable topology description
+    # Quincunx findings
+    quincunx_routes: List[CircuitEdge] = field(default_factory=list)   # rerouted arcs
+    open_arcs: List[CircuitEdge] = field(default_factory=list)         # unresolvable arcs
+
+
+@dataclass
+class CircuitSimulation:
+    """Top-level result of the circuit power simulation for a chart."""
+    # Per-shape circuit results
+    shape_circuits: List[ShapeCircuit] = field(default_factory=list)
+    # All nodes across all shapes (union; planets may appear in multiple shapes)
+    node_map: Dict[str, CircuitNode] = field(default_factory=dict)
+    # Directional SN→NN flow path (list of planet names from SN to NN)
+    sn_nn_path: List[str] = field(default_factory=list)
+    # Planets not in any shape (floating singletons)
+    singletons: List[str] = field(default_factory=list)
+    # Mutual reception pairs boosted during simulation
+    mutual_receptions: List[tuple] = field(default_factory=list)
+
+
+@dataclass
+class DetectedShape:
+    """A geometric pattern detected in a chart's aspect graph.
+
+    Produced by ``patterns_v2.detect_shapes()``.  Each instance encodes one
+    multi-planet configuration (Grand Trine, Mystic Rectangle, Yod, etc.)
+    identified within a connected component of the major-aspect graph.
+
+    Replaces the ad-hoc dict format ``{"id": …, "type": …, "members": …,
+    "edges": …}`` previously returned by detect_shapes.
+    """
+    shape_id: int                               # unique id within this chart
+    shape_type: str                             # e.g. "Grand Trine", "Mystic Rectangle"
+    parent: int                                 # index into chart.aspect_groups
+    members: List[str]                          # planet/point names involved
+    edges: List[Any]                            # list of ((node_a, node_b), aspect_type)
+    suppresses: Optional[Any] = None            # internal suppression metadata
+
+    @property
+    def name(self) -> str:
+        """Human-readable alias for shape_type."""
+        return self.shape_type
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "DetectedShape":
+        """Create a DetectedShape from a patterns_v2 shape dict."""
+        return cls(
+            shape_id=int(d["id"]),
+            shape_type=str(d["type"]),
+            parent=int(d.get("parent", 0)),
+            members=list(d.get("members", [])),
+            edges=list(d.get("edges", [])),
+            suppresses=d.get("suppresses"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialise back to dict form (for JSON export or legacy callers)."""
+        d: Dict[str, Any] = {
+            "id": self.shape_id,
+            "type": self.shape_type,
+            "parent": self.parent,
+            "members": list(self.members),
+            "edges": self.edges,
+        }
+        if self.suppresses is not None:
+            d["suppresses"] = self.suppresses
+        return d
+
+    # ── Mapping interface ─────────────────────────────────────────────
+    # Allows legacy callers (drawing_v2, circuit_sim, etc.) that use
+    # shape["id"], shape.get("members", []) etc. to continue working
+    # without modification.  The canonical attrs (shape_type, shape_id)
+    # remain the primary interface.
+    _KEY_MAP: ClassVar[Dict[str, str]] = {
+        "id":         "shape_id",
+        "type":       "shape_type",
+        "members":    "members",
+        "edges":      "edges",
+        "parent":     "parent",
+        "suppresses": "suppresses",
+    }
+
+    def __getitem__(self, key: str) -> Any:
+        attr = self._KEY_MAP.get(key, key)
+        try:
+            return getattr(self, attr)
+        except AttributeError:
+            raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
 @dataclass
 class AstrologicalChart:
     """Complete astrological chart with all celestial objects and house cusps."""
@@ -1011,7 +1167,7 @@ class AstrologicalChart:
     edges_major: list = field(default_factory=list)                    # was "edges_major"
     edges_minor: list = field(default_factory=list)                    # was "edges_minor"
     aspect_groups: list = field(default_factory=list)                  # was session "patterns" (connected components)
-    shapes: list = field(default_factory=list)                         # was "shapes"
+    shapes: List["DetectedShape"] = field(default_factory=list)        # was "shapes"
     filaments: list = field(default_factory=list)                      # was "filaments"
     singleton_map: dict = field(default_factory=dict)                  # was "singleton_map"
     combos: list = field(default_factory=list)                         # was "combos"
@@ -1029,6 +1185,8 @@ class AstrologicalChart:
     planetary_states: Dict[str, "PlanetaryState"] = field(default_factory=dict)
     # Mutual reception loops detected during strength analysis
     mutual_receptions: list = field(default_factory=list)
+    # Circuit power simulation result (populated by circuit_sim.simulate_and_attach)
+    circuit_simulation: Optional["CircuitSimulation"] = field(default=None)
 
     def __getattr__(self, name: str):
         # Gracefully return None for fields that don't exist on cached instances
@@ -1398,7 +1556,7 @@ class RenderResult:
 	
 	# ⬇️ Optional fields with defaults ⬇️
 	patterns: Optional[List[List[str]]] = None
-	shapes: Optional[List[Dict[str, Any]]] = None
+	shapes: Optional[List["DetectedShape"]] = None
 	singleton_map: Optional[Dict[str, Any]] = None
 	plot_data: Optional[Dict[str, Any]] = None
 

@@ -43,14 +43,16 @@ _OPENROUTER_MODELS: List[str] = [
 _HOUSE_SYSTEMS: List[str] = ["Placidus", "Whole Sign", "Koch", "Equal", "Campanus"]
 
 _CHAT_MODES: List[str] = ["Ask", "Plan", "Agent"]
+_VOICE_MODES: List[str] = ["Plain", "Circuit"]
 
 # ── Session-state keys ────────────────────────────────────────────────────────
 
 _HISTORY_KEY = "mcp_chat_history"   # List[Dict] — {role, content, meta}
 _MODEL_KEY   = "mcp_model"
 _HS_KEY      = "mcp_house_system"
-_NOTES_KEY   = "mcp_agent_notes"    # str — populated live during generation
+_NOTES_KEY   = "mcp_agent_notes"    # str — accumulated across conversation
 _MODE_KEY    = "mcp_chat_mode"      # "Ask" | "Plan" | "Agent"
+_VOICE_KEY   = "mcp_voice_mode"    # "Plain" | "Circuit"
 
 # ── CSS injection ─────────────────────────────────────────────────────────────
 
@@ -116,6 +118,7 @@ def _init_state() -> None:
     st.session_state.setdefault(_HS_KEY, "Placidus")
     st.session_state.setdefault(_NOTES_KEY, "")
     st.session_state.setdefault(_MODE_KEY, "Ask")
+    st.session_state.setdefault(_VOICE_KEY, "Plain")
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -186,6 +189,23 @@ def render_chat_widget() -> None:
             ),
         )
 
+        # Voice toggle
+        voice_idx = (
+            _VOICE_MODES.index(st.session_state[_VOICE_KEY])
+            if st.session_state[_VOICE_KEY] in _VOICE_MODES
+            else 0
+        )
+        st.session_state[_VOICE_KEY] = st.radio(
+            "Voice",
+            options=_VOICE_MODES,
+            index=voice_idx,
+            key="mcp_voice_radio",
+            help=(
+                "**Plain** — warm, psychological language\n\n"
+                "**Circuit** — energy/flow/friction metaphor"
+            ),
+        )
+
     # ════════════════════════════════════════════════════════════════════════
     # LEFT COLUMN — chat
     # ════════════════════════════════════════════════════════════════════════
@@ -199,6 +219,7 @@ def render_chat_widget() -> None:
             if st.button("🗑", key="mcp_clear_chat", help="Clear chat history"):
                 st.session_state[_HISTORY_KEY] = []
                 st.session_state[_NOTES_KEY] = ""
+                st.session_state[_VOICE_KEY] = "Plain"
                 st.rerun()
 
         # History replay
@@ -240,6 +261,17 @@ def render_chat_widget() -> None:
                 api_key=_get_api_key(),
                 model=st.session_state[_MODEL_KEY],
                 mode=st.session_state[_MODE_KEY],
+                voice=st.session_state.get(_VOICE_KEY, "Plain"),
+                agent_notes=st.session_state.get(_NOTES_KEY, ""),
+                render_result=st.session_state.get("render_result"),
+            )
+
+        # Accumulate agent notes from this turn
+        turn_note = meta.get("comprehension_note", "")
+        if turn_note:
+            existing = st.session_state.get(_NOTES_KEY, "")
+            st.session_state[_NOTES_KEY] = (
+                (existing + "\n" if existing else "") + turn_note
             )
 
         history.append({"role": "assistant", "content": response_text, "meta": meta})
@@ -256,8 +288,12 @@ def _render_caption(meta: Dict[str, Any]) -> None:
         parts.append(f"tokens: {meta['total_tokens']}")
     if meta.get("domain"):
         parts.append(f"topic: {meta['domain']}")
+    if meta.get("question_type"):
+        parts.append(f"type: {meta['question_type']}")
     if meta.get("confidence") is not None:
         parts.append(f"confidence: {meta['confidence']:.0%}")
+    if meta.get("voice"):
+        parts.append(f"voice: {meta['voice']}")
     if meta.get("mode"):
         parts.append(f"mode: {meta['mode']}")
     if parts:
@@ -274,10 +310,14 @@ def _generate_response(
     api_key: str,
     model: str,
     mode: str = "Ask",
+    voice: str = "Plain",
+    agent_notes: str = "",
+    render_result: Any = None,
 ) -> tuple[str, Dict[str, Any]]:
     """Run the full MCP pipeline. Returns (response_text, meta)."""
 
-    meta: Dict[str, Any] = {"mode": mode}
+    meta: Dict[str, Any] = {"mode": mode, "voice": voice}
+    voice_lower = voice.lower()
 
     try:
         packet = build_reading(
@@ -287,10 +327,15 @@ def _generate_response(
             include_sabians=False,
             include_interp_text=True,
             max_aspects=12,
+            api_key=api_key,
+            agent_notes=agent_notes,
+            render_result=render_result,
         )
         meta["domain"]     = packet.domain
         meta["subtopic"]   = packet.subtopic
         meta["confidence"] = packet.confidence
+        meta["question_type"] = packet.question_type
+        meta["comprehension_note"] = packet.comprehension_note
 
     except Exception as exc:
         return (
@@ -318,6 +363,7 @@ def _generate_response(
             backend="openrouter",
             model=model,
             mode="natal",
+            voice=voice_lower,
             api_key=api_key,
         )
         meta.update({

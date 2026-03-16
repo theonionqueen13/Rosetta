@@ -100,6 +100,48 @@ def _fallback_synthesize(packet: ReadingPacket) -> SynthesisResult:
                       f"Benefic of sect: {packet.sect.benefic_of_sect} | "
                       f"Malefic of sect: {packet.sect.malefic_of_sect}")
 
+    # Circuit data
+    if packet.circuit_flows:
+        parts.append("\n## Circuit Flows")
+        for cf in packet.circuit_flows:
+            parts.append(
+                f"- **{cf.shape_type}** ({', '.join(cf.members)}): "
+                f"resonance {cf.resonance:.0%}, friction {cf.friction:.0%}, "
+                f"throughput {cf.throughput:.1f}"
+            )
+            if cf.flow_characterization:
+                parts.append(f"  *{cf.flow_characterization}*")
+
+    if packet.power_nodes:
+        parts.append("\n## Power Nodes")
+        for pn in packet.power_nodes:
+            line = f"- **{pn.planet_name}**: power {pn.power_index:.1f}"
+            if pn.effective_power != pn.power_index:
+                line += f", effective {pn.effective_power:.1f}"
+            if pn.friction_load > 0.01:
+                line += f", friction {pn.friction_load:.1f}"
+            parts.append(line)
+
+    if packet.circuit_paths:
+        parts.append("\n## Circuit Paths")
+        for cp in packet.circuit_paths:
+            parts.append(
+                f"- {cp.from_concept} → {cp.to_concept}: "
+                f"{cp.connection_quality}"
+            )
+            if cp.path_planets:
+                parts.append(f"  Path: {' → '.join(cp.path_planets)}")
+
+    if packet.narrative_seeds:
+        parts.append("\n## Circuit Analysis")
+        for seed in packet.narrative_seeds:
+            parts.append(f"- {seed}")
+
+    if packet.isolations:
+        parts.append("\n## Isolated Systems")
+        for iso in packet.isolations:
+            parts.append(f"- {iso.note}")
+
     if packet.interp_text:
         parts.append("\n## Interpretation")
         parts.append(packet.interp_text)
@@ -122,6 +164,7 @@ def _openai_synthesize(
     *,
     model: str = "gpt-4o-mini",
     mode: str = "natal",
+    voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
 ) -> SynthesisResult:
@@ -136,7 +179,7 @@ def _openai_synthesize(
         raise RuntimeError("OPENAI_API_KEY not set")
 
     client = openai.OpenAI(api_key=key)
-    messages = build_prompt(packet, mode=mode, extra_instructions=extra_instructions)
+    messages = build_prompt(packet, mode=mode, voice=voice, extra_instructions=extra_instructions)
 
     response = client.chat.completions.create(
         model=model,
@@ -167,6 +210,7 @@ def _openrouter_synthesize(
     *,
     model: str = DEFAULT_OPENROUTER_MODEL,
     mode: str = "natal",
+    voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
 ) -> SynthesisResult:
@@ -188,7 +232,7 @@ def _openrouter_synthesize(
             "X-Title": "Rosetta Astrology",
         },
     )
-    messages = build_prompt(packet, mode=mode, extra_instructions=extra_instructions)
+    messages = build_prompt(packet, mode=mode, voice=voice, extra_instructions=extra_instructions)
 
     response = client.chat.completions.create(
         model=model,
@@ -219,6 +263,7 @@ def _anthropic_synthesize(
     *,
     model: str = "claude-sonnet-4-20250514",
     mode: str = "natal",
+    voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
 ) -> SynthesisResult:
@@ -233,7 +278,7 @@ def _anthropic_synthesize(
         raise RuntimeError("ANTHROPIC_API_KEY not set")
 
     client = anthropic.Anthropic(api_key=key)
-    messages = build_prompt(packet, mode=mode, extra_instructions=extra_instructions)
+    messages = build_prompt(packet, mode=mode, voice=voice, extra_instructions=extra_instructions)
 
     # Anthropic API separates system from messages
     system_content = messages[0]["content"]
@@ -272,6 +317,7 @@ def synthesize(
     backend: str = "auto",
     model: Optional[str] = None,
     mode: str = "natal",
+    voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
 ) -> SynthesisResult:
@@ -288,6 +334,8 @@ def synthesize(
         Override the default model for the chosen backend.
     mode : str
         "natal", "transit", or "synastry" — selects the system prompt.
+    voice : str
+        "circuit" or "plain" — selects language/metaphor style.
     extra_instructions : str
         Extra text appended to the system prompt.
     api_key : str, optional
@@ -296,6 +344,7 @@ def synthesize(
     def _kwargs(**extra):
         kw: Dict[str, Any] = {
             "packet": packet, "mode": mode,
+            "voice": voice,
             "extra_instructions": extra_instructions,
             "api_key": api_key,
         }
