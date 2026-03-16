@@ -7,32 +7,13 @@ import streamlit as st
 from typing import List
 
 CHART_KEYS_TO_SWAP = [
-    # Input Data
+    # Form input data (widget state)
     "year", "month_name", "day", "hour_12", "minute_str", "ampm", "city",
     "profile_unknown_time",
     
-    # Calculated Data (DataFrame/Chart Objects)
+    # Chart objects — all computed data travels inside them
     "last_chart",
-    "last_df",
-    "last_aspect_df",
     "plot_data",
-    "chart_dt_utc",
-    "chart_unknown_time",
-    "chart_positions",
-
-    # Calculated Astrological Summaries
-    "dispositor_summary_rows",
-    "dispositor_chains_rows",
-    
-    # Calculated Patterns/Aspects
-    "edges_major",
-    "edges_minor",
-    "patterns",
-    "shapes",
-    "filaments",
-    "combos",
-    "singleton_map",
-    "major_edges_all",
 ]
 
 def swap_primary_and_secondary_charts() -> None:

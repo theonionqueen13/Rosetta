@@ -6,7 +6,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from house_selector_v2 import render_house_system_selector
-from drawing_v2 import _current_chart_header_lines
 import matplotlib.patheffects as pe
 from models_v2 import static_db
 
@@ -203,7 +202,7 @@ def render_dispositor_section(st, chart) -> None:
             label_visibility="collapsed"
         )
 
-    plot_data = st.session_state.get("DISPOSITOR_GRAPH_DATA")
+    plot_data = chart.plot_data
     
     if plot_data is not None:
         # The rest of your logic now runs directly on the plot_data variable.
@@ -224,7 +223,7 @@ def render_dispositor_section(st, chart) -> None:
             scope_data = plot_data.get(plot_data_key)
 
         if scope_data and scope_data.get("raw_links"):
-            name, date_line, time_line, city, extra_line = _current_chart_header_lines()
+            name, date_line, time_line, city, extra_line = chart.header_lines()
             header_info = {
                 'name': name,
                 'date_line': date_line,
@@ -712,7 +711,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     # house label text likewise should scale
     house_font_size = base_symbol_font * scale_factor * 1.1
 
-    edges_major = st.session_state.get('edges_major', [])
+    edges_major = chart.edges_major
     png_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pngs")
 
     # collect x extents for each (house, level, parent) combination using merged data

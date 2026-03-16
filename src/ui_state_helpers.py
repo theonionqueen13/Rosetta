@@ -5,55 +5,6 @@ from typing import Any, Mapping, Collection
 import logging
 
 
-def _selected_house_system():
-	s = st.session_state.get("house_system_main", "Equal")
-	return s.lower().replace(" sign", "")
-
-
-def _current_chart_header_lines():
-	name = (
-		st.session_state.get("current_profile_title")
-		or st.session_state.get("current_profile")
-		or "Untitled Chart"
-	)
-	if isinstance(name, str) and name.startswith("community:"):
-		name = "Community Chart"
-
-	month  = st.session_state.get("profile_month_name", "")
-	day    = st.session_state.get("profile_day", "")
-	year   = st.session_state.get("profile_year", "")
-	hour   = st.session_state.get("profile_hour")
-	minute = st.session_state.get("profile_minute")
-	city   = st.session_state.get("profile_city", "")
-	unknown_time = bool(
-		st.session_state.get("chart_unknown_time")
-		or st.session_state.get("profile_unknown_time")
-	)
-
-	date_line = f"{month} {day}, {year}".strip()
-
-	if unknown_time:
-		# Desired render order:
-		# Line 1: AC = Aries 0° (default)
-		# Line 2: date_line
-		# Line 3: 12:00 PM
-		extra_line = ""
-		date_line  = "AC = Aries 0° (default)"
-		time_line  = f"{month} {day}, {year}".strip()
-		city       = "12:00 PM"
-	else:
-		extra_line = ""
-		time_line = ""
-		if hour is not None and minute is not None:
-			h = int(hour)
-			m = int(minute)
-			ampm = "AM" if h < 12 else "PM"
-			h12 = 12 if (h % 12 == 0) else (h % 12)
-			time_line = f"{h12}:{m:02d} {ampm}"
-
-	return name, date_line, time_line, city, extra_line
-
-
 def _get_profile_lat_lon() -> tuple[float | None, float | None]:
 	"""Pull chart/birth lat/lon from session_state."""
 	SS = st.session_state

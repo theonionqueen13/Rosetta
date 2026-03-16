@@ -20,6 +20,15 @@ TEST_CHARTS: Dict[str, Dict[str, Any]] = {
         "ampm": "AM",
         "city": "Red Bank, NJ",
     },
+    "Wildhorse bf Michael": {
+        "year": 1994,
+        "month_name": "February",
+        "day": 8,
+        "hour_12": "6",
+        "minute_str": "35",
+        "ampm": "AM",
+        "city": "Oakland, CA",
+    },
     "Joylin": {
         "year": 1990,
         "month_name": "July",

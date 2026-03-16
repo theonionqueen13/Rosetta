@@ -29,6 +29,7 @@ from interp_base_natal import NatalInterpreter
 st.set_page_config(layout="wide")
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
+from src.mcp.chat_ui import render_chat_widget
 from toggles_v2 import render_circuit_toggles
 from drawing_v2 import RenderResult, render_chart, render_chart_with_shapes
 from profile_manager_v2 import render_profile_manager, ensure_profile_session_defaults
@@ -580,6 +581,9 @@ if chart_cached is not None:
 		unsafe_allow_html=True
 	)
 
+	# ── AI Chat widget ──────────────────────────────────────────────────
+	render_chat_widget()
+
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# prepare saved_profiles for the call
 	saved_profiles = load_user_profiles_db(current_user_id)
@@ -607,71 +611,80 @@ if chart_cached is not None:
 		st.pyplot(rr.fig, clear_figure=True)
 		plt.close(rr.fig)
 
-	# --- MCP Interpretation Output Section ---
-	st.markdown("<div id='mcp-interpretation'></div>", unsafe_allow_html=True)
-	st.markdown("**Interpretation**", unsafe_allow_html=True)
-	interp_mode = st.radio(
-		"Interpretation Mode",
-		["poetic", "technical"],
-		horizontal=True,
-		key="interp_mode_radio",
-		index=0
-	)
-	# Prepare chart state for MCP
-	# Filter objects and aspects to only those currently visible
-	visible_objects = st.session_state.get('visible_objects', [])
-	chart_cached = st.session_state.get('last_chart')
-	last_df = chart_cached.to_dataframe() if chart_cached is not None else None
-	edges_major = chart_cached.edges_major if chart_cached else []
-	# Filter DataFrame rows to visible objects
-	if chart_cached is not None and visible_objects:
-		ordered = ordered_objects(chart_cached, visible_objects=visible_objects, edges_major=edges_major)
-		filter_names = {obj.object_name.name for obj in ordered if obj.object_name}
-		filtered_df = last_df[last_df["Object"].isin(filter_names)] if last_df is not None else None
-	else:
-		filtered_df = last_df
-	# Filter aspects to only those between visible objects
-	visible_set = set(visible_objects)
-	filtered_edges_major = [e for e in edges_major if e[0] in visible_set and e[1] in visible_set]
-	# Import lookups from the central static_db and profiles_v2
-	from models_v2 import static_db
-	from profiles_v2 import STAR_CATALOG, find_fixed_star_conjunctions
+	# --- Interpretation Output Section ---
+	# Auto-open when the chat widget triggers fallback mode
+	_interp_open = st.session_state.get("mcp_interp_expander_open", False)
+	if _interp_open:
+		# Reset so the next rerun starts closed again (unless re-triggered)
+		st.session_state["mcp_interp_expander_open"] = False
 
-	chart_state = {
-		'ordered_df': filtered_df,
-		'edges_major': filtered_edges_major,
-		'edges_minor': (chart_cached.edges_minor if chart_cached else []),
-		'mode': interp_mode,
-		'raw_links': (chart_cached.plot_data if chart_cached else {}),
-		'lookup': {
-			'GLYPHS': static_db.GLYPHS,
-			'OBJECT_MEANINGS': static_db.OBJECT_MEANINGS,
-			'SIGN_MEANINGS': static_db.SIGN_MEANINGS,
-			'HOUSE_MEANINGS': static_db.HOUSE_MEANINGS,
-			'INTERP_FLAGS': static_db.INTERP_FLAGS if hasattr(static_db, 'INTERP_FLAGS') else {},
-			'SABIAN_SYMBOLS': static_db.SABIAN_SYMBOLS,
-			'ASPECT_INTERP': static_db.ASPECT_INTERP,
-			'FIXED_STAR_CATALOG': STAR_CATALOG,
-			'find_fixed_star_conjunctions': find_fixed_star_conjunctions,
-		},
-		'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
-		'compass_rose_on_2': st.session_state.get('ui_compass_overlay_2', False),
-	}
-	# Debugging: Log chart_state before instantiation (no longer used)
-	print(f"chart_state: {chart_state}")
-
-	try:
-		# the new interpreter works directly against the RenderResult returned
-		# by ``_refresh_chart_figure`` rather than a dictionary.
-		if rr is not None:
-			interp = NatalInterpreter(rr)
+	with st.expander("📜 Interpretation", expanded=_interp_open):
+		st.markdown("<div id='mcp-interpretation'></div>", unsafe_allow_html=True)
+		interp_mode = st.radio(
+			"Interpretation Mode",
+			["poetic", "technical"],
+			horizontal=True,
+			key="interp_mode_radio",
+			index=0
+		)
+		# Prepare chart state for MCP
+		# Filter objects and aspects to only those currently visible
+		visible_objects = st.session_state.get('visible_objects', [])
+		chart_cached = st.session_state.get('last_chart')
+		last_df = chart_cached.to_dataframe() if chart_cached is not None else None
+		edges_major = chart_cached.edges_major if chart_cached else []
+		# Filter DataFrame rows to visible objects
+		if chart_cached is not None and visible_objects:
+			ordered = ordered_objects(chart_cached, visible_objects=visible_objects, edges_major=edges_major)
+			filter_names = {obj.object_name.name for obj in ordered if obj.object_name}
+			filtered_df = last_df[last_df["Object"].isin(filter_names)] if last_df is not None else None
 		else:
-			# fallback, will raise a helpful error
-			interp = NatalInterpreter(rr)
-		interp_output = interp.generate()
-		st.markdown(f"<div style='background:#222;padding:1em;border-radius:8px;white-space:pre-wrap;color:#fff'>{interp_output}</div>", unsafe_allow_html=True)
-	except Exception as e:
-		print(f"Error during NatalInterpreter instantiation: {e}")
+			filtered_df = last_df
+		# Filter aspects to only those between visible objects
+		visible_set = set(visible_objects)
+		filtered_edges_major = [e for e in edges_major if e[0] in visible_set and e[1] in visible_set]
+		# Import lookups from the central static_db and profiles_v2
+		from models_v2 import static_db
+		from profiles_v2 import STAR_CATALOG, find_fixed_star_conjunctions
+
+		chart_state = {
+			'ordered_df': filtered_df,
+			'edges_major': filtered_edges_major,
+			'edges_minor': (chart_cached.edges_minor if chart_cached else []),
+			'mode': interp_mode,
+			'raw_links': (chart_cached.plot_data if chart_cached else {}),
+			'lookup': {
+				'GLYPHS': static_db.GLYPHS,
+				'OBJECT_MEANINGS': static_db.OBJECT_MEANINGS,
+				'SIGN_MEANINGS': static_db.SIGN_MEANINGS,
+				'HOUSE_MEANINGS': static_db.HOUSE_MEANINGS,
+				'INTERP_FLAGS': static_db.INTERP_FLAGS if hasattr(static_db, 'INTERP_FLAGS') else {},
+				'SABIAN_SYMBOLS': static_db.SABIAN_SYMBOLS,
+				'ASPECT_INTERP': static_db.ASPECT_INTERP,
+				'FIXED_STAR_CATALOG': STAR_CATALOG,
+				'find_fixed_star_conjunctions': find_fixed_star_conjunctions,
+			},
+			'compass_rose_on': st.session_state.get('ui_compass_overlay', False),
+			'compass_rose_on_2': st.session_state.get('ui_compass_overlay_2', False),
+		}
+
+		try:
+			# the new interpreter works directly against the RenderResult returned
+			# by ``_refresh_chart_figure`` rather than a dictionary.
+			if rr is not None:
+				interp = NatalInterpreter(rr)
+			else:
+				interp = NatalInterpreter(rr)
+			interp_output = interp.generate()
+			# Store for fallback access in the chat widget
+			st.session_state["mcp_interp_output"] = interp_output
+			st.markdown(
+				f"<div style='background:#222;padding:1em;border-radius:8px;"
+				f"white-space:pre-wrap;color:#fff'>{interp_output}</div>",
+				unsafe_allow_html=True,
+			)
+		except Exception as e:
+			print(f"Error during NatalInterpreter instantiation: {e}")
 
 	# --- Dispositor Graph (moved from popover) ---
 	render_dispositor_section(st, chart_cached)
