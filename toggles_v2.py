@@ -864,6 +864,11 @@ def render_circuit_toggles(
 			st.session_state.setdefault("dark_mode", False)
 			st.checkbox("🌙 Dark Mode", key="dark_mode")
 
+			# Interactive D3 chart toggle
+			st.session_state.setdefault("interactive_chart", False)
+			st.checkbox("✨ Interactive Chart", key="interactive_chart",
+						help="Switch to the interactive D3.js/SVG chart with hover tooltips and click events")
+
 			# Transits toggle — visible whenever a chart is loaded and synastry is off
 			_synastry_now = st.session_state.get("synastry_mode", False)
 			if not _synastry_now:

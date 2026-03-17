@@ -24,6 +24,8 @@ from calc_v2 import calculate_chart, chart_sect_from_chart, build_aspect_edges, 
 					build_conjunction_clusters
 from src.dispositor_graph import plot_dispositor_graph
 from circuit_sim import simulate_and_attach
+from src.chart_serializer import serialize_chart_for_rendering
+from src.components.interactive_chart import st_interactive_chart
 
 
 def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
@@ -402,7 +404,67 @@ def _refresh_chart_figure():
 
 	# Check if we're in Standard Chart mode
 	chart_mode = st.session_state.get("chart_mode", "Circuits")
-	
+
+	# ── Interactive Chart Mode ──────────────────────────────────────────────
+	interactive_mode = st.session_state.get("interactive_chart", False)
+	if interactive_mode:
+		try:
+			highlights = st.session_state.get("chart_highlights", {})
+			chart_data = serialize_chart_for_rendering(
+				chart,
+				house_system=house_system,
+				dark_mode=dark_mode,
+				label_style=label_style,
+				compass_on=st.session_state.get(COMPASS_KEY, True),
+				degree_markers=True,
+				edges_major=edges_major,
+				edges_minor=edges_minor,
+				shapes=shapes,
+				singleton_map=singleton_map,
+				patterns=patterns,
+				highlights=highlights,
+			)
+			event = st_interactive_chart(
+				chart_data,
+				highlights=highlights,
+				width=600,
+				height=600,
+				key="interactive_main_chart",
+			)
+			# Store event for downstream consumers (chat, detail panel, etc.)
+			if event:
+				st.session_state["chart_click_event"] = event
+			# Still build a minimal RenderResult so the rest of the app works
+			positions = {obj.object_name.name: obj.longitude
+						 for obj in chart.objects if obj.object_name}
+			cusps = [
+				float(c.absolute_degree) for c in chart.house_cusps
+				if (c.house_system or "").strip().lower() == house_system
+			]
+			rr = result(
+				fig=None, ax=None,
+				positions=positions,
+				cusps=cusps,
+				visible_objects=list(positions.keys()),
+				drawn_major_edges=[(e[0], e[1], e[2].get("aspect", "") if isinstance(e[2], dict) else str(e[2]))
+									for e in edges_major] if edges_major else [],
+				drawn_minor_edges=[(e[0], e[1], e[2].get("aspect", "") if isinstance(e[2], dict) else str(e[2]))
+									for e in edges_minor] if edges_minor else [],
+				patterns=patterns,
+				shapes=shapes,
+				singleton_map=singleton_map,
+				plot_data={"chart": chart},
+			)
+			st.session_state["render_result"] = rr
+			st.session_state["visible_objects"] = rr.visible_objects
+			st.session_state["active_shapes"] = shapes or []
+			st.session_state["last_cusps"] = cusps
+			st.session_state["ai_text"] = None
+			return rr
+		except Exception as e:
+			st.warning(f"Interactive chart failed, falling back to static: {e}")
+			# Fall through to matplotlib renderers
+
 	if chart_mode == "Standard Chart":
 		# Standard Chart mode: use cached aspects from chart object, filtered by toggle settings
 		
