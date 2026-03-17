@@ -487,6 +487,12 @@ class ReadingPacket:
     # ── Clarification (only set when comprehension needs follow-up) ──
     _clarification: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Modular planet profiles (raw stats + interpretive text per object) ──
+    # Each entry is PlanetStats.to_dict() / PlanetProfile.to_dict() for every
+    # object that was judged relevant to the current question.
+    planet_stats: List[Dict[str, Any]] = field(default_factory=list)
+    planet_profiles: List[Dict[str, Any]] = field(default_factory=list)
+
     # ── Pre-baked NatalInterpreter text (for the focused objects) ────
     interp_text: str = ""
 
@@ -582,6 +588,10 @@ class ReadingPacket:
             d["sabians"] = [s.to_dict() for s in self.sabians]
         if self.sect:
             d["sect"] = self.sect.to_dict()
+        if self.planet_stats:
+            d["planet_stats"] = self.planet_stats
+        if self.planet_profiles:
+            d["planet_profiles"] = self.planet_profiles
         if self.interp_text:
             d["interpretation"] = self.interp_text
         if self.visible_objects:

@@ -34,6 +34,12 @@ import pandas as pd
 
 from models_v2 import static_db, ObjectSign, ObjectHouse
 from lookup_v2 import SETNENCE_ASPECT_NAMES, SENTENCE_ASPECT_MEANINGS
+from planet_profiles import (
+    PlanetProfile,
+    PlanetProfileReader,
+    AspectProfile,
+    AspectProfileReader,
+)
 from profiles_v2 import (
     ordered_object_rows,
     ordered_objects,
@@ -495,275 +501,65 @@ class NatalInterpreter:
         return ""
 
     def _format_default_object(self, chart_obj: Any) -> str:
+        """Format object interpretation in default mode.
+
+        Delegates to :class:`~planet_profiles.PlanetProfileReader` so the
+        same rendering logic is available to sidebar, MCP, and any future
+        callers.
         """
-        Format object interpretation in default mode from a ChartObject.
-
-        Lines:
-        1. [glyph] [object] (Rx) in [sign]: [short_meaning] (ObjectSign)
-        2. [dignity]: [object_name] [dignity_interp]  (only if dignity exists)
-        3. [behavioral_style]
-        4. 𑁋   # mini‑divider
-        5. [sign] [DMS]
-        6. Sabian Symbol: [symbol]
-        7. Sabian Symbol Meaning: [short_meaning]
-        8. Fixed star conjunction(s): [star names]
-        9. 𑁋   # mini‑divider
-        10. [object_name] in the [house_number]: [short_meaning] (ObjectHouse)
-        11. Environmental Impact: [environmental_impact]
-        12. Concrete Manifestations: [concrete_manifestation]
-        13. 𑁋   # mini‑divider
-        14. Other stats:
-        15. Out of bounds: [oob_status] (only if object is out of bounds)
-        16. Reception: [reception] (only if reception exists)
-        17. Rules: "[rules_signs] ([object_name], [object_name],...)"; "[rules_houses] ([object_name], [object_name],...)" (only if it is a ruler)
-        18. Ruled by (by sign): "[sign_ruler] ([object_name], [object_name],...)"
-        19. Ruled by (by house): "[house_ruler_placidus, house_ruler_equal, or house_ruler_whole based on house system] ([object_name], [object_name],...)"
-
-        """
-        lines: List[str] = []
-
         obj_name = self._get_object_name(chart_obj)
-        display_name = _format_axis_for_display(obj_name)
         sign_name = chart_obj.sign.name if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
-        
-        # Extract house number - prefer direct house object's number property
-        house_num = None
-        if hasattr(chart_obj, "placidus_house") and chart_obj.placidus_house:
-            house_obj = chart_obj.placidus_house
-            house_num = house_obj.number if hasattr(house_obj, "number") else int(house_obj)
 
-        # Line 1: glyph/object/retrograde in sign, plus short meaning if available
-        obj_sign_combo = self._get_object_sign_combo(obj_name, sign_name)
-        glyph = glyph_for(obj_name)
-        
-        # For axes, don't include the glyph since it's just a text abbreviation and we're already
-        # including the abbreviation in the display format (e.g., "Ascendant (AC)")
-        is_axis = obj_name in {"Ascendant", "Descendant", "Midheaven", "Immum Coeli", "MC", "IC", "AC", "DC"}
-        first_line = f"{display_name}" if is_axis else f"{glyph} {display_name}"
-        if chart_obj.retrograde:
-            first_line += " (Rx)"
-        first_line += f" in {sign_name}"
-        if obj_sign_combo and obj_sign_combo.short_meaning:
-            first_line += f": {obj_sign_combo.short_meaning}"
-        else:
-            # record missing meaning so it can be logged elsewhere
+        profile = PlanetProfile.from_chart_object(
+            chart_obj,
+            house_system=_selected_house_system(),
+            lookup=self.lookup,
+            chart_objects=self.chart_objects,
+            chart=self.chart,
+        )
+
+        # Track missing combos for diagnostics
+        if not profile.sign_short_meaning:
             self.missing.append(f"object_sign_combo:{obj_name}_{sign_name}")
-        lines.append(first_line)
+        if profile.house_num is not None and not profile.house_short_meaning:
+            self.missing.append(f"object_house_combo:{obj_name}_House_{profile.house_num}")
 
-        # Line 2: Dignity (only if it exists)
-        if obj_sign_combo and obj_sign_combo.dignity:
-            dignity_line = f"{obj_sign_combo.dignity}: {display_name}"
-            if obj_sign_combo.dignity_interp:
-                dignity_line += f" {obj_sign_combo.dignity_interp}"
-            lines.append(dignity_line)
-
-        # Line 3: Behavioral style
-        if obj_sign_combo and obj_sign_combo.behavioral_style:
-            lines.append(obj_sign_combo.behavioral_style)
-
-        # Before house info, insert any Sabian/fixed-star details separated by a divider
-        # sabian logic: either computed from degree or supplied manually
-        manual_sabian = chart_obj.sabian_symbol.symbol if chart_obj.sabian_symbol and hasattr(chart_obj.sabian_symbol, "symbol") else None
-        degree_in_sign = chart_obj.degree_in_sign if hasattr(chart_obj, "degree_in_sign") else None
-        sabian_obj = None
-        if degree_in_sign is not None:
-            try:
-                sabian_obj = static_db.sabian_symbols.get(sign_name, {}).get(int(float(degree_in_sign)) + 1)
-            except (TypeError, ValueError):
-                pass
-
-        fixed_star = chart_obj.fixed_star_conj if hasattr(chart_obj, "fixed_star_conj") else None
-        if manual_sabian or sabian_obj or fixed_star:
-            lines.append("𑁋")
-            # always show sign+dms line when any sabian info exists
-            dms = chart_obj.dms if hasattr(chart_obj, "dms") else ""
-            lines.append(f"{sign_name} {dms}")
-            # symbol text: prefer manual if provided
-            if manual_sabian:
-                lines.append(f"Sabian Symbol: {manual_sabian}")
-            elif sabian_obj and sabian_obj.symbol:
-                lines.append(f"Sabian Symbol: {sabian_obj.symbol}")
-            # meaning (only from lookup; manual intent is usually just symbol)
-            if sabian_obj and sabian_obj.short_meaning:
-                lines.append(f"Sabian Symbol Meaning: {sabian_obj.short_meaning}")
-            # Fixed star line
-            if fixed_star:
-                lines.append(f"Fixed star conjunction(s): {fixed_star}")
-
-        # Lines 5-7: Combined house line with short meaning + additional house details
-        # Format: [object_name] in the [house_number]: [short_meaning]
-        # Do not show a house section for AC/DC; those are implicitly 1st/7th and add
-        # no extra interpretive text. Avoid printing a dangling divider in that case.
-        is_acdc = self._normalize_obj_name_for_combo(obj_name) in {"AC", "DC"}
-        if house_num is not None and not is_acdc:
-            # separator before house section
-            lines.append("𑁋")
-            obj_house_combo = self._get_object_house_combo(obj_name, house_num)
-            if obj_house_combo and obj_house_combo.short_meaning:
-                house_label = _format_house_label(house_num)
-                house_line = f"{display_name} in the {house_label}: {obj_house_combo.short_meaning}"
-                lines.append(house_line)
-            else:
-                self.missing.append(f"object_house_combo:{obj_name}_House_{house_num}")
-            
-            # Line 6: Environmental Impact (if exists)
-            if obj_house_combo and obj_house_combo.environmental_impact:
-                lines.append(f"Environmental Impact: {obj_house_combo.environmental_impact}")
-            
-            # Line 7: Concrete Manifestations (if exists)
-            if obj_house_combo and obj_house_combo.concrete_manifestation:
-                lines.append(f"Concrete Manifestations: {obj_house_combo.concrete_manifestation}")
-
-        # ===== Other Stats Section =====
-        other_stats = self._format_other_stats(chart_obj)
-        if other_stats:
-            lines.extend(other_stats)
-
-        return "\n".join([line for line in lines if line])
+        return PlanetProfileReader(profile).format_text(mode="default")
 
     def _format_focus_object(self) -> str:
-        """
-        Format object interpretation in focus mode (detailed multi-block format).
+        """Format object interpretation in focus mode (detailed multi-block).
 
-        Block 1 (Sign Placement):
-        - Line 1: [glyph] [object] (Rx) in [sign]: [short_meaning] (ObjectSign)
-        - Line 2: Dignity: [dignity]: [object_name] [dignity_interp]  (if exists)
-        - Line 4: Style: [behavioral_style]
-        - Line 5: Strengths: [strengths]
-        - Line 6: Challenges: [challenges]
-        - Line 7: Somatic Signature: [somatic_signature]
-        - Line 8: Shadow Expression: [shadow_expression]
-
-        Block 2 (House Placement):
-        - Line 1: [object_name] in [house_number]
-        - Line 2: [short_meaning] (ObjectHouse)
-        - Line 3: Environmental Impact: [environmental_impact]
-        - Line 4: Concrete Manifestations: [concrete_manifestation]
-        - Line 5: Strengths: [strengths]
-        - Line 6: Challenges: [challenges]
-        - Line 7: Objective: [objective]
+        Delegates to :class:`~planet_profiles.PlanetProfileReader` in focus
+        mode so the same logic is available to MCP and any future callers.
         """
         if self.object_name is None:
             return "Focus mode requires object_name to be specified."
 
-        # Find the chart object by name
         chart_obj = None
         for obj in self.chart_objects:
             if self._get_object_name(obj) == self.object_name:
                 chart_obj = obj
                 break
-        
+
         if chart_obj is None:
             return f"Object '{self.object_name}' not found in chart."
 
         obj_name = self._get_object_name(chart_obj)
-        display_name = _format_axis_for_display(obj_name)
         sign_name = chart_obj.sign.name if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
-        
-        # Extract house number
-        house_num = None
-        if hasattr(chart_obj, "placidus_house") and chart_obj.placidus_house:
-            house_obj = chart_obj.placidus_house
-            house_num = house_obj.number if hasattr(house_obj, "number") else int(house_obj)
 
-        blocks: List[str] = []
+        profile = PlanetProfile.from_chart_object(
+            chart_obj,
+            house_system=_selected_house_system(),
+            lookup=self.lookup,
+            chart_objects=self.chart_objects,
+            chart=self.chart,
+        )
 
-        # ===== BLOCK 1: Sign Placement =====
-        sign_lines: List[str] = []
-
-        # Sign Block Line 1: combine glyph/object/(Rx)/sign and short meaning
-        obj_sign_combo = self._get_object_sign_combo(obj_name, sign_name)
-        glyph = glyph_for(obj_name)
-        
-        # For axes, don't include the glyph since it's just a text abbreviation and we're already
-        # including the abbreviation in the display format (e.g., "Ascendant (AC)")
-        is_axis = obj_name in {"Ascendant", "Descendant", "Midheaven", "Immum Coeli", "MC", "IC", "AC", "DC"}
-        first = f"{display_name}" if is_axis else f"{glyph} {display_name}"
-        if chart_obj.retrograde:
-            first += " (Rx)"
-        first += f" in {sign_name}"
-        if obj_sign_combo and obj_sign_combo.short_meaning:
-            first += f": {obj_sign_combo.short_meaning}"
-        else:
+        # Track missing combos
+        if not profile.sign_short_meaning:
             self.missing.append(f"object_sign_combo:{obj_name}_{sign_name}")
-        sign_lines.append(first)
 
-        # Sign Block Line 3: Dignity (only if exists)
-        if obj_sign_combo and obj_sign_combo.dignity:
-            dignity_line = f"Dignity: {obj_sign_combo.dignity}: {display_name}"
-            if obj_sign_combo.dignity_interp:
-                dignity_line += f" {obj_sign_combo.dignity_interp}"
-            sign_lines.append(dignity_line)
-
-        # Sign Block Line 4: Style
-        if obj_sign_combo and obj_sign_combo.behavioral_style:
-            sign_lines.append(f"Style: {obj_sign_combo.behavioral_style}")
-
-        # Sign Block Line 5: Strengths
-        if obj_sign_combo and obj_sign_combo.strengths:
-            sign_lines.append(f"Strengths: {obj_sign_combo.strengths}")
-
-        # Sign Block Line 6: Challenges
-        if obj_sign_combo and obj_sign_combo.challenges:
-            sign_lines.append(f"Challenges: {obj_sign_combo.challenges}")
-
-        # Sign Block Line 7: Somatic Signature
-        if obj_sign_combo and obj_sign_combo.somatic_signature:
-            sign_lines.append(f"Somatic Signature: {obj_sign_combo.somatic_signature}")
-
-        # Sign Block Line 8: Shadow Expression
-        if obj_sign_combo and obj_sign_combo.shadow_expression:
-            sign_lines.append(f"Shadow Expression: {obj_sign_combo.shadow_expression}")
-
-        blocks.append("\n".join([line for line in sign_lines if line]))
-
-        # ===== BLOCK 2: House Placement =====
-        # skip the house block for AC/DC since those are implicitly 1st/7th and we
-        # don't want to display redundant/empty information
-        is_acdc = self._normalize_obj_name_for_combo(obj_name) in {"AC", "DC"}
-        if house_num is not None and not is_acdc:
-            house_lines: List[str] = []
-
-            # House Block Line 1
-            house_lines.append(f"{display_name} in {_format_house_label(house_num)}")
-
-            # House Block Line 2: short_meaning
-            obj_house_combo = self._get_object_house_combo(obj_name, house_num)
-            if obj_house_combo and obj_house_combo.short_meaning:
-                house_lines.append(obj_house_combo.short_meaning)
-
-            # House Block Line 3: Environmental Impact
-            if obj_house_combo and obj_house_combo.environmental_impact:
-                house_lines.append(
-                    f"Environmental Impact: {obj_house_combo.environmental_impact}"
-                )
-
-            # House Block Line 4: Concrete Manifestations
-            if obj_house_combo and obj_house_combo.concrete_manifestation:
-                house_lines.append(
-                    f"Concrete Manifestations: {obj_house_combo.concrete_manifestation}"
-                )
-
-            # House Block Line 5: Strengths
-            if obj_house_combo and obj_house_combo.strengths:
-                house_lines.append(f"Strengths: {obj_house_combo.strengths}")
-
-            # House Block Line 6: Challenges
-            if obj_house_combo and obj_house_combo.challenges:
-                house_lines.append(f"Challenges: {obj_house_combo.challenges}")
-
-            # House Block Line 7: Objective
-            if obj_house_combo and obj_house_combo.objective:
-                house_lines.append(f"Objective: {obj_house_combo.objective}")
-
-            blocks.append("\n".join([line for line in house_lines if line]))
-
-        # ===== BLOCK 3: Other Stats =====
-        other_stats = self._format_other_stats(chart_obj)
-        if other_stats:
-            blocks.append("\n".join(other_stats))
-
-        return "\n\n".join(blocks)
+        return PlanetProfileReader(profile).format_text(mode="focus")
 
     def _build_conjunction_cluster_map(self) -> dict[str, list[str]]:
         """Return a mapping of canon-root -> [ordered object names] for conjunction clusters.
@@ -815,67 +611,55 @@ class NatalInterpreter:
         cluster_map: dict[str, list[str]],
         canon_to_root: dict[str, str],
     ) -> str:
-        """Format the aspects section listing all drawn major and minor edges."""
+        """Format the aspects section listing all drawn major and minor edges.
 
-        def node_label(name: str) -> str:
-            """Return display label for a node, substituting cluster notation if applicable."""
-            root = canon_to_root.get(_canon(name))
-            if root is not None:
-                members = cluster_map.get(root, [])
-                if len(members) >= 2:
-                    inner = " + ".join(
-                        _aspect_display_name(m) for m in members
-                    )
-                    return f"[{inner}]"
-            return _aspect_display_name(name)
-
+        Delegates to :class:`~planet_profiles.AspectProfileReader` for rendering
+        each individual aspect line.
+        """
         all_edges = list(self.drawn_major_edges or []) + list(self.drawn_minor_edges or [])
         if not all_edges:
             return ""
 
         divider = "─" * 50
         aspect_lines: list[str] = []
-        seen_edges: set[tuple[frozenset, str]] = set()
+        seen_edges: set[tuple] = set()
+
+        _COMPASS_OPP_PAIRS = {
+            frozenset({"AC", "DC"}),
+            frozenset({"MC", "IC"}),
+            frozenset({"North Node", "South Node"}),
+        }
 
         for edge in all_edges:
             try:
                 a, b, meta = edge
             except (ValueError, TypeError):
                 continue
+
             aspect = _extract_aspect(meta)
             if not aspect:
                 continue
             if aspect.lower() == "conjunction":
                 continue
 
-            label_a = node_label(a)
-            label_b = node_label(b)
-            dedup_key = (frozenset({label_a, label_b}), aspect)
+            # Build profile (handles cluster label substitution)
+            profile = AspectProfile.from_edge(a, b, meta, cluster_map=cluster_map)
+
+            dedup_key = (frozenset({profile.obj_a_display, profile.obj_b_display}), aspect)
             if dedup_key in seen_edges:
                 continue
             seen_edges.add(dedup_key)
 
-            # Skip bare compass-rose axis oppositions (e.g. "AC opposite DC")
-            # unless at least one node is a conjunction cluster (label starts with "[")
-            _COMPASS_OPP_PAIRS = {
-                frozenset({"AC", "DC"}),
-                frozenset({"MC", "IC"}),
-                frozenset({"North Node", "South Node"}),
-            }
-            is_cluster = label_a.startswith("[") or label_b.startswith("[")
+            # Skip bare compass-rose axis oppositions unless one node is a cluster
             if (
                 aspect.lower() == "opposition"
-                and not is_cluster
-                and frozenset({label_a, label_b}) in _COMPASS_OPP_PAIRS
+                and not profile.is_cluster_edge
+                and frozenset({profile.obj_a_display, profile.obj_b_display}) in _COMPASS_OPP_PAIRS
             ):
                 continue
 
-            verb = SETNENCE_ASPECT_NAMES.get(aspect, aspect.lower() + "s")
-            meaning = SENTENCE_ASPECT_MEANINGS.get(aspect, "")
-
-            aspect_lines.append(f"{label_a} {verb} {label_b}")
-            if meaning:
-                aspect_lines.append(f"{label_a} and {label_b} {meaning}")
+            reader = AspectProfileReader(profile)
+            aspect_lines.append(reader.format_text())
             aspect_lines.append(divider)
 
         if not aspect_lines:

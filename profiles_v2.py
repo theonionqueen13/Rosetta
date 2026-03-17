@@ -1020,110 +1020,54 @@ def format_object_profile_html(
 ) -> str:
     """
     Build a single object's profile block using ONLY values already in the DF row.
-    No recalculation here—pure formatting.
+    No recalculation here — pure formatting.
 
     Accepts either a :class:`ChartObject` or any mapping-like object with the
-    expected keys.  The previous implementation used ``isinstance(row,
-    ChartObject)`` which could fail if the caller had come from a different
-    import path (due to circular imports).  We now detect objects by the
-    presence of attributes commonly found on ``ChartObject`` instances instead
-    of relying on strict type equality.
+    expected keys.  When a ``ChartObject`` is provided this delegates to
+    :class:`~planet_profiles.PlanetStatsReader` so the sidebar, MCP, and
+    any future mouseover callers all use the same rendering path.  The
+    legacy dict-based path is preserved for backward compatibility.
     """
-    # treat anything with an ``object_name`` attribute as a ChartObject (or at
-    # least duck-type compatible) so we don't depend on class identity
+    # Delegate to PlanetStatsReader for ChartObject inputs
     if hasattr(row, "object_name") and hasattr(row, "glyph"):
-        obj_name = row.object_name.name if row.object_name else ""
-        glyph = row.glyph or (row.object_name.glyph if row.object_name else "")
-        meaning = meaning_for(obj_name)
+        from planet_profiles import PlanetStats, PlanetStatsReader
+        stats = PlanetStats.from_chart_object(row, house_system=house_label)
+        return PlanetStatsReader(stats).format_html(include_house_data=include_house_data)
 
-        tags = []
-        if row.retrograde:
-            tags.append("Rx")
-        if row.dignity:
-            tags.append(str(row.dignity).strip())
-        paren = f" ({', '.join(tags)})" if tags else ""
+    # --- Legacy dict-based path (kept for backward compatibility with DF rows) ---
+    glyph = (row.get("Glyph") or "").strip()
+    obj_name = (row.get("Object") or "").strip()
+    meaning = meaning_for(obj_name)
 
-        sign = row.sign.name if row.sign else ""
-        dms = row.dms or ""
-        # row.sabian_symbol may be a SabianSymbol from another import path,
-        # so avoid direct isinstance checks which can fail during reloads.
-        sabian = ""
-        ss = row.sabian_symbol
-        if ss is not None:
-            # prefer the explicit symbol text if provided
-            if hasattr(ss, 'symbol'):
-                sabian = ss.symbol or ""
-            # if the symbol field is empty, try the short meaning (common in
-            # the dataset where the text lives there instead)
-            if not sabian and hasattr(ss, 'short_meaning'):
-                sabian = ss.short_meaning or ""
-            # if we still don't have anything, fall back to stringifying
-            if not sabian:
-                sabian = str(ss)
-        stars = row.fixed_star_conj or ""
-        oob = row.oob_status or ""
+    # Header tag: (Rx first, then dignity) — omit if neither present
+    tags = []
+    if row.get("Retrograde Bool"):
+        tags.append("Rx")
+    if row.get("Dignity"):
+        tags.append(str(row.get("Dignity")).strip())
+    paren = f" ({', '.join(tags)})" if tags else ""
 
-        house = None
-        if house_label == "Placidus" and row.placidus_house:
-            house = row.placidus_house.number
-        elif house_label == "Equal" and row.equal_house:
-            house = row.equal_house.number
-        elif house_label == "Whole Sign" and row.whole_sign_house:
-            house = row.whole_sign_house.number
-        if house is None:
-            for h in (row.placidus_house, row.equal_house, row.whole_sign_house):
-                if h:
-                    house = h.number
-                    break
+    sign   = row.get("Sign") or ""
+    dms    = row.get("DMS") or ""                       # precomputed positional DMS
+    sabian = (row.get("Sabian Symbol") or "").strip()
+    stars  = (row.get("Fixed Star Conj") or "").strip()
+    oob    = (row.get("OOB Status") or "").strip()
 
-        by_house = ""
-        if house_label == "Placidus":
-            by_house = ", ".join([o.name for o in row.house_ruler_placidus if o])
-        elif house_label == "Equal":
-            by_house = ", ".join([o.name for o in row.house_ruler_equal if o])
-        elif house_label == "Whole Sign":
-            by_house = ", ".join([o.name for o in row.house_ruler_whole if o])
+    # House (prefer specified label; fall back if missing)
+    house = row.get(f"{house_label} House")
+    if house is None:
+        for alt in ("Placidus House", "Equal House", "Whole Sign House"):
+            if row.get(alt) is not None:
+                house = row.get(alt)
+                break
 
-        by_sign = row.ruled_by_sign or ", ".join([o.name for o in row.sign_ruler if o])
-        reception = _format_reception_links(row.reception)
-        speed_txt = _fmt_speed_per_day(row.speed)
-        lat_txt = _fmt_lat(row.latitude)
-        dec_txt = _fmt_decl(row.declination)
-        dist_txt = _fmt_distance_au_km(row.distance)
-    else:
-        glyph = (row.get("Glyph") or "").strip()
-        obj_name = (row.get("Object") or "").strip()
-        meaning = meaning_for(obj_name)
-
-        # Header tag: (Rx first, then dignity) — omit if neither present
-        tags = []
-        if row.get("Retrograde Bool"):
-            tags.append("Rx")
-        if row.get("Dignity"):
-            tags.append(str(row.get("Dignity")).strip())
-        paren = f" ({', '.join(tags)})" if tags else ""
-
-        sign   = row.get("Sign") or ""
-        dms    = row.get("DMS") or ""                       # precomputed positional DMS
-        sabian = (row.get("Sabian Symbol") or "").strip()
-        stars  = (row.get("Fixed Star Conj") or "").strip()
-        oob    = (row.get("OOB Status") or "").strip()
-
-        # House (prefer specified label; fall back if missing)
-        house = row.get(f"{house_label} House")
-        if house is None:
-            for alt in ("Placidus House", "Equal House", "Whole Sign House"):
-                if row.get(alt) is not None:
-                    house = row.get(alt)
-                    break
-
-        by_house = (row.get(f"{house_label} House Rulers") or "").strip()
-        by_sign  = (row.get("Ruled by (sign)") or "").strip()
-        reception = (row.get("Reception") or "").strip()
-        speed_txt = _fmt_speed_per_day(row.get("Speed"))
-        lat_txt   = _fmt_lat(row.get("Latitude"))
-        dec_txt   = _fmt_decl(row.get("Declination"))
-        dist_txt  = _fmt_distance_au_km(row.get("Distance"))
+    by_house = (row.get(f"{house_label} House Rulers") or "").strip()
+    by_sign  = (row.get("Ruled by (sign)") or "").strip()
+    reception = (row.get("Reception") or "").strip()
+    speed_txt = _fmt_speed_per_day(row.get("Speed"))
+    lat_txt   = _fmt_lat(row.get("Latitude"))
+    dec_txt   = _fmt_decl(row.get("Declination"))
+    dist_txt  = _fmt_distance_au_km(row.get("Distance"))
 
     # Short meaning (from lookup_v2.OBJECT_MEANINGS)
     # Try exact key first, then a version with any trailing "(...)" removed.

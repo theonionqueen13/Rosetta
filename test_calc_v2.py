@@ -790,7 +790,7 @@ with st.sidebar:
 			blocks = [
 				format_object_profile_html(
 					r,
-					house_label=_selected_house_system,
+					house_label=_selected_house_system(),
 					include_house_data=not unknown_time_chart,
 				)
 				for r in ordered_rows

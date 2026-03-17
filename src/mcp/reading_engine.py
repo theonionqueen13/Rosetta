@@ -49,7 +49,7 @@ from src.mcp.reading_packet import (
 if TYPE_CHECKING:
     from models_v2 import AstrologicalChart, ChartObject, StaticLookup
 
-# Lazy import of heavy modules — only pulled in when actually needed.
+# Lazy imports of heavy modules — only pulled in when actually needed.
 _static_db: Any = None
 
 
@@ -310,6 +310,31 @@ def build_reading(
     if include_interp_text and relevant_names:
         interp_text = _run_interp(chart, relevant_names, house_system)
 
+    # ── Modular planet profiles (PlanetStats + PlanetProfile) ────────
+    _planet_stats_list: List[Dict[str, Any]] = []
+    _planet_profiles_list: List[Dict[str, Any]] = []
+    try:
+        from planet_profiles import PlanetStats, PlanetProfile, PlanetStatsReader
+        for _robj in relevant_objects:
+            try:
+                _ps = PlanetStats.from_chart_object(_robj, house_system=house_system)
+                _planet_stats_list.append(_ps.to_dict())
+            except Exception:
+                pass
+            try:
+                _pp = PlanetProfile.from_chart_object(
+                    _robj,
+                    house_system=house_system,
+                    lookup=None,
+                    chart_objects=list(chart.objects),
+                    chart=chart,
+                )
+                _planet_profiles_list.append(_pp.to_dict())
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
     # ── Visible objects from current render state ─────────────────────────
     visible_objects: List[str] = []
     if render_result and hasattr(render_result, "visible_objects"):
@@ -421,6 +446,8 @@ def build_reading(
         needs_chart_b=_needs_chart_b,
         agent_notes=agent_notes,
         interp_text=interp_text,
+        planet_stats=_planet_stats_list,
+        planet_profiles=_planet_profiles_list,
         visible_objects=visible_objects,
         full_chart_placements=full_chart_placements,
         chart_b_name=chart_b_name,
@@ -860,16 +887,16 @@ def _run_interp(
             patterns=chart.aspect_groups or [],
             shapes=chart.shapes or [],
             singleton_map=chart.singleton_map or {},
+            plot_data={"chart": chart},
         )
 
         parts: List[str] = []
         for obj_name in sorted(relevant_names):
             try:
                 interp = NatalInterpreter(
-                    render_result=rr,
+                    rr,
                     mode="focus",
                     object_name=obj_name,
-                    chart=chart,
                 )
                 text = interp.generate()
                 if text:

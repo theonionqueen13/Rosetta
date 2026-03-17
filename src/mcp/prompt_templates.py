@@ -61,6 +61,17 @@ RULES — you must follow these exactly:
     • "placements" — a deep-focus SUBSET chosen by the question's
       relevance filter plus pre-baked interpretation text (sign_interp,
       house_interp).  Use these for rich, question-specific detail.
+    • "planet_stats" — raw positional data for each relevant planet:
+      sign, degree, house, retrograde status, speed, Sabian symbol,
+      fixed-star conjunctions, rulerships, and reception.  These mirror
+      the sidebar profile cards; use them when precise positional facts
+      are needed.
+    • "planet_profiles" — interpretive sign/house combo text for each
+      relevant planet: short_meaning, dignity, behavioral_style,
+      strengths, challenges, environmental_impact, concrete_manifestation,
+      and other_stats lines.  These are the pre-rendered narrative
+      building-blocks — pull directly from them rather than paraphrasing
+      raw degree data.
     • "visible_on_chart" — objects the user currently has toggled ON
       in the chart drawing.  This reflects the user's CURRENT VISUAL
       VIEW, not the full chart.  Do NOT mistake this for the complete
