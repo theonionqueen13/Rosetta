@@ -128,7 +128,8 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "name": "get_placement",
         "description": (
             "Get detailed information about a specific object's placement "
-            "in the chart (sign, house, dignity, aspects to it)."
+            "in the chart (sign, house, dignity, aspects to it). "
+            "Use chart='chart_2' to query the second chart in a biwheel."
         ),
         "inputSchema": {
             "type": "object",
@@ -136,6 +137,12 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "object_name": {
                     "type": "string",
                     "description": "Object name (e.g. 'Sun', 'Venus', 'MC', 'North Node')",
+                },
+                "chart": {
+                    "type": "string",
+                    "enum": ["chart_1", "chart_2"],
+                    "description": "Which chart to query. 'chart_2' is the outer chart in a biwheel (synastry partner or transiting planets). Defaults to 'chart_1'.",
+                    "default": "chart_1",
                 },
             },
             "required": ["object_name"],
@@ -145,7 +152,8 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "name": "get_house",
         "description": (
             "Get information about a specific house: sign on the cusp, "
-            "ruler, and objects occupying it."
+            "ruler, and objects occupying it. "
+            "Use chart='chart_2' to query the second chart in a biwheel."
         ),
         "inputSchema": {
             "type": "object",
@@ -156,6 +164,12 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                     "minimum": 1,
                     "maximum": 12,
                 },
+                "chart": {
+                    "type": "string",
+                    "enum": ["chart_1", "chart_2"],
+                    "description": "Which chart to query. Defaults to 'chart_1'.",
+                    "default": "chart_1",
+                },
             },
             "required": ["house_number"],
         },
@@ -163,7 +177,9 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
         "name": "get_aspects",
         "description": (
-            "Get all aspects involving a specific object in the chart."
+            "Get all aspects involving a specific object in the chart. "
+            "Use chart='chart_2' to query the second chart in a biwheel. "
+            "For aspects between the two charts use get_inter_chart_aspects."
         ),
         "inputSchema": {
             "type": "object",
@@ -171,6 +187,12 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "object_name": {
                     "type": "string",
                     "description": "Object name to find aspects for",
+                },
+                "chart": {
+                    "type": "string",
+                    "enum": ["chart_1", "chart_2"],
+                    "description": "Which chart to query. Defaults to 'chart_1'.",
+                    "default": "chart_1",
                 },
             },
             "required": ["object_name"],
@@ -180,18 +202,47 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "name": "get_patterns",
         "description": (
             "Get all detected geometric patterns (Grand Trine, T-Square, "
-            "Yod, Kite, etc.) in the chart."
+            "Yod, Kite, etc.) in the chart. "
+            "Use chart='chart_2' to get the second chart's patterns in a biwheel."
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "chart": {
+                    "type": "string",
+                    "enum": ["chart_1", "chart_2"],
+                    "description": "Which chart to query. Defaults to 'chart_1'.",
+                    "default": "chart_1",
+                },
+            },
         },
     },
     {
         "name": "get_chart_summary",
         "description": (
             "Get a high-level summary of the chart: key placements, "
-            "sect, dominant element/modality, and pattern count."
+            "sect, dominant element/modality, and pattern count. "
+            "Use chart='chart_2' to summarise the second chart in a biwheel."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "chart": {
+                    "type": "string",
+                    "enum": ["chart_1", "chart_2"],
+                    "description": "Which chart to summarise. Defaults to 'chart_1'.",
+                    "default": "chart_1",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_inter_chart_aspects",
+        "description": (
+            "Get all cross-chart aspects between chart_1 and chart_2 when a "
+            "biwheel is loaded (synastry or transit mode). Returns the aspect "
+            "list pre-computed by the drawing layer. Returns an empty list if "
+            "no second chart is loaded."
         ),
         "inputSchema": {
             "type": "object",
@@ -220,7 +271,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "description": (
             "Get the circuit simulation reading for a question. Returns "
             "the power-flow subgraph relevant to the question, including "
-            "shape circuits, power nodes, connecting paths, isolation notes, "
+            "shape circuits, power nodes, connecting paths, "
             "and narrative seeds. This is the primary circuit-aware tool."
         ),
         "inputSchema": {
@@ -240,7 +291,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "Trace the conductive path between two planets or concepts "
             "in the circuit simulation. Returns the connecting path, "
             "conductance values, and whether they share a circuit shape "
-            "or are isolated from each other."
+            "or are bridged through intermediate shapes."
         ),
         "inputSchema": {
             "type": "object",
@@ -278,12 +329,16 @@ class ToolContext:
         llm_backend: str = "auto",
         llm_model: Optional[str] = None,
         api_key: Optional[str] = None,
+        chart_b: Any = None,
+        edges_inter_chart: Optional[List] = None,
     ):
         self.chart = chart
         self.house_system = house_system
         self.llm_backend = llm_backend
         self.llm_model = llm_model
         self.api_key = api_key
+        self.chart_b = chart_b
+        self.edges_inter_chart = edges_inter_chart or []
 
 
 def execute_tool(
@@ -303,6 +358,14 @@ def execute_tool(
 
 # ── Individual handlers ──────────────────────────────────────────────
 
+def _resolve_chart(ctx: ToolContext, args: Dict[str, Any]) -> Any:
+    """Return ctx.chart or ctx.chart_b based on the 'chart' arg."""
+    which = args.get("chart", "chart_1")
+    if which == "chart_2" and ctx.chart_b is not None:
+        return ctx.chart_b
+    return ctx.chart
+
+
 def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     if not ctx.chart:
         return {"error": "No chart loaded. Load a chart first."}
@@ -315,12 +378,23 @@ def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         question, ctx.chart,
         house_system=ctx.house_system,
         api_key=ctx.api_key,
+        chart_b=ctx.chart_b or None,
+        edges_inter_chart=ctx.edges_inter_chart or None,
     )
+    # Auto-detect synthesis mode from detected temporal dimension
+    _td = packet.temporal_dimension or "natal"
+    if _td == "synastry":
+        _mode = "synastry"
+    elif _td in ("transit", "cycle", "timing_predict", "solar_return"):
+        _mode = "transit"
+    else:
+        _mode = "natal"
     result = synthesize(
         packet,
         backend=backend,
         model=ctx.llm_model,
         api_key=ctx.api_key,
+        mode=_mode,
     )
 
     out: Dict[str, Any] = {
@@ -345,6 +419,8 @@ def _get_reading_data(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     packet = build_reading(
         question, ctx.chart,
         house_system=ctx.house_system,
+        chart_b=ctx.chart_b or None,
+        edges_inter_chart=ctx.edges_inter_chart or None,
     )
     return {
         "packet": packet.to_dict(),
@@ -382,10 +458,13 @@ def _get_placement(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         return {"error": "No chart loaded."}
 
     obj_name = args.get("object_name", "")
+    target_chart = _resolve_chart(ctx, args)
+    if target_chart is None:
+        return {"error": "Requested chart is not loaded."}
     # Use the reading engine to get placement data for this object
     packet = build_reading(
         f"Tell me about {obj_name}",
-        ctx.chart,
+        target_chart,
         house_system=ctx.house_system,
         include_interp_text=False,
     )
@@ -401,9 +480,12 @@ def _get_house(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         return {"error": "No chart loaded."}
 
     house_num = args.get("house_number", 0)
+    target_chart = _resolve_chart(ctx, args)
+    if target_chart is None:
+        return {"error": "Requested chart is not loaded."}
     packet = build_reading(
         f"Tell me about the {house_num}th house",
-        ctx.chart,
+        target_chart,
         house_system=ctx.house_system,
         include_interp_text=False,
     )
@@ -418,9 +500,12 @@ def _get_aspects(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         return {"error": "No chart loaded."}
 
     obj_name = args.get("object_name", "")
+    target_chart = _resolve_chart(ctx, args)
+    if target_chart is None:
+        return {"error": "Requested chart is not loaded."}
     packet = build_reading(
         f"aspects of {obj_name}",
-        ctx.chart,
+        target_chart,
         house_system=ctx.house_system,
         include_interp_text=False,
         max_aspects=50,
@@ -435,16 +520,19 @@ def _get_patterns(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
+    target_chart = _resolve_chart(ctx, args)
+    if target_chart is None:
+        return {"error": "Requested chart is not loaded."}
     # Build a broad reading to capture all patterns
     packet = build_reading(
         "Show me all chart patterns",
-        ctx.chart,
+        target_chart,
         house_system=ctx.house_system,
         include_interp_text=False,
     )
     # Grab patterns directly from shapes
     all_patterns: List[Dict[str, Any]] = []
-    for shape in (ctx.chart.shapes or []):
+    for shape in (target_chart.shapes or []):
         if hasattr(shape, "shape_type"):  # DetectedShape
             shape_name = shape.shape_type
             members = list(shape.members)
@@ -465,7 +553,9 @@ def _get_chart_summary(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
-    chart = ctx.chart
+    chart = _resolve_chart(ctx, args)
+    if chart is None:
+        return {"error": "Requested chart is not loaded."}
     hdr = chart.header_lines() if hasattr(chart, "header_lines") else ("",) * 5
 
     # Element/modality counts
@@ -492,6 +582,28 @@ def _get_chart_summary(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]
         "elements": elements,
         "modalities": modalities,
     }
+
+
+def _get_inter_chart_aspects(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return pre-computed inter-chart aspects from biwheel mode."""
+    if not ctx.chart:
+        return {"error": "No chart loaded."}
+    if not ctx.edges_inter_chart:
+        note = (
+            "No second chart loaded — load a synastry partner or transit chart first."
+            if ctx.chart_b is None
+            else "No inter-chart aspects computed yet. Display the biwheel chart first."
+        )
+        return {"inter_chart_aspects": [], "count": 0, "note": note}
+    result: List[Dict[str, str]] = []
+    for record in ctx.edges_inter_chart:
+        if isinstance(record, (list, tuple)) and len(record) >= 3:
+            result.append({
+                "planet_1": str(record[0]),
+                "planet_2": str(record[1]),
+                "aspect": str(record[2]),
+            })
+    return {"inter_chart_aspects": result, "count": len(result)}
 
 
 def _get_domain_factors(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
@@ -540,11 +652,6 @@ def _trace_circuit_path(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any
 
     if cr.connecting_paths:
         result["paths"] = [p.to_dict() for p in cr.connecting_paths]
-    if cr.isolation_notes:
-        result["isolated"] = True
-        result["isolation_notes"] = cr.isolation_notes
-    else:
-        result["isolated"] = False
     if cr.relevant_shapes:
         result["shared_shapes"] = [
             {"type": s.shape_type, "members": [n.planet_name for n in s.nodes]}
@@ -566,6 +673,7 @@ _HANDLERS: Dict[str, Any] = {
     "get_aspects": _get_aspects,
     "get_patterns": _get_patterns,
     "get_chart_summary": _get_chart_summary,
+    "get_inter_chart_aspects": _get_inter_chart_aspects,
     "get_domain_factors": _get_domain_factors,
     "get_circuit_reading": _get_circuit_reading,
     "trace_circuit_path": _trace_circuit_path,

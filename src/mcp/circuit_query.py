@@ -58,7 +58,7 @@ class CircuitPath:
     path_planets: List[str] = field(default_factory=list)    # planet names along the path
     path_aspects: List[str] = field(default_factory=list)    # aspect types along the path
     total_conductance: float = 0.0
-    connection_quality: str = ""   # "direct_shape", "bridged", "isolated"
+    connection_quality: str = ""   # "direct_shape", "bridged"
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -89,8 +89,6 @@ class CircuitReading:
     power_summary: Dict[str, Any] = field(default_factory=dict)
     # SN→NN relevance — note if path crosses queried factors
     sn_nn_relevance: str = ""
-    # Isolation notes — when queried factors aren't circuited together
-    isolation_notes: List[str] = field(default_factory=list)
     # Deterministic narrative seeds from circuit data
     narrative_seeds: List[str] = field(default_factory=list)
 
@@ -106,8 +104,6 @@ class CircuitReading:
             d["power_summary"] = self.power_summary
         if self.sn_nn_relevance:
             d["sn_nn"] = self.sn_nn_relevance
-        if self.isolation_notes:
-            d["isolation"] = self.isolation_notes
         if self.narrative_seeds:
             d["narrative_seeds"] = self.narrative_seeds
         return d
@@ -189,14 +185,23 @@ def _factors_to_planet_names(
     target_houses: Set[int] = set()
     target_signs: Set[str] = set()
 
+    # Build a set of valid chart-object names so we never treat
+    # non-astrological words ("you", "boyfriend", etc.) as planets.
+    _valid_obj_names: Set[str] = set()
+    for cobj in chart.objects:
+        obj_name = cobj.object_name.name if cobj.object_name else ""
+        if obj_name:
+            _valid_obj_names.add(obj_name)
+
     for f in factors:
         m = _HOUSE_RE.match(f)
         if m:
             target_houses.add(int(m.group(1)))
         elif f in _SIGN_NAMES:
             target_signs.add(f)
-        else:
+        elif f in _valid_obj_names:
             names.add(f)
+        # else: silently discard — not a real chart object
 
     # Expand houses and signs from chart objects
     for cobj in chart.objects:
@@ -352,12 +357,6 @@ def _generate_narrative_seeds(
                 f"{' → '.join(path.path_planets)} through {', '.join(path.path_aspects)} "
                 f"(bottleneck conductance {path.total_conductance:.0%})"
             )
-        elif path.connection_quality == "isolated":
-            seeds.append(
-                f"'{path.from_concept}' and '{path.to_concept}' have no conductive path "
-                f"between them — they operate as independent systems."
-            )
-
     # SN→NN path relevance
     if sn_nn_path and focus_names:
         overlap = set(sn_nn_path) & focus_names
@@ -439,7 +438,6 @@ def _query_relationship(
 
     # Trace paths between each pair of clusters
     connecting_paths: List[CircuitPath] = []
-    isolation_notes: List[str] = []
 
     for i in range(len(cluster_names)):
         for j in range(i + 1, len(cluster_names)):
@@ -478,27 +476,9 @@ def _query_relationship(
                         total_conductance=cond,
                         connection_quality="bridged",
                     ))
-                else:
-                    connecting_paths.append(CircuitPath(
-                        from_concept=label_a,
-                        to_concept=label_b,
-                        connection_quality="isolated",
-                    ))
-                    # Only report isolation if every planet in BOTH clusters is a
-                    # genuine singleton (not in any shape), per singleton_map — the
-                    # authoritative record of unconnected planets.
-                    singleton_map = getattr(chart, "singleton_map", None) or {}
-                    all_isolated = (
-                        all(n in singleton_map for n in names_a)
-                        and all(n in singleton_map for n in names_b)
-                    )
-                    if all_isolated:
-                        isolation_notes.append(
-                            f"'{label_a}' and '{label_b}' are not conductively "
-                            f"connected — they operate as separate electrical systems "
-                            f"in this chart. This means these areas of life develop "
-                            f"independently."
-                        )
+                # else: no path found — but we do NOT fabricate an
+                # "isolated" verdict.  Isolation is determined solely by
+                # the chart's singleton_map.
 
     sn_nn_path = sim.sn_nn_path or []
     narrative_seeds = _generate_narrative_seeds(
@@ -521,7 +501,6 @@ def _query_relationship(
         connecting_paths=connecting_paths,
         power_summary=power_summary,
         sn_nn_relevance=sn_nn_rel,
-        isolation_notes=isolation_notes,
         narrative_seeds=narrative_seeds,
     )
 

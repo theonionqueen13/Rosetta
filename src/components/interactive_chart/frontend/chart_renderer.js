@@ -273,6 +273,9 @@ const RosettaChart = (() => {
         // === Draw center earth ===
         drawCenterEarth(g, rScale, darkMode);
 
+        // === Draw chart header + moon phase (above the chart ring) ===
+        drawChartHeader(svg, data.header || {}, data.moon_phase || {}, size, darkMode);
+
         // === Draw planet labels ===
         drawPlanetLabels(layerPlanets, data.objects || [], ascDeg, rScale, labelStyle, darkMode);
 
@@ -325,6 +328,8 @@ const RosettaChart = (() => {
                 .attr("class", "zodiac-divider");
 
             // Draw glyph at the center of the segment
+            // Strip U+FE0F (emoji variation selector) so the codepoints render
+            // as plain text glyphs, not colour emoji in the browser.
             const midRad = degToRad(sign.start_degree + 15, ascDeg);
             const [gx, gy] = polarToCartesian(rScale(R_ZODIAC_GLYPH), midRad);
             layer
@@ -332,12 +337,13 @@ const RosettaChart = (() => {
                 .attr("x", gx).attr("y", gy)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "14px")
+                .attr("font-size", "36px")
                 .attr("font-weight", "bold")
+                .attr("font-family", "\"Segoe UI Symbol\", \"Apple Symbols\", \"Arial Unicode MS\", \"DejaVu Sans\", sans-serif")
                 .attr("fill", sign.glyph_color)
                 .attr("class", "zodiac-glyph")
                 .attr("data-sign", sign.name)
-                .text(sign.glyph);
+                .text((sign.glyph || "").replace(/\uFE0F/g, ""));
         });
     }
 
@@ -358,7 +364,7 @@ const RosettaChart = (() => {
                 .attr("x1", x1).attr("y1", y1)
                 .attr("x2", x2).attr("y2", y2)
                 .attr("stroke", lineColor)
-                .attr("stroke-width", 1.2)
+                .attr("stroke-width", 3.6)
                 .attr("class", "house-cusp")
                 .attr("data-house", house.number);
 
@@ -374,7 +380,7 @@ const RosettaChart = (() => {
                 .attr("x", lx).attr("y", ly)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "8px")
+                .attr("font-size", "20px")
                 .attr("fill", lblColor)
                 .attr("class", "house-number")
                 .attr("data-house", house.number)
@@ -395,20 +401,20 @@ const RosettaChart = (() => {
             .attr("r", rScale(R_DEGREE_CIRCLE))
             .attr("fill", "none")
             .attr("stroke", color)
-            .attr("stroke-width", 1)
+            .attr("stroke-width", 4)
             .attr("class", "degree-circle");
 
         // Tick marks
         for (let deg = 0; deg < 360; deg++) {
             const rad = degToRad(deg, ascDeg);
             let tickLen = 0.015;
-            let tickWidth = 0.5;
+            let tickWidth = 1.0;
             if (deg % 10 === 0) {
                 tickLen = 0.05;
-                tickWidth = 1.2;
+                tickWidth = 2.4;
             } else if (deg % 5 === 0) {
                 tickLen = 0.03;
-                tickWidth = 0.8;
+                tickWidth = 1.2;
             }
 
             const [x1, y1] = polarToCartesian(rScale(R_DEGREE_CIRCLE), rad);
@@ -458,10 +464,10 @@ const RosettaChart = (() => {
 
             // Line style
             const isMajor = asp.is_major !== false;
-            let lw = isMajor ? 2 : 1;
+            let lw = isMajor ? 8 : 4;
             const aspectName = (asp.aspect || "").toLowerCase();
             if (aspectName === "quincunx" || aspectName === "sesquisquare") {
-                lw = 1;
+                lw = 4;
             }
 
             let dashArray = "none";
@@ -493,6 +499,7 @@ const RosettaChart = (() => {
                 .attr("data-obj-a", asp.obj_a)
                 .attr("data-obj-b", asp.obj_b)
                 .attr("data-is-major", isMajor)
+                .attr("data-original-width", lw)
                 .attr("data-conductance", asp.conductance || "")
                 .attr("data-transmitted-power", asp.transmitted_power || "")
                 .attr("data-friction-heat", asp.friction_heat || "")
@@ -597,7 +604,7 @@ const RosettaChart = (() => {
             .attr("r", r)
             .attr("fill", "none")
             .attr("stroke", color)
-            .attr("stroke-width", 1.5)
+            .attr("stroke-width", 2)
             .attr("class", "center-earth");
         g.append("line")
             .attr("x1", -r).attr("y1", 0)
@@ -609,6 +616,153 @@ const RosettaChart = (() => {
             .attr("x2", 0).attr("y2", r)
             .attr("stroke", color).attr("stroke-width", 1)
             .attr("class", "center-earth");
+    }
+
+    // -----------------------------------------------------------------------
+    // Chart header (name, date, time, city) + moon phase label/icon
+    // Drawn in SVG-root (screen) coordinates, NOT inside the zoomable group.
+    // -----------------------------------------------------------------------
+    function drawChartHeader(svg, header, moonPhase, size, darkMode) {
+        if (!header || !header.name) return;
+        const color = darkMode ? "#FFFFFF" : "#000000";
+        const subColor = darkMode ? "#CCCCCC" : "#333333";
+        const x0 = 14;        // left padding
+        let y = 40;           // start y
+        const lineHeight = 30;
+
+        // Chart name (bold, larger)
+        svg.append("text")
+            .attr("x", x0).attr("y", y)
+            .attr("font-size", "44px")
+            .attr("font-weight", "bold")
+            .attr("fill", color)
+            .attr("class", "chart-header-name")
+            .text(header.name);
+        y += lineHeight;
+
+        // Date line
+        if (header.date_line) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "30px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-date")
+                .text(header.date_line);
+            y += lineHeight;
+        }
+
+        // Time line
+        if (header.time_line) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "30px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-time")
+                .text(header.time_line);
+            y += lineHeight;
+        }
+
+        // City
+        if (header.city) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "30px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-city")
+                .text(header.city);
+        }
+
+        // Moon phase label + SVG icon (upper-right)
+        if (moonPhase && moonPhase.label) {
+            const rightX = size - 14;
+            const moonY = 26;
+
+            // SVG moon icon (drawn first, label to its left)
+            const iconR = 24;
+            const iconCx = rightX - iconR;
+            const iconCy = moonY + iconR + 4;
+            _drawMoonIcon(svg, iconCx, iconCy, iconR, moonPhase.phase_delta || 0, darkMode);
+
+            // Label to the left of the icon
+            svg.append("text")
+                .attr("x", iconCx - iconR - 8).attr("y", iconCy + 5)
+                .attr("text-anchor", "end")
+                .attr("font-size", "36px")
+                .attr("font-weight", "bold")
+                .attr("fill", color)
+                .attr("class", "chart-moon-label")
+                .text(moonPhase.label);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // SVG moon phase icon
+    // phase_delta: 0 = new, 90 = first quarter, 180 = full, 270 = last quarter
+    // Uses a clip-path approach for reliability: draw a full lit circle,
+    // then clip it to the illuminated half using a cubic Bézier terminator.
+    // -----------------------------------------------------------------------
+    function _drawMoonIcon(svg, cx, cy, r, phaseDelta, darkMode) {
+        const bgFill = darkMode ? "#444" : "#BBB";
+        const litFill = darkMode ? "#EEE" : "#FFFDE7";
+        const strokeColor = darkMode ? "#888" : "#777";
+
+        // Background circle (shadow side)
+        svg.append("circle")
+            .attr("cx", cx).attr("cy", cy).attr("r", r)
+            .attr("fill", bgFill)
+            .attr("stroke", strokeColor).attr("stroke-width", 1.5)
+            .attr("class", "moon-icon-bg");
+
+        const p = ((phaseDelta % 360) + 360) % 360;
+
+        // Full moon or very close: just fill the whole circle
+        if (p >= 170 && p <= 190) {
+            svg.append("circle")
+                .attr("cx", cx).attr("cy", cy).attr("r", r - 0.5)
+                .attr("fill", litFill)
+                .attr("class", "moon-icon-lit");
+            return;
+        }
+        // New moon or very close: no lit area
+        if (p <= 10 || p >= 350) {
+            return;
+        }
+
+        // Determine which half is lit and the terminator bulge.
+        // Waxing (0-180): lit on the RIGHT side
+        // Waning (180-360): lit on the LEFT side
+        const waxing = p < 180;
+        // Normalised phase within the half-cycle (0..180)
+        const hp = waxing ? p : (p - 180);
+        // Terminator curvature: 0 at quarter (straight), ±r at new/full
+        // k < 0 → concave (crescent), k > 0 → convex (gibbous)
+        const k = r * Math.cos(hp * Math.PI / 180);
+
+        const top = cy - r;
+        const bot = cy + r;
+
+        // Terminator is an S-curve from top to bottom through cx.
+        // Control points offset horizontally by k.
+        // Outer edge is a semicircle arc on the lit side.
+        const litSide = waxing ? 1 : -1; // +1 = right, -1 = left
+
+        // Outer semicircle arc on the lit side: top→bottom via cx±r
+        // large-arc=1, sweep depends on direction
+        const outerSweep = waxing ? 0 : 1;
+
+        // Build path:
+        // M top-center → cubic Bézier terminator → bottom-center → semicircle back
+        const d = [
+            `M ${cx} ${top}`,
+            `C ${cx + k} ${cy - r * 0.4}, ${cx + k} ${cy + r * 0.4}, ${cx} ${bot}`,
+            `A ${r} ${r} 0 0 ${outerSweep} ${cx} ${top}`,
+            "Z",
+        ].join(" ");
+
+        svg.append("path")
+            .attr("d", d)
+            .attr("fill", litFill)
+            .attr("class", "moon-icon-lit");
     }
 
     // -----------------------------------------------------------------------
@@ -639,7 +793,7 @@ const RosettaChart = (() => {
                 .attr("x", gx).attr("y", gy)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "11px")
+                .attr("font-size", "30px")
                 .attr("fill", color)
                 .attr("class", "planet-glyph")
                 .attr("data-object", obj.name)
@@ -651,7 +805,7 @@ const RosettaChart = (() => {
                 .attr("x", dx).attr("y", dy)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "7px")
+                .attr("font-size", "24px")
                 .attr("fill", color)
                 .attr("class", "planet-degree")
                 .attr("data-object", obj.name)
@@ -699,7 +853,7 @@ const RosettaChart = (() => {
                 .attr("r", 5)
                 .attr("fill", color)
                 .attr("stroke", "#fff")
-                .attr("stroke-width", 1.2)
+                .attr("stroke-width", 1.8)
                 .attr("class", "singleton-dot")
                 .attr("data-object", name);
         });

@@ -1,26 +1,38 @@
 """
-comprehension.py — Question Decomposition Layer
-================================================
+comprehension.py — Question Decomposition Layer (5W+H Protocol)
+================================================================
 Decomposes a natural-language question into a structured QuestionGraph
 that maps concepts to astrological factors and relationships between them.
 
-Two resolution paths
---------------------
-  1. **LLM path** (preferred when API key available):
-     One cheap, fast structured-output LLM call with a JSON-schema
-     constraint.  The LLM can ONLY select from a validated vocabulary
-     of astrological factors present in the chart — it cannot hallucinate.
+The comprehension protocol extracts the full 5W+H:
+  WHO   — PersonProfile for each person mentioned
+  WHAT  — Topics, StoryObjects, Dilemmas, AnswerAim
+  WHEN  — Temporal setting, Transit objects
+  WHERE — Location objects
+  WHY   — User intent and context
+  HOW   — QuerentState (tone, certainty, guidance openness)
+
+Resolution paths
+----------------
+  1. **LLM path** (required for rich 5W+H extraction):
+     Structured-output LLM call with a JSON-schema constraint.
+     The LLM can ONLY select astrological factors from a validated
+     vocabulary present in the chart — it cannot hallucinate.
 
   2. **Keyword path** (fallback when no API key):
      Uses ``topic_maps.resolve_factors()`` for keyword extraction +
-     heuristic relationship detection from question text.
+     heuristic relationship detection. Rich fields (persons, dilemmas,
+     querent state, etc.) remain at defaults — LLM is required for those.
 
 After either path, ``_anchor_to_chart()`` validates every factor against
 the live chart and maps them to shape_ids in the circuit simulation.
 
+A sufficiency check may return a ``ClarificationRequest`` instead of a
+complete graph when the bot doesn't fully understand the question.
+
 Public API
 ----------
-  comprehend(question, chart, api_key=None) → QuestionGraph
+  comprehend(question, chart, api_key=None, ...) → ComprehensionResult
 """
 
 from __future__ import annotations
@@ -38,6 +50,14 @@ if _PROJECT_ROOT not in sys.path:
 
 from src.mcp.topic_maps import resolve_factors, TopicMatch
 from src.mcp.term_registry import load_terms, match_terms, TermIntent
+from src.mcp.comprehension_models import (
+    AimType, Depth, Urgency, Specificity,
+    EmotionalTone, CertaintyLevel, GuidanceOpenness,
+    ClarificationCategory,
+    PersonProfile, LocationLink, StoryObject, Dilemma, AnswerAim,
+    Transit, Location, QuerentState,
+    ClarificationRequest, ComprehensionResult,
+)
 
 if TYPE_CHECKING:
     from models_v2 import AstrologicalChart
@@ -65,26 +85,55 @@ class QuestionEdge:
 
 @dataclass
 class QuestionGraph:
-    """Structured representation of a decomposed question."""
-    # Decomposition
+    """Structured representation of a decomposed question (5W+H)."""
+    # ── Core decomposition ───────────────────────────────────────────
     nodes: List[QuestionNode] = field(default_factory=list)
     edges: List[QuestionEdge] = field(default_factory=list)
     question_type: str = "single_focus"  # "single_focus" | "relationship" | "multi_node" | "open_exploration"
 
-    # Post-anchoring (filled by _anchor_to_chart)
-    focus_circuits: List[int] = field(default_factory=list)   # shape_ids containing relevant factors
-    all_factors: List[str] = field(default_factory=list)       # deduplicated union of all node factors
-    anchored: bool = False                                     # True once _anchor_to_chart has run
+    # ── Post-anchoring (filled by _anchor_to_chart) ──────────────────
+    focus_circuits: List[int] = field(default_factory=list)
+    all_factors: List[str] = field(default_factory=list)
+    anchored: bool = False
 
-    # Metadata
+    # ── Routing metadata ─────────────────────────────────────────────
     domain: str = ""
     subtopic: str = ""
     confidence: float = 0.0
     matched_keywords: List[str] = field(default_factory=list)
-    source: str = "keyword"             # "keyword", "llm", or "term_registry"
-    question_intent: str = ""           # routing intent from term_registry (e.g. "potency_ranking")
-    paraphrase: str = ""                # one-sentence plain-language restatement of the question
-    comprehension_note: str = ""        # one-line log for agent notes
+    source: str = "keyword"
+    question_intent: str = ""
+    paraphrase: str = ""
+    comprehension_note: str = ""
+    temporal_dimension: str = "natal"
+    subject_config: str = "single"
+
+    # ── WHO — People in the querent's story ──────────────────────────
+    persons: List[PersonProfile] = field(default_factory=list)
+
+    # ── WHAT — Objects, dilemma, aim ─────────────────────────────────
+    story_objects: List[StoryObject] = field(default_factory=list)
+    dilemma: Optional[Dilemma] = None
+    answer_aim: Optional[AnswerAim] = None
+
+    # ── WHEN — Temporal setting & transit references ─────────────────
+    setting_time: Optional[str] = None       # "past" / "present" / "future" / specific date
+    transits: List[Transit] = field(default_factory=list)
+
+    # ── WHERE — Locations ────────────────────────────────────────────
+    locations: List[Location] = field(default_factory=list)
+
+    # ── WHY — Intent & context ───────────────────────────────────────
+    intent_context: Optional[str] = None     # why the user is asking
+    desired_input: Optional[str] = None      # what actionable output they want
+
+    # ── HOW — Querent state ──────────────────────────────────────────
+    querent_state: Optional[QuerentState] = None
+
+    # ── Sufficiency metadata ─────────────────────────────────────────
+    comprehension_confidence: float = 0.0    # LLM self-assessed 0.0–1.0
+    ambiguities: List[str] = field(default_factory=list)
+    contradictions: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -98,9 +147,38 @@ class QuestionGraph:
             "confidence": self.confidence,
             "source": self.source,
             "question_intent": self.question_intent,
+            "temporal_dimension": self.temporal_dimension,
+            "subject_config": self.subject_config,
         }
         if self.paraphrase:
             d["paraphrase"] = self.paraphrase
+        # 5W+H rich fields — only include if populated
+        if self.persons:
+            d["persons"] = [p.to_dict() for p in self.persons]
+        if self.story_objects:
+            d["story_objects"] = [o.to_dict() for o in self.story_objects]
+        if self.dilemma:
+            d["dilemma"] = self.dilemma.to_dict()
+        if self.answer_aim:
+            d["answer_aim"] = self.answer_aim.to_dict()
+        if self.setting_time:
+            d["setting_time"] = self.setting_time
+        if self.transits:
+            d["transits"] = [t.to_dict() for t in self.transits]
+        if self.locations:
+            d["locations"] = [loc.to_dict() for loc in self.locations]
+        if self.intent_context:
+            d["intent_context"] = self.intent_context
+        if self.desired_input:
+            d["desired_input"] = self.desired_input
+        if self.querent_state:
+            d["querent_state"] = self.querent_state.to_dict()
+        if self.comprehension_confidence > 0:
+            d["comprehension_confidence"] = self.comprehension_confidence
+        if self.ambiguities:
+            d["ambiguities"] = self.ambiguities
+        if self.contradictions:
+            d["contradictions"] = self.contradictions
         return d
 
 
@@ -151,6 +229,56 @@ def _detect_relationship_type(question: str) -> str:
         if pat.search(question):
             return rel_type
     return "connection"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Temporal & subject detection heuristics
+# ═══════════════════════════════════════════════════════════════════════
+
+_TEMPORAL_KEYWORDS: Dict[str, List[str]] = {
+    "transit":        ["transit", "transiting", "right now", "currently", "lately",
+                       "these days", "at this time", "this week", "this month",
+                       "this year", "passing through", "retrograde"],
+    "synastry":       ["synastry", "compatibility", "partner", "spouse", "our chart",
+                       "we have", "between us", "her chart", "his chart", "their chart"],
+    "solar_return":   ["solar return", "birthday chart"],
+    "relocation":     ["relocation", "moving to", "astrocartography", "new city",
+                       "relocate", "astromap"],
+    "cycle":          ["saturn return", "planetary cycle", "progressed", "progression",
+                       "life cycle", "nodal return", "chiron return"],
+    "timing_predict": ["when will", "when does", "how soon", "what year",
+                       "waiting room", "energy shift", "coming up"],
+}
+
+_DYADIC_KEYWORDS: List[str] = [
+    "my partner", "my spouse", "our synastry", "our chart",
+    "between us", " we ", " our ", " us ", "her chart", "his chart",
+    "their chart", "with my",
+]
+
+_FAMILIAL_KEYWORDS: List[str] = [
+    "my parent", "my mother", "my father", "my child",
+    "my sibling", "my family", "my ex",
+]
+
+
+def _detect_temporal(question: str) -> str:
+    """Return the most likely temporal dimension from question text."""
+    ql = question.lower()
+    for dim, kws in _TEMPORAL_KEYWORDS.items():
+        if any(kw in ql for kw in kws):
+            return dim
+    return "natal"
+
+
+def _detect_subject(question: str) -> str:
+    """Return subject configuration: 'single', 'dyadic', or 'familial'."""
+    ql = question.lower()
+    if any(k in ql for k in _DYADIC_KEYWORDS):
+        return "dyadic"
+    if any(k in ql for k in _FAMILIAL_KEYWORDS):
+        return "familial"
+    return "single"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -250,6 +378,8 @@ def _comprehend_keyword(question: str) -> QuestionGraph:
         confidence=topic.confidence,
         matched_keywords=topic.matched_keywords,
         source="keyword",
+        temporal_dimension=_detect_temporal(question),
+        subject_config=_detect_subject(question),
     )
 
 
@@ -259,42 +389,127 @@ def _comprehend_keyword(question: str) -> QuestionGraph:
 
 _COMPREHENSION_SYSTEM = """\
 You are the comprehension layer of an astrology chatbot. Your job is to
-understand what the user is genuinely asking BEFORE you touch any astrology.
+deeply understand what the user is genuinely asking BEFORE you touch any
+astrology.  Extract the full 5W+H from their question or story.
 
 Work in two phases:
 
-─── PHASE 1: ACTIVE LISTENING — understand the human question ───
+--- PHASE 1: ACTIVE LISTENING --- understand the human question ---
 Restate the user's question in one plain sentence. No astrology yet.
 Ask yourself: what does this person actually want to know?
-Then identify which DOMAINS from the DOMAINS list genuinely apply.
-Only pick domains that a thoughtful person would agree relate to the question.
-If it is about a structural chart concept (power, strength, timing, pattern
-analysis) rather than a life domain, leave domains empty.
 
-─── PHASE 2: ASTROLOGICAL MAPPING ───
+Extract the full context:
+
+WHO:
+  - Is it just the querent, or are other people involved?
+  - For each person mentioned (besides the user), record:
+    name (or label like "partner"), relationship_to_querent,
+    any locations they're connected to (with how: "lives there", etc.)
+
+WHAT:
+  - Topics of the question
+  - Story objects: any notable things mentioned (job offer, house, instrument, etc.)
+  - Dilemma: if the user faces a decision, capture: description, options, stakes,
+    constraints, desired_outcome
+  - Answer aim: what KIND of answer do they need?
+    aim_type: "diagnostic" (why?), "advisory" (how?), "predictive" (when?),
+              "validating" (is this true?), "exploratory" (tell me about)
+    depth: "overview" | "moderate" | "deep_dive"
+    urgency: "low" | "moderate" | "high" | "immediate"
+    specificity: "broad" | "focused" | "pinpoint"
+
+WHEN:
+  - setting_time: "past" | "present" | "future" | specific date/period
+  - Any transits mentioned: transiting_body, natal_body, aspect_type, timeframe
+  - temporal_dimension: "natal" | "transit" | "synastry" | "solar_return" |
+    "relocation" | "cycle" | "timing_predict"
+
+WHERE:
+  - Locations mentioned: name, type (city/venue/home/workplace/country),
+    connected persons, relevance
+
+WHY:
+  - intent_context: why is the user asking? What context did they give?
+  - desired_input: what actionable output are they hoping to receive?
+
+HOW:
+  - How did they ask? Assess the querent's state:
+    emotional_tone: "neutral" | "curious" | "hopeful" | "anxious" |
+                    "distressed" | "desperate" | "discouraged" | "excited"
+    certainty_level: "unsure" | "somewhat_sure" | "confident"
+    guidance_openness: "minimal" | "moderate" | "extensive"
+    expressed_feelings: list of emotional statements from their message
+    demeanor_notes: your brief observation of their overall presentation
+
+Identify which DOMAINS from the DOMAINS list genuinely apply.
+Also self-assess your comprehension_confidence (0.0\u20131.0).
+Flag any ambiguities or contradictions in the question.
+
+CRITICAL — STATEMENTS vs QUESTIONS:
+If the user's message is a STATEMENT or ANECDOTE with NO clear question or
+request for insight, you MUST:
+  - Set comprehension_confidence very low (0.1–0.25)
+  - Put "no_explicit_question" in the ambiguities list
+  - Do NOT fabricate an intent_context or desired_input — leave them empty/null
+  - Do NOT guess what the user "probably" wants to know
+  - The user may just be sharing context for a follow-up question
+Examples of statements (NOT questions):
+  "I told my brother about my job and he was upset."
+  "My Saturn return started last month."
+  "I've been feeling restless lately."
+These deserve clarification, not assumptions.
+
+--- PHASE 2: ASTROLOGICAL MAPPING ---
 Given your Phase 1 understanding, select specific planets, signs, or houses
 from VALID_FACTORS that a skilled astrologer would use to answer this question.
 If the question is about a structural concept (e.g. "which planet is strongest"),
-factors MUST be empty — the engine will handle factor selection itself.
+factors MUST be empty \u2014 the engine will handle factor selection itself.
 NEVER invent factor names outside VALID_FACTORS.
 
 RULES:
 1. paraphrase: one sentence in plain language, no jargon.
 2. domains: list of matching domain names from DOMAINS; may be empty.
 3. question_type: "single_focus" | "relationship" | "multi_node" | "open_exploration".
-4. nodes: each concept the user mentions. label is 1-3 words lowercase.
-5. factors in each node: ONLY items from VALID_FACTORS, or empty list.
-6. NEVER guess or hallucinate factor names.
-7. If a RECOGNIZED_TERM is provided, its meaning takes precedence over your
-   own interpretation — do not contradict it.
+4. temporal_dimension: one of the values listed above. Default "natal".
+5. subject_config: "single" | "dyadic" | "familial". Default "single".
+6. nodes: each concept the user mentions. label is 1-3 words lowercase.
+7. factors in each node: ONLY items from VALID_FACTORS, or empty list.
+8. NEVER guess or hallucinate factor names.
+9. If a RECOGNIZED_TERM is provided, its meaning takes precedence.
+10. comprehension_confidence: 0.0\u20131.0 how well you understood the question.
+11. Omit any optional object/array that would be empty or null.
 
-Respond with ONLY valid JSON:
+Respond with ONLY valid JSON matching this schema:
 {
   "paraphrase": "string",
   "domains": ["string"],
   "question_type": "string",
+  "temporal_dimension": "string",
+  "subject_config": "string",
   "nodes": [{"label": "string", "factors": ["string"]}],
-  "edges": [{"node_a": "string", "node_b": "string", "relationship": "string"}]
+  "edges": [{"node_a": "string", "node_b": "string", "relationship": "string"}],
+  "persons": [{"name": "string", "relationship_to_querent": "string",
+               "locations": [{"location_name": "string", "connection": "string"}]}],
+  "story_objects": [{"name": "string", "description": "string", "significance": "string",
+                     "related_persons": ["string"], "related_locations": ["string"]}],
+  "dilemma": {"description": "string", "options": ["string"], "stakes": "string",
+              "constraints": ["string"], "desired_outcome": "string"},
+  "answer_aim": {"aim_type": "string", "depth": "string", "urgency": "string",
+                 "specificity": "string"},
+  "setting_time": "string",
+  "transits": [{"transiting_body": "string", "natal_body": "string",
+                "aspect_type": "string", "timeframe": "string", "description": "string"}],
+  "locations": [{"name": "string", "location_type": "string",
+                 "connected_persons": [{"person": "string", "connection": "string"}],
+                 "relevance": "string"}],
+  "intent_context": "string",
+  "desired_input": "string",
+  "querent_state": {"emotional_tone": "string", "certainty_level": "string",
+                    "guidance_openness": "string", "expressed_feelings": ["string"],
+                    "demeanor_notes": "string"},
+  "comprehension_confidence": 0.85,
+  "ambiguities": ["string"],
+  "contradictions": ["string"]
 }
 """
 
@@ -305,9 +520,12 @@ def _comprehend_llm(
     api_key: str,
     model: str = "google/gemini-2.0-flash-001",
     matched_term: Optional["Term"] = None,  # type: ignore[name-defined]
+    known_persons: Optional[List[PersonProfile]] = None,
+    known_locations: Optional[List[Location]] = None,
+    pending_clarification: Optional[str] = None,
 ) -> Optional[QuestionGraph]:
     """
-    Two-phase LLM comprehension: active listening then astrological mapping.
+    Two-phase LLM comprehension with full 5W+H extraction.
 
     Returns None on any failure (caller should fall back to keyword path).
     """
@@ -328,6 +546,18 @@ def _comprehend_llm(
         parts.append(
             f"RECOGNIZED_TERM: \"{matched_term.canonical}\" — {matched_term.description}"
         )
+    if known_persons:
+        parts.append(
+            f"KNOWN_PERSONS (from prior turns):\n{json.dumps([p.to_dict() for p in known_persons], ensure_ascii=False)}"
+        )
+    if known_locations:
+        parts.append(
+            f"KNOWN_LOCATIONS (from prior turns):\n{json.dumps([loc.to_dict() for loc in known_locations], ensure_ascii=False)}"
+        )
+    if pending_clarification:
+        parts.append(
+            f"USER'S CLARIFICATION (answering a prior follow-up):\n{pending_clarification}"
+        )
     parts.append(f"Question: {question}")
     user_msg = "\n\n".join(parts)
 
@@ -347,7 +577,7 @@ def _comprehend_llm(
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.0,
-            max_tokens=500,
+            max_tokens=1200,
         )
         raw = response.choices[0].message.content or ""
     except Exception:
@@ -364,7 +594,7 @@ def _comprehend_llm(
     except (json.JSONDecodeError, ValueError):
         return None
 
-    # Validate factors against vocabulary
+    # ── Parse core fields (same as before) ──────────────────────────
     valid_set = set(vocab)
     nodes: List[QuestionNode] = []
     for nd in data.get("nodes", []):
@@ -389,7 +619,6 @@ def _comprehend_llm(
     if q_type not in {"single_focus", "relationship", "multi_node", "open_exploration"}:
         q_type = "single_focus"
 
-    # Domain: use first item from LLM's domain list, fall back to matched term's domain
     llm_domains: List[str] = data.get("domains") or []
     domain = ""
     if llm_domains:
@@ -399,6 +628,123 @@ def _comprehend_llm(
 
     paraphrase = str(data.get("paraphrase", "")).strip()
 
+    valid_temporal = {"natal", "transit", "synastry", "solar_return", "relocation", "cycle", "timing_predict"}
+    valid_subject = {"single", "dyadic", "familial"}
+    temporal = data.get("temporal_dimension", "")
+    if temporal not in valid_temporal:
+        temporal = _detect_temporal(question)
+    subject = data.get("subject_config", "")
+    if subject not in valid_subject:
+        subject = _detect_subject(question)
+
+    # ── Parse WHO — persons ─────────────────────────────────────────
+    persons: List[PersonProfile] = []
+    for p_data in data.get("persons", []):
+        locs: List[LocationLink] = []
+        for loc_d in p_data.get("locations", []):
+            locs.append(LocationLink(
+                location_name=str(loc_d.get("location_name", "")),
+                connection=str(loc_d.get("connection", "")),
+            ))
+        persons.append(PersonProfile(
+            name=p_data.get("name"),
+            relationship_to_querent=p_data.get("relationship_to_querent"),
+            relationships_to_others=p_data.get("relationships_to_others", []),
+            memories=p_data.get("memories", []),
+            significant_places=p_data.get("significant_places", []),
+            locations=locs,
+        ))
+
+    # ── Parse WHAT — story objects, dilemma, aim ────────────────────
+    story_objects: List[StoryObject] = []
+    for so_data in data.get("story_objects", []):
+        story_objects.append(StoryObject(
+            name=str(so_data.get("name", "")),
+            description=so_data.get("description"),
+            significance=so_data.get("significance"),
+            related_persons=so_data.get("related_persons", []),
+            related_locations=so_data.get("related_locations", []),
+        ))
+
+    dilemma: Optional[Dilemma] = None
+    dil_data = data.get("dilemma")
+    if dil_data and isinstance(dil_data, dict) and dil_data.get("description"):
+        dilemma = Dilemma(
+            description=str(dil_data.get("description", "")),
+            options=dil_data.get("options", []),
+            stakes=dil_data.get("stakes"),
+            constraints=dil_data.get("constraints", []),
+            desired_outcome=dil_data.get("desired_outcome"),
+        )
+
+    answer_aim: Optional[AnswerAim] = None
+    aim_data = data.get("answer_aim")
+    if aim_data and isinstance(aim_data, dict):
+        _aim_type_map = {e.value: e for e in AimType}
+        _depth_map = {e.value: e for e in Depth}
+        _urgency_map = {e.value: e for e in Urgency}
+        _specificity_map = {e.value: e for e in Specificity}
+        answer_aim = AnswerAim(
+            aim_type=_aim_type_map.get(aim_data.get("aim_type", ""), AimType.EXPLORATORY),
+            depth=_depth_map.get(aim_data.get("depth", ""), Depth.MODERATE),
+            urgency=_urgency_map.get(aim_data.get("urgency", ""), Urgency.MODERATE),
+            specificity=_specificity_map.get(aim_data.get("specificity", ""), Specificity.FOCUSED),
+        )
+
+    # ── Parse WHEN — setting, transits ──────────────────────────────
+    setting_time = data.get("setting_time") or None
+
+    transits: List[Transit] = []
+    for tr_data in data.get("transits", []):
+        transits.append(Transit(
+            transiting_body=tr_data.get("transiting_body"),
+            natal_body=tr_data.get("natal_body"),
+            aspect_type=tr_data.get("aspect_type"),
+            timeframe=tr_data.get("timeframe"),
+            description=tr_data.get("description"),
+        ))
+
+    # ── Parse WHERE — locations ─────────────────────────────────────
+    locations: List[Location] = []
+    for loc_data in data.get("locations", []):
+        conn_persons: List[Tuple[str, str]] = []
+        for cp in loc_data.get("connected_persons", []):
+            if isinstance(cp, dict):
+                conn_persons.append((
+                    str(cp.get("person", "")),
+                    str(cp.get("connection", "")),
+                ))
+        locations.append(Location(
+            name=str(loc_data.get("name", "")),
+            location_type=loc_data.get("location_type"),
+            connected_persons=conn_persons,
+            relevance=loc_data.get("relevance"),
+        ))
+
+    # ── Parse WHY — intent context ──────────────────────────────────
+    intent_context = data.get("intent_context") or None
+    desired_input = data.get("desired_input") or None
+
+    # ── Parse HOW — querent state ───────────────────────────────────
+    querent_state: Optional[QuerentState] = None
+    qs_data = data.get("querent_state")
+    if qs_data and isinstance(qs_data, dict):
+        _tone_map = {e.value: e for e in EmotionalTone}
+        _cert_map = {e.value: e for e in CertaintyLevel}
+        _guide_map = {e.value: e for e in GuidanceOpenness}
+        querent_state = QuerentState(
+            emotional_tone=_tone_map.get(qs_data.get("emotional_tone", ""), EmotionalTone.NEUTRAL),
+            certainty_level=_cert_map.get(qs_data.get("certainty_level", ""), CertaintyLevel.SOMEWHAT_SURE),
+            guidance_openness=_guide_map.get(qs_data.get("guidance_openness", ""), GuidanceOpenness.MODERATE),
+            expressed_feelings=qs_data.get("expressed_feelings", []),
+            demeanor_notes=qs_data.get("demeanor_notes"),
+        )
+
+    # ── Parse sufficiency metadata ──────────────────────────────────
+    comprehension_confidence = float(data.get("comprehension_confidence", 0.85))
+    ambiguities = data.get("ambiguities", [])
+    contradictions = data.get("contradictions", [])
+
     return QuestionGraph(
         nodes=nodes,
         edges=edges,
@@ -407,6 +753,22 @@ def _comprehend_llm(
         source="llm",
         confidence=0.85,
         paraphrase=paraphrase,
+        temporal_dimension=temporal,
+        subject_config=subject,
+        # 5W+H rich fields
+        persons=persons,
+        story_objects=story_objects,
+        dilemma=dilemma,
+        answer_aim=answer_aim,
+        setting_time=setting_time,
+        transits=transits,
+        locations=locations,
+        intent_context=intent_context,
+        desired_input=desired_input,
+        querent_state=querent_state,
+        comprehension_confidence=comprehension_confidence,
+        ambiguities=ambiguities,
+        contradictions=contradictions,
     )
 
 
@@ -503,6 +865,68 @@ def _anchor_to_chart(graph: QuestionGraph, chart: "AstrologicalChart") -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Sufficiency check — decides whether to ask for clarification
+# ═══════════════════════════════════════════════════════════════════════
+
+def _check_sufficiency(graph: QuestionGraph) -> Optional[ClarificationRequest]:
+    """Examine a populated QuestionGraph and decide if clarification is needed.
+
+    Returns a ClarificationRequest if the bot should ask the user for more
+    info, or None if comprehension is sufficient to proceed.
+    """
+    # Rule 1: no explicit question detected (statement / anecdote)
+    # Check this FIRST since it's the most specific signal.
+    if graph.ambiguities and "no_explicit_question" in graph.ambiguities:
+        return ClarificationRequest(
+            reason="The message appears to be a statement rather than a question",
+            category=ClarificationCategory.AMBIGUOUS_INTENT,
+            best_guesses=[],
+            follow_up_question=(
+                "Thanks for sharing that with me! I want to make sure I help you "
+                "in the right way — is there something specific you'd like me to "
+                "look at in your chart about this, or are you just giving me context "
+                "for a follow-up question?"
+            ),
+            partial_graph=graph,
+        )
+
+    # Rule 2: very low comprehension confidence from the LLM
+    if graph.comprehension_confidence > 0 and graph.comprehension_confidence < 0.4:
+        guesses = graph.ambiguities[:3] if graph.ambiguities else []
+        if not guesses:
+            guesses = [graph.paraphrase] if graph.paraphrase else ["a general chart reading"]
+        return ClarificationRequest(
+            reason=f"Comprehension confidence is low ({graph.comprehension_confidence:.0%})",
+            category=ClarificationCategory.AMBIGUOUS_INTENT,
+            best_guesses=guesses,
+            follow_up_question=(
+                "I want to make sure I understand your question correctly. "
+                "Did you mean:\n" +
+                "\n".join(f"  {i+1}. {g}" for i, g in enumerate(guesses)) +
+                "\n\nOr something else entirely?"
+            ),
+            partial_graph=graph,
+        )
+
+    # Rule 3: contradictions detected by the LLM
+    if graph.contradictions:
+        return ClarificationRequest(
+            reason="Contradictory information detected in the question",
+            category=ClarificationCategory.CONTRADICTORY_INFO,
+            best_guesses=graph.contradictions[:3],
+            follow_up_question=(
+                "I noticed some things in your question that seem to "
+                "contradict each other — could you help me clarify?\n\n" +
+                "\n".join(f"  • {c}" for c in graph.contradictions[:3])
+            ),
+            partial_graph=graph,
+        )
+
+    # All good — no clarification needed
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -512,24 +936,40 @@ def comprehend(
     *,
     api_key: Optional[str] = None,
     llm_model: str = "google/gemini-2.0-flash-001",
-) -> QuestionGraph:
+    known_persons: Optional[List[PersonProfile]] = None,
+    known_locations: Optional[List[Location]] = None,
+    pending_clarification: Optional[str] = None,
+) -> ComprehensionResult:
     """
     Decompose *question* into a ``QuestionGraph`` anchored to *chart*.
+
+    Returns a ``ComprehensionResult`` that wraps either a complete
+    QuestionGraph or a ClarificationRequest (when the bot needs to ask
+    the user for more information before proceeding).
 
     Resolution order
     ----------------
     1. Term registry — always runs first; stamps ``question_intent`` when a
        canonical astrological concept is recognised.
-    2. LLM path — two-phase active-listening call (requires ``api_key``).
-       Receives any matched term as context so it never contradicts the
-       registry.
+    2. LLM path — full 5W+H extraction (requires ``api_key``).
+       Receives any matched term and session context as input.
     3. Term-only fallback — when a term was matched but no API key is
        available, builds a minimal graph from the term without running the
-       keyword guesser.
+       keyword guesser.  Rich 5W+H fields remain at defaults.
     4. Keyword fallback — only runs when no term matched AND no API key.
        Uses ``topic_maps.resolve_factors()`` for life-domain questions.
 
-    Always anchors to the chart after resolution.
+    After resolution, a sufficiency check may return a ClarificationRequest.
+    Otherwise, anchors to the chart and returns a complete result.
+
+    Parameters
+    ----------
+    known_persons : list of PersonProfile, optional
+        Accumulated person profiles from prior turns in the session.
+    known_locations : list of Location, optional
+        Accumulated locations from prior turns in the session.
+    pending_clarification : str, optional
+        The user's answer to a prior ClarificationRequest.
     """
     # ── Step 1: Term registry — always runs first ──────────────────
     _terms = load_terms()
@@ -538,19 +978,17 @@ def comprehend(
     graph: Optional[QuestionGraph] = None
 
     # ── Step 2: LLM path (if key available) ──────────────────────
-    # Pass the matched term as context so the LLM knows the intent is
-    # already resolved and must not contradict it.
     if api_key:
         graph = _comprehend_llm(
             question, chart, api_key,
             model=llm_model,
             matched_term=_matched_term,
+            known_persons=known_persons,
+            known_locations=known_locations,
+            pending_clarification=pending_clarification,
         )
 
     # ── Step 3: Term-only fallback (term matched, no API key) ────────
-    # Build a minimal graph from the matched term without touching the
-    # keyword guesser — the keyword guesser would only introduce noise
-    # for a question whose intent is already resolved.
     if graph is None and _matched_term is not None:
         graph = QuestionGraph(
             nodes=[QuestionNode(
@@ -563,23 +1001,26 @@ def comprehend(
             confidence=0.9,
             source="term_registry",
             paraphrase=f"(term match: {_matched_term.canonical})",
+            temporal_dimension=_detect_temporal(question),
+            subject_config=_detect_subject(question),
         )
 
     # ── Step 4: Keyword fallback (no term, no API key) ──────────────
-    # Only runs when neither the term registry nor the LLM resolved the
-    # question.  Keywords remain useful for genuine life-domain questions
-    # like "tell me about my health" when no API key is configured.
     if graph is None:
         graph = _comprehend_keyword(question)
 
     # ── Stamp intent from term registry ───────────────────────────
     if _matched_term:
         graph.question_intent = _matched_term.intent
-        # If the term supplies specific factors, seed the first node
         if _matched_term.factors and graph.nodes:
             for f in _matched_term.factors:
                 if f not in graph.nodes[0].factors:
                     graph.nodes[0].factors.append(f)
+
+    # ── Sufficiency check ─────────────────────────────────────────
+    clarification = _check_sufficiency(graph)
+    if clarification is not None:
+        return ComprehensionResult(graph=None, clarification=clarification)
 
     # ── Anchor to chart (validate factors, find circuit shapes) ──────
     graph.comprehension_note = question  # temp store for _anchor_to_chart
@@ -588,14 +1029,24 @@ def comprehend(
     # ── Final comprehension note for the dev monologue ──────────────
     node_labels = [n.label for n in graph.nodes]
     paraphrase_fragment = f" | understood: \"{graph.paraphrase}\"" if graph.paraphrase and not graph.paraphrase.startswith("(") else ""
+    temporal_fragment = f" | temporal: {graph.temporal_dimension}" if graph.temporal_dimension != "natal" else ""
+    subject_fragment = f" | subject: {graph.subject_config}" if graph.subject_config != "single" else ""
+    aim_fragment = f" | aim: {graph.answer_aim.aim_type.value}" if graph.answer_aim else ""
+    tone_fragment = f" | tone: {graph.querent_state.emotional_tone.value}" if graph.querent_state and graph.querent_state.emotional_tone != EmotionalTone.NEUTRAL else ""
+    persons_fragment = f" | persons: {[p.name or p.relationship_to_querent for p in graph.persons]}" if graph.persons else ""
     graph.comprehension_note = (
-        f"Q: {question} → {graph.question_type} | "
+        f"Q: {question} -> {graph.question_type} | "
         f"intent: {graph.question_intent or 'none'} | "
         f"nodes: {node_labels} | "
         f"shapes: {graph.focus_circuits} | "
         f"source: {graph.source} | "
         f"conf: {graph.confidence:.0%}"
         + paraphrase_fragment
+        + temporal_fragment
+        + subject_fragment
+        + aim_fragment
+        + tone_fragment
+        + persons_fragment
     )
 
-    return graph
+    return ComprehensionResult(graph=graph, clarification=None)

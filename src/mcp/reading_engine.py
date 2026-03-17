@@ -27,6 +27,7 @@ if _PROJECT_ROOT not in sys.path:
 
 from src.mcp.topic_maps import resolve_factors, TopicMatch
 from src.mcp.comprehension import comprehend, QuestionGraph
+from src.mcp.comprehension_models import ComprehensionResult, PersonProfile, Location
 from src.mcp.circuit_query import query_circuit, CircuitReading
 from src.mcp.term_registry import TermIntent, assign_potency_tiers
 from src.mcp.reading_packet import (
@@ -36,7 +37,6 @@ from src.mcp.reading_packet import (
     DignityFact,
     DispositorFact,
     HouseOverview,
-    IsolationFact,
     PatternFact,
     PlacementFact,
     PowerNodeFact,
@@ -132,11 +132,16 @@ def build_reading(
     agent_notes: str = "",
     render_result: Optional[Any] = None,
     chart_b: Optional["AstrologicalChart"] = None,
+    edges_inter_chart: Optional[List] = None,
+    known_persons: Optional[List[PersonProfile]] = None,
+    known_locations: Optional[List[Location]] = None,
+    pending_clarification: Optional[str] = None,
 ) -> ReadingPacket:
     """Produce a ReadingPacket for *question* against *chart*.
 
     Pipeline:
-      1. Comprehend → QuestionGraph (structured LLM or keyword fallback)
+      1. Comprehend → ComprehensionResult (structured LLM or keyword fallback)
+         - If clarification needed, return a special packet signalling that.
       2. Query circuit → CircuitReading (subgraph extraction)
       3. Classical facts (placements, aspects, patterns, etc.)
       4. Optional NatalInterpreter text
@@ -161,10 +166,13 @@ def build_reading(
     agent_notes : str
         Accumulated agent notes from the conversation.
     chart_b : AstrologicalChart, optional
-        Second chart when in biwheel mode (synastry / transits).  Its
-        full placements are always included in the packet under
-        ``chart_b_context`` so the LLM has complete visibility of both
-        charts regardless of active toggles.
+        Second chart when in biwheel mode (synastry / transits).
+    known_persons : list of PersonProfile, optional
+        Accumulated person profiles from prior turns in the session.
+    known_locations : list of Location, optional
+        Accumulated locations from prior turns in the session.
+    pending_clarification : str, optional
+        User's answer to a prior ClarificationRequest.
 
     Returns
     -------
@@ -173,7 +181,25 @@ def build_reading(
     static = _get_static_db()
 
     # ── 1. Comprehend the question ───────────────────────────────────
-    q_graph: QuestionGraph = comprehend(question, chart, api_key=api_key)
+    comp_result: ComprehensionResult = comprehend(
+        question, chart, api_key=api_key,
+        known_persons=known_persons,
+        known_locations=known_locations,
+        pending_clarification=pending_clarification,
+    )
+
+    # ── 1a. Handle clarification request ─────────────────────────────
+    if comp_result.needs_clarification:
+        clar = comp_result.clarification
+        return ReadingPacket(
+            question=question,
+            comprehension_note=f"CLARIFICATION_NEEDED: {clar.follow_up_question}" if clar else "",
+            agent_notes=agent_notes,
+            # Store serialized clarification for the UI to detect
+            _clarification=clar.to_dict() if clar else {},
+        )
+
+    q_graph: QuestionGraph = comp_result.graph  # type: ignore[assignment]
     # ── 1b. Potency-ranking branch ──────────────────────────
     # When the question is about planetary power / influence, bypass the
     # circuit-focus filter and instead rank ALL chart planets by their
@@ -291,24 +317,56 @@ def build_reading(
     # user has toggled on or what the question's relevance filter captured.
     full_chart_placements = _build_full_placements(chart, house_system)
 
-    # ── Second chart (biwheel) full placements ─────────────────────────
+    # ── Second chart (biwheel) full placements + full parity facts ────────────
     chart_b_name = ""
     chart_b_date = ""
     chart_b_city = ""
     chart_b_full_placements: List[PlacementFact] = []
+    chart_b_aspects: List[AspectFact] = []
+    chart_b_patterns: List[PatternFact] = []
+    chart_b_dignities: List[DignityFact] = []
+    chart_b_dispositors: List[DispositorFact] = []
+    chart_b_sect: Optional[SectFact] = None
     if chart_b is not None:
         chart_b_full_placements = _build_full_placements(chart_b, house_system)
         b_hdr = chart_b.header_lines() if hasattr(chart_b, "header_lines") else ("", "", "", "", "")
         chart_b_name = b_hdr[0] if b_hdr else ""
         chart_b_date = b_hdr[1] if len(b_hdr) > 1 else ""
         chart_b_city = b_hdr[3] if len(b_hdr) > 3 else ""
+        # Build full parity classical facts for chart_b
+        _b_all_names: Set[str] = {
+            cobj.object_name.name
+            for cobj in chart_b.objects
+            if cobj.object_name
+        }
+        chart_b_aspects = _build_aspects(chart_b, _b_all_names, max_aspects)
+        chart_b_patterns = _build_patterns(chart_b, _b_all_names)
+        chart_b_dignities = _build_dignities(list(chart_b.objects))
+        chart_b_dispositors = _build_dispositors(chart_b, _b_all_names)
+        chart_b_sect = _build_sect(chart_b)
+
+    # Convert pre-computed inter-chart aspect tuples → serialisable dicts
+    inter_chart_aspects_raw: List[Dict[str, str]] = []
+    for _record in (edges_inter_chart or []):
+        if isinstance(_record, (list, tuple)) and len(_record) >= 3:
+            inter_chart_aspects_raw.append({
+                "planet_1": str(_record[0]),
+                "planet_2": str(_record[1]),
+                "aspect": str(_record[2]),
+            })
+
+    # Soft gate: flag when a dyadic question was asked but no second chart loaded
+    _needs_chart_b = (
+        q_graph.subject_config == "dyadic"
+        and chart_b is None
+    )
+
     # ── 7. Convert circuit reading to packet fact types ──────────────
     circuit_flows = _circuit_reading_to_flows(circuit_reading)
     # Use tier-labelled potency nodes for potency_ranking questions;
     # fall back to plain circuit-derived nodes otherwise.
     power_nodes = _potency_nodes if _potency_nodes is not None else _circuit_reading_to_power_nodes(circuit_reading)
     circuit_paths = _circuit_reading_to_paths(circuit_reading)
-    isolations = _circuit_reading_to_isolations(circuit_reading)
 
     # ── 8. Pack it ───────────────────────────────────────────────────
     hdr = chart.header_lines() if hasattr(chart, "header_lines") else ("", "", "", "", "")
@@ -321,7 +379,6 @@ def build_reading(
     _circuit_debug: Dict[str, Any] = {
         "shapes_count": len(circuit_reading.relevant_shapes),
         "focus_nodes": [getattr(n, "planet_name", str(n)) for n in circuit_reading.focus_nodes],
-        "isolation_notes": list(circuit_reading.isolation_notes or []),
         "sn_nn_relevance": circuit_reading.sn_nn_relevance or "",
         "narrative_seeds": list(circuit_reading.narrative_seeds or []),
         "power_summary": dict(circuit_reading.power_summary or {}),
@@ -349,7 +406,6 @@ def build_reading(
         circuit_flows=circuit_flows,
         power_nodes=power_nodes,
         circuit_paths=circuit_paths,
-        isolations=isolations,
         narrative_seeds=circuit_reading.narrative_seeds,
         power_summary=circuit_reading.power_summary,
         sn_nn_relevance=circuit_reading.sn_nn_relevance,
@@ -357,6 +413,9 @@ def build_reading(
         question_intent=q_graph.question_intent,
         paraphrase=q_graph.paraphrase,
         comprehension_note=q_graph.comprehension_note,
+        temporal_dimension=q_graph.temporal_dimension,
+        subject_config=q_graph.subject_config,
+        needs_chart_b=_needs_chart_b,
         agent_notes=agent_notes,
         interp_text=interp_text,
         visible_objects=visible_objects,
@@ -365,6 +424,23 @@ def build_reading(
         chart_b_date=chart_b_date,
         chart_b_city=chart_b_city,
         chart_b_full_placements=chart_b_full_placements,
+        chart_b_aspects=chart_b_aspects,
+        chart_b_patterns=chart_b_patterns,
+        chart_b_dignities=chart_b_dignities,
+        chart_b_dispositors=chart_b_dispositors,
+        chart_b_sect=chart_b_sect,
+        inter_chart_aspects=inter_chart_aspects_raw,
+        # ── 5W+H rich comprehension fields ──
+        persons=[p.to_dict() for p in q_graph.persons] if q_graph.persons else [],
+        story_objects=[o.to_dict() for o in q_graph.story_objects] if q_graph.story_objects else [],
+        locations=[loc.to_dict() for loc in q_graph.locations] if q_graph.locations else [],
+        dilemma=q_graph.dilemma.to_dict() if q_graph.dilemma else None,
+        transits=[t.to_dict() for t in q_graph.transits] if q_graph.transits else [],
+        answer_aim=q_graph.answer_aim.to_dict() if q_graph.answer_aim else None,
+        querent_state=q_graph.querent_state.to_dict() if q_graph.querent_state else None,
+        setting_time=q_graph.setting_time,
+        intent_context=q_graph.intent_context,
+        desired_input=q_graph.desired_input,
         # ── Dev debug fields ──
         debug_q_graph=q_graph.to_dict(),
         debug_comprehension_source=q_graph.source,
@@ -824,14 +900,4 @@ def _circuit_reading_to_paths(cr: CircuitReading) -> List[CircuitPathFact]:
     return out
 
 
-def _circuit_reading_to_isolations(cr: CircuitReading) -> List[IsolationFact]:
-    """Convert CircuitReading.isolation_notes → list of IsolationFact."""
-    out: List[IsolationFact] = []
-    for note in (cr.isolation_notes or []):
-        # Parse concept names from the note string, or use generic labels
-        out.append(IsolationFact(
-            concept_a="",
-            concept_b="",
-            note=note,
-        ))
-    return out
+

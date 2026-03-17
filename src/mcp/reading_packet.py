@@ -246,7 +246,7 @@ class PowerNodeFact:
     is_source: bool = False     # South Node
     is_sink: bool = False       # North Node
     is_mutual_reception: bool = False
-    role_note: str = ""         # e.g. "dominant", "bottleneck", "isolated"
+    role_note: str = ""         # e.g. "dominant", "bottleneck"
     # Relative tier label assigned by term_registry.assign_potency_tiers().
     # When set, raw numerical scores are suppressed from to_dict() so the LLM
     # never sees the underlying numbers.
@@ -283,7 +283,7 @@ class CircuitPathFact:
     path_planets: List[str] = field(default_factory=list)
     path_aspects: List[str] = field(default_factory=list)
     total_conductance: float = 0.0
-    connection_quality: str = ""   # "direct_shape", "bridged", "isolated"
+    connection_quality: str = ""   # "direct_shape", "bridged"
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -299,19 +299,6 @@ class CircuitPathFact:
             d["conductance"] = round(self.total_conductance, 3)
         return d
 
-
-@dataclass
-class IsolationFact:
-    """Documents when queried factors are electrically isolated."""
-    concept_a: str
-    concept_b: str
-    note: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "between": f"{self.concept_a} ↔ {self.concept_b}",
-            "note": self.note,
-        }
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -354,7 +341,6 @@ class ReadingPacket:
     circuit_flows: List[CircuitFlowFact] = field(default_factory=list)
     power_nodes: List[PowerNodeFact] = field(default_factory=list)
     circuit_paths: List[CircuitPathFact] = field(default_factory=list)
-    isolations: List[IsolationFact] = field(default_factory=list)
     narrative_seeds: List[str] = field(default_factory=list)
     power_summary: Dict[str, Any] = field(default_factory=dict)
     sn_nn_relevance: str = ""
@@ -364,9 +350,28 @@ class ReadingPacket:
     question_intent: str = ""        # routing intent (e.g. "potency_ranking")
     paraphrase: str = ""             # one-sentence plain-language restatement
     comprehension_note: str = ""     # LLM comprehension explanation
+    temporal_dimension: str = "natal"  # temporal frame: natal / transit / synastry / etc.
+    subject_config: str = "single"     # subject scope: single / dyadic / familial
+    needs_chart_b: bool = False        # True when dyadic question detected but no second chart loaded
 
     # ── Agent notes (accumulated across conversation) ────────────────
     agent_notes: str = ""
+
+    # ── 5W+H rich comprehension data ────────────────────────────────
+    # Pre-serialized dicts from comprehension_models dataclasses.
+    persons: List[Dict[str, Any]] = field(default_factory=list)       # PersonProfile dicts
+    story_objects: List[Dict[str, Any]] = field(default_factory=list) # StoryObject dicts
+    locations: List[Dict[str, Any]] = field(default_factory=list)     # Location dicts
+    dilemma: Optional[Dict[str, Any]] = None                          # Dilemma dict
+    transits: List[Dict[str, Any]] = field(default_factory=list)      # Transit dicts
+    answer_aim: Optional[Dict[str, Any]] = None                       # AnswerAim dict
+    querent_state: Optional[Dict[str, Any]] = None                    # QuerentState dict
+    setting_time: Optional[str] = None                                # past/present/future/date
+    intent_context: Optional[str] = None                              # why user is asking
+    desired_input: Optional[str] = None                               # what output they want
+
+    # ── Clarification (only set when comprehension needs follow-up) ──
+    _clarification: Dict[str, Any] = field(default_factory=dict)
 
     # ── Pre-baked NatalInterpreter text (for the focused objects) ────
     interp_text: str = ""
@@ -396,6 +401,14 @@ class ReadingPacket:
     chart_b_date: str = ""
     chart_b_city: str = ""
     chart_b_full_placements: List[PlacementFact] = field(default_factory=list)
+    # Full parity fact sets for chart_b
+    chart_b_aspects: List[AspectFact] = field(default_factory=list)
+    chart_b_patterns: List[PatternFact] = field(default_factory=list)
+    chart_b_dignities: List[DignityFact] = field(default_factory=list)
+    chart_b_dispositors: List[DispositorFact] = field(default_factory=list)
+    chart_b_sect: Optional[SectFact] = None
+    # Cross-chart aspects — list of {"planet_1": str, "planet_2": str, "aspect": str}
+    inter_chart_aspects: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Compact serialization for prompt building.
@@ -457,7 +470,7 @@ class ReadingPacket:
             ]
 
         # Biwheel second chart
-        if self.chart_b_full_placements:
+        if self.chart_b_full_placements or self.inter_chart_aspects:
             b_header: Dict[str, str] = {}
             if self.chart_b_name:
                 b_header["name"] = self.chart_b_name
@@ -465,14 +478,26 @@ class ReadingPacket:
                 b_header["date"] = self.chart_b_date
             if self.chart_b_city:
                 b_header["city"] = self.chart_b_city
-            d["chart_b_context"] = {
-                "header": b_header,
-                "placements": [
+            b_ctx: Dict[str, Any] = {"header": b_header}
+            if self.chart_b_full_placements:
+                b_ctx["placements"] = [
                     {k: v for k, v in p.to_dict().items()
                      if k not in ("sign_interp", "house_interp")}
                     for p in self.chart_b_full_placements
-                ],
-            }
+                ]
+            if self.chart_b_aspects:
+                b_ctx["aspects"] = [a.to_dict() for a in self.chart_b_aspects]
+            if self.chart_b_patterns:
+                b_ctx["patterns"] = [p.to_dict() for p in self.chart_b_patterns]
+            if self.chart_b_dignities:
+                b_ctx["dignities"] = [dg.to_dict() for dg in self.chart_b_dignities]
+            if self.chart_b_dispositors:
+                b_ctx["dispositors"] = [ds.to_dict() for ds in self.chart_b_dispositors]
+            if self.chart_b_sect:
+                b_ctx["sect"] = self.chart_b_sect.to_dict()
+            if self.inter_chart_aspects:
+                b_ctx["inter_chart_aspects"] = self.inter_chart_aspects
+            d["chart_b_context"] = b_ctx
 
         # Circuit-aware sections
         if self.circuit_flows:
@@ -481,8 +506,6 @@ class ReadingPacket:
             d["power_nodes"] = [pn.to_dict() for pn in self.power_nodes]
         if self.circuit_paths:
             d["circuit_paths"] = [cp.to_dict() for cp in self.circuit_paths]
-        if self.isolations:
-            d["isolations"] = [iso.to_dict() for iso in self.isolations]
         if self.narrative_seeds:
             d["narrative_seeds"] = self.narrative_seeds
         if self.power_summary:
@@ -495,8 +518,34 @@ class ReadingPacket:
             d["question_intent"] = self.question_intent
         if self.paraphrase:
             d["paraphrase"] = self.paraphrase
+        if self.temporal_dimension and self.temporal_dimension != "natal":
+            d["temporal_dimension"] = self.temporal_dimension
+        if self.subject_config and self.subject_config != "single":
+            d["subject_config"] = self.subject_config
         if self.agent_notes:
             d["agent_notes"] = self.agent_notes
+
+        # 5W+H rich comprehension sections — only include if populated
+        if self.persons:
+            d["persons"] = self.persons
+        if self.story_objects:
+            d["story_objects"] = self.story_objects
+        if self.locations:
+            d["locations_mentioned"] = self.locations
+        if self.dilemma:
+            d["dilemma"] = self.dilemma
+        if self.transits:
+            d["transits_mentioned"] = self.transits
+        if self.answer_aim:
+            d["answer_aim"] = self.answer_aim
+        if self.querent_state:
+            d["querent_state"] = self.querent_state
+        if self.setting_time:
+            d["setting_time"] = self.setting_time
+        if self.intent_context:
+            d["intent_context"] = self.intent_context
+        if self.desired_input:
+            d["desired_input"] = self.desired_input
 
         return d
 
@@ -527,6 +576,4 @@ class ReadingPacket:
             parts.append(f"{len(self.power_nodes)} power nodes")
         if self.circuit_paths:
             parts.append(f"{len(self.circuit_paths)} paths")
-        if self.isolations:
-            parts.append(f"{len(self.isolations)} isolations")
         return ", ".join(parts) if parts else "empty packet"

@@ -172,7 +172,7 @@ elif test_chart == "Custom":
 if synastry_mode:
 	test_chart_2 = st.radio(
 		"Chart 2 (Outer)",
-		["Custom", "Wildhorse", "Joylin", "Terra", "Jessica"],
+		["Custom", "Wildhorse", "Wildhorse bf Michael", "Joylin", "Terra", "Jessica"],
 		horizontal=True,
 		key="test_chart_2",
 		label_visibility="collapsed"
@@ -613,7 +613,7 @@ if chart_cached is not None:
 
 	# ── AI Chat widget ──────────────────────────────────────────────────
 	render_chat_widget()
-	
+
 	# --- Interpretation Output Section ---
 	# Auto-open when the chat widget triggers fallback mode
 	_interp_open = st.session_state.get("mcp_interp_expander_open", False)

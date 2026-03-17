@@ -38,6 +38,29 @@ body {
     fill: #000000;
 }
 
+/* --- Header + moon phase (anchored outside zoom group) --- */
+.chart-header-name {
+    font-family: inherit;
+    pointer-events: none;
+}
+
+.chart-header-date,
+.chart-header-time,
+.chart-header-city {
+    font-family: inherit;
+    pointer-events: none;
+}
+
+.chart-moon-label {
+    font-family: inherit;
+    pointer-events: none;
+}
+
+.moon-icon-bg,
+.moon-icon-lit {
+    pointer-events: none;
+}
+
 /* --- Interactive elements --- */
 .planet-glyph,
 .planet-hitarea,
@@ -47,6 +70,12 @@ body {
 .zodiac-band,
 .zodiac-glyph {
     transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* Force zodiac codepoints to render as text glyphs, not colour emoji */
+.zodiac-glyph {
+    font-family: "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", "DejaVu Sans", sans-serif;
+    unicode-bidi: plaintext;
 }
 
 .planet-hitarea {

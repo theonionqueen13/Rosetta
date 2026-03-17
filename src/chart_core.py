@@ -5,7 +5,7 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 from typing import Dict, Any
 from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, render_biwheel_chart_with_circuits, render_biwheel_connected_circuits
-from drawing_v2 import RenderResult as result
+from drawing_v2 import RenderResult as result, group_color_for, shape_color_for
 from toggles_v2 import COMPASS_KEY, COMPASS_KEY_2
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups
 from src.geocoding import geocode_city_with_timezone
@@ -410,6 +410,104 @@ def _refresh_chart_figure():
 	if interactive_mode:
 		try:
 			highlights = st.session_state.get("chart_highlights", {})
+
+			# ── Mirror circuit/shape toggle logic from render_chart_with_shapes ──
+			# Determine which circuits, sub-shapes, and singletons are active.
+			active_parents = set(i for i, show in enumerate(toggles) if show)
+			active_shape_ids = {
+				s["id"] for s in (shapes or [])
+				if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+			}
+			active_shapes_list = [s for s in (shapes or []) if s["id"] in active_shape_ids]
+			active_toggle_count = len(active_parents) + len(active_shapes_list)
+			layered_mode = active_toggle_count > 1
+			active_singletons: set[str] = {obj for obj, on in singleton_toggles.items() if on}
+			any_active = active_toggle_count > 0 or bool(active_singletons)
+
+			# In Standard Chart mode always show everything; in Circuits mode
+			# only show edges/objects for active toggles (matching non-interactive
+			# chart behaviour exactly).
+			if chart_mode != "Standard Chart" and any_active:
+				visible_objs: set[str] = set()
+				edge_color_map: dict = {}
+				edge_keys: set = set()
+				filtered_major: list = []
+				filtered_minor: list = []
+
+				# Per-circuit: major edges + internal minor filaments
+				for idx in active_parents:
+					if idx >= len(patterns):
+						continue
+					visible_objs.update(patterns[idx])
+					color = group_color_for(idx) if layered_mode else None
+					for (p1, p2), asp_name in (major_edges_all or []):
+						if p1 in patterns[idx] and p2 in patterns[idx]:
+							k = (tuple(sorted((p1, p2))), asp_name)
+							if k not in edge_keys:
+								edge_keys.add(k)
+								filtered_major.append((p1, p2, {"aspect": asp_name}))
+								if color:
+									edge_color_map[(p1, p2, asp_name)] = color
+									edge_color_map[(p2, p1, asp_name)] = color
+					for item in (filaments or []):
+						f1, f2, fasp, pat1, pat2 = item
+						if pat1 == idx and pat2 == idx:
+							k = (tuple(sorted((f1, f2))), fasp)
+							if k not in edge_keys:
+								edge_keys.add(k)
+								filtered_minor.append((f1, f2, {"aspect": fasp}))
+								if color:
+									edge_color_map[(f1, f2, fasp)] = color
+									edge_color_map[(f2, f1, fasp)] = color
+
+				# Inter-circuit filaments (only when 2+ circuits active)
+				if len(active_parents) > 1:
+					for item in (filaments or []):
+						f1, f2, fasp, pat1, pat2 = item
+						if (pat1 != pat2
+								and pat1 in active_parents
+								and pat2 in active_parents):
+							k = (tuple(sorted((f1, f2))), fasp)
+							if k not in edge_keys:
+								edge_keys.add(k)
+								filtered_minor.append((f1, f2, {"aspect": fasp}))
+
+				# Sub-shape edges
+				for s in active_shapes_list:
+					visible_objs.update(s["members"])
+					color = shape_color_for(s["id"]) if layered_mode else None
+					for (p1, p2), asp_name in s["edges"]:
+						k = (tuple(sorted((p1, p2))), asp_name)
+						if k not in edge_keys:
+							edge_keys.add(k)
+							filtered_major.append((p1, p2, {"aspect": asp_name}))
+							if color:
+								edge_color_map[(p1, p2, asp_name)] = color
+								edge_color_map[(p2, p1, asp_name)] = color
+
+				# Singletons (visible but no extra edges)
+				visible_objs.update(active_singletons)
+
+				# Always keep compass axes visible when compass rose is on
+				if st.session_state.get(COMPASS_KEY, True):
+					for axis in ("Ascendant", "Descendant", "AC", "DC",
+								 "Midheaven", "MC", "IC",
+								 "North Node", "South Node"):
+						visible_objs.add(axis)
+
+				vis_list = list(visible_objs) if visible_objs else None
+				final_major = filtered_major
+				final_minor = filtered_minor
+			else:
+				# Standard Chart mode, or Circuits mode with no active toggles:
+				# show everything with default aspect colours.
+				vis_list = None
+				final_major = edges_major
+				final_minor = edges_minor
+				edge_color_map = {}
+				active_singletons = set()
+				layered_mode = False
+
 			chart_data = serialize_chart_for_rendering(
 				chart,
 				house_system=house_system,
@@ -417,18 +515,35 @@ def _refresh_chart_figure():
 				label_style=label_style,
 				compass_on=st.session_state.get(COMPASS_KEY, True),
 				degree_markers=True,
-				edges_major=edges_major,
-				edges_minor=edges_minor,
+				edges_major=final_major,
+				edges_minor=final_minor,
 				shapes=shapes,
 				singleton_map=singleton_map,
 				patterns=patterns,
 				highlights=highlights,
+				visible_objects=vis_list,
 			)
+
+			# Post-process: apply group/shape colour overrides to aspect records.
+			# The JS renderer picks up asp.color directly, so overriding here is
+			# sufficient — no JS changes required.
+			if edge_color_map:
+				for asp in chart_data["aspects"]:
+					key_fwd = (asp["obj_a"], asp["obj_b"], asp["aspect"])
+					key_rev = (asp["obj_b"], asp["obj_a"], asp["aspect"])
+					override = edge_color_map.get(key_fwd) or edge_color_map.get(key_rev)
+					if override:
+						asp["color"] = override
+
+			# Embed active singletons + layered-mode flag for the JS renderer
+			chart_data["active_singletons"] = list(active_singletons)
+			chart_data["config"]["layered_mode"] = layered_mode
+
 			event = st_interactive_chart(
 				chart_data,
 				highlights=highlights,
-				width=600,
-				height=600,
+				width=1250,
+				height=1250,
 				key="interactive_main_chart",
 			)
 			# Store event for downstream consumers (chat, detail panel, etc.)
@@ -445,19 +560,19 @@ def _refresh_chart_figure():
 				fig=None, ax=None,
 				positions=positions,
 				cusps=cusps,
-				visible_objects=list(positions.keys()),
+				visible_objects=vis_list or list(positions.keys()),
 				drawn_major_edges=[(e[0], e[1], e[2].get("aspect", "") if isinstance(e[2], dict) else str(e[2]))
-									for e in edges_major] if edges_major else [],
+									for e in final_major] if final_major else [],
 				drawn_minor_edges=[(e[0], e[1], e[2].get("aspect", "") if isinstance(e[2], dict) else str(e[2]))
-									for e in edges_minor] if edges_minor else [],
+									for e in final_minor] if final_minor else [],
 				patterns=patterns,
-				shapes=shapes,
+				shapes=active_shapes_list if any_active else (shapes or []),
 				singleton_map=singleton_map,
 				plot_data={"chart": chart},
 			)
 			st.session_state["render_result"] = rr
 			st.session_state["visible_objects"] = rr.visible_objects
-			st.session_state["active_shapes"] = shapes or []
+			st.session_state["active_shapes"] = active_shapes_list if any_active else (shapes or [])
 			st.session_state["last_cusps"] = cusps
 			st.session_state["ai_text"] = None
 			return rr

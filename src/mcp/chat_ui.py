@@ -45,7 +45,7 @@ _OPENROUTER_MODELS: List[str] = [
 
 _HOUSE_SYSTEMS: List[str] = ["Placidus", "Whole Sign", "Koch", "Equal", "Campanus"]
 
-_CHAT_MODES: List[str] = ["Ask", "Plan", "Agent"]
+_CHAT_MODES: List[str] = ["Query", "Map", "Execute"]
 _VOICE_MODES: List[str] = ["Plain", "Circuit"]
 
 # ── Session-state keys ────────────────────────────────────────────────────────
@@ -54,9 +54,12 @@ _HISTORY_KEY    = "mcp_chat_history"   # List[Dict] — {role, content, meta}
 _MODEL_KEY      = "mcp_model"
 _HS_KEY         = "mcp_house_system"
 _NOTES_KEY      = "mcp_agent_notes"    # str — accumulated across conversation
-_MODE_KEY       = "mcp_chat_mode"      # "Ask" | "Plan" | "Agent"
+_MODE_KEY       = "mcp_chat_mode"      # "Query" | "Map" | "Execute"
 _VOICE_KEY      = "mcp_voice_mode"     # "Plain" | "Circuit"
 _DEV_TRACE_KEY  = "mcp_dev_trace"      # dict  — last-turn inner-monologue (dev only)
+_PERSONS_KEY    = "mcp_known_persons"  # List[dict] — accumulated PersonProfile dicts
+_LOCATIONS_KEY  = "mcp_known_locations" # List[dict] — accumulated Location dicts
+_PENDING_Q_KEY  = "mcp_pending_question"  # str — original question when clarification is pending
 
 # ── CSS injection ─────────────────────────────────────────────────────────────
 
@@ -121,9 +124,12 @@ def _init_state() -> None:
     st.session_state.setdefault(_MODEL_KEY, DEFAULT_OPENROUTER_MODEL)
     st.session_state.setdefault(_HS_KEY, "Placidus")
     st.session_state.setdefault(_NOTES_KEY, "")
-    st.session_state.setdefault(_MODE_KEY, "Ask")
+    st.session_state.setdefault(_MODE_KEY, "Query")
     st.session_state.setdefault(_VOICE_KEY, "Plain")
     st.session_state.setdefault(_DEV_TRACE_KEY, {})
+    st.session_state.setdefault(_PERSONS_KEY, [])
+    st.session_state.setdefault(_LOCATIONS_KEY, [])
+    st.session_state.setdefault(_PENDING_Q_KEY, "")
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -188,9 +194,9 @@ def render_chat_widget() -> None:
             index=mode_idx,
             key="mcp_mode_radio",
             help=(
-                "**Ask** — single-turn Q&A\n\n"
-                "**Plan** — multi-step analysis outline *(coming soon)*\n\n"
-                "**Agent** — autonomous chart research loop *(coming soon)*"
+                "**Query** — single-turn Q&A\n\n"
+                "**Map** — establish comprehension of complex questions; multi-step analysis outline *(coming soon)*\n\n"
+                "**Execute** — autonomous chart research loop; executes what was planned in Map mode (if switching from planning in Map mode) *(coming soon)*"
             ),
         )
 
@@ -226,6 +232,9 @@ def render_chat_widget() -> None:
                 st.session_state[_NOTES_KEY] = ""
                 st.session_state[_VOICE_KEY] = "Plain"
                 st.session_state[_DEV_TRACE_KEY] = {}
+                st.session_state[_PERSONS_KEY] = []
+                st.session_state[_LOCATIONS_KEY] = []
+                st.session_state[_PENDING_Q_KEY] = ""
                 st.rerun()
 
         # History replay
@@ -263,9 +272,25 @@ def render_chat_widget() -> None:
             st.rerun()
             return
 
+        # ── Resolve pending clarification context ─────────────────────
+        actual_question = prompt
+        pending_clar: Optional[str] = None
+        stored_q = st.session_state.get(_PENDING_Q_KEY)
+        if stored_q:
+            # User is replying to a clarification follow-up
+            pending_clar = prompt            # their new reply is the clarification
+            actual_question = stored_q       # re-ask the original question
+            st.session_state[_PENDING_Q_KEY] = ""
+
         with st.spinner("Reading the chart…"):
+            # Resolve pre-computed inter-chart aspects from whichever biwheel mode is active
+            _edges_inter = (
+                st.session_state.get("edges_inter_chart_cc")
+                or st.session_state.get("_biwheel_standard_cache", {}).get("inter_aspects")
+                or []
+            )
             response_text, meta = _generate_response(
-                question=prompt,
+                question=actual_question,
                 chart=chart,
                 house_system=st.session_state[_HS_KEY],
                 api_key=_get_api_key(),
@@ -275,7 +300,18 @@ def render_chat_widget() -> None:
                 agent_notes=st.session_state.get(_NOTES_KEY, ""),
                 render_result=st.session_state.get("render_result"),
                 chart_b=st.session_state.get("last_chart_2"),
+                edges_inter_chart=_edges_inter,
+                known_persons=st.session_state.get(_PERSONS_KEY) or None,
+                known_locations=st.session_state.get(_LOCATIONS_KEY) or None,
+                pending_clarification=pending_clar,
             )
+
+        # ── Handle clarification request from pipeline ────────────────
+        if meta.get("_is_clarification"):
+            st.session_state[_PENDING_Q_KEY] = actual_question
+            history.append({"role": "assistant", "content": response_text, "meta": meta})
+            st.rerun()
+            return
 
         # Accumulate agent notes from this turn
         turn_note = meta.get("comprehension_note", "")
@@ -284,6 +320,10 @@ def render_chat_widget() -> None:
             st.session_state[_NOTES_KEY] = (
                 (existing + "\n" if existing else "") + turn_note
             )
+
+        # ── Accumulate persons & locations across turns ───────────────
+        _merge_persons(meta.get("_new_persons", []))
+        _merge_locations(meta.get("_new_locations", []))
 
         # Persist dev trace to session state for the expander
         if meta.get("_dev"):
@@ -336,6 +376,11 @@ def _render_dev_expander() -> None:
             _paraphrase = s1.get("paraphrase", "")
             if _paraphrase and not _paraphrase.startswith("("):
                 st.info(f'**Understood as:** "{_paraphrase}"')
+            if s1.get("needs_chart_b"):
+                st.warning(
+                    "This question involves another person. For a full synastry "
+                    "reading, load a second chart using the biwheel panel."
+                )
             c1, c2, c3 = st.columns(3)
             c1.metric("Domain", s1.get("domain") or "—")
             c2.metric("Subtopic", s1.get("subtopic") or "—")
@@ -385,6 +430,130 @@ def _render_dev_expander() -> None:
                     if all_f:
                         st.markdown(f"**All factors:** {', '.join(all_f)}")
 
+            # ── 5W+H Extraction Detail ────────────────────────────────
+            _has_5wh = any(s1.get(k) for k in (
+                "persons", "story_objects", "locations", "dilemma",
+                "answer_aim", "querent_state", "transits",
+                "setting_time", "intent_context", "desired_input",
+            ))
+            if _has_5wh:
+                with st.expander("🧠 5W+H Extraction", expanded=False):
+                    # ── WHO ────────────────────────────────────────────
+                    _persons = s1.get("persons") or []
+                    if _persons:
+                        st.markdown("##### 👤 WHO — Persons")
+                        for p in _persons:
+                            name = p.get("name") or "*(unnamed)*"
+                            rel = p.get("relationship_to_querent") or ""
+                            locs = p.get("locations") or []
+                            loc_str = ", ".join(
+                                f"{loc.get('location', '?')} ({loc.get('connection', '')})"
+                                for loc in locs
+                            ) if locs else ""
+                            parts = [f"**{name}**"]
+                            if rel:
+                                parts.append(f"({rel})")
+                            if loc_str:
+                                parts.append(f"— 📍 {loc_str}")
+                            st.markdown("- " + " ".join(parts))
+
+                    # ── WHAT ───────────────────────────────────────────
+                    _story = s1.get("story_objects") or []
+                    _dilemma = s1.get("dilemma")
+                    _aim = s1.get("answer_aim")
+                    if _story or _dilemma or _aim:
+                        st.markdown("##### 🎯 WHAT — Story & Aim")
+                    if _story:
+                        for so in _story:
+                            sig = so.get("significance") or ""
+                            st.markdown(
+                                f"- **{so.get('name', '?')}**"
+                                + (f" — *{sig}*" if sig else "")
+                            )
+                    if _dilemma:
+                        desc = _dilemma.get("description") or ""
+                        opts = _dilemma.get("options") or []
+                        stakes = _dilemma.get("stakes") or ""
+                        st.warning(
+                            f"**Dilemma:** {desc}"
+                            + (f"  \nOptions: {', '.join(opts)}" if opts else "")
+                            + (f"  \nStakes: *{stakes}*" if stakes else "")
+                        )
+                    if _aim:
+                        aim_parts = []
+                        for k in ("aim_type", "depth", "urgency", "specificity"):
+                            v = _aim.get(k)
+                            if v:
+                                aim_parts.append(f"{k}: `{v}`")
+                        st.markdown(f"**Answer aim:** {' · '.join(aim_parts)}")
+
+                    # ── WHEN ───────────────────────────────────────────
+                    _setting = s1.get("setting_time")
+                    _transits = s1.get("transits") or []
+                    if _setting or _transits:
+                        st.markdown("##### ⏱️ WHEN — Temporal")
+                    if _setting:
+                        st.markdown(f"**Setting time:** {_setting}")
+                    if _transits:
+                        for t in _transits:
+                            bodies = " ".join(filter(None, [
+                                t.get("transiting_body"), "→", t.get("natal_body"),
+                            ]))
+                            asp = t.get("aspect_type") or ""
+                            tf = t.get("timeframe") or ""
+                            st.markdown(
+                                f"- {bodies}"
+                                + (f" ({asp})" if asp else "")
+                                + (f" — *{tf}*" if tf else "")
+                            )
+
+                    # ── WHERE ──────────────────────────────────────────
+                    _locations = s1.get("locations") or []
+                    if _locations:
+                        st.markdown("##### 📍 WHERE — Locations")
+                        for loc in _locations:
+                            lname = loc.get("name") or "?"
+                            ltype = loc.get("location_type") or ""
+                            conn = loc.get("connected_persons") or []
+                            conn_str = ", ".join(
+                                f"{c.get('person', '?')} ({c.get('connection', '')})"
+                                for c in conn
+                            ) if conn else ""
+                            st.markdown(
+                                f"- **{lname}**"
+                                + (f" *({ltype})*" if ltype else "")
+                                + (f" — {conn_str}" if conn_str else "")
+                            )
+
+                    # ── WHY ────────────────────────────────────────────
+                    _intent_ctx = s1.get("intent_context")
+                    _desired = s1.get("desired_input")
+                    if _intent_ctx or _desired:
+                        st.markdown("##### 💡 WHY — Intent & Desired Input")
+                    if _intent_ctx:
+                        st.markdown(f"**Context:** {_intent_ctx}")
+                    if _desired:
+                        st.markdown(f"**Desired input:** {_desired}")
+
+                    # ── HOW ────────────────────────────────────────────
+                    _qs = s1.get("querent_state")
+                    if _qs:
+                        st.markdown("##### 🫀 HOW — Querent State")
+                        qs_parts = []
+                        for k in ("emotional_tone", "certainty_level", "guidance_openness"):
+                            v = _qs.get(k)
+                            if v:
+                                label = k.replace("_", " ").title()
+                                qs_parts.append(f"{label}: `{v}`")
+                        if qs_parts:
+                            st.markdown(" · ".join(qs_parts))
+                        feelings = _qs.get("expressed_feelings") or []
+                        if feelings:
+                            st.markdown(f"**Expressed feelings:** {', '.join(feelings)}")
+                        demeanor = _qs.get("demeanor_notes")
+                        if demeanor:
+                            st.caption(f"Demeanor: {demeanor}")
+
         st.markdown("---")
 
         # ── Step 2: Factor resolution ─────────────────────────────────────
@@ -421,10 +590,6 @@ def _render_dev_expander() -> None:
                 st.markdown("**Narrative seeds:**")
                 for seed in seeds:
                     st.markdown(f"- {seed}")
-
-            isolations = s3.get("isolation_notes", [])
-            if isolations:
-                st.warning("**Isolation notes:** " + " | ".join(isolations))
 
             ps = s3.get("power_summary", {})
             if ps:
@@ -667,6 +832,36 @@ def _render_read_aloud_button(text: str, key: str) -> None:
 
     components.html(html, height=110)
 
+# ── Session accumulator helpers ───────────────────────────────────────────────
+
+def _merge_persons(new_persons: List[Dict[str, Any]]) -> None:
+    """Merge newly-discovered person dicts into session-state list (by name)."""
+    if not new_persons:
+        return
+    existing: List[Dict[str, Any]] = st.session_state.get(_PERSONS_KEY, [])
+    names = {p.get("name", "").lower() for p in existing}
+    for p in new_persons:
+        key = (p.get("name") or "").lower()
+        if key and key not in names:
+            existing.append(p)
+            names.add(key)
+    st.session_state[_PERSONS_KEY] = existing
+
+
+def _merge_locations(new_locations: List[Dict[str, Any]]) -> None:
+    """Merge newly-discovered location dicts into session-state list (by name)."""
+    if not new_locations:
+        return
+    existing: List[Dict[str, Any]] = st.session_state.get(_LOCATIONS_KEY, [])
+    names = {loc.get("name", "").lower() for loc in existing}
+    for loc in new_locations:
+        key = (loc.get("name") or "").lower()
+        if key and key not in names:
+            existing.append(loc)
+            names.add(key)
+    st.session_state[_LOCATIONS_KEY] = existing
+
+
 # ── Generation ────────────────────────────────────────────────────────────────
 
 def _generate_response(
@@ -681,11 +876,39 @@ def _generate_response(
     agent_notes: str = "",
     render_result: Any = None,
     chart_b: Any = None,
+    edges_inter_chart: Optional[List[Any]] = None,
+    known_persons: Optional[List[Dict[str, Any]]] = None,
+    known_locations: Optional[List[Dict[str, Any]]] = None,
+    pending_clarification: Optional[str] = None,
 ) -> tuple[str, Dict[str, Any]]:
     """Run the full MCP pipeline. Returns (response_text, meta)."""
 
     meta: Dict[str, Any] = {"mode": mode, "voice": voice}
     voice_lower = voice.lower()
+
+    # Convert session-stored dicts back to dataclass instances for comprehension
+    from src.mcp.comprehension_models import PersonProfile, Location, LocationLink
+    _persons: Optional[List[PersonProfile]] = None
+    _locations: Optional[List[Location]] = None
+    if known_persons:
+        _persons = []
+        for pd in known_persons:
+            locs = [LocationLink(location_name=ld.get("location", ""), connection=ld.get("connection", ""))
+                    for ld in pd.get("locations", [])]
+            _persons.append(PersonProfile(
+                name=pd.get("name"), relationship_to_querent=pd.get("relationship_to_querent"),
+                relationships_to_others=pd.get("relationships_to_others", []),
+                memories=pd.get("memories", []), significant_places=pd.get("significant_places", []),
+                chart_id=pd.get("chart_id"), locations=locs,
+            ))
+    if known_locations:
+        _locations = []
+        for ld in known_locations:
+            conn = [(cp.get("person", ""), cp.get("connection", "")) for cp in ld.get("connected_persons", [])]
+            _locations.append(Location(
+                name=ld.get("name", ""), location_type=ld.get("location_type"),
+                connected_persons=conn, relevance=ld.get("relevance"),
+            ))
 
     try:
         packet = build_reading(
@@ -699,12 +922,31 @@ def _generate_response(
             agent_notes=agent_notes,
             render_result=render_result,
             chart_b=chart_b,
+            edges_inter_chart=edges_inter_chart or None,
+            known_persons=_persons,
+            known_locations=_locations,
+            pending_clarification=pending_clarification,
         )
+
+        # ── Handle clarification request ─────────────────────────────
+        if packet._clarification:
+            clar = packet._clarification
+            meta["_is_clarification"] = True
+            meta["comprehension_note"] = packet.comprehension_note
+            follow_up = clar.get("follow_up_question", "Could you tell me more about what you'd like to know?")
+            return follow_up, meta
+
         meta["domain"]     = packet.domain
         meta["subtopic"]   = packet.subtopic
         meta["confidence"] = packet.confidence
         meta["question_type"] = packet.question_type
         meta["comprehension_note"] = packet.comprehension_note
+
+        # ── Accumulate persons & locations from this turn ────────────
+        if packet.persons:
+            meta["_new_persons"] = packet.persons
+        if packet.locations:
+            meta["_new_locations"] = packet.locations
 
         # ── Dev trace — full inner-monologue snapshot ──────────────
         meta["_dev"] = {
@@ -720,7 +962,21 @@ def _generate_response(
                 "paraphrase": packet.paraphrase or "",
                 "comprehension_note": packet.comprehension_note,
                 "matched_keywords": packet.matched_keywords,
+                "temporal_dimension": packet.temporal_dimension,
+                "subject_config": packet.subject_config,
+                "needs_chart_b": packet.needs_chart_b,
                 "q_graph": packet.debug_q_graph,
+                # 5W+H enrichments
+                "persons": packet.persons or [],
+                "story_objects": packet.story_objects or [],
+                "locations": packet.locations or [],
+                "dilemma": packet.dilemma,
+                "answer_aim": packet.answer_aim,
+                "querent_state": packet.querent_state,
+                "setting_time": packet.setting_time,
+                "intent_context": packet.intent_context,
+                "desired_input": packet.desired_input,
+                "transits": packet.transits or [],
             },
             # Step 2 — factor resolution & relevant objects
             "step2_factor_resolution": {
@@ -752,6 +1008,17 @@ def _generate_response(
             meta,
         )
 
+    # Auto-detect synthesis mode from comprehension result
+    _td = packet.temporal_dimension or "natal"
+    if _td == "synastry" or (
+        packet.subject_config == "dyadic" and packet.chart_b_full_placements
+    ):
+        _synthesize_mode = "synastry"
+    elif _td in ("transit", "cycle", "timing_predict", "solar_return"):
+        _synthesize_mode = "transit"
+    else:
+        _synthesize_mode = "natal"
+
     # No key — redirect to interpretation expander
     if not api_key:
         st.session_state["mcp_interp_expander_open"] = True
@@ -770,7 +1037,7 @@ def _generate_response(
             packet,
             backend="openrouter",
             model=model,
-            mode="natal",
+            mode=_synthesize_mode,
             voice=voice_lower,
             api_key=api_key,
         )
@@ -780,6 +1047,7 @@ def _generate_response(
             "prompt_tokens":     result.prompt_tokens,
             "completion_tokens": result.completion_tokens,
             "total_tokens":      result.total_tokens,
+            "synthesis_mode":    _synthesize_mode,
         })
         if "_dev" in meta:
             meta["_dev"]["step5_synthesis"] = {

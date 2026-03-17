@@ -60,6 +60,13 @@ SIGN_ELEMENTS = [
     "fire", "earth", "air", "water",
 ]
 
+SIGN_MODALITIES = [
+    "Cardinal", "Fixed", "Mutable",
+    "Cardinal", "Fixed", "Mutable",
+    "Cardinal", "Fixed", "Mutable",
+    "Cardinal", "Fixed", "Mutable",
+]
+
 SIGN_NAMES = [
     "Aries", "Taurus", "Gemini", "Cancer",
     "Leo", "Virgo", "Libra", "Scorpio",
@@ -360,6 +367,7 @@ def _serialize_signs(dark_mode: bool) -> list[dict]:
             "glyph": ZODIAC_SIGNS[i],
             "glyph_color": ZODIAC_COLORS[i],
             "element": element,
+            "modality": SIGN_MODALITIES[i],
             "band_color": colors[element],
             "start_degree": i * 30,
         })
@@ -577,6 +585,58 @@ def serialize_chart_for_rendering(
         "house_system": house_system,
     }
 
+    # --- Header lines (chart name, date, time, city) ---
+    header_data = {}
+    try:
+        name, date_line, time_line, city_val, extra_line = chart.header_lines()
+        header_data = {
+            "name": name or "",
+            "date_line": date_line or "",
+            "time_line": time_line or "",
+            "city": city_val or "",
+            "extra_line": extra_line or "",
+        }
+    except Exception:
+        pass
+
+    # --- Moon phase ---
+    moon_data = {}
+    try:
+        sun_lon = None
+        moon_lon = None
+        for obj in chart.objects:
+            if not obj.object_name:
+                continue
+            oname = obj.object_name.name.lower()
+            if oname == "sun":
+                sun_lon = float(obj.longitude) % 360.0
+            elif oname == "moon":
+                moon_lon = float(obj.longitude) % 360.0
+        if sun_lon is not None and moon_lon is not None:
+            phase_delta = (moon_lon - sun_lon) % 360.0
+            # Same phase boundaries as now_v2._phase_label_from_delta
+            if phase_delta < 11.25:
+                label = "New Moon"
+            elif phase_delta < 78.75:
+                label = "Waxing Crescent"
+            elif phase_delta < 101.25:
+                label = "First Quarter"
+            elif phase_delta < 168.75:
+                label = "Waxing Gibbous"
+            elif phase_delta < 191.25:
+                label = "Full Moon"
+            elif phase_delta < 258.75:
+                label = "Waning Gibbous"
+            elif phase_delta < 281.25:
+                label = "Last Quarter"
+            elif phase_delta < 348.75:
+                label = "Waning Crescent"
+            else:
+                label = "New Moon"
+            moon_data = {"label": label, "phase_delta": round(phase_delta, 2)}
+    except Exception:
+        pass
+
     # --- Color palettes (for JS to use directly) ---
     colors = {
         "group_colors": list(GROUP_COLORS),
@@ -600,4 +660,6 @@ def serialize_chart_for_rendering(
         "config": config,
         "colors": colors,
         "highlights": hl,
+        "header": header_data,
+        "moon_phase": moon_data,
     }

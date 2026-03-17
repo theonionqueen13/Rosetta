@@ -137,11 +137,6 @@ def _fallback_synthesize(packet: ReadingPacket) -> SynthesisResult:
         for seed in packet.narrative_seeds:
             parts.append(f"- {seed}")
 
-    if packet.isolations:
-        parts.append("\n## Isolated Systems")
-        for iso in packet.isolations:
-            parts.append(f"- {iso.note}")
-
     if packet.interp_text:
         parts.append("\n## Interpretation")
         parts.append(packet.interp_text)

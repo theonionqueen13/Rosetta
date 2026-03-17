@@ -166,8 +166,13 @@ const RosettaTooltip = (() => {
         const signs = (_data && _data.signs) || [];
         const sign = signs.find((s) => s.name === signName);
         if (!sign) return "";
-        let html = `<div class="tt-header">${sign.glyph} <strong>${sign.name}</strong></div>`;
-        html += `<div class="tt-row">Element: ${sign.element}</div>`;
+        const modality = sign.modality || "";
+        const element = sign.element
+            ? sign.element.charAt(0).toUpperCase() + sign.element.slice(1)
+            : "";
+        const phrase = [modality, element, "Sign"].filter(Boolean).join(" ");
+        let html = `<div class="tt-header">${(sign.glyph || "").replace(/\uFE0F/g, "")} <strong>${sign.name}</strong></div>`;
+        html += `<div class="tt-row">The ${phrase}</div>`;
         return html;
     }
 
@@ -272,12 +277,11 @@ const RosettaTooltip = (() => {
         }).on("mousemove", function (evt) { _move(evt); })
             .on("mouseleave", function () {
                 _hide();
-                // Restore width
-                const isMajor = this.getAttribute("data-is-major") === "true";
-                const asp = (this.getAttribute("data-aspect") || "").toLowerCase();
-                let lw = isMajor ? 2 : 1;
-                if (asp === "quincunx" || asp === "sesquisquare") lw = 1;
-                d3.select(this).attr("stroke-width", lw);
+                // Restore to original width (stored when line was created)
+                const originalWidth = this.getAttribute("data-original-width");
+                if (originalWidth) {
+                    d3.select(this).attr("stroke-width", originalWidth);
+                }
             }).on("click", function () {
                 const a = this.getAttribute("data-obj-a");
                 const b = this.getAttribute("data-obj-b");

@@ -181,7 +181,8 @@ def main():
     parser = argparse.ArgumentParser(description="Rosetta MCP Astrology Server")
     parser.add_argument("--test", action="store_true", help="Run self-test")
     parser.add_argument("--demo", type=str, default="", help="Demo question (uses fallback)")
-    parser.add_argument("--profile", type=str, default="", help="JSON file with profile data")
+    parser.add_argument("--profile", type=str, default="", help="JSON file with profile data (chart_1 / natal)")
+    parser.add_argument("--profile-b", type=str, default="", help="JSON file for second chart (synastry / transits)")
     parser.add_argument("--house-system", type=str, default="placidus")
     parser.add_argument("--backend", type=str, default="auto",
                         choices=["auto", "openai", "anthropic", "fallback"])
@@ -199,6 +200,14 @@ def main():
         sys.stderr.write(f"[rosetta-mcp] Loading chart from {args.profile}...\n")
         ctx.chart = load_chart_from_profile(profile, args.house_system)
         sys.stderr.write(f"[rosetta-mcp] Chart loaded: {len(ctx.chart.objects)} objects\n")
+
+    # Load second chart for biwheel mode (synastry / transits)
+    if args.profile_b:
+        with open(args.profile_b) as f:
+            profile_b = json.load(f)
+        sys.stderr.write(f"[rosetta-mcp] Loading chart_b from {args.profile_b}...\n")
+        ctx.chart_b = load_chart_from_profile(profile_b, args.house_system)
+        sys.stderr.write(f"[rosetta-mcp] Chart_b loaded: {len(ctx.chart_b.objects)} objects\n")
 
     if args.test:
         _run_self_test(ctx)

@@ -44,7 +44,20 @@ if TYPE_CHECKING:
 
 class TermIntent:
     """String constants for question_intent values."""
-    POTENCY_RANKING = "potency_ranking"
+    POTENCY_RANKING       = "potency_ranking"
+    RELATIONSHIP_READING  = "relationship_reading"
+    TIMING_FORECAST       = "timing_forecast"
+    CAREER_PATH           = "career_path"
+    CYCLE_GUIDANCE        = "cycle_guidance"
+    SPIRITUAL_PURPOSE     = "spiritual_purpose"
+    EMOTIONAL_WELLNESS    = "emotional_wellness"
+    CHALLENGE_TRANSMUTE   = "challenge_transmutation"
+    LIFE_AREA_PRIORITY    = "life_area_priority"
+    FAMILY_DYNAMICS       = "family_dynamics"
+    RELOCATION            = "relocation"
+    COMMUNITY_BELONGING   = "community_belonging"
+    FINANCIAL_INSIGHT     = "financial_insight"
+    TRAIT_PERCEPTION      = "trait_perception"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -219,6 +232,247 @@ _BUILTIN_TERMS: List[Term] = [
             "the chart; routed to the full potency-ranking calculation."
         ),
     ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Relationship Reading cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="emotionally unavailable",
+        aliases=[r"emotionally unavailable", r"emotionally distant",
+                 r"avoidant attachment", r"unavailable partner"],
+        factors=[],
+        intent=TermIntent.RELATIONSHIP_READING,
+        domain="Relationships & Love",
+        description="Describes a person who avoids emotional intimacy.",
+    ),
+    Term(
+        canonical="attract",
+        aliases=[r"keep attracting", r"always attract", r"draw in",
+                 r"why do i attract"],
+        factors=[],
+        intent=TermIntent.RELATIONSHIP_READING,
+        domain="Relationships & Love",
+        description="Recurring pattern of attracting a particular type of person.",
+    ),
+    Term(
+        canonical="love language",
+        aliases=[r"love language", r"love languages", r"how.*express love",
+                 r"how.*show love"],
+        factors=["Venus", "Mars"],
+        intent=TermIntent.RELATIONSHIP_READING,
+        domain="Relationships & Love",
+        description="How a person gives and receives affection, mapped to Venus/Mars.",
+    ),
+    Term(
+        canonical="Venus placement",
+        aliases=[r"venus placement", r"my venus", r"venus sign",
+                 r"venus in"],
+        factors=["Venus"],
+        intent=TermIntent.RELATIONSHIP_READING,
+        domain="Relationships & Love",
+        description="Sign and house position of Venus in the birth chart.",
+    ),
+    Term(
+        canonical="Mars placement",
+        aliases=[r"mars placement", r"my mars", r"mars sign",
+                 r"mars in"],
+        factors=["Mars"],
+        intent=TermIntent.RELATIONSHIP_READING,
+        domain="Relationships & Love",
+        description="Sign and house position of Mars in the birth chart.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Career Path cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="hidden professional strengths",
+        aliases=[r"hidden.*strengths", r"untapped.*strengths",
+                 r"underutiliz.*strengths", r"professional strengths"],
+        factors=["MC", "10th House", "Saturn", "Sun"],
+        intent=TermIntent.CAREER_PATH,
+        domain="Career & Public Life",
+        description="Skills and talents not currently being fully used in career.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Spiritual Purpose cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="spiritual lesson",
+        aliases=[r"spiritual lesson", r"life lesson", r"soul lesson",
+                 r"meant to learn", r"purpose.*this lifetime"],
+        factors=["North Node", "South Node", "12th House"],
+        intent=TermIntent.SPIRITUAL_PURPOSE,
+        domain="Spirituality & Imagination",
+        description="Key theme or challenge for spiritual growth in this lifetime.",
+    ),
+    Term(
+        canonical="North Node",
+        aliases=[r"north node", r"north node of the moon", r"true node",
+                 r"my north node", r"significance.*north node",
+                 r"north node.*significance"],
+        factors=["North Node"],
+        intent=TermIntent.SPIRITUAL_PURPOSE,
+        domain="Spirituality & Imagination",
+        description="The karmic direction or soul purpose indicator in the chart.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Emotional Wellness cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="anxiety",
+        aliases=[r"anxiety", r"anxious", r"worries", r"unease",
+                 r"apprehension", r"manage.*anxiety"],
+        factors=["Moon", "Mercury", "Saturn", "Neptune"],
+        intent=TermIntent.EMOTIONAL_WELLNESS,
+        domain="Emotions & Inner World",
+        description="State of worry or nervousness; mapped to lunar/mercurial factors.",
+    ),
+    Term(
+        canonical="planetary influences",
+        aliases=[r"planetary influences", r"planetary effects",
+                 r"astrological influences", r"astrological effects"],
+        factors=[],
+        intent=TermIntent.EMOTIONAL_WELLNESS,
+        domain="Emotions & Inner World",
+        description="General impact of planets on a person's life and experiences.",
+    ),
+    Term(
+        canonical="social exhaustion",
+        aliases=[r"exhausted after social", r"drained after social",
+                 r"social.*exhaust", r"tired after.*gathering",
+                 r"social energy"],
+        factors=["Moon", "Neptune", "12th House"],
+        intent=TermIntent.EMOTIONAL_WELLNESS,
+        domain="Emotions & Inner World",
+        description="Feeling depleted after social interactions.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Timing Forecast cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="waiting room phase",
+        aliases=[r"waiting room.*phase", r"waiting room.*period",
+                 r"phase of waiting", r"in a waiting room",
+                 r"life.*on pause"],
+        factors=[],
+        intent=TermIntent.TIMING_FORECAST,
+        domain="Change & Transformation",
+        description="Period of stagnation or lack of progress in life.",
+    ),
+    Term(
+        canonical="energy shift",
+        aliases=[r"energy shift", r"shift in energy", r"energy change",
+                 r"when.*energy.*shift", r"when.*shift"],
+        factors=[],
+        intent=TermIntent.TIMING_FORECAST,
+        domain="Change & Transformation",
+        description="An anticipated change in circumstances or momentum.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Challenge Transmutation cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="challenging aspect",
+        aliases=[r"challenging aspect", r"difficult aspect",
+                 r"hard aspect", r"affliction", r"most challenging"],
+        factors=[],
+        intent=TermIntent.CHALLENGE_TRANSMUTE,
+        domain="Identity & Self",
+        description="An aspect in a birth chart that presents obstacles.",
+    ),
+    Term(
+        canonical="transmute",
+        aliases=[r"transmut", r"transform.*strength",
+                 r"turn.*into.*strength", r"convert.*strength"],
+        factors=[],
+        intent=TermIntent.CHALLENGE_TRANSMUTE,
+        domain="Change & Transformation",
+        description="Turning difficult chart patterns into constructive energy.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Community Belonging cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="my people",
+        aliases=[r"my people", r"my community", r"my tribe",
+                 r"find.*community", r"find.*my people"],
+        factors=["11th House", "Uranus", "Jupiter", "Venus"],
+        intent=TermIntent.COMMUNITY_BELONGING,
+        domain="Community & Future",
+        description="Finding a sense of belonging or community.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Financial Insight cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="financial volatility",
+        aliases=[r"financial.*volatil", r"financial.*instabil",
+                 r"unexpected expenses", r"unstable finances"],
+        factors=["2nd House", "8th House", "Jupiter", "Saturn"],
+        intent=TermIntent.FINANCIAL_INSIGHT,
+        domain="Finances & Resources",
+        description="Trend of financial instability or surprising expenses.",
+    ),
+    Term(
+        canonical="subconscious blocks",
+        aliases=[r"subconscious block", r"mental block",
+                 r"limiting belief", r"block.*wealth",
+                 r"block.*money", r"block.*abundance"],
+        factors=["12th House", "Neptune", "Pluto", "Saturn"],
+        intent=TermIntent.FINANCIAL_INSIGHT,
+        domain="Finances & Resources",
+        description="Hidden psychological barriers to financial growth.",
+    ),
+    Term(
+        canonical="relationship with money",
+        aliases=[r"relationship with money", r"attitude.*money",
+                 r"money mindset", r"money.*relationship"],
+        factors=["Venus", "2nd House", "Jupiter"],
+        intent=TermIntent.FINANCIAL_INSIGHT,
+        domain="Finances & Resources",
+        description="Core beliefs and patterns around earning and spending.",
+    ),
+    Term(
+        canonical="building wealth",
+        aliases=[r"building wealth", r"accumulating wealth",
+                 r"creating wealth", r"grow.*wealth",
+                 r"financial independence"],
+        factors=["Jupiter", "Venus", "2nd House", "8th House"],
+        intent=TermIntent.FINANCIAL_INSIGHT,
+        domain="Finances & Resources",
+        description="Long-term wealth creation and financial growth.",
+    ),
+
+    # ══════════════════════════════════════════════════════════════════
+    # Trait Perception cluster
+    # ══════════════════════════════════════════════════════════════════
+    Term(
+        canonical="intense",
+        aliases=[r"described as intense", r"people.*say.*intense",
+                 r"come across as intense", r"seen as intense"],
+        factors=["Pluto", "Scorpio", "8th House", "Mars"],
+        intent=TermIntent.TRAIT_PERCEPTION,
+        domain="Identity & Self",
+        description="Being perceived as emotionally or energetically intense.",
+    ),
+    Term(
+        canonical="mysterious",
+        aliases=[r"described as mysterious", r"people.*say.*mysterious",
+                 r"come across as mysterious", r"seen as mysterious"],
+        factors=["Pluto", "Scorpio", "12th House", "Neptune"],
+        intent=TermIntent.TRAIT_PERCEPTION,
+        domain="Identity & Self",
+        description="Being perceived as enigmatic or hard to read.",
+    ),
+
+# ── END BUILTIN TERMS ────────────────────────────────────────────────────────
 ]
 
 

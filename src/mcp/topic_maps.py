@@ -461,6 +461,10 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   "identity": ["Sun", "Ascendant", "1st House"],
   "self": ["Sun", "Ascendant", "1st House"],
   "confidence": ["Sun", "1st House", "Part of Fortune"],
+  "intense": ["Pluto", "Scorpio", "8th House", "Mars"],
+  "mysterious": ["Pluto", "Scorpio", "12th House", "Neptune"],
+  "perception": ["Ascendant", "1st House", "Sun", "MC"],
+  "quality of life": ["Sun", "Moon", "Ascendant", "Part of Fortune"],
   "self-confidence": ["Sun", "1st House", "Part of Fortune"],
   "style": ["Ascendant", "1st House", "Sun"],
   "appearance": ["Ascendant", "1st House", "Sun"],
@@ -472,6 +476,8 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   "higher learning": ["Jupiter", "9th House", "Mercury"],
   "destiny": ["North Node", "Vertex", "Part of Fortune", "Sun"],
   "turning point": ["Vertex", "Sun", "Part of Fortune"],
+  "relocation": ["MC", "IC", "Ascendant", "4th House", "10th House"],
+  "moving": ["MC", "IC", "4th House", "Moon"],
 
   # --- Emotions / Family ---
   "family": ["Moon", "IC", "4th House", "Ceres", "Mnemosyne"],
@@ -486,12 +492,21 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   "grief": ["Ceres", "8th House", "Pluto", "Niobe", "South Node"],
   "loss": ["Ceres", "8th House", "Pluto", "Niobe", "South Node"],
   "self-care": ["Moon", "Ceres", "4th House", "Hygiea"],
+  "parent": ["Moon", "Saturn", "IC", "4th House", "Ceres"],
 
   # --- Love / Relationships ---
   "love": ["Venus", "5th House", "Sun", "Eros"],
   "romance": ["Venus", "5th House", "Sun", "Eros", "Freia"],
   "dating": ["Venus", "5th House", "Sun", "Eros"],
   "attraction": ["Venus", "Mars", "Eros", "5th House"],
+  "attracting": ["Venus", "Mars", "Eros", "5th House", "7th House"],
+  "emotionally unavailable": ["Venus", "Moon", "7th House", "Chiron"],
+  "partner": ["7th House", "Descendant", "Juno", "Venus"],
+  "spouse": ["7th House", "Descendant", "Juno", "Saturn"],
+  "synastry": ["7th House", "Descendant", "Venus", "Mars"],
+  "love language": ["Venus", "Mars", "Moon", "5th House"],
+  "long-term potential": ["Saturn", "Juno", "7th House", "Venus"],
+  "relationship": ["7th House", "Descendant", "Venus", "Juno"],
   "sex": ["Mars", "Eros", "Lilith (Asteroid)", "Black Moon Lilith", "8th House", "Pluto"],
   "chemistry": ["Mars", "Eros", "Lilith (Asteroid)", "Black Moon Lilith", "8th House"],
   "intimacy": ["Psyche", "Moon", "8th House", "Ceres"],
@@ -508,6 +523,13 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   "vocation": ["MC", "10th House", "Sun", "North Node", "Saturn"],
   "promotion": ["Saturn", "Sun", "MC", "Jupiter", "10th House"],
   "leadership": ["Pallas", "Mercury", "Saturn", "Sun"],
+  "midheaven": ["MC", "10th House"],
+  "business": ["MC", "10th House", "Jupiter", "Saturn"],
+  "job offer": ["MC", "10th House", "Saturn", "Mercury"],
+  "professional": ["MC", "10th House", "Saturn", "Sun"],
+  "stagnation": ["Saturn", "MC", "10th House"],
+  "stagnant": ["Saturn", "MC", "10th House"],
+  "work environment": ["6th House", "MC", "10th House", "Moon"],
   "reputation": ["Sun", "MC", "10th House", "Fama", "Apollo"],
   "public image": ["Sun", "MC", "10th House", "Fama", "Apollo"],
   "opportunity": ["Jupiter", "9th House", "10th House", "MC"],
@@ -515,6 +537,9 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   # --- Finances ---
   "money": ["Jupiter", "Venus", "2nd House", "Part of Fortune"],
   "finances": ["Jupiter", "Venus", "2nd House", "Part of Fortune"],
+  "expenses": ["2nd House", "Saturn", "Jupiter", "Venus"],
+  "purchase": ["2nd House", "Venus", "Jupiter", "Saturn"],
+  "wealth": ["Jupiter", "Venus", "2nd House", "8th House", "Part of Fortune"],
   "income": ["Jupiter", "Venus", "2nd House", "Part of Fortune"],
   "salary": ["Jupiter", "Venus", "2nd House"],
   "savings": ["Saturn", "Vesta", "2nd House"],
@@ -537,6 +562,8 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
 
   # --- Spirituality ---
   "spirituality": ["Neptune", "12th House", "Moon", "Hekate", "9th House"],
+  "spiritual": ["Neptune", "12th House", "Jupiter", "9th House"],
+  "north node": ["North Node", "South Node", "12th House"],
   "intuition": ["Moon", "Psyche", "Neptune", "12th House", "Kassandra"],
   "dreams": ["Neptune", "12th House", "Moon"],
   "meditation": ["Neptune", "12th House", "Vesta", "Moon"],
@@ -545,12 +572,22 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   "beliefs": ["Jupiter", "9th House", "Mercury", "Neptune"],
 
   # --- Transformation ---
+  "saturn return": ["Saturn", "1st House", "10th House"],
+  "falling apart": ["Pluto", "Saturn", "8th House", "12th House"],
+  "major shift": ["Pluto", "Uranus", "Saturn", "8th House"],
+  "transits": ["Saturn", "Pluto", "Uranus", "Jupiter", "8th House"],
+  "challenging": ["Saturn", "Pluto", "Mars", "8th House"],
+  "patterns": ["Pluto", "Saturn", "South Node", "12th House"],
+  "waiting room": ["Saturn", "Neptune", "12th House"],
+  "energy shift": ["Pluto", "Uranus", "Saturn", "8th House"],
   "trauma": ["Pluto", "Chiron", "8th House", "Nessus", "Aletheia"],
   "healing": ["Chiron", "Pluto", "8th House", "Panacea", "Vesta"],
   "shadow work": ["Pluto", "Chiron", "8th House", "Nessus", "Aletheia"],
   "rebirth": ["Pluto", "8th House", "Uranus", "South Node", "12th House"],
   "endings": ["Pluto", "West", "Saturn", "12th House", "8th House"],
   "empowerment": ["Pluto", "Eris", "8th House", "Mars", "Orcus"],
+  "strength": ["Sun", "Mars", "Pluto", "1st House"],
+  "strengths": ["Sun", "Mars", "Pluto", "1st House"],
   "breakthrough": ["Uranus", "Pluto", "8th House", "12th House"],
 
   # --- Learning ---
@@ -566,6 +603,10 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   # --- Health / Service ---
   "health": ["6th House", "Ceres", "Moon", "Hygiea", "Vesta", "Saturn"],
   "wellness": ["6th House", "Ceres", "Moon", "Hygiea", "Vesta"],
+  "anxiety": ["Moon", "Mercury", "Saturn", "Neptune", "6th House"],
+  "anxious": ["Moon", "Mercury", "Saturn", "Neptune", "6th House"],
+  "exhausted": ["Moon", "Neptune", "12th House", "6th House"],
+  "exhaustion": ["Moon", "Neptune", "12th House", "6th House"],
   "routines": ["6th House", "Saturn", "Vesta", "Lachesis"],
   "habits": ["6th House", "Saturn", "Vesta", "Lachesis"],
   "service": ["Vesta", "Ceres", "6th House", "Neptune", "Panacea"],
@@ -579,6 +620,7 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
   "networking": ["11th House", "Jupiter", "Pallas", "Koussevitzky", "Fama"],
   "collaboration": ["11th House", "Jupiter", "Pallas", "Koussevitzky", "Fama"],
   "future": ["11th House", "Neptune", "North Node", "Part of Fortune", "Jupiter"],
+  "my people": ["11th House", "Venus", "Jupiter", "Uranus"],
   "goals": ["11th House", "Saturn", "Jupiter", "Pallas", "MC"],
   "activism": ["Uranus", "Eris", "11th House", "Mercury", "Kassandra", "Nemesis"],
   "co-parenting": ["8th House", "Saturn", "Pluto", "Juno"],
@@ -608,6 +650,205 @@ KEYWORDS_LOOKUP: Dict[str, List[str]] = {
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# 2b. KEYWORD_DOMAIN_HINTS  (keyword → domain name)
+#     Bridges KEYWORDS_LOOKUP entries to the correct WIZARD_TARGETS domain.
+#     Used by resolve_factors() when subtopic_match fails.
+# ═══════════════════════════════════════════════════════════════════════
+
+KEYWORD_DOMAIN_HINTS: Dict[str, str] = {
+    # --- Identity & Self ---
+    "identity": "Identity & Self",
+    "self": "Identity & Self",
+    "confidence": "Identity & Self",
+    "intense": "Identity & Self",
+    "mysterious": "Identity & Self",
+    "perception": "Identity & Self",
+    "quality of life": "Identity & Self",
+    "self-confidence": "Identity & Self",
+    "style": "Identity & Self",
+    "appearance": "Identity & Self",
+    "purpose": "Identity & Self",
+    "life direction": "Identity & Self",
+    "calling": "Identity & Self",
+    "travel": "Identity & Self",
+    "philosophy": "Identity & Self",
+    "higher learning": "Identity & Self",
+    "destiny": "Identity & Self",
+    "turning point": "Identity & Self",
+    "relocation": "Identity & Self",
+    "moving": "Identity & Self",
+
+    # --- Emotions & Inner World ---
+    "family": "Emotions & Inner World",
+    "ancestry": "Emotions & Inner World",
+    "generational trauma": "Emotions & Inner World",
+    "father wound": "Emotions & Inner World",
+    "mother wound": "Emotions & Inner World",
+    "home": "Emotions & Inner World",
+    "childhood": "Emotions & Inner World",
+    "inner child": "Emotions & Inner World",
+    "play": "Emotions & Inner World",
+    "grief": "Emotions & Inner World",
+    "loss": "Emotions & Inner World",
+    "self-care": "Emotions & Inner World",
+    "parent": "Emotions & Inner World",
+
+    # --- Relationships & Love ---
+    "love": "Relationships & Love",
+    "romance": "Relationships & Love",
+    "dating": "Relationships & Love",
+    "attraction": "Relationships & Love",
+    "attracting": "Relationships & Love",
+    "emotionally unavailable": "Relationships & Love",
+    "partner": "Relationships & Love",
+    "spouse": "Relationships & Love",
+    "synastry": "Relationships & Love",
+    "love language": "Relationships & Love",
+    "long-term potential": "Relationships & Love",
+    # Note: "relationship" deliberately omitted — too ambiguous (romantic / familial / financial).
+    "sex": "Relationships & Love",
+    "chemistry": "Relationships & Love",
+    "intimacy": "Relationships & Love",
+    "trust": "Relationships & Love",
+    "commitment": "Relationships & Love",
+    "marriage": "Relationships & Love",
+    "partnership": "Relationships & Love",
+    "breakup": "Relationships & Love",
+    "karmic relationship": "Relationships & Love",
+
+    # --- Career & Public Life ---
+    "career": "Career & Public Life",
+    "job": "Career & Public Life",
+    "vocation": "Career & Public Life",
+    "promotion": "Career & Public Life",
+    "leadership": "Career & Public Life",
+    "midheaven": "Career & Public Life",
+    "business": "Career & Public Life",
+    "job offer": "Career & Public Life",
+    "professional": "Career & Public Life",
+    "stagnation": "Career & Public Life",
+    "stagnant": "Career & Public Life",
+    "work environment": "Career & Public Life",
+    "reputation": "Career & Public Life",
+    "public image": "Career & Public Life",
+    "opportunity": "Career & Public Life",
+
+    # --- Finances & Resources ---
+    "money": "Finances & Resources",
+    "finances": "Finances & Resources",
+    "expenses": "Finances & Resources",
+    "purchase": "Finances & Resources",
+    "wealth": "Finances & Resources",
+    "income": "Finances & Resources",
+    "salary": "Finances & Resources",
+    "savings": "Finances & Resources",
+    "budget": "Finances & Resources",
+    "debt": "Finances & Resources",
+    "taxes": "Finances & Resources",
+    "inheritance": "Finances & Resources",
+    "self-worth": "Finances & Resources",
+    "right livelihood": "Finances & Resources",
+    "purpose & money": "Finances & Resources",
+
+    # --- Creativity & Expression ---
+    "creativity": "Creativity & Expression",
+    "art": "Creativity & Expression",
+    "music": "Creativity & Expression",
+    "voice": "Creativity & Expression",
+    "muse": "Creativity & Expression",
+    "design": "Creativity & Expression",
+    "fun": "Creativity & Expression",
+
+    # --- Spirituality & Imagination ---
+    "spirituality": "Spirituality & Imagination",
+    "spiritual": "Spirituality & Imagination",
+    "north node": "Spirituality & Imagination",
+    "intuition": "Spirituality & Imagination",
+    "dreams": "Spirituality & Imagination",
+    "meditation": "Spirituality & Imagination",
+    "confusion": "Spirituality & Imagination",
+    "overwhelm": "Spirituality & Imagination",
+    "beliefs": "Spirituality & Imagination",
+
+    # --- Change & Transformation ---
+    "saturn return": "Change & Transformation",
+    "falling apart": "Change & Transformation",
+    "major shift": "Change & Transformation",
+    "transits": "Change & Transformation",
+    "challenging": "Change & Transformation",
+    "patterns": "Change & Transformation",
+    "waiting room": "Change & Transformation",
+    "energy shift": "Change & Transformation",
+    "trauma": "Change & Transformation",
+    "healing": "Change & Transformation",
+    "shadow work": "Change & Transformation",
+    "rebirth": "Change & Transformation",
+    "endings": "Change & Transformation",
+    "empowerment": "Change & Transformation",
+    "strength": "Change & Transformation",
+    "strengths": "Change & Transformation",
+    "breakthrough": "Change & Transformation",
+
+    # --- Learning & Mind ---
+    "learning": "Learning & Mind",
+    "study": "Learning & Mind",
+    "education": "Learning & Mind",
+    "travel (long-distance)": "Learning & Mind",
+    "communication": "Learning & Mind",
+    "writing": "Learning & Mind",
+    "teaching": "Learning & Mind",
+    "focus": "Learning & Mind",
+
+    # --- Devotion & Purposeful Service ---
+    "health": "Devotion & Purposeful Service",
+    "wellness": "Devotion & Purposeful Service",
+    "anxiety": "Devotion & Purposeful Service",
+    "anxious": "Devotion & Purposeful Service",
+    "exhausted": "Devotion & Purposeful Service",
+    "exhaustion": "Devotion & Purposeful Service",
+    "routines": "Devotion & Purposeful Service",
+    "habits": "Devotion & Purposeful Service",
+    "service": "Devotion & Purposeful Service",
+    "work": "Devotion & Purposeful Service",
+    "craft": "Devotion & Purposeful Service",
+    "burnout": "Devotion & Purposeful Service",
+
+    # --- Community & Future ---
+    "community": "Community & Future",
+    "friends": "Community & Future",
+    "networking": "Community & Future",
+    "collaboration": "Community & Future",
+    "future": "Community & Future",
+    "my people": "Community & Future",
+    "goals": "Community & Future",
+    "activism": "Community & Future",
+    "co-parenting": "Community & Future",
+
+    # --- Conflict & Enemies ---
+    "boundaries": "Conflict & Enemies",
+    "conflict": "Conflict & Enemies",
+    "enemies": "Conflict & Enemies",
+    "open enemies": "Conflict & Enemies",
+    "hidden enemies": "Conflict & Enemies",
+    "sabotage": "Conflict & Enemies",
+    "smear": "Conflict & Enemies",
+    "power struggle": "Conflict & Enemies",
+    "coercion": "Conflict & Enemies",
+    "manipulation": "Conflict & Enemies",
+    "legal": "Conflict & Enemies",
+    "lawsuit": "Conflict & Enemies",
+    "contracts": "Conflict & Enemies",
+    "workplace conflict": "Conflict & Enemies",
+    "reputation attack": "Conflict & Enemies",
+    "truth": "Conflict & Enemies",
+    "clarity": "Conflict & Enemies",
+    "de-escalation": "Conflict & Enemies",
+    "cut-off": "Conflict & Enemies",
+    "safety": "Conflict & Enemies",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # 3.  Derived index — built once at import time
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -626,10 +867,16 @@ for _dom in WIZARD_TARGETS["domains"]:
         _SUBTOPIC_INDEX[_sub["label"].lower()] = (_dom["name"], _sub)
 
 # Domain description words → domain name (lightweight fuzzy matching)
+# Stopwords that appear in domain descriptions but carry no domain signal.
+_DOMAIN_STOP_WORDS: set = {
+    "what", "your", "have", "does", "about", "from", "with", "this",
+    "that", "they", "them", "their", "been", "will", "were", "more",
+    "some", "into", "show", "managing", "life", "needs", "thinking",
+}
 _DOMAIN_KEYWORDS: Dict[str, str] = {}
 for _dom in WIZARD_TARGETS["domains"]:
     for w in re.findall(r"\w+", (_dom["name"] + " " + _dom.get("description", "")).lower()):
-        if len(w) > 3:  # skip tiny words
+        if len(w) > 3 and w not in _DOMAIN_STOP_WORDS:
             _DOMAIN_KEYWORDS[w] = _dom["name"]
 
 
@@ -691,13 +938,14 @@ def domain_match(text: str) -> Optional[str]:
 
 
 def resolve_factors(question: str) -> TopicMatch:
-    """Full intent routing: question → TopicMatch.
+    """Full intent routing: question -> TopicMatch.
 
     Strategy (layered, from most specific to broadest):
-      1. Exact keyword hits from KEYWORDS_LOOKUP
-      2. Subtopic label fuzzy match from WIZARD_TARGETS
-      3. Domain-level keyword match
-      4. Fallback: return the "big 3" (Sun, Moon, Ascendant) with low confidence.
+      1. Exact keyword hits from KEYWORDS_LOOKUP  (factors + kws)
+      2. Subtopic label fuzzy match from WIZARD_TARGETS  (domain + subtopic)
+      3. Keyword-domain hints from KEYWORD_DOMAIN_HINTS  (domain from kw signal)
+      4. Domain-level keyword match from domain names/descriptions
+      5. Fallback: return the "big 3" (Sun, Moon, Ascendant) with low confidence.
     """
     factors: List[str] = []
     matched_kws: List[str] = []
@@ -713,14 +961,25 @@ def resolve_factors(question: str) -> TopicMatch:
         matched_kws.extend(kw_hits)
         confidence = min(0.5 + 0.1 * len(kw_hits), 0.85)
 
-    # Layer 2: subtopic match
+    # Layer 2: subtopic match (most specific domain signal)
     sub_result = subtopic_match(question)
     if sub_result:
         domain, subtopic, sub_factors = sub_result
         factors.extend(sub_factors)
         confidence = max(confidence, 0.7)
 
-    # Layer 3: domain match
+    # Layer 3: keyword → domain hints (explicit curated mapping)
+    if not domain and matched_kws:
+        _votes: Dict[str, int] = {}
+        for kw in matched_kws:
+            hint = KEYWORD_DOMAIN_HINTS.get(kw)
+            if hint:
+                _votes[hint] = _votes.get(hint, 0) + 1
+        if _votes:
+            domain = max(_votes, key=_votes.get)
+            confidence = max(confidence, 0.55)
+
+    # Layer 4: domain name / description word match
     if not domain:
         domain = domain_match(question) or ""
         if domain and not factors:
@@ -733,7 +992,7 @@ def resolve_factors(question: str) -> TopicMatch:
                     confidence = max(confidence, 0.4)
                     break
 
-    # Layer 4: absolute fallback — the "big 3"
+    # Layer 5: absolute fallback -- the "big 3"
     if not factors:
         factors = ["Sun", "Moon", "Ascendant"]
         confidence = 0.15
@@ -794,10 +1053,17 @@ def _dedup(seq: Sequence[str]) -> List[str]:
     return out
 
 
+_FUZZY_STOP: set = {
+    "a", "an", "the", "to", "of", "in", "on", "or", "and", "is", "it",
+    "at", "by", "for", "do", "if", "am", "no", "up", "so", "my", "me",
+    "we", "he", "be", "i",
+}
+
+
 def _fuzzy_overlap(text: str, label: str) -> float:
-    """Simple word-overlap ratio between *text* and *label*."""
-    label_words = set(re.findall(r"\w+", label.lower()))
-    text_words = set(re.findall(r"\w+", text.lower()))
+    """Word-overlap ratio between *text* and *label*, ignoring stopwords."""
+    label_words = set(re.findall(r"\w+", label.lower())) - _FUZZY_STOP
+    text_words = set(re.findall(r"\w+", text.lower())) - _FUZZY_STOP
     if not label_words:
         return 0.0
     return len(label_words & text_words) / len(label_words)
