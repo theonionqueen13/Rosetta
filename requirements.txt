@@ -19,3 +19,7 @@ pytz
 plotly>=5.0.0
 google-generativeai
 opencage
+requests
+beautifulsoup4
+selenium
+lxml

@@ -221,8 +221,23 @@ const RosettaChart = (() => {
             .attr("fill", darkMode ? "#0E1117" : "#FFFFFF")
             .attr("class", "chart-background");
 
-        // Main group centered
-        const g = svg.append("g").attr("transform", `translate(${cx},${cy})`);
+        // Main group — transform managed by D3 zoom; initial position = center
+        const g = svg.append("g");
+
+        // ── D3 Zoom ────────────────────────────────────────────────────────
+        // Scroll-wheel / pinch to zoom; drag to pan.
+        // Initial transform centers the chart at (cx, cy).
+        const zoom = d3.zoom()
+            .scaleExtent([0.4, 8])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+
+        svg.call(zoom)
+            .on("dblclick.zoom", null); // disable double-click zoom (reserved for future)
+
+        // Apply initial centering transform
+        svg.call(zoom.transform, d3.zoomIdentity.translate(cx, cy));
 
         // Layer groups (z-ordering)
         const layerZodiac = g.append("g").attr("class", "layer-zodiac");
@@ -232,6 +247,7 @@ const RosettaChart = (() => {
         const layerCompass = g.append("g").attr("class", "layer-compass");
         const layerPlanets = g.append("g").attr("class", "layer-planets");
         const layerHighlights = g.append("g").attr("class", "layer-highlights");
+        const layerSingletons = g.append("g").attr("class", "layer-singletons");
 
         // === Draw zodiac bands ===
         drawZodiacBands(layerZodiac, data.signs || [], ascDeg, rScale);
@@ -259,6 +275,12 @@ const RosettaChart = (() => {
 
         // === Draw planet labels ===
         drawPlanetLabels(layerPlanets, data.objects || [], ascDeg, rScale, labelStyle, darkMode);
+
+        // === Draw singleton dots ===
+        const activeSingletons = data.active_singletons || [];
+        if (activeSingletons.length) {
+            drawSingletonDots(layerSingletons, data.objects || [], activeSingletons, ascDeg, rScale);
+        }
 
         // === Apply highlights ===
         if (data.highlights && Object.keys(data.highlights).length) {
@@ -644,6 +666,42 @@ const RosettaChart = (() => {
                 .attr("class", "planet-hitarea")
                 .attr("data-object", obj.name)
                 .style("cursor", "pointer");
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Singleton dots  (drawn on the degree circle for lone-planet toggles)
+    // Matches drawing_v2.draw_singleton_dots: a solid-filled circle on the
+    // outer edge of the degree ring at the planet's exact longitude.
+    // -----------------------------------------------------------------------
+    function drawSingletonDots(layer, objects, activeSingletons, ascDeg, rScale) {
+        const singletonSet = new Set(
+            (activeSingletons || []).map((s) => (s || "").toLowerCase())
+        );
+        const posMap = {};
+        objects.forEach((o) => { posMap[(o.name || "").toLowerCase()] = o.longitude; });
+
+        // Cycle through a small palette for multiple singletons
+        const palette = ["#9B59B6", "#1ABC9C", "#E67E22", "#E74C3C", "#3498DB"];
+        let colorIdx = 0;
+        singletonSet.forEach((name) => {
+            const lon = posMap[name];
+            if (lon === undefined) return;
+            const rad = degToRad(lon, ascDeg);
+            const r = rScale(R_DEGREE_CIRCLE);
+            const [cx, cy] = polarToCartesian(r, rad);
+            const color = palette[colorIdx % palette.length];
+            colorIdx++;
+
+            // Outer ring dot
+            layer.append("circle")
+                .attr("cx", cx).attr("cy", cy)
+                .attr("r", 5)
+                .attr("fill", color)
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 1.2)
+                .attr("class", "singleton-dot")
+                .attr("data-object", name);
         });
     }
 

@@ -176,23 +176,60 @@ const RosettaTooltip = (() => {
     // -----------------------------------------------------------------------
     function _show(evt, html) {
         if (!_tooltip) return;
+
+        // Set content first so we can measure real dimensions
         _tooltip.innerHTML = html;
+        _tooltip.style.visibility = "hidden";
+        _tooltip.style.left = "0px";
+        _tooltip.style.top = "0px";
         _tooltip.classList.remove("hidden");
 
-        // Position near cursor but within viewport
-        const pad = 12;
-        let x = evt.pageX + pad;
-        let y = evt.pageY + pad;
-        const rect = _tooltip.getBoundingClientRect();
-        if (x + rect.width > window.innerWidth) x = evt.pageX - rect.width - pad;
-        if (y + rect.height > window.innerHeight) y = evt.pageY - rect.height - pad;
+        // Measure after layout (offsetWidth/offsetHeight force reflow)
+        const tw = _tooltip.offsetWidth;
+        const th = _tooltip.offsetHeight;
+        const pad = 14;
+        const vw = window.innerWidth || document.documentElement.clientWidth;
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+
+        // Use clientX/clientY — works correctly with position:fixed
+        let x = evt.clientX + pad;
+        let y = evt.clientY + pad;
+
+        // Flip left if overflows right edge
+        if (x + tw > vw - pad) x = evt.clientX - tw - pad;
+        // Flip up if overflows bottom (most common clip case)
+        if (y + th > vh - pad) y = evt.clientY - th - pad;
+
+        // Hard clamp so it never goes off-screen
+        x = Math.max(pad, Math.min(x, vw - tw - pad));
+        y = Math.max(pad, Math.min(y, vh - th - pad));
+
         _tooltip.style.left = x + "px";
         _tooltip.style.top = y + "px";
+        _tooltip.style.visibility = "visible";
     }
 
     function _hide() {
         if (!_tooltip) return;
         _tooltip.classList.add("hidden");
+    }
+
+    // Reposition tooltip on mousemove — called from every handler
+    function _move(evt) {
+        if (!_tooltip || _tooltip.classList.contains("hidden")) return;
+        const tw = _tooltip.offsetWidth;
+        const th = _tooltip.offsetHeight;
+        const pad = 14;
+        const vw = window.innerWidth || document.documentElement.clientWidth;
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        let x = evt.clientX + pad;
+        let y = evt.clientY + pad;
+        if (x + tw > vw - pad) x = evt.clientX - tw - pad;
+        if (y + th > vh - pad) y = evt.clientY - th - pad;
+        x = Math.max(pad, Math.min(x, vw - tw - pad));
+        y = Math.max(pad, Math.min(y, vh - th - pad));
+        _tooltip.style.left = x + "px";
+        _tooltip.style.top = y + "px";
     }
 
     // -----------------------------------------------------------------------
@@ -207,21 +244,16 @@ const RosettaTooltip = (() => {
             const name = this.getAttribute("data-object");
             const obj = _objectMap[name];
             if (obj) _show(evt, _objectTooltip(obj));
-        }).on("mousemove", function (evt) {
-            if (_tooltip && !_tooltip.classList.contains("hidden")) {
-                const pad = 12;
-                _tooltip.style.left = (evt.pageX + pad) + "px";
-                _tooltip.style.top = (evt.pageY + pad) + "px";
-            }
-        }).on("mouseleave", _hide).on("click", function () {
-            const name = this.getAttribute("data-object");
-            Streamlit.setComponentValue({
-                type: "click",
-                element_type: "object",
-                element: name,
-                data: _objectMap[name] || {},
+        }).on("mousemove", function (evt) { _move(evt); })
+            .on("mouseleave", _hide).on("click", function () {
+                const name = this.getAttribute("data-object");
+                Streamlit.setComponentValue({
+                    type: "click",
+                    element_type: "object",
+                    element: name,
+                    data: _objectMap[name] || {},
+                });
             });
-        });
 
         // --- Aspect hover/click ---
         svg.selectAll(".aspect-line").on("mouseenter", function (evt) {
@@ -237,64 +269,49 @@ const RosettaTooltip = (() => {
 
             // Thicken on hover
             d3.select(this).attr("stroke-width", parseFloat(d3.select(this).attr("stroke-width")) + 2);
-        }).on("mousemove", function (evt) {
-            if (_tooltip && !_tooltip.classList.contains("hidden")) {
-                const pad = 12;
-                _tooltip.style.left = (evt.pageX + pad) + "px";
-                _tooltip.style.top = (evt.pageY + pad) + "px";
-            }
-        }).on("mouseleave", function () {
-            _hide();
-            // Restore width
-            const isMajor = this.getAttribute("data-is-major") === "true";
-            const asp = (this.getAttribute("data-aspect") || "").toLowerCase();
-            let lw = isMajor ? 2 : 1;
-            if (asp === "quincunx" || asp === "sesquisquare") lw = 1;
-            d3.select(this).attr("stroke-width", lw);
-        }).on("click", function () {
-            const a = this.getAttribute("data-obj-a");
-            const b = this.getAttribute("data-obj-b");
-            const asp = this.getAttribute("data-aspect");
-            Streamlit.setComponentValue({
-                type: "click",
-                element_type: "aspect",
-                element: `${a}-${b}-${asp}`,
-                data: { obj_a: a, obj_b: b, aspect: asp },
+        }).on("mousemove", function (evt) { _move(evt); })
+            .on("mouseleave", function () {
+                _hide();
+                // Restore width
+                const isMajor = this.getAttribute("data-is-major") === "true";
+                const asp = (this.getAttribute("data-aspect") || "").toLowerCase();
+                let lw = isMajor ? 2 : 1;
+                if (asp === "quincunx" || asp === "sesquisquare") lw = 1;
+                d3.select(this).attr("stroke-width", lw);
+            }).on("click", function () {
+                const a = this.getAttribute("data-obj-a");
+                const b = this.getAttribute("data-obj-b");
+                const asp = this.getAttribute("data-aspect");
+                Streamlit.setComponentValue({
+                    type: "click",
+                    element_type: "aspect",
+                    element: `${a}-${b}-${asp}`,
+                    data: { obj_a: a, obj_b: b, aspect: asp },
+                });
             });
-        });
 
         // --- House hover/click ---
         svg.selectAll(".house-cusp, .house-number").on("mouseenter", function (evt) {
             const h = this.getAttribute("data-house");
             const house = _houseMap[h];
             if (house) _show(evt, _houseTooltip(house));
-        }).on("mousemove", function (evt) {
-            if (_tooltip && !_tooltip.classList.contains("hidden")) {
-                const pad = 12;
-                _tooltip.style.left = (evt.pageX + pad) + "px";
-                _tooltip.style.top = (evt.pageY + pad) + "px";
-            }
-        }).on("mouseleave", _hide).on("click", function () {
-            const h = this.getAttribute("data-house");
-            Streamlit.setComponentValue({
-                type: "click",
-                element_type: "house",
-                element: h,
-                data: _houseMap[h] || {},
+        }).on("mousemove", function (evt) { _move(evt); })
+            .on("mouseleave", _hide).on("click", function () {
+                const h = this.getAttribute("data-house");
+                Streamlit.setComponentValue({
+                    type: "click",
+                    element_type: "house",
+                    element: h,
+                    data: _houseMap[h] || {},
+                });
             });
-        });
 
         // --- Zodiac sign hover ---
         svg.selectAll(".zodiac-band, .zodiac-glyph").on("mouseenter", function (evt) {
             const name = this.getAttribute("data-sign");
             if (name) _show(evt, _signTooltip(name));
-        }).on("mousemove", function (evt) {
-            if (_tooltip && !_tooltip.classList.contains("hidden")) {
-                const pad = 12;
-                _tooltip.style.left = (evt.pageX + pad) + "px";
-                _tooltip.style.top = (evt.pageY + pad) + "px";
-            }
-        }).on("mouseleave", _hide);
+        }).on("mousemove", function (evt) { _move(evt); })
+            .on("mouseleave", _hide);
     }
 
     return { wire };
