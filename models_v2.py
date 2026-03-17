@@ -1054,6 +1054,8 @@ class ShapeCircuit:
     resonance_score: float = 0.0         # 0–1, how harmonically resonant the shape is
     friction_score: float = 0.0          # 0–1, how much tension the shape carries
     flow_characterization: str = ""      # human-readable topology description
+    # Membrane classification — "drum_head", "resonant_membrane", or "" (none)
+    membrane_class: str = ""
     # Quincunx findings
     quincunx_routes: List[CircuitEdge] = field(default_factory=list)   # rerouted arcs
     open_arcs: List[CircuitEdge] = field(default_factory=list)         # unresolvable arcs

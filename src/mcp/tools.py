@@ -308,6 +308,29 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "required": ["concept_a", "concept_b"],
         },
     },
+    {
+        "name": "get_switch_points",
+        "description": (
+            "Detect switch points in the chart \u2014 missing vertices of "
+            "incomplete resonant shapes (T-Square \u2192 Grand Cross, "
+            "Wedge \u2192 Mystic Rectangle, etc.). Returns the zodiacal "
+            "position, activation range, Sabian symbol, and Saturn-informed "
+            "keystone guidance for each switch point. Keystones are "
+            "deliberate practices, habits, objects, or structures that "
+            "complete the harmonic circuit."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "chart": {
+                    "type": "string",
+                    "enum": ["chart_1", "chart_2"],
+                    "description": "Which chart to analyse. Defaults to 'chart_1'.",
+                    "default": "chart_1",
+                },
+            },
+        },
+    },
 ]
 
 
@@ -320,7 +343,17 @@ class ToolContext:
 
     The MCP server creates one of these when a chart is loaded,
     and passes it to every tool call.
+
+    conversation_history stores prior turns so the internal synthesizer
+    LLM has multi-turn context (e.g. remembers it offered a keystone
+    deep dive and can follow through when the user replies "yes").
+    Each entry: {"role": "user"|"assistant", "content": str}
+    User entries store just the plain question text.
+    Assistant entries store the full response text.
+    History is capped at MAX_HISTORY_TURNS most-recent exchanges.
     """
+
+    MAX_HISTORY_TURNS = 4  # keep last 4 exchanges (8 messages) in context
 
     def __init__(
         self,
@@ -339,6 +372,24 @@ class ToolContext:
         self.api_key = api_key
         self.chart_b = chart_b
         self.edges_inter_chart = edges_inter_chart or []
+        self.conversation_history: List[Dict[str, str]] = []
+
+    def add_turn(self, question: str, response: str) -> None:
+        """Append a user/assistant exchange to the conversation history.
+
+        Keeps only the most recent MAX_HISTORY_TURNS exchanges to avoid
+        token bloat on long conversations.
+        """
+        self.conversation_history.append({"role": "user", "content": question})
+        self.conversation_history.append({"role": "assistant", "content": response})
+        # Trim to MAX_HISTORY_TURNS exchanges (2 messages each)
+        max_messages = self.MAX_HISTORY_TURNS * 2
+        if len(self.conversation_history) > max_messages:
+            self.conversation_history = self.conversation_history[-max_messages:]
+
+    def prior_turns(self) -> List[Dict[str, str]]:
+        """Return the stored conversation history for injection into prompts."""
+        return list(self.conversation_history)
 
 
 def execute_tool(
@@ -381,6 +432,29 @@ def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         chart_b=ctx.chart_b or None,
         edges_inter_chart=ctx.edges_inter_chart or None,
     )
+
+    # Inject prior conversation turns into agent_notes so the synthesizer
+    # LLM knows what was said in previous turns (e.g. it offered a keystone
+    # deep dive and the user just replied "yes").
+    prior = ctx.prior_turns()
+    if prior:
+        # Build a compact summary of the last turn to anchor context
+        last_user = next(
+            (m["content"] for m in reversed(prior) if m["role"] == "user"), ""
+        )
+        last_asst = next(
+            (m["content"] for m in reversed(prior) if m["role"] == "assistant"), ""
+        )
+        # Truncate prior assistant response to avoid token overload
+        asst_preview = last_asst[:600] + ("…" if len(last_asst) > 600 else "")
+        notes_lines = [
+            f"Prior user message: {last_user}",
+            f"Prior assistant response (excerpt): {asst_preview}",
+        ]
+        if len(prior) > 2:
+            notes_lines.insert(0, f"[{len(prior)//2} prior exchange(s) in this session]")
+        packet.agent_notes = "\n".join(notes_lines)
+
     # Auto-detect synthesis mode from detected temporal dimension
     _td = packet.temporal_dimension or "natal"
     if _td == "synastry":
@@ -389,13 +463,18 @@ def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
         _mode = "transit"
     else:
         _mode = "natal"
+
     result = synthesize(
         packet,
         backend=backend,
         model=ctx.llm_model,
         api_key=ctx.api_key,
         mode=_mode,
+        conversation_history=prior,
     )
+
+    # Record this exchange so future turns have context
+    ctx.add_turn(question, result.text)
 
     out: Dict[str, Any] = {
         "reading": result.text,
@@ -661,6 +740,34 @@ def _trace_circuit_path(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any
     return result
 
 
+def _get_switch_points(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Detect switch points (incomplete drum heads / membranes)."""
+    if not ctx.chart:
+        return {"error": "No chart loaded."}
+
+    target_chart = _resolve_chart(ctx, args)
+    if target_chart is None:
+        return {"error": "Requested chart is not loaded."}
+
+    try:
+        from switch_points import find_switch_points
+    except ImportError:
+        return {"error": "switch_points module not found"}
+
+    sps = find_switch_points(target_chart, house_system=ctx.house_system)
+    result = [sp.to_dict() for sp in sps]
+    return {
+        "switch_points": result,
+        "count": len(result),
+        "note": (
+            "Each switch point is a missing vertex that would complete an "
+            "incomplete shape into a full resonant membrane. It can be "
+            "activated by transit, synastry, or a deliberately chosen "
+            "keystone (practice / habit / object / structure)."
+        ) if result else "No incomplete resonant shapes detected.",
+    }
+
+
 # Handler dispatch table
 _HANDLERS: Dict[str, Any] = {
     "ask_chart": _ask_chart,
@@ -677,4 +784,5 @@ _HANDLERS: Dict[str, Any] = {
     "get_domain_factors": _get_domain_factors,
     "get_circuit_reading": _get_circuit_reading,
     "trace_circuit_path": _trace_circuit_path,
+    "get_switch_points": _get_switch_points,
 }

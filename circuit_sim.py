@@ -77,61 +77,101 @@ SHAPE_TOPOLOGY = {
     "Grand Trine": {
         "resonance_base": 0.95,
         "friction_base": 0.05,
+        "membrane_class": None,
         "flow": "Resonant recycling loop — energy circulates freely between all three nodes.",
     },
     "Kite": {
         "resonance_base": 0.85,
         "friction_base": 0.15,
+        "membrane_class": None,
         "flow": "Directed Grand Trine — the apex node focuses and projects the loop's energy outward.",
     },
     "T-Square": {
         "resonance_base": 0.30,
         "friction_base": 0.70,
+        "membrane_class": None,
         "flow": "Pressure funnel — friction tension from the base funnels into the apex, charging it with driven output.",
     },
     "Grand Cross": {
         "resonance_base": 0.15,
         "friction_base": 0.85,
-        "flow": "Maximum tension engine — four-way friction creates immense internal pressure that demands resolution.",
+        "membrane_class": "drum_head",
+        "flow": (
+            "Drum head — even tension in all four directions pulls the energy "
+            "taut and LIVE with resonance, creating a spinning vortex effect "
+            "like a pinwheel. The squares provide propulsive friction that makes "
+            "the structure spin; the intersecting oppositions ground and balance "
+            "polarities across the entire structure. Energy can be intensely "
+            "fast-paced — everything clicking into place so rapidly it can be "
+            "hard to stay grounded."
+        ),
     },
     "Yod": {
         "resonance_base": 0.55,
         "friction_base": 0.45,
+        "membrane_class": None,
         "flow": "Indirect pressure concentrator — quincunx arcs focus unresolved tension on the apex, forcing redirection.",
     },
     "Mystic Rectangle": {
         "resonance_base": 0.70,
         "friction_base": 0.30,
-        "flow": "Balanced stable loop — trines and sextiles create smooth flow while oppositions keep the structure grounded.",
+        "membrane_class": "resonant_membrane",
+        "flow": (
+            "Resonant membrane — the trines and sextiles stretch a harmonious "
+            "surface between the grounding oppositions, picking up and "
+            "amplifying resonant frequencies like an antenna with foil stretched "
+            "across it. The structure is symmetrical about the origin, creating "
+            "a sixth-sense receiver that heightens intuitive and sensory "
+            "perception."
+        ),
+    },
+    "Merkabah": {
+        "resonance_base": 0.80,
+        "friction_base": 0.20,
+        "membrane_class": "drum_head",
+        "flow": (
+            "Super drum head — three intersecting oppositions create a triple-taut "
+            "membrane across six harmonic points, with two interlocking Grand "
+            "Trines providing massive resonant surface area. The most structurally "
+            "complete drum head possible; every opposition is connected to every "
+            "other through the harmonic sextile chain, generating extraordinary "
+            "propulsive spin from the sheer scope of intersecting tension."
+        ),
     },
     "Opposition": {
         "resonance_base": 0.35,
         "friction_base": 0.65,
+        "membrane_class": None,
         "flow": "Polarized channel — power splits between two poles and oscillates in tension.",
     },
     "Conjunction": {
         "resonance_base": 0.90,
         "friction_base": 0.10,
+        "membrane_class": None,
         "flow": "Merged power source — energies fuse into a single amplified expression.",
     },
     "Cradle": {
         "resonance_base": 0.65,
         "friction_base": 0.35,
+        "membrane_class": None,
         "flow": "Contained arc — sextile/trine cradle cushions oppositions and channels friction productively.",
     },
     "LightningBolt": {
         "resonance_base": 0.50,
         "friction_base": 0.50,
+        "membrane_class": None,
         "flow": "Tension discharge — built-up friction releases in a single directed flash of output.",
     },
     "Envelope": {
         "resonance_base": 0.60,
         "friction_base": 0.40,
+        "membrane_class": None,
         "flow": "Contained tension — outer trines or sextiles wrap an inner friction dynamic.",
     },
     "Unnamed": {
         "resonance_base": 0.50,
         "friction_base": 0.50,
+        "membrane_class": None,
         "flow": "Custom topology — mixed aspect blend with emergent flow characteristics.",
     },
 }
@@ -139,6 +179,7 @@ SHAPE_TOPOLOGY = {
 _DEFAULT_TOPOLOGY = {
     "resonance_base": 0.50,
     "friction_base": 0.50,
+    "membrane_class": None,
     "flow": "Unclassified circuit topology.",
 }
 
@@ -499,6 +540,7 @@ def _simulate_shape(
         resonance_score=resonance_score,
         friction_score=friction_score,
         flow_characterization=flow_char,
+        membrane_class=topology.get("membrane_class") or "",
         quincunx_routes=quincunx_routes,
         open_arcs=open_arcs,
     )

@@ -104,10 +104,12 @@ def _fallback_synthesize(packet: ReadingPacket) -> SynthesisResult:
     if packet.circuit_flows:
         parts.append("\n## Circuit Flows")
         for cf in packet.circuit_flows:
+            # Use to_dict() which now returns qualitative tier labels
+            cfd = cf.to_dict()
             parts.append(
-                f"- **{cf.shape_type}** ({', '.join(cf.members)}): "
-                f"resonance {cf.resonance:.0%}, friction {cf.friction:.0%}, "
-                f"throughput {cf.throughput:.1f}"
+                f"- **{cfd['shape']}** ({', '.join(cfd['members'])}): "
+                f"resonance: {cfd['resonance']}, friction: {cfd['friction']}, "
+                f"throughput: {cfd['throughput']}"
             )
             if cf.flow_characterization:
                 parts.append(f"  *{cf.flow_characterization}*")
@@ -115,11 +117,11 @@ def _fallback_synthesize(packet: ReadingPacket) -> SynthesisResult:
     if packet.power_nodes:
         parts.append("\n## Power Nodes")
         for pn in packet.power_nodes:
-            line = f"- **{pn.planet_name}**: power {pn.power_index:.1f}"
-            if pn.effective_power != pn.power_index:
-                line += f", effective {pn.effective_power:.1f}"
-            if pn.friction_load > 0.01:
-                line += f", friction {pn.friction_load:.1f}"
+            pnd = pn.to_dict()
+            if pn.tier_label:
+                line = f"- **{pn.planet_name}**: {pn.tier_label}"
+            else:
+                line = f"- **{pn.planet_name}**"
             parts.append(line)
 
     if packet.circuit_paths:
@@ -162,6 +164,7 @@ def _openai_synthesize(
     voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
+    conversation_history: Optional[List[Dict]] = None,
 ) -> SynthesisResult:
     """Call OpenAI's chat completion API."""
     try:
@@ -174,7 +177,11 @@ def _openai_synthesize(
         raise RuntimeError("OPENAI_API_KEY not set")
 
     client = openai.OpenAI(api_key=key)
-    messages = build_prompt(packet, mode=mode, voice=voice, extra_instructions=extra_instructions)
+    messages = build_prompt(
+        packet, mode=mode, voice=voice,
+        extra_instructions=extra_instructions,
+        conversation_history=conversation_history,
+    )
 
     response = client.chat.completions.create(
         model=model,
@@ -208,6 +215,7 @@ def _openrouter_synthesize(
     voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
+    conversation_history: Optional[List[Dict]] = None,
 ) -> SynthesisResult:
     """Call OpenRouter via the OpenAI SDK with a base_url override."""
     try:
@@ -227,7 +235,11 @@ def _openrouter_synthesize(
             "X-Title": "Rosetta Astrology",
         },
     )
-    messages = build_prompt(packet, mode=mode, voice=voice, extra_instructions=extra_instructions)
+    messages = build_prompt(
+        packet, mode=mode, voice=voice,
+        extra_instructions=extra_instructions,
+        conversation_history=conversation_history,
+    )
 
     response = client.chat.completions.create(
         model=model,
@@ -261,6 +273,7 @@ def _anthropic_synthesize(
     voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
+    conversation_history: Optional[List[Dict]] = None,
 ) -> SynthesisResult:
     """Call Anthropic's messages API."""
     try:
@@ -273,7 +286,11 @@ def _anthropic_synthesize(
         raise RuntimeError("ANTHROPIC_API_KEY not set")
 
     client = anthropic.Anthropic(api_key=key)
-    messages = build_prompt(packet, mode=mode, voice=voice, extra_instructions=extra_instructions)
+    messages = build_prompt(
+        packet, mode=mode, voice=voice,
+        extra_instructions=extra_instructions,
+        conversation_history=conversation_history,
+    )
 
     # Anthropic API separates system from messages
     system_content = messages[0]["content"]
@@ -315,6 +332,7 @@ def synthesize(
     voice: str = "plain",
     extra_instructions: str = "",
     api_key: Optional[str] = None,
+    conversation_history: Optional[List[Dict]] = None,
 ) -> SynthesisResult:
     """Synthesize prose from a ReadingPacket.
 
@@ -335,6 +353,11 @@ def synthesize(
         Extra text appended to the system prompt.
     api_key : str, optional
         API key override (otherwise reads from env vars).
+    conversation_history : list of {"role", "content"} dicts, optional
+        Prior conversation turns to inject as real messages before the
+        current user message.  This is the primary multi-turn memory
+        mechanism — the LLM sees the prior exchange and knows it offered
+        a keystone deep dive, so a follow-up "yes" is handled correctly.
     """
     def _kwargs(**extra):
         kw: Dict[str, Any] = {
@@ -342,6 +365,7 @@ def synthesize(
             "voice": voice,
             "extra_instructions": extra_instructions,
             "api_key": api_key,
+            "conversation_history": conversation_history,
         }
         if model:
             kw["model"] = model

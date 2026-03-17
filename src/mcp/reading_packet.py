@@ -111,6 +111,54 @@ class PatternFact:
 
 
 @dataclass
+class SwitchPointFact:
+    """A switch point — the missing vertex of an incomplete resonant shape.
+
+    When occupied by transit, synastry, or a deliberate keystone,
+    the incomplete shape completes into a full resonant membrane.
+    """
+    source_shape: str              # e.g. "T-Square"
+    source_members: List[str]      # planets in the incomplete shape
+    completes_to: str              # e.g. "Grand Cross"
+    membrane_class: str            # "drum_head", "resonant_membrane", or ""
+    switch_sign: str               # e.g. "Scorpio"
+    switch_degree: int             # 1–30 (Sabian convention)
+    switch_dms: str                # formatted position string
+    activation_range: str          # e.g. "14°–16° Scorpio"
+    switch_house: int = 0          # which natal house the switch point falls in
+    sabian_symbol: str = ""        # Sabian symbol text
+    sabian_meaning: str = ""       # short meaning of the Sabian symbol
+    saturn_guidance: str = ""      # Saturn-informed keystone selection guidance
+    description: str = ""          # shape completion narrative
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {
+            "source_shape": self.source_shape,
+            "source_members": self.source_members,
+            "completes_to": self.completes_to,
+            "membrane_class": self.membrane_class,
+            "switch_point": {
+                "sign": self.switch_sign,
+                "degree": self.switch_degree,
+                "dms": self.switch_dms,
+                "range": self.activation_range,
+            },
+        }
+        if self.switch_house:
+            d["switch_point"]["house"] = self.switch_house
+        if self.sabian_symbol:
+            d["sabian"] = {
+                "symbol": self.sabian_symbol,
+                "meaning": self.sabian_meaning,
+            }
+        if self.saturn_guidance:
+            d["keystone_guidance"] = self.saturn_guidance
+        if self.description:
+            d["description"] = self.description
+        return d
+
+
+@dataclass
 class DispositorFact:
     """One row from the dispositor chain analysis."""
     object_name: str
@@ -206,6 +254,60 @@ class SabianFact:
 # Circuit-aware fact types (populated by circuit_query.py)
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── Qualitative tier helpers (internal scores → comparative language) ──
+
+def _qualify_resonance(v: float) -> str:
+    """Map a 0-1 resonance score to a qualitative tier label."""
+    if v >= 0.85:
+        return "deeply resonant"
+    if v >= 0.70:
+        return "strongly resonant"
+    if v >= 0.50:
+        return "moderately resonant"
+    if v >= 0.30:
+        return "mildly resonant"
+    return "weakly resonant"
+
+
+def _qualify_friction(v: float) -> str:
+    """Map a 0-1 friction score to a qualitative tier label."""
+    if v >= 0.80:
+        return "very high friction"
+    if v >= 0.60:
+        return "significant friction"
+    if v >= 0.40:
+        return "moderate friction"
+    if v >= 0.20:
+        return "mild friction"
+    return "low friction"
+
+
+def _qualify_conductance(v: float) -> str:
+    """Map a 0-1 conductance to a qualitative tier label."""
+    if v >= 0.90:
+        return "near-seamless"
+    if v >= 0.70:
+        return "strong"
+    if v >= 0.50:
+        return "moderate"
+    if v >= 0.30:
+        return "strained"
+    return "very weak"
+
+
+def _qualify_throughput(v: float) -> str:
+    """Map throughput to a qualitative label."""
+    if v >= 8.0:
+        return "very high"
+    if v >= 5.0:
+        return "high"
+    if v >= 3.0:
+        return "moderate"
+    if v >= 1.0:
+        return "low"
+    return "minimal"
+
+
 @dataclass
 class CircuitFlowFact:
     """One shape circuit's power-flow summary."""
@@ -218,20 +320,31 @@ class CircuitFlowFact:
     flow_characterization: str  # e.g. "Effortless resonance loop"
     dominant_node: str = ""
     bottleneck_node: str = ""
+    # Membrane classification — "drum_head", "resonant_membrane", or ""
+    membrane_class: str = ""
+    # Element/modality span of shape members (e.g. ["Fire", "Earth", "Air", "Water"])
+    element_span: List[str] = field(default_factory=list)
+    modality_span: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
             "shape": self.shape_type,
             "members": self.members,
-            "resonance": round(self.resonance, 2),
-            "friction": round(self.friction, 2),
-            "throughput": round(self.throughput, 2),
+            "resonance": _qualify_resonance(self.resonance),
+            "friction": _qualify_friction(self.friction),
+            "throughput": _qualify_throughput(self.throughput),
             "flow": self.flow_characterization,
         }
         if self.dominant_node:
             d["dominant"] = self.dominant_node
         if self.bottleneck_node:
             d["bottleneck"] = self.bottleneck_node
+        if self.membrane_class:
+            d["membrane_class"] = self.membrane_class
+        if self.element_span:
+            d["element_span"] = self.element_span
+        if self.modality_span:
+            d["modality_span"] = self.modality_span
         return d
 
 
@@ -296,7 +409,7 @@ class CircuitPathFact:
         if self.path_aspects:
             d["aspects"] = self.path_aspects
         if self.total_conductance:
-            d["conductance"] = round(self.total_conductance, 3)
+            d["conductance"] = _qualify_conductance(self.total_conductance)
         return d
 
 
@@ -331,6 +444,7 @@ class ReadingPacket:
     placements: List[PlacementFact] = field(default_factory=list)
     aspects: List[AspectFact] = field(default_factory=list)
     patterns: List[PatternFact] = field(default_factory=list)
+    switch_points: List[SwitchPointFact] = field(default_factory=list)
     dispositors: List[DispositorFact] = field(default_factory=list)
     dignities: List[DignityFact] = field(default_factory=list)
     houses: List[HouseOverview] = field(default_factory=list)
@@ -444,7 +558,20 @@ class ReadingPacket:
         if self.aspects:
             d["aspects"] = [a.to_dict() for a in self.aspects]
         if self.patterns:
-            d["patterns"] = [p.to_dict() for p in self.patterns]
+            # Deduplicate: skip patterns already covered by circuit_flows
+            # (circuit_flows is the richer version with resonance/friction data)
+            _cf_keys = {
+                (cf.shape_type, frozenset(cf.members))
+                for cf in self.circuit_flows
+            } if self.circuit_flows else set()
+            _deduped = [
+                p for p in self.patterns
+                if (p.pattern_type, frozenset(p.members)) not in _cf_keys
+            ]
+            if _deduped:
+                d["patterns"] = [p.to_dict() for p in _deduped]
+        if self.switch_points:
+            d["switch_points"] = [sp.to_dict() for sp in self.switch_points]
         if self.dispositors:
             d["dispositors"] = [ds.to_dict() for ds in self.dispositors]
         if self.dignities:
@@ -564,6 +691,8 @@ class ReadingPacket:
             parts.append(f"{len(self.aspects)} aspects")
         if self.patterns:
             parts.append(f"{len(self.patterns)} patterns")
+        if self.switch_points:
+            parts.append(f"{len(self.switch_points)} switch points")
         if self.dispositors:
             parts.append(f"{len(self.dispositors)} dispositors")
         if self.dignities:

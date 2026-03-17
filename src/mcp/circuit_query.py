@@ -295,67 +295,181 @@ def _generate_narrative_seeds(
     connecting_paths: List[CircuitPath],
     sn_nn_path: List[str],
     focus_names: Set[str],
+    chart: "AstrologicalChart | None" = None,
 ) -> List[str]:
     """
     Generate deterministic prose fragments from circuit data.
 
     These are NOT LLM output — they are template-rendered from numbers.
+    When *chart* is provided, membrane-class shapes (drum_head,
+    resonant_membrane) get additional structural-resonance seeds with
+    element-span tagging.
     """
     from lookup_v2 import ASPECT_CONDUCTANCE
+    from src.mcp.reading_packet import (
+        _qualify_resonance,
+        _qualify_friction,
+        _qualify_conductance,
+    )
 
     seeds: List[str] = []
 
-    # Shape flow descriptions
+    # ── Qualitative power-level helper (node-local) ──────────────
+    def _power_tier(idx: float) -> str:
+        if idx >= 7.0:
+            return "dominant force"
+        if idx >= 5.0:
+            return "strong presence"
+        if idx >= 3.0:
+            return "moderate presence"
+        if idx >= 1.5:
+            return "quiet contributor"
+        return "subtle background note"
+
+    # ── Element-span helper ──────────────────────────────────────
+    _EL_ORDER = ["Fire", "Earth", "Air", "Water"]
+    _MOD_ORDER = ["Cardinal", "Fixed", "Mutable"]
+
+    def _element_span_for(member_names: List[str]) -> Tuple[List[str], List[str]]:
+        """Return (element_span, modality_span) for a list of planet names."""
+        if chart is None:
+            return [], []
+        elements: set[str] = set()
+        modalities: set[str] = set()
+        for name in member_names:
+            cobj = chart.get_object(name) if hasattr(chart, "get_object") else None
+            if cobj and getattr(cobj, "sign", None):
+                el = getattr(cobj.sign, "element", None)
+                mod = getattr(cobj.sign, "modality", None)
+                if el:
+                    elements.add(getattr(el, "name", None) or str(el))
+                if mod:
+                    modalities.add(getattr(mod, "name", None) or str(mod))
+        return (
+            [e for e in _EL_ORDER if e in elements],
+            [m for m in _MOD_ORDER if m in modalities],
+        )
+
+    # Shape flow descriptions (qualitative — no raw %).
     for sc in relevant_shapes:
         seeds.append(
             f"The {sc.shape_type} ({', '.join(n.planet_name for n in sc.nodes)}) "
-            f"has a resonance score of {sc.resonance_score:.0%} and friction score of "
-            f"{sc.friction_score:.0%}. {sc.flow_characterization}"
+            f"is {_qualify_resonance(sc.resonance_score)} with "
+            f"{_qualify_friction(sc.friction_score)}. {sc.flow_characterization}"
         )
 
-    # Focus node power descriptions
+        # ── Membrane-class seeds ─────────────────────────────────
+        membrane_class = getattr(sc, "membrane_class", "") or ""
+        if membrane_class:
+            member_names = [n.planet_name for n in sc.nodes]
+            el_span, mod_span = _element_span_for(member_names)
+
+            if membrane_class == "drum_head":
+                # Element diversity note
+                if len(el_span) == 4:
+                    el_note = (
+                        "All four elements are represented — "
+                        f"{', '.join(el_span)} — giving this drum head its "
+                        "characteristic full-spectrum resonance."
+                    )
+                elif el_span:
+                    el_note = (
+                        f"This drum head spans {len(el_span)} element(s) "
+                        f"({', '.join(el_span)})."
+                    )
+                else:
+                    el_note = ""
+
+                # Spin note varies by shape
+                if sc.shape_type == "Grand Cross":
+                    spin_note = (
+                        "The squares provide propulsive friction that makes "
+                        "the structure spin like a pinwheel"
+                    )
+                elif sc.shape_type == "Merkabah":
+                    spin_note = (
+                        "Three intersecting oppositions provide maximum "
+                        "structural tension — the most complete drum head "
+                        "possible"
+                    )
+                else:
+                    spin_note = (
+                        "Intersecting oppositions create taut structural "
+                        "tension across the membrane"
+                    )
+
+                seeds.append(
+                    f"This {sc.shape_type} functions as a drum head — "
+                    f"intersecting oppositions create a taut resonant membrane "
+                    f"that spans {len(el_span)} element(s). {spin_note}. "
+                    f"The native may uniquely intuit patterns and resonances "
+                    f"at the degrees occupied by these planets."
+                )
+                if el_note:
+                    seeds.append(el_note)
+                if mod_span:
+                    seeds.append(
+                        f"Modality span: {', '.join(mod_span)}."
+                    )
+
+            elif membrane_class == "resonant_membrane":
+                seeds.append(
+                    f"This Mystic Rectangle functions as a resonant membrane — "
+                    f"the harmonious surface between trines and sextiles acts "
+                    f"as an antenna, picking up and amplifying resonant "
+                    f"frequencies. The structure is symmetrical about the "
+                    f"origin, creating a sixth-sense receiver that heightens "
+                    f"intuitive and sensory perception."
+                )
+                if el_span:
+                    seeds.append(
+                        f"The membrane spans {len(el_span)} element(s) "
+                        f"({', '.join(el_span)}), tuning the antenna to those "
+                        f"elemental frequencies."
+                    )
+
+    # Focus node power descriptions (qualitative tiers)
     for node in focus_nodes:
-        desc = f"{node.planet_name}: power index {node.power_index:.1f}"
-        if node.effective_power != node.power_index:
-            desc += f", effective power {node.effective_power:.1f}"
+        desc = f"{node.planet_name} functions as a {_power_tier(node.power_index)} in this chart"
         if node.friction_load > 0.01:
-            desc += f", carrying {node.friction_load:.1f} friction load"
+            desc += ", carrying noticeable friction"
         if node.received_power > 0.01:
-            desc += f", receiving {node.received_power:.1f} from connected nodes"
+            desc += ", amplified by energy received from connected nodes"
         seeds.append(desc)
 
-    # Edge-level descriptions for focus nodes
+    # Edge-level descriptions for focus nodes (qualitative)
     for sc in relevant_shapes:
         for edge in sc.edges:
             if edge.node_a in focus_names or edge.node_b in focus_names:
                 cond_entry = ASPECT_CONDUCTANCE.get(edge.aspect_type, {})
                 flow_type = cond_entry.get("flow_type", "connection")
+                cond_label = _qualify_conductance(edge.conductance)
                 desc = (
                     f"{edge.node_a} {edge.aspect_type} {edge.node_b}: "
-                    f"conductance {edge.conductance:.0%}, flow type '{flow_type}', "
-                    f"transmitting {edge.transmitted_power:.1f} power"
+                    f"{cond_label} {flow_type} connection"
                 )
                 if edge.friction_heat > 0.01:
-                    desc += f" with {edge.friction_heat:.1f} friction heat"
+                    desc += ", generating noticeable friction heat"
                 if edge.is_rerouted:
                     desc += f" (rerouted via {' → '.join(edge.reroute_path)})"
                 elif edge.is_open_arc:
                     desc += " (OPEN ARC — no alternative conductive path)"
                 seeds.append(desc)
 
-    # Connection path descriptions
+    # Connection path descriptions (qualitative)
     for path in connecting_paths:
+        cond_label = _qualify_conductance(path.total_conductance)
         if path.connection_quality == "direct_shape":
             seeds.append(
                 f"'{path.from_concept}' and '{path.to_concept}' share a direct circuit: "
                 f"{' → '.join(path.path_planets)} "
-                f"(conductance {path.total_conductance:.0%})"
+                f"({cond_label} connection)"
             )
         elif path.connection_quality == "bridged":
             seeds.append(
                 f"'{path.from_concept}' connects to '{path.to_concept}' via a bridge: "
                 f"{' → '.join(path.path_planets)} through {', '.join(path.path_aspects)} "
-                f"(bottleneck conductance {path.total_conductance:.0%})"
+                f"({cond_label} bottleneck)"
             )
     # SN→NN path relevance
     if sn_nn_path and focus_names:
@@ -389,6 +503,7 @@ def _query_single_focus(
     sn_nn_path = sim.sn_nn_path or []
     narrative_seeds = _generate_narrative_seeds(
         focus_nodes, relevant_shapes, [], sn_nn_path, planet_names,
+        chart=chart,
     )
 
     # Power summary
@@ -483,6 +598,7 @@ def _query_relationship(
     sn_nn_path = sim.sn_nn_path or []
     narrative_seeds = _generate_narrative_seeds(
         focus_nodes, relevant_shapes, connecting_paths, sn_nn_path, all_planet_names,
+        chart=chart,
     )
 
     power_summary = _build_power_summary(focus_nodes, relevant_shapes)
@@ -533,6 +649,7 @@ def _query_open_exploration(
     focus_names = {n.planet_name for n in focus_nodes}
     narrative_seeds = _generate_narrative_seeds(
         focus_nodes, top_shapes, [], sn_nn_path, focus_names,
+        chart=chart,
     )
 
     power_summary = _build_power_summary(all_nodes, all_shapes)

@@ -43,6 +43,7 @@ from src.mcp.reading_packet import (
     ReadingPacket,
     SabianFact,
     SectFact,
+    SwitchPointFact,
 )
 
 if TYPE_CHECKING:
@@ -302,6 +303,7 @@ def build_reading(
         sabians = _build_sabians(relevant_objects)
 
     sect_fact = _build_sect(chart)
+    switch_points = _build_switch_points(chart, house_system)
 
     # ── Optional NatalInterpreter text ────────────────────────────
     interp_text = ""
@@ -362,7 +364,7 @@ def build_reading(
     )
 
     # ── 7. Convert circuit reading to packet fact types ──────────────
-    circuit_flows = _circuit_reading_to_flows(circuit_reading)
+    circuit_flows = _circuit_reading_to_flows(circuit_reading, chart)
     # Use tier-labelled potency nodes for potency_ranking questions;
     # fall back to plain circuit-derived nodes otherwise.
     power_nodes = _potency_nodes if _potency_nodes is not None else _circuit_reading_to_power_nodes(circuit_reading)
@@ -398,6 +400,7 @@ def build_reading(
         placements=placements,
         aspects=aspects,
         patterns=patterns,
+        switch_points=switch_points,
         dispositors=dispositors,
         dignities=dignities,
         houses=houses,
@@ -608,6 +611,39 @@ def _build_aspects(
         if len(out) >= max_count:
             break
 
+    return out
+
+
+def _build_switch_points(
+    chart: "AstrologicalChart",
+    house_system: str,
+) -> List[SwitchPointFact]:
+    """Detect switch points (incomplete drum heads / membranes) and convert
+    them to SwitchPointFact instances for the ReadingPacket.
+    """
+    try:
+        from switch_points import find_switch_points
+    except ImportError:
+        return []
+
+    raw = find_switch_points(chart, house_system=house_system)
+    out: List[SwitchPointFact] = []
+    for sp in raw:
+        out.append(SwitchPointFact(
+            source_shape=sp.source_shape_type,
+            source_members=sp.source_members,
+            completes_to=sp.completes_to,
+            membrane_class=sp.membrane_class,
+            switch_sign=sp.sign,
+            switch_degree=sp.degree_in_sign,
+            switch_dms=sp.dms,
+            activation_range=sp.range_description,
+            switch_house=sp.switch_point_house,
+            sabian_symbol=sp.sabian_symbol,
+            sabian_meaning=sp.sabian_meaning,
+            saturn_guidance=sp.saturn_summary,
+            description=sp.description,
+        ))
     return out
 
 
@@ -850,20 +886,55 @@ def _run_interp(
 # Circuit Reading → Packet Fact converters
 # ═══════════════════════════════════════════════════════════════════════
 
-def _circuit_reading_to_flows(cr: CircuitReading) -> List[CircuitFlowFact]:
-    """Convert CircuitReading.relevant_shapes → list of CircuitFlowFact."""
+def _circuit_reading_to_flows(
+    cr: CircuitReading,
+    chart: "AstrologicalChart | None" = None,
+) -> List[CircuitFlowFact]:
+    """Convert CircuitReading.relevant_shapes → list of CircuitFlowFact.
+
+    When *chart* is provided, element and modality span are computed for
+    each shape from the chart's planet sign data.
+    """
     out: List[CircuitFlowFact] = []
     for sc in (cr.relevant_shapes or []):
+        members = [n.planet_name for n in sc.nodes]
+
+        # ── Compute element & modality span from chart data ──────
+        element_span: list[str] = []
+        modality_span: list[str] = []
+        if chart is not None:
+            elements_seen: set[str] = set()
+            modalities_seen: set[str] = set()
+            for name in members:
+                cobj = chart.get_object(name) if hasattr(chart, "get_object") else None
+                if cobj and getattr(cobj, "sign", None):
+                    el = getattr(cobj.sign, "element", None)
+                    mod = getattr(cobj.sign, "modality", None)
+                    if el:
+                        el_name = getattr(el, "name", None) or str(el)
+                        elements_seen.add(el_name)
+                    if mod:
+                        mod_name = getattr(mod, "name", None) or str(mod)
+                        modalities_seen.add(mod_name)
+            # Canonical ordering
+            _EL_ORDER = ["Fire", "Earth", "Air", "Water"]
+            _MOD_ORDER = ["Cardinal", "Fixed", "Mutable"]
+            element_span = [e for e in _EL_ORDER if e in elements_seen]
+            modality_span = [m for m in _MOD_ORDER if m in modalities_seen]
+
         out.append(CircuitFlowFact(
             shape_type=sc.shape_type,
             shape_id=sc.shape_id,
-            members=[n.planet_name for n in sc.nodes],
+            members=members,
             resonance=sc.resonance_score,
             friction=sc.friction_score,
             throughput=sc.total_throughput,
             flow_characterization=sc.flow_characterization,
             dominant_node=sc.dominant_node or "",
             bottleneck_node=sc.bottleneck_node or "",
+            membrane_class=getattr(sc, "membrane_class", "") or "",
+            element_span=element_span,
+            modality_span=modality_span,
         ))
     return out
 

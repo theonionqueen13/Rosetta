@@ -59,7 +59,54 @@ _VOICE_KEY      = "mcp_voice_mode"     # "Plain" | "Circuit"
 _DEV_TRACE_KEY  = "mcp_dev_trace"      # dict  — last-turn inner-monologue (dev only)
 _PERSONS_KEY    = "mcp_known_persons"  # List[dict] — accumulated PersonProfile dicts
 _LOCATIONS_KEY  = "mcp_known_locations" # List[dict] — accumulated Location dicts
-_PENDING_Q_KEY  = "mcp_pending_question"  # str — original question when clarification is pending
+_PENDING_Q_KEY       = "mcp_pending_question"   # str — original question when clarification is pending
+_STARTER_PROMPT_KEY = "mcp_starter_prompt"     # str — example prompt clicked by user before any history
+
+# ── Example starter prompts ─────────────────────────────────────────────────
+
+_EXAMPLE_PROMPTS: Dict[str, List[str]] = {
+    "natal": [
+        "What are the main power planets of my chart, and how do they drive my motivations?",
+        "Where do I have the most internal 'friction' in my personality, and how can I balance it?",
+        "How can I best structure my career to be sustainable and fulfilling in the long term?",
+    ],
+    "synastry": [
+        "When we are together, which parts of my personality get amplified the most?",
+        "Where do our communication styles naturally sync up, and where do we tend to short-circuit?",
+        "What is our biggest relationship challenge, and what lesson can it teach me?",
+    ],
+    "transit": [
+        "Which areas of my life are under the most 'cosmic pressure' right now, and what is it trying to change?",
+        "I feel a shift in my energy lately—is there a current planet 'poking' a sensitive spot in my chart?",
+        "Is this a better time for me to push forward on a project or to sit back and recalibrate my system?",
+    ],
+}
+
+
+def _render_example_prompts() -> None:
+    """Render clickable starter-question buttons when chat history is empty."""
+    synastry_on = st.session_state.get("synastry_mode", False)
+    transit_on  = st.session_state.get("transit_mode",  False)
+
+    if synastry_on:
+        mode_key = "synastry"
+    elif transit_on:
+        mode_key = "transit"
+    else:
+        mode_key = "natal"
+
+    prompts = _EXAMPLE_PROMPTS[mode_key]
+
+    st.markdown(
+        "<div style='color:#6b7280; font-size:0.8rem; margin-bottom:0.4rem;'>"
+        "Try asking…</div>",
+        unsafe_allow_html=True,
+    )
+    for i, q in enumerate(prompts):
+        if st.button(q, key=f"starter_prompt_{mode_key}_{i}", use_container_width=True):
+            st.session_state[_STARTER_PROMPT_KEY] = q
+            st.rerun()
+
 
 # ── CSS injection ─────────────────────────────────────────────────────────────
 
@@ -76,33 +123,240 @@ div[data-testid="stHorizontalBlock"]:has(div[data-testid="stChatInput"])
     border: 1px solid #1f2937;
 }
 
-/* Notes box in right column */
-.mcp-notes-box {
-    background: #0d1117;
-    color: #58a6ff;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 0.75em;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    padding: 8px 10px;
-    min-height: 180px;
-    max-height: 360px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    line-height: 1.5;
-}
-
-.mcp-notes-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 3px;
-}
 </style>
 """
+
+# ── Agent-notes tree helpers ─────────────────────────────────────────────────
+
+# Keys in comprehension_note that hold comma-separated lists (bracket-wrapped)
+_LIST_NOTE_KEYS = {"nodes", "shapes", "persons", "focus"}
+
+
+def _parse_note_line(line: str) -> "dict | str":
+    """Parse a pipe-delimited comprehension_note line into a dict.
+
+    Format: "Q: <text> -> <type> | key: value | ..."
+    List-valued keys (nodes/shapes/persons/focus) are returned as lists.
+    Returns the raw string on any parse failure.
+    """
+    line = line.strip()
+    if not line.startswith("Q:"):
+        return line
+    try:
+        segments = [s.strip() for s in line.split(" | ")]
+        result: dict = {}
+        # First segment: "Q: <text> -> <type>"
+        first = segments[0]  # e.g. "Q: will I get the job? -> predictive"
+        if " -> " in first:
+            q_part, type_part = first.split(" -> ", 1)
+            result["q"] = q_part[2:].strip()   # strip leading "Q: "
+            result["type"] = type_part.strip()
+        else:
+            result["q"] = first[2:].strip()
+        # Remaining segments: "key: value"
+        for seg in segments[1:]:
+            if ":" not in seg:
+                continue
+            k, v = seg.split(":", 1)
+            k = k.strip()
+            v = v.strip()
+            if k in _LIST_NOTE_KEYS:
+                # Strip surrounding brackets and split
+                v_clean = v.strip("[]")
+                items = [i.strip().strip("'\"") for i in v_clean.split(",") if i.strip()]
+                result[k] = items
+            else:
+                result[k] = v
+        return result
+    except Exception:
+        return line
+
+
+def _render_agent_notes_tree(notes_raw: str) -> None:
+    """Render agent notes as a collapsible <details>/<summary> tree."""
+    lines = [ln for ln in (notes_raw or "").splitlines() if ln.strip()]
+    entries = [_parse_note_line(ln) for ln in lines]
+
+    # ── HTML + inline CSS ────────────────────────────────────────────────
+    style = """
+    <style>
+      .an-root {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 0.73em;
+        color: #c9d1d9;
+        line-height: 1.55;
+      }
+      .an-title {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        margin: 0 0 5px 0;
+      }
+      details.turn > summary {
+        cursor: pointer;
+        color: #58a6ff;
+        font-weight: 600;
+        padding: 2px 0;
+        list-style: disclosure-closed;
+        outline: none;
+        user-select: none;
+      }
+      details.turn[open] > summary {
+        list-style: disclosure-open;
+        border-bottom: 1px solid #21262d;
+        margin-bottom: 3px;
+        padding-bottom: 3px;
+      }
+      details.turn {
+        border-left: 2px solid #30363d;
+        padding-left: 6px;
+        margin-bottom: 4px;
+      }
+      .turn-body {
+        padding: 2px 0 2px 8px;
+      }
+      .kv {
+        display: flex;
+        gap: 6px;
+        padding: 1px 0;
+      }
+      .kv .k {
+        color: #7ee787;   /* green — key */
+        min-width: 62px;
+        flex-shrink: 0;
+      }
+      .kv .v {
+        color: #e6edf3;
+        word-break: break-word;
+      }
+      details.sub > summary {
+        cursor: pointer;
+        color: #d2a8ff;   /* purple — list keys */
+        list-style: disclosure-closed;
+        outline: none;
+        user-select: none;
+        padding: 1px 0;
+      }
+      details.sub[open] > summary { list-style: disclosure-open; }
+      details.sub {
+        margin-left: 0;
+        padding-left: 4px;
+        border-left: 1px dotted #30363d;
+      }
+      .list-item {
+        color: #ffa657;   /* orange — list values */
+        padding: 0px 0 0 10px;
+      }
+      .list-item::before { content: "• "; color: #30363d; }
+      .freeform {
+        color: #8b949e;
+        padding: 2px 0;
+        font-style: italic;
+      }
+      .empty { color: #4b5563; font-style: italic; }
+    </style>
+    """
+
+    def _esc(s: str) -> str:
+        return _html.escape(str(s))
+
+    # Scalar fields to show (in order), with display labels
+    SCALAR_FIELDS = [
+        ("type",      "type"),
+        ("intent",    "intent"),
+        ("source",    "source"),
+        ("conf",      "conf"),
+        ("temporal",  "temporal"),
+        ("subject",   "subject"),
+        ("aim",       "aim"),
+        ("tone",      "tone"),
+        ("understood", "understood"),
+    ]
+    LIST_FIELDS = [
+        ("nodes",   "nodes"),
+        ("shapes",  "shapes"),
+        ("focus",   "focus"),
+        ("persons", "persons"),
+    ]
+
+    body_parts: list[str] = []
+
+    if not entries:
+        body_parts.append('<div class="empty">(no notes yet)</div>')
+    else:
+        turn_n = 0
+        for entry in entries:
+            if isinstance(entry, str):
+                # Free-form / memory-stub line
+                body_parts.append(f'<div class="freeform">{_esc(entry)}</div>')
+                continue
+
+            turn_n += 1
+            q_text = entry.get("q", "")
+            q_type = entry.get("type", "")
+            # Truncate Q to ~50 chars for summary
+            q_excerpt = (q_text[:48] + "…") if len(q_text) > 50 else q_text
+            summary_badge = f" <span style='color:#6b7280;font-weight:400'>({_esc(q_type)})</span>" if q_type else ""
+
+            rows: list[str] = []
+
+            # Full question as first row
+            if q_text:
+                rows.append(
+                    f'<div class="kv">'
+                    f'<span class="k">Q</span>'
+                    f'<span class="v">{_esc(q_text)}</span>'
+                    f'</div>'
+                )
+
+            # Scalar fields
+            for field_key, label in SCALAR_FIELDS:
+                val = entry.get(field_key)
+                if val and str(val) not in ("-", "none", "None", ""):
+                    rows.append(
+                        f'<div class="kv">'
+                        f'<span class="k">{_esc(label)}</span>'
+                        f'<span class="v">{_esc(val)}</span>'
+                        f'</div>'
+                    )
+
+            # List fields — nested <details>
+            for field_key, label in LIST_FIELDS:
+                items = entry.get(field_key)
+                if items and isinstance(items, list) and items:
+                    items_html = "".join(
+                        f'<div class="list-item">{_esc(it)}</div>' for it in items
+                    )
+                    rows.append(
+                        f'<details class="sub">'
+                        f'<summary>{_esc(label)} ({len(items)})</summary>'
+                        f'{items_html}'
+                        f'</details>'
+                    )
+
+            inner = "".join(rows)
+            body_parts.append(
+                f'<details class="turn">'
+                f'<summary>Turn {turn_n} &nbsp;·&nbsp; {_esc(q_excerpt)}{summary_badge}</summary>'
+                f'<div class="turn-body">{inner}</div>'
+                f'</details>'
+            )
+
+    html_content = (
+        style
+        + '<div class="an-root">'
+        + '<p class="an-title">Agent Notes</p>'
+        + "".join(body_parts)
+        + "</div>"
+    )
+    components.html(html_content, height=360, scrolling=True)
+
 
 # ── Key resolution ────────────────────────────────────────────────────────────
 
@@ -146,13 +400,7 @@ def render_chat_widget() -> None:
     # RIGHT COLUMN — agent notes + controls
     # ════════════════════════════════════════════════════════════════════════
     with col_right:
-        st.markdown('<div class="mcp-notes-label">Agent notes</div>',
-                    unsafe_allow_html=True)
-        notes_raw = st.session_state.get(_NOTES_KEY, "") or "(no notes yet)"
-        st.markdown(
-            f'<div class="mcp-notes-box">{_html.escape(notes_raw)}</div>',
-            unsafe_allow_html=True,
-        )
+        _render_agent_notes_tree(st.session_state.get(_NOTES_KEY, "") or "")
 
         # Memory controls (stubbed for future wiring)
         b1, b2 = st.columns([1, 1])
@@ -248,6 +496,10 @@ def render_chat_widget() -> None:
                     _render_caption(msg["meta"])
                     _render_read_aloud_button(msg["content"], key=f"msg_{msg_idx}")
 
+        # Show example starter prompts when there is no history yet
+        if not history:
+            _render_example_prompts()
+
         # Chat input (must be inside the column to make :has() CSS work)
         prompt = st.chat_input("Ask your chart anything…", key="mcp_chat_input")
 
@@ -256,6 +508,10 @@ def render_chat_widget() -> None:
 
     # ── Handle new prompt ─────────────────────────────────────────────────
     # Done outside the column context so st.rerun() works without nesting
+    # Pick up either a directly typed prompt or one chosen from starters.
+    _starter = st.session_state.pop(_STARTER_PROMPT_KEY, None)
+    if not prompt and _starter:
+        prompt = _starter
     if prompt:
         history.append({"role": "user", "content": prompt, "meta": {}})
 
