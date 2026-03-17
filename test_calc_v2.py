@@ -1,4 +1,6 @@
 import os, sys
+import json
+import streamlit.components.v1 as components
 import swisseph as swe
 EPHE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "ephe"))
 EPHE_PATH = EPHE_PATH.replace("\\", "/")
@@ -22,7 +24,14 @@ from donate_v2 import donate_chart
 from now_v2 import render_now_widget
 from event_lookup_v2 import update_events_html_state
 from datetime import datetime
-from profiles_v2 import format_object_profile_html, ordered_objects
+from profiles_v2 import (
+    format_object_profile_html,
+    ordered_objects,
+)
+from planet_profiles import (
+    format_planet_profile_html,
+    format_full_planet_profile_html,
+)
 import os, streamlit as st
 import matplotlib.pyplot as plt
 from interp_base_natal import NatalInterpreter
@@ -98,6 +107,8 @@ resolved_dark_mode = set_background_for_theme(
 
 st.session_state["dark_mode"] = resolved_dark_mode
 
+# (scroll handler is now done via components.html at the scroll target site)
+
 # --- Sidebar profile styling (single-space lines + thin separators) ---
 st.sidebar.markdown("""
 <style>
@@ -110,6 +121,14 @@ st.sidebar.markdown("""
   margin-bottom: 10px;
 }
 .profile-card:last-child { border-bottom: none; }
+
+/* Distinct separator between full profile blocks */
+.planet-profile-card {
+  border-bottom: 2px solid rgba(255,255,255,0.35);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+.planet-profile-card:last-child { border-bottom: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -739,14 +758,44 @@ if chart_cached is not None:
 				rows.append(row)
 			for a, b, meta in edges_minor:
 				row = {"Kind": "Minor", "A": a, "B": b, **meta}
-				rows.append(row)
-			st.dataframe(rows, use_container_width=True)
+				st.dataframe(rows, use_container_width=True)
 		else:
 			st.caption("No aspect data available.")
-		
+
 # --- Left sidebar: Planet Profiles ---
 with st.sidebar:
 	st.subheader("🪐 Planet Profiles in View")
+
+	# Choose rendering mode for the profile cards
+	interactive_chart = st.session_state.get("interactive_chart", False)
+	prev_interactive = st.session_state.get("_prev_interactive_chart", False)
+
+	# When entering interactive chart mode, remember user's last selection so we can restore it later.
+	if interactive_chart and not prev_interactive:
+		st.session_state["_profile_mode_before_interactive"] = st.session_state.get("profile_view_mode", "Stats")
+
+	# When exiting interactive chart mode, restore the user's last selection.
+	if not interactive_chart and prev_interactive:
+		st.session_state["profile_view_mode"] = st.session_state.get("_profile_mode_before_interactive", "Stats")
+
+	# Track the latest interactive mode value for the next run.
+	st.session_state["_prev_interactive_chart"] = interactive_chart
+
+	# Create the radio widget (let it manage its own state via the key)
+	profile_mode = st.radio(
+		"Profile view",
+		["Stats", "Profile", "Full"],
+		index=["Stats", "Profile", "Full"].index(
+			st.session_state.get("profile_view_mode", "Stats")
+		),
+		key="profile_view_mode",
+		horizontal=True,
+		disabled=interactive_chart,
+	)
+
+	# When in interactive chart mode, override to use "Full" profile regardless of widget selection
+	if interactive_chart:
+		profile_mode = "Full"
 
 	# 1) Inject tight CSS once
 	st.markdown("""
@@ -772,6 +821,26 @@ with st.sidebar:
 
 	# 2) Render all profiles inside one wrapper so the CSS applies uniformly
 	if chart_cached is not None:
+		# Track which planet was just clicked for scrolling
+		if st.session_state.get("interactive_chart", False):
+			chart_click_event = st.session_state.get("chart_click_event")
+			print(f"[DEBUG] chart_click_event: {chart_click_event}")
+			print(f"[DEBUG] Type check: {type(chart_click_event)}")
+			if chart_click_event:
+				print(f"[DEBUG] Event keys: {chart_click_event.keys() if hasattr(chart_click_event, 'keys') else 'N/A'}")
+				if chart_click_event.get("type") == "click" and chart_click_event.get("element_type") == "object":
+					# Mark this planet for scrolling
+					target_planet = chart_click_event.get("element")
+					if target_planet:
+						st.session_state["_scroll_to_planet"] = target_planet
+						print(f"[DEBUG] ✓ Marked planet for scroll: {target_planet}")
+				else:
+					print(f"[DEBUG] Event type mismatch - type: {chart_click_event.get('type')}, element_type: {chart_click_event.get('element_type')}")
+			else:
+				print(f"[DEBUG] No chart_click_event")
+		else:
+			print(f"[DEBUG] Not in interactive chart mode")
+		
 		# Get visible_objects from render_result, with fallback to session state
 		rr = st.session_state.get("render_result")
 		visible_objects = (rr.visible_objects if rr and hasattr(rr, "visible_objects") else None) or st.session_state.get("visible_objects", [])
@@ -786,19 +855,95 @@ with st.sidebar:
 			edges_major=edges_major,
 		)
 		print("[DEBUG] Sidebar ordered_rows objects:", [obj.object_name.name for obj in ordered_rows if obj.object_name])
+		print(f"[DEBUG] profile_mode: {profile_mode}")
 		if ordered_rows:
-			blocks = [
-				format_object_profile_html(
+			if profile_mode == "Stats":
+				formatter = lambda r: format_object_profile_html(
 					r,
 					house_label=_selected_house_system(),
 					include_house_data=not unknown_time_chart,
 				)
-				for r in ordered_rows
-			]
-			st.markdown(
-				"<div class='pf-root'>" + "\n".join(blocks) + "</div>",
-				unsafe_allow_html=True,
-			)
+			elif profile_mode == "Profile":
+				formatter = lambda r: format_planet_profile_html(
+					r,
+					chart_cached,
+					ordered_rows,
+					house_system=_selected_house_system(),
+				)
+			else:  # Full
+				formatter = lambda r: format_full_planet_profile_html(
+					r,
+					chart_cached,
+					ordered_rows,
+					house_system=_selected_house_system(),
+					include_house_data=not unknown_time_chart,
+				)
+
+			try:
+				blocks = []
+				planet_ids = []
+				for i, r in enumerate(ordered_rows):
+					try:
+						block = formatter(r)
+						# Extract planet name and create a safe ID
+						planet_name = r.object_name.name if hasattr(r, 'object_name') and r.object_name else "unknown"
+						planet_id = f"rosetta-planet-{planet_name.replace(' ', '-').lower()}"
+						planet_ids.append(planet_id)
+						
+						# Wrap block with ID div
+						wrapped_block = f"<div id='{planet_id}' class='planet-profile-card'>{block}</div>"
+						blocks.append(wrapped_block)
+					except Exception as e:
+						st.error(f"Error formatting {r.object_name.name if hasattr(r, 'object_name') else 'unknown'}: {e}")
+						import traceback
+						traceback.print_exc()
+				
+				html_content = "<div class='pf-root'>" + "\n".join(blocks) + "</div>"
+				print(f"[DEBUG] HTML content length: {len(html_content)}, blocks count: {len(blocks)}")
+				st.markdown(html_content, unsafe_allow_html=True)
+				
+				# Check if we need to scroll to a specific planet
+				target_planet = st.session_state.get("_scroll_to_planet")
+				if target_planet and st.session_state.get("interactive_chart", False):
+					planet_id = f"rosetta-planet-{target_planet.replace(' ', '-').lower()}"
+					print(f"[DEBUG] Scrolling to: {planet_id}")
+					
+					# components.html() creates a real iframe where JS actually executes.
+					# From inside the iframe, window.parent.document accesses the main page DOM.
+					components.html(f"""
+					<script>
+					(function() {{
+						const el = window.parent.document.getElementById('{planet_id}');
+						if (!el) return;
+						
+						// Find the best scrollable ancestor
+						let best = null, bestRange = 0, p = el.parentElement;
+						while (p) {{
+							const r = p.scrollHeight - p.clientHeight;
+							if (r > bestRange) {{ bestRange = r; best = p; }}
+							p = p.parentElement;
+						}}
+						
+						if (best && bestRange > 0) {{
+							// Scroll so the element top aligns with the top of the scrollable area
+							const elRect = el.getBoundingClientRect();
+							const containerRect = best.getBoundingClientRect();
+							best.scrollTop += elRect.top - containerRect.top;
+						}}
+						
+						el.style.transition = 'background-color 0.4s ease';
+						el.style.backgroundColor = 'rgba(100, 200, 255, 0.35)';
+						setTimeout(() => {{ el.style.backgroundColor = ''; }}, 1500);
+					}})();
+					</script>
+					""", height=0)
+					
+					# Clear the flag so we don't scroll again on next render
+					st.session_state["_scroll_to_planet"] = None
+			except Exception as e:
+				st.error(f"Error rendering profiles: {e}")
+				import traceback
+				traceback.print_exc()
 		else:
 			st.caption("No objects currently visible with the selected toggles.")
 	else:

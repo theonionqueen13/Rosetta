@@ -61,15 +61,44 @@ const RosettaTooltip = (() => {
     // -----------------------------------------------------------------------
     function _objectTooltip(obj) {
         if (!obj) return "";
+
+        // When available, use the pre-rendered PlanetStats HTML from Python.
+        // This provides a consistent profile presentation with the sidebar.
+        if (obj.planet_stats_html) {
+            return obj.planet_stats_html;
+        }
+
         const ps = obj.planetary_state || {};
         const cn = obj.circuit_node || {};
         const ed = ps.essential_dignity || {};
 
-        let html = `<div class="tt-header">${obj.glyph} <strong>${obj.name}</strong></div>`;
+        // Header with retrograde indicator if applicable
+        let retrogradeIndicator = obj.retrograde ? " (Rx)" : "";
+        let html = `<div class="tt-header">${obj.glyph} <strong>${obj.name}</strong>${retrogradeIndicator}</div>`;
+
+        // Add meaning right below header
+        if (obj.meaning_short) {
+            html += `<div class="tt-meaning">${obj.meaning_short}</div>`;
+        }
+
         html += `<div class="tt-row">${obj.sign || "?"} · House ${obj.house || "?"} · ${obj.degree_in_sign}°${obj.minute_in_sign ? obj.minute_in_sign + "'" : ""}</div>`;
 
-        if (obj.retrograde) html += `<div class="tt-row tt-warn">☿ Retrograde</div>`;
+        // Sabian Symbol (replacing the retrograde line)
+        if (obj.sabian_symbol) {
+            html += `<div class="tt-row">Sabian Symbol: ${obj.sabian_symbol}</div>`;
+        }
+
         if (obj.station) html += `<div class="tt-row tt-warn">${obj.station}</div>`;
+
+        // Out of bounds status
+        if (obj.oob_status && obj.oob_status !== "No") {
+            html += `<div class="tt-row tt-warn">Out of Bounds (${obj.oob_status})</div>`;
+        }
+
+        // Fixed Star Conjunctions
+        if (obj.fixed_star_conjunctions && obj.fixed_star_conjunctions.length) {
+            html += `<div class="tt-row">Fixed Star Conjunctions: ${obj.fixed_star_conjunctions.join(", ")}</div>`;
+        }
 
         // Dignity
         html += `<div class="tt-section">Essential Dignity</div>`;
@@ -109,14 +138,15 @@ const RosettaTooltip = (() => {
             if (roles.length) html += `<div class="tt-row">Role: ${roles.join(", ")}</div>`;
         }
 
-        // Meaning
-        if (obj.meaning_short) {
-            html += `<div class="tt-section">Meaning</div>`;
-            html += `<div class="tt-meaning">${obj.meaning_short}</div>`;
-        }
-
-        if (obj.keywords && obj.keywords.length) {
-            html += `<div class="tt-keywords">${obj.keywords.slice(0, 8).join(" · ")}</div>`;
+        // Speed and Position (replaces Meaning section)
+        if (obj.speed !== undefined || obj.latitude !== undefined || obj.declination !== undefined || obj.distance !== undefined) {
+            html += `<div class="tt-section">Speed and Position</div>`;
+            html += `<div class="tt-badges">`;
+            if (obj.speed !== undefined) html += _badge("Speed", _fmt(obj.speed));
+            if (obj.latitude !== undefined) html += _badge("Latitude", _fmt(obj.latitude));
+            if (obj.declination !== undefined) html += _badge("Declination", _fmt(obj.declination));
+            if (obj.distance !== undefined) html += _badge("Distance", _fmt(obj.distance));
+            html += `</div>`;
         }
 
         return html;

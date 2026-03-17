@@ -1093,6 +1093,30 @@ class PlanetProfileReader:
             lines.append(p.ruled_by_house_str)
         return lines
 
+    def format_html(self, mode: str = "default") -> str:
+        """Format the profile as HTML.
+        
+        Parameters
+        ----------
+        mode : str
+            "default" — concise block format.
+            "focus"   — detailed multi-block format.
+        
+        Returns
+        -------
+        str
+            HTML string with proper div structure and line breaks.
+        """
+        # Get the text representation
+        text = self.format_text(mode=mode)
+        
+        # Escape HTML and convert newlines to <br> tags
+        escaped = _html.escape(text)
+        html_content = escaped.replace("\n", "<br>")
+        
+        # Wrap in a styled block with divider
+        return f"<div class='pf-block'>\n{html_content}\n<hr class='pf-divider'/>\n</div>"
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # AspectProfile + AspectProfileReader
@@ -1235,6 +1259,65 @@ class AspectProfileReader:
         return "\n".join(parts)
 
 
+def format_planet_profile_html(
+    chart_obj: Any,
+    chart: Any,
+    chart_objects: list[Any],
+    *,
+    house_system: str = "Placidus",
+) -> str:
+    """Render the interpretive PlanetProfile as HTML.
+
+    This function is intended for UI renderers that want the narrative profile
+    output (sign/house combo interpretation) as HTML blocks.
+    """
+    profile = PlanetProfile.from_chart_object(
+        chart_obj,
+        house_system=house_system,
+        lookup=None,
+        chart_objects=chart_objects,
+        chart=chart,
+    )
+    return PlanetProfileReader(profile).format_html(mode="default")
+
+
+def format_full_planet_profile_html(
+    chart_obj: Any,
+    chart: Any,
+    chart_objects: list[Any],
+    *,
+    house_system: str = "Placidus",
+    include_house_data: bool = True,
+) -> str:
+    """Render a combined PlanetStats + PlanetProfile HTML block.
+
+    This is intended to be the most comprehensive sidebar profile, merging:
+    1) raw positional / status data (from PlanetStats)
+    2) interpretive narrative (from PlanetProfile)
+
+    The output is suitable for the sidebar and maintains the same styling as
+    the existing `pf-block` HTML.
+    """
+    stats = PlanetStats.from_chart_object(chart_obj, house_system=house_system)
+    stats_html = PlanetStatsReader(stats).format_html(include_house_data=include_house_data)
+
+    profile_html = format_planet_profile_html(
+        chart_obj,
+        chart,
+        chart_objects,
+        house_system=house_system,
+    )
+
+    retro_addendum = ""
+    if stats.retrograde:
+        retro_addendum = (
+            f"<div>⚶ {_html.escape(stats.object_name)} Retrograde "
+            f"(To be added - just wire in a placeholder for now)</div>"
+        )
+
+    return "\n".join([stats_html, profile_html, retro_addendum])
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════════════════
@@ -1248,6 +1331,9 @@ __all__ = [
     "PlanetStatsReader",
     "PlanetProfileReader",
     "AspectProfileReader",
+    # Combined renderers
+    "format_planet_profile_html",
+    "format_full_planet_profile_html",
     # Shared helpers exposed for use in profiles_v2 / interp_base_natal
     "_format_axis_for_display",
     "_format_house_label",

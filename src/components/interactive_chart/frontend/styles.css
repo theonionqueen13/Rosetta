@@ -208,6 +208,30 @@ body {
     margin-top: 4px;
 }
 
+/* --- Minimal styles for PlanetStats HTML (used in tooltips) --- */
+.pf-block {
+    line-height: 1.2;
+    font-size: 12px;
+}
+
+.pf-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.pf-meaning {
+    font-style: italic;
+    margin: 3px 0;
+    font-size: 11px;
+    color: rgba(240, 240, 255, 0.85);
+}
+
+.pf-divider {
+    border: 0;
+    border-top: 1px solid rgba(140, 140, 180, 0.5);
+    margin: 6px 0;
+}
+
 /* --- Dark mode body --- */
 body.dark-mode {
     background: #0E1117;
