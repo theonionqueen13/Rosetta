@@ -7,7 +7,7 @@ from typing import Callable, Dict, Any, Optional, List
 def ensure_profile_session_defaults(month_names: List[str]) -> None:
     """Create the session keys this panel expects before any widgets render."""
     st.session_state.setdefault("current_profile", None)
-    st.session_state.setdefault("active_profile_tab", "Load Profile")
+    st.session_state.setdefault("active_profile_tab", "Load Chart")
     st.session_state.setdefault("profile_loaded", False)
     st.session_state.setdefault("saved_circuit_names", {})
     # basic birth defaults (don’t assume user has set them yet)
@@ -33,6 +33,9 @@ def ensure_profile_session_defaults(month_names: List[str]) -> None:
     st.session_state.setdefault("show_now_city_field", False)
     st.session_state.setdefault("now_city_temp", "")
     st.session_state.setdefault("__clear_now_city_temp__", False)
+    # synastry controls inside profile manager
+    st.session_state.setdefault("synastry_mode", False)
+    st.session_state.setdefault("pm_synastry_slot", "Outer Chart")
 
 def render_profile_manager(
     *,
@@ -98,13 +101,13 @@ def render_profile_manager(
     # =====================
     # 👤 Profile Manager UI
     # =====================
-    tab_labels = ["Add Profile", "Load Profile", "Delete Profile"]
-    default_tab = st.session_state.get("active_profile_tab", "Load Profile")
+    tab_labels = ["Add Chart", "Load Chart", "Delete Chart"]
+    default_tab = st.session_state.get("active_profile_tab", "Load Chart")
     if default_tab not in tab_labels:
         default_tab = tab_labels[0]
 
     active_tab = st.radio(
-        "👤 Chart Profile Manager",
+        "👤 Chart Manager",
         tab_labels,
         index=tab_labels.index(default_tab),
         horizontal=True,
@@ -120,13 +123,13 @@ def render_profile_manager(
     if st.session_state.get("profile_loaded") and st.session_state.get("current_profile"):
         _profile_name = st.session_state["current_profile"]
         if st.session_state.get("last_chart"):
-            st.success(f"✅ Profile '{_profile_name}' loaded! Chart is ready.")
+            st.success(f"✅ Chart '{_profile_name}' loaded! Chart is ready.")
         else:
-            st.info(f"📋 Profile '{_profile_name}' loaded. (Recalculation may be needed if birth data changed.)")
+            st.info(f"📋 Chart '{_profile_name}' loaded. (Recalculation may be needed if birth data changed.)")
         st.session_state["profile_loaded"] = False  # Show message only once
 
     # --- Add ---
-    if active_tab == "Add Profile":
+    if active_tab == "Add Chart":
         # Show the current chart's birth data (read-only) so the user knows what they're saving
         _current_chart = st.session_state.get("last_chart")
         if _current_chart is None:
@@ -137,11 +140,11 @@ def render_profile_manager(
                 f"**📅** {_date_line}  \n**🕐** {_time_line}  \n**📍** {_chart_city or '—'}"
             )
             st.divider()
-            profile_name = st.text_input("Profile Name (unique)", value="", key="profile_name_input")
+            profile_name = st.text_input("Chart Name (unique)", value="", key="profile_name_input")
 
-            if st.button("💾 Save / Update Profile"):
+            if st.button("💾 Save / Update Chart"):
                 if profile_name.strip() == "":
-                    st.error("Please enter a name for the profile.")
+                    st.error("Please enter a name for the chart.")
                 else:
                     # keep or initialize circuit names
                     _patterns = _current_chart.aspect_groups or []
@@ -228,13 +231,13 @@ def render_profile_manager(
                         import traceback
                         print(f"[ProfileManager] Save FAILED: {e}")
                         traceback.print_exc()
-                        st.error(f"Could not save profile: {e}")
+                        st.error(f"Could not save chart: {e}")
                     else:
-                        st.success(f"Profile '{profile_name}' saved!")
+                        st.success(f"Chart '{profile_name}' saved!")
                         st.rerun()
 
     # --- Load ---
-    elif active_tab == "Load Profile":
+    elif active_tab == "Load Chart":
         # Initialize group management functions with defaults if not provided
         if save_user_profile_group_db is None:
             from supabase_profiles import (
@@ -248,33 +251,50 @@ def render_profile_manager(
             load_user_profiles_by_group_db = _load_by_group
             delete_user_profile_group_db = _delete_group
         
-        # --- New Group Button ---
-        col1, col2 = st.columns([1, 4])
-        with col1:
+        # --- New Group Button + Synastry Mode (visible once a chart is loaded) ---
+        _has_loaded_chart = st.session_state.get("last_chart") is not None
+        _btn_col, _syn_col = st.columns([1, 4])
+        with _btn_col:
             if st.button("➕ New Group", key="new_group_btn"):
                 st.session_state["_show_new_group_dialog"] = True
-        
-        # Create new group dialog
+        with _syn_col:
+            if _has_loaded_chart:
+                def _on_synastry_toggle_pm():
+                    # When turning synastry OFF, clear Chart 2 so it doesn't linger
+                    if not st.session_state.get("synastry_mode", False):
+                        st.session_state.pop("last_chart_2", None)
+                        st.session_state.pop("chart_2_source", None)
+
+                st.checkbox("👭 Synastry", key="synastry_mode", on_change=_on_synastry_toggle_pm)
+                if st.session_state.get("synastry_mode"):
+                    st.radio(
+                        "Assign next profile to:",
+                        ["Inner Chart", "Outer Chart"],
+                        index=1,
+                        key="pm_synastry_slot",
+                        horizontal=True,
+                    )
+
+        # New group dialog (shown below the button row)
         if st.session_state.get("_show_new_group_dialog"):
-            with col2:
-                group_name = st.text_input("Group Name", key="new_group_input", placeholder="e.g., Family, Friends, etc.")
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Create", key="create_group_btn"):
-                        if group_name and group_name.strip():
-                            try:
-                                save_user_profile_group_db(current_user_id, group_name.strip())
-                                st.success(f"Group '{group_name}' created!")
-                                st.session_state["_show_new_group_dialog"] = False
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Could not create group: {e}")
-                        else:
-                            st.error("Group name cannot be empty.")
-                with c2:
-                    if st.button("Cancel", key="cancel_group_btn"):
-                        st.session_state["_show_new_group_dialog"] = False
-                        st.rerun()
+            group_name = st.text_input("Group Name", key="new_group_input", placeholder="e.g., Family, Friends, etc.")
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Create", key="create_group_btn"):
+                    if group_name and group_name.strip():
+                        try:
+                            save_user_profile_group_db(current_user_id, group_name.strip())
+                            st.success(f"Group '{group_name}' created!")
+                            st.session_state["_show_new_group_dialog"] = False
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Could not create group: {e}")
+                    else:
+                        st.error("Group name cannot be empty.")
+            with c2:
+                if st.button("Cancel", key="cancel_group_btn"):
+                    st.session_state["_show_new_group_dialog"] = False
+                    st.rerun()
         
         st.divider()
         
@@ -285,7 +305,7 @@ def render_profile_manager(
             # If the groups table doesn't exist yet (first time), show setup instruction
             if "groups" in str(e).lower() or "relation" in str(e).lower():
                 st.info(
-                    "📋 Profile groups not yet set up. Run this SQL in your Supabase dashboard to enable groups:\n\n"
+                    "📋 Chart groups not yet set up. Run this SQL in your Supabase dashboard to enable groups:\n\n"
                     "```sql\n"
                     "create table if not exists public.user_profile_groups (\n"
                     "    id       uuid primary key default gen_random_uuid(),\n"
@@ -302,7 +322,7 @@ def render_profile_manager(
                     "For now, your profiles are displayed without groups. After running the SQL, refresh the page."
                 )
                 # Fallback: show profiles flat without groups
-                profiles_by_group = {"__ungrouped__": {"group_name": "All Profiles", "profiles": _get_saved_profiles()}}
+                profiles_by_group = {"__ungrouped__": {"group_name": "All Charts", "profiles": _get_saved_profiles()}}
             else:
                 raise
         
@@ -349,13 +369,21 @@ def render_profile_manager(
                             with col1:
                                 label = _format_profile_label(name, data)
                                 if st.button(label, key=f"load_{group_id}_{name}", use_container_width=True):
-                                    # Defer the profile load to happen BEFORE widgets are created
-                                    # (similar to __pending_calculate__ pattern)
-                                    st.session_state["__pending_profile_load__"] = {
-                                        "profile_name": name,
-                                        "profile_data": data,
-                                        "group_id": group_id,
-                                    }
+                                    _syn_on = st.session_state.get("synastry_mode", False)
+                                    _syn_slot = st.session_state.get("pm_synastry_slot", "Outer Chart")
+                                    if _syn_on and _syn_slot == "Outer Chart":
+                                        # Load this profile as Chart 2 (outer / synastry chart)
+                                        st.session_state["__pending_profile_load_2__"] = {
+                                            "profile_name": name,
+                                            "profile_data": data,
+                                        }
+                                    else:
+                                        # Load as primary (inner) chart
+                                        st.session_state["__pending_profile_load__"] = {
+                                            "profile_name": name,
+                                            "profile_data": data,
+                                            "group_id": group_id,
+                                        }
                                     st.rerun()
                             
                             # Group management popover
@@ -404,13 +432,13 @@ def render_profile_manager(
                                     except Exception as e:
                                         st.error(f"Could not load groups: {e}")
                     else:
-                        st.caption("📭 This group is empty. Add profiles by saving them in the 'Add Profile' tab.")
+                        st.caption("📭 This group is empty. Add charts by saving them in the 'Add Chart' tab.")
 
             # quick-save circuit names into current profile
             _last_chart = st.session_state.get("last_chart")
             _patterns = _last_chart.aspect_groups if _last_chart else []
             if st.session_state.get("current_profile") and _patterns:
-                if st.button("💾 Save Circuit Names to Current Profile", key="save_names_only"):
+                if st.button("💾 Save Circuit Names to Current Chart", key="save_names_only"):
                     circuit_names = {
                         f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
                         for i in range(len(_patterns))
@@ -419,7 +447,7 @@ def render_profile_manager(
                     profile_data = _get_saved_profiles().get(prof_name, {}).copy()
 
                     if not profile_data:
-                        st.error("No profile data found. Load a profile first.")
+                        st.error("No chart data found. Load a chart first.")
                     else:
                         profile_data["circuit_names"] = circuit_names
                         # Refresh the stored chart object so it stays in sync
@@ -433,16 +461,16 @@ def render_profile_manager(
             st.info("No saved profiles yet.")
 
     # --- Delete (private, per-user) ---
-    elif active_tab == "Delete Profile":
+    elif active_tab == "Delete Chart":
         saved_profiles = _get_saved_profiles()
         if saved_profiles:
             delete_choice = st.selectbox(
-                "Select a profile to delete",
+                "Select a chart to delete",
                 options=sorted(saved_profiles.keys()),
                 key="profile_delete"
             )
 
-            if st.button("🗑️ Delete Selected Profile", key="priv_delete_ask"):
+            if st.button("🗑️ Delete Selected Chart", key="priv_delete_ask"):
                 st.session_state["priv_delete_target"] = delete_choice
                 st.rerun()
 

@@ -4,6 +4,7 @@ import pytz
 import streamlit as st
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db, DetectedShape
+from src.state_manager import swap_primary_and_secondary_charts
 
 GLYPHS = static_db.GLYPHS
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
@@ -260,6 +261,8 @@ def render_circuit_toggles(
 	with header_col:
 		st.subheader(header_text)
 	with jump_col:
+		if st.session_state.get("synastry_mode", False):
+			st.button("🔄 Swap Charts", key="swap_chart_wheels", on_click=swap_primary_and_secondary_charts, use_container_width=True)
 		st.markdown(
 			'<a href="#ruler-hierarchies" style="display:inline-block;padding:0.25rem 0.75rem;background-color:#ff4b4b;color:white;text-decoration:none;border-radius:0.25rem;text-align:center;width:100%;">Jump to Houses & Rulers</a>',
 			unsafe_allow_html=True
@@ -318,13 +321,11 @@ def render_circuit_toggles(
 		with c1:
 			synastry_mode = st.session_state.get("synastry_mode", False)
 			biwheel_active = synastry_mode or st.session_state.get("transit_mode", False)
-			# chart names for labeling
-			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
-			if chart1_name == "Custom":
-				chart1_name = "Chart 1"
-			_chart_1 = st.session_state.get("last_chart")
+			# chart names from loaded chart objects
+			_c1 = st.session_state.get("last_chart")
+			chart1_name = (_c1.display_name if _c1 and _c1.display_name else None) or st.session_state.get("current_profile") or "Chart 1"
 			unknown_time1 = bool(
-				(_chart_1.unknown_time if _chart_1 else False)
+				(_c1.unknown_time if _c1 else False)
 				or st.session_state.get("profile_unknown_time")
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
@@ -333,13 +334,12 @@ def render_circuit_toggles(
 			# second chart toggle if biwheel is active
 			if biwheel_active:
 				if synastry_mode:
-					chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-					if chart2_name == "Custom":
-						chart2_name = "Chart 2"
+					_c2 = st.session_state.get("last_chart_2")
+					chart2_name = (_c2.display_name if _c2 and _c2.display_name else None) or "Chart 2"
 				else:
 					chart2_name = "Transits"
-				_chart_2 = st.session_state.get("last_chart_2")
-				unknown_time2 = bool(_chart_2.unknown_time if _chart_2 else False)
+					_c2 = st.session_state.get("last_chart_2")
+				unknown_time2 = bool(_c2.unknown_time if _c2 else False)
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
 				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
 
@@ -374,11 +374,7 @@ def render_circuit_toggles(
 			old_style = st.session_state.get("label_style", "glyph")
 			# The radio button writes to this key; read its current choice
 			new_style = st.session_state.get("__label_style_choice", old_style)
-			if new_style.lower() != old_style:
-				st.session_state["label_style"] = new_style.lower()
-				st.rerun()  # force full refresh so both chart + singles update instantly
-			else:
-				st.session_state["label_style"] = new_style.lower()
+			st.session_state["label_style"] = new_style.lower()
 
 			# now use the up-to-date label style
 			label_style = st.session_state["label_style"]
@@ -401,17 +397,12 @@ def render_circuit_toggles(
 		# ---------- Standard Chart Mode UI ----------
 		synastry_mode = st.session_state.get("synastry_mode", False)
 		
-		# Create columns for compass checkbox and swap button
-		compass_col, swap_col = st.columns([1, 1])
-		
-		with compass_col:
-			# use chart names for labels
-			chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
-			if chart1_name == "Custom":
-				chart1_name = "Chart 1"
-			_chart_1 = st.session_state.get("last_chart")
+		with st.container():
+			# chart names from loaded chart objects
+			_c1 = st.session_state.get("last_chart")
+			chart1_name = (_c1.display_name if _c1 and _c1.display_name else None) or st.session_state.get("current_profile") or "Chart 1"
 			unknown_time1 = bool(
-				(_chart_1.unknown_time if _chart_1 else False)
+				(_c1.unknown_time if _c1 else False)
 				or st.session_state.get("profile_unknown_time")
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
@@ -422,13 +413,12 @@ def render_circuit_toggles(
 			biwheel_active = synastry_mode or st.session_state.get("transit_mode", False)
 			if biwheel_active:
 				if synastry_mode:
-					chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-					if chart2_name == "Custom":
-						chart2_name = "Chart 2"
+					_c2 = st.session_state.get("last_chart_2")
+					chart2_name = (_c2.display_name if _c2 and _c2.display_name else None) or "Chart 2"
 				else:
 					chart2_name = "Transits"
-				_chart_2 = st.session_state.get("last_chart_2")
-				unknown_time2 = bool(_chart_2.unknown_time if _chart_2 else False)
+					_c2 = st.session_state.get("last_chart_2")
+				unknown_time2 = bool(_c2.unknown_time if _c2 else False)
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
 				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
 
@@ -443,49 +433,6 @@ def render_circuit_toggles(
 				if new_value2 != prev2:
 					st.session_state["_last_compass_value_2"] = new_value2
 					st.session_state["_pending_compass_rerun"] = True
-		with swap_col:
-			if synastry_mode:
-				# Define swap function that runs in the on_click callback
-				def swap_charts_callback():
-					"""Swap all chart data between Chart 1 and Chart 2"""
-					# Swap radio button selections
-					test_chart_1 = st.session_state.get("test_chart_radio", "Custom")
-					test_chart_2 = st.session_state.get("test_chart_2", "Custom")
-					st.session_state["test_chart_radio"] = test_chart_2
-					st.session_state["test_chart_2"] = test_chart_1
-					
-					# Swap last_test_chart trackers
-					last_1 = st.session_state.get("last_test_chart")
-					last_2 = st.session_state.get("last_test_chart_2")
-					st.session_state["last_test_chart"] = last_2
-					st.session_state["last_test_chart_2"] = last_1
-					
-					# Define data keys to swap
-					swap_pairs = [
-						("year", "year_2"),
-						("month_name", "month_name_2"),
-						("day", "day_2"),
-						("hour_12", "hour_12_2"),
-						("minute_str", "minute_str_2"),
-						("ampm", "ampm_2"),
-						("city", "city_2"),
-						("plot_data", "plot_data_2"),
-					]
-					
-					# Perform the swap
-					for key1, key2 in swap_pairs:
-						val1 = st.session_state.get(key1)
-						val2 = st.session_state.get(key2)
-						st.session_state[key1] = val2
-						st.session_state[key2] = val1
-					
-					# Clear cached figures
-					st.session_state["render_fig"] = None
-					st.session_state["render_result"] = None
-				
-				# Button with on_click callback
-				st.button("Swap Chart Wheels", key="swap_chart_wheels", on_click=swap_charts_callback)
-		
 		st.markdown("---")
 
 	circuits_col, spacer_col, options_col = st.columns([3, 1, 2])
@@ -501,14 +448,12 @@ def render_circuit_toggles(
 				# Biwheel mode: show aspect group toggles
 				st.subheader("Aspect Groups")
 
-				# Get chart names
-				chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
-				if chart1_name == "Custom":
-					chart1_name = "Chart 1"
+				# Get chart names from loaded chart objects
+				_c1 = st.session_state.get("last_chart")
+				chart1_name = (_c1.display_name if _c1 and _c1.display_name else None) or st.session_state.get("current_profile") or "Chart 1"
 				if synastry_mode:
-					chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-					if chart2_name == "Custom":
-						chart2_name = "Chart 2"
+					_c2 = st.session_state.get("last_chart_2")
+					chart2_name = (_c2.display_name if _c2 and _c2.display_name else None) or "Chart 2"
 				else:
 					chart2_name = "Transits"
 
@@ -539,7 +484,6 @@ def render_circuit_toggles(
 					for body_name in TOGGLE_ASPECTS.keys():
 						st.session_state[f"aspect_toggle_{body_name}"] = select_all
 					st.session_state["_last_select_all_state"] = select_all
-					st.rerun()
 				
 				# Create checkboxes for TOGGLE_ASPECTS in a grid
 				toggle_bodies = list(TOGGLE_ASPECTS.keys())
@@ -618,34 +562,28 @@ def render_circuit_toggles(
 					target_col = col_left if idx < half else col_right
 					with target_col:
 						with st.expander(f"**{shape_type}** – {len(type_shapes)} found", expanded=False):
+							# resolve chart names once per expander
+							_c1 = st.session_state.get("last_chart")
+							chart1_name = (_c1.display_name if _c1 and _c1.display_name else None) or st.session_state.get("current_profile") or "Chart 1"
+							_c2 = st.session_state.get("last_chart_2")
+							chart2_name = (_c2.display_name if _c2 and _c2.display_name else None) or "Chart 2"
 							for sh in type_shapes:
-								# Format members by chart origin
-									members = sh.members
-								# determine chart names
-							chart1_name = st.session_state.get("test_chart_radio", "Chart 1")
-							if chart1_name == "Custom":
-								chart1_name = "Chart 1"
-							chart2_name = st.session_state.get("test_chart_2", "Chart 2")
-							if chart2_name == "Custom":
-								chart2_name = "Chart 2"
-								
+								members = sh.members
 								members1 = [m for m in members if not m.endswith("_2")]
 								members2 = [m[:-2] for m in members if m.endswith("_2")]
-								
+
 								def fmt_list(lst):
 									if want_glyphs:
 										return ", ".join(GLYPHS.get(m, m) for m in lst)
 									else:
 										return ", ".join(lst)
-								
+
 								members_label = f"{chart1_name}: {fmt_list(members1)}"
 								if members2:
 									members_label += f"; {chart2_name}: {fmt_list(members2)}"
-								# Create unique key for this shape
-									parent = sh.parent
-									shape_id = sh.shape_id
+								parent = sh.parent
+								shape_id = sh.shape_id
 								unique_key = f"shape_{parent}_{shape_id}"
-								
 								st.session_state.setdefault(unique_key, False)
 								st.checkbox(
 									members_label,
@@ -763,55 +701,32 @@ def render_circuit_toggles(
 								payload = saved_profiles.get(profile_name, {}).copy()
 								payload["circuit_names"] = current
 								save_user_profile_db(current_user_id, profile_name, payload)
-								saved_profiles = load_user_profiles_db(current_user_id)
+								# Update local dict (cache was already cleared by save)
+								saved_profiles[profile_name] = payload
 								st.session_state["saved_circuit_names"] = current.copy()
 
-						# Sub-shapes
-						parent_shapes = [sh for sh in shapes if sh.parent == i]
-						shape_entries = []
-						if parent_shapes:
-							st.markdown("**Sub-shapes detected:**")
-							for sh in parent_shapes:
-								label_text = f"{sh.shape_type}: {', '.join(str(m) for m in sh.members)}"
-								unique_key = f"shape_{i}_{sh.shape_id}"
-								on = st.checkbox(
-									label_text,
-									key=unique_key,
-									value=st.session_state.get(unique_key, False),
-								)
-								shape_entries.append({"id": sh.shape_id, "on": on})
-						else:
-							st.markdown("_(no sub-shapes found)_")
-
-						shape_toggle_map = st.session_state.setdefault(
-							"shape_toggles_by_parent", {}
-						)
-						shape_toggle_map[i] = shape_entries
-
-						# ---------- Chart 2 Connections (Connected Circuits + synastry only) ----------
-						# Show connections when the circuit itself OR any of its sub-shapes is active.
-						any_shape_on = any(e["on"] for e in shape_entries)
-						if (synastry_mode or st.session_state.get("transit_mode", False)) and circuit_submode == "Connected Circuits" and (cbox or any_shape_on):
-							cc_shapes_for_circuit = circuit_connected_shapes2.get(i, [])
-							st.markdown("---")
-							if cc_shapes_for_circuit:
-								st.markdown("**Chart 2 Connections:**")
-								for sh2 in cc_shapes_for_circuit:
-									# cc_shapes_for_circuit is a mix of DetectedShape (real shapes)
-									# and plain dicts (singleton UI entries)
-									sh2_members = sh2.members if hasattr(sh2, "members") and not isinstance(sh2, dict) else sh2.get("members", [])
-									sh2_type = sh2.shape_type if hasattr(sh2, "shape_type") else sh2.get("type", "Single object")
-									sh2_id = sh2.shape_id if hasattr(sh2, "shape_id") else sh2.get("id", f"x_{i}")
-									if want_glyphs:
-										members_str = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
-									else:
-										members_str = ", ".join(sh2_members)
-									sh2_label = f"{sh2_type}: {members_str}"
-									cc_key = f"cc_shape_{i}_{sh2_id}"
-									st.session_state.setdefault(cc_key, False)
-									st.checkbox(sh2_label, key=cc_key)
+							# Sub-shapes
+							parent_shapes = [sh for sh in shapes if sh.parent == i]
+							shape_entries = []
+							if parent_shapes:
+								st.markdown("**Sub-shapes detected:**")
+								for sh in parent_shapes:
+									label_text = f"{sh.shape_type}: {', '.join(str(m) for m in sh.members)}"
+									unique_key = f"shape_{i}_{sh.shape_id}"
+									on = st.checkbox(
+										label_text,
+										key=unique_key,
+										value=st.session_state.get(unique_key, False),
+									)
+									shape_entries.append({"id": sh.shape_id, "on": on})
 							else:
-								st.markdown("_No Chart 2 connections found._")
+								st.markdown("_(no sub-shapes found)_")
+
+							shape_toggle_map = st.session_state.setdefault(
+								"shape_toggles_by_parent", {}
+							)
+							shape_toggle_map[i] = shape_entries
+
 			# Save Circuit Names (only if edits exist)
 			if st.session_state.get("current_profile"):
 				saved = st.session_state.get("saved_circuit_names", {})
@@ -828,7 +743,8 @@ def render_circuit_toggles(
 						payload = saved_profiles.get(profile_name, {}).copy()
 						payload["circuit_names"] = current
 						save_user_profile_db(current_user_id, profile_name, payload)
-						saved_profiles = load_user_profiles_db(current_user_id)
+						# Update local dict (cache was already cleared by save)
+						saved_profiles[profile_name] = payload
 						st.session_state["saved_circuit_names"] = current.copy()
 
 	# ---------- RIGHT: house system / label style / dark mode ----------
@@ -853,12 +769,8 @@ def render_circuit_toggles(
 			)
 			new_style = label_choice.lower()
 
-			# Update session + rerun instantly if changed
-			if new_style != old_style:
-				st.session_state["label_style"] = new_style
-				st.rerun()
-			else:
-				st.session_state["label_style"] = new_style
+			# Always sync to session state; Streamlit reruns on widget change
+			st.session_state["label_style"] = new_style
 
 			# Dark mode → persist to session
 			st.session_state.setdefault("dark_mode", False)

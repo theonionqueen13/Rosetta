@@ -7,7 +7,7 @@ EPHE_PATH = EPHE_PATH.replace("\\", "/")
 os.environ["SE_EPHE_PATH"] = EPHE_PATH
 swe.set_ephe_path(EPHE_PATH)
 from src.ui_utils import apply_custom_css, set_background_for_theme
-from src.test_data import apply_test_chart_to_session, MONTH_NAMES
+from src.test_data import MONTH_NAMES
 from src.geocoding import geocode_city_with_timezone
 from src.chart_core import run_chart, _refresh_chart_figure
 from src.state_manager import swap_primary_and_secondary_charts
@@ -68,7 +68,6 @@ from calc_v2 import (
 
 result = st.session_state.get("render_result")
 # Key initialization:
-st.session_state.setdefault("last_test_chart", None)
 st.session_state.setdefault("last_test_chart_2", None)
 
 # Initialize birth data defaults for Chart 1
@@ -83,7 +82,7 @@ st.session_state.setdefault("chart_dt_utc", None)
 st.session_state.setdefault("defaults_loaded", False)
 
 # Initialize birth data defaults for Chart 2 (if synastry is on)
-st.session_state.setdefault("test_chart_2", "Custom")
+# (test_chart_2 selector removed; Chart 2 loaded via profile manager synastry slot)
 
 apply_custom_css() # Call the imported CSS function
 # current_user_id is now set by render_auth_gate() at startup (the logged-in user's UUID)
@@ -147,100 +146,69 @@ st.sidebar.markdown("""
 st.session_state.setdefault("render_fig", None)
 if st.session_state.get("__pending_swap_charts__"):
 	swap_primary_and_secondary_charts()
+	st.rerun()  # not in an on_click callback, so explicit rerun needed
 
 # --- Handle pending Calculate (deferred so preset data is applied BEFORE widgets) ---
 _pending_calc = st.session_state.pop("__pending_calculate__", None)
 if _pending_calc:
-	_ch1_sel = _pending_calc["ch1_sel"]
-	_ch2_sel = _pending_calc["ch2_sel"]
-	_syn     = _pending_calc["synastry"]
+	_syn              = _pending_calc["synastry"]
 	_custom2_snapshot = _pending_calc.get("custom2_snapshot")
 
-	# -- Chart 1 --
-	if _ch1_sel != "Custom":
-		apply_test_chart_to_session(_ch1_sel)
+	# Chart 1 — always from current form / profile data
 	run_chart(suffix="")
 
-	# -- Chart 2 (synastry only) --
-	if _syn:
-		if _ch2_sel != "Custom":
-			apply_test_chart_to_session(_ch2_sel, suffix="_2")
-		elif _custom2_snapshot:
+	# Chart 2 (synastry only) — only recalculate if no chart object loaded
+	if _syn and st.session_state.get("last_chart_2") is None:
+		if _custom2_snapshot:
 			for _k, _v in _custom2_snapshot.items():
 				st.session_state[_k] = _v
 		run_chart(suffix="_2")
 
-synastry_mode = st.checkbox("Synastry Mode", key="synastry_mode")
 
-# Primary chart selector
-test_chart = st.radio(
-	"Test Charts" if not synastry_mode else "Chart 1 (Inner)",
-	["Custom", "Wildhorse", "Wildhorse bf Michael", "Joylin", "Terra", "Jessica"],
-	horizontal=True,
-	key="test_chart_radio",
-	label_visibility="collapsed"
-)
 
-# Only apply test chart data if the selection changed (not on every rerun)
-if test_chart != st.session_state["last_test_chart"] and test_chart != "Custom":
-	st.session_state["last_test_chart"] = test_chart
+# --- Handle pending Chart 2 profile load (outer / synastry chart) ---
+_pending_profile_2 = st.session_state.pop("__pending_profile_load_2__", None)
+if _pending_profile_2:
+	_prof_name_2 = _pending_profile_2["profile_name"]
+	_prof_data_2 = _pending_profile_2["profile_data"]
 
-	# 1. Apply data
-	apply_test_chart_to_session(test_chart)
-
-	# 2. Trigger calculation for Chart 1 (no suffix)
-	if run_chart():
-		st.success(f"Chart 1 loaded: {st.session_state.get('city')}")
+	# Restore Chart 2 from saved profile
+	_stored_chart_raw_2 = _prof_data_2.get("chart")
+	if isinstance(_stored_chart_raw_2, dict):
+		from models_v2 import AstrologicalChart
+		_stored_chart_2 = AstrologicalChart.from_json(_stored_chart_raw_2)
+		_stored_chart_2.display_name = _prof_name_2
+		st.session_state["last_chart_2"] = _stored_chart_2
+		st.session_state["chart_2_source"] = "synastry"
+		st.session_state["last_test_chart_2"] = _prof_name_2
+		st.success(f"\u2705 Outer chart '{_prof_name_2}' loaded for Synastry.")
+	elif any(v is None for v in (_prof_data_2.get("lat"), _prof_data_2.get("lon"), _prof_data_2.get("tz_name"))):
+		st.error(f"Profile '{_prof_name_2}' is missing location/timezone data. Re-save it after a city lookup.")
 	else:
-		st.error(f"Failed to calculate Chart 1. Check date/time/location inputs.")
-
-elif test_chart == "Custom":
-	st.session_state["last_test_chart"] = "Custom"
-
-# Secondary chart selector (only visible in synastry mode)
-if synastry_mode:
-	test_chart_2 = st.radio(
-		"Chart 2 (Outer)",
-		["Custom", "Wildhorse", "Wildhorse bf Michael", "Joylin", "Terra", "Jessica"],
-		horizontal=True,
-		key="test_chart_2",
-		label_visibility="collapsed"
-	)
-	# Show what charts are currently loaded
-	df2_city = st.session_state.get("city_2", "Not set")
-	st.caption(f"Chart 2 data: {df2_city}, Chart exists: {st.session_state.get('last_chart_2') is not None}")
-else:
-	test_chart_2 = None
-
-# Handle second chart selection (for synastry mode)
-if synastry_mode and test_chart_2:
-	# Calculate if: (1) chart changed OR (2) chart is selected but df doesn't exist
-	chart_changed = test_chart_2 != st.session_state["last_test_chart_2"]
-	df_missing = st.session_state.get("last_chart_2") is None
-
-	should_calculate = chart_changed and test_chart_2 != "Custom"
-
-	# Also calculate if a non-Custom chart is selected but no data exists yet
-	if test_chart_2 != "Custom" and df_missing:
-		should_calculate = True
-
-	if should_calculate:
-		st.session_state["last_test_chart_2"] = test_chart_2
-
-		# 1. Apply data for Chart 2
-		success_apply = apply_test_chart_to_session(test_chart_2, suffix="_2")
-
-		if success_apply:
-			# 2. Trigger calculation for Chart 2 (with suffix)
-			if run_chart(suffix="_2"):
-				st.success(f"Chart 2 loaded: {st.session_state.get('city_2')}")
-			else:
-				st.error(f"Failed to calculate Chart 2. Check date/time/location inputs.")
+		# Profile has coords but no cached chart — calculate it
+		for _k2, _v2 in [
+			("year_2", _prof_data_2["year"]),
+			("month_name_2", MONTH_NAMES[_prof_data_2["month"] - 1]),
+			("day_2", _prof_data_2["day"]),
+			("city_2", _prof_data_2["city"]),
+			("current_lat_2", _prof_data_2.get("lat")),
+			("current_lon_2", _prof_data_2.get("lon")),
+			("current_tz_name_2", _prof_data_2.get("tz_name")),
+		]:
+			st.session_state[_k2] = _v2
+		_h24_2 = _prof_data_2["hour"]
+		_h12_2 = _h24_2 % 12 or 12
+		_ampm_2 = "AM" if _h24_2 < 12 else "PM"
+		st.session_state["hour_12_2"] = f"{_h12_2:02d}"
+		st.session_state["minute_str_2"] = f"{_prof_data_2['minute']:02d}"
+		st.session_state["ampm_2"] = _ampm_2
+		st.session_state["chart_2_source"] = "synastry"
+		if run_chart(suffix="_2"):
+			if st.session_state.get("last_chart_2"):
+				st.session_state["last_chart_2"].display_name = _prof_name_2
+			st.success(f"\u2705 Outer chart '{_prof_name_2}' calculated for Synastry.")
 		else:
-			st.error(f"Error: Could not find test chart data for {test_chart_2}")
-
-	elif test_chart_2 == "Custom":
-		st.session_state["last_test_chart_2"] = "Custom"
+			st.error(f"Failed to calculate outer chart for '{_prof_name_2}'.")
 
 # --- Handle pending profile load (deferred until before form widgets are created) ---
 _pending_profile = st.session_state.pop("__pending_profile_load__", None)
@@ -298,6 +266,8 @@ if _pending_profile:
 	if isinstance(_stored_chart_raw, dict):
 		from models_v2 import AstrologicalChart
 		_stored_chart = AstrologicalChart.from_json(_stored_chart_raw)
+		# Update display_name to match the currently loaded profile (real-time sync)
+		_stored_chart.display_name = _prof_name
 		st.session_state["last_chart"] = _stored_chart
 		st.session_state["chart_ready"] = True
 	elif any(v is None for v in (_prof_data.get("lat"), _prof_data.get("lon"), _prof_data.get("tz_name"))):
@@ -443,13 +413,11 @@ with col_left:
 				# form widgets are instantiated (Streamlit forbids writing
 				# to a widget-bound key after the widget exists).
 				_syn = st.session_state.get("synastry_mode", False)
-				_ch1_sel = st.session_state.get("test_chart_radio", "Custom")
-				_ch2_sel = st.session_state.get("test_chart_2", "Custom") if _syn else None
 
-				# Snapshot Custom Chart 2 data now (form values are still
-				# available), since _2 keys aren't widget-bound.
+				# Snapshot form values for Chart 2 position (only needed when
+				# synastry is on and no Chart 2 profile has been loaded yet).
 				_custom2_snap = None
-				if _syn and _ch2_sel == "Custom":
+				if _syn and st.session_state.get("last_chart_2") is None:
 					_custom2_snap = {}
 					for _key in ["year", "month_name", "day", "hour_12",
 								 "minute_str", "ampm", "city"]:
@@ -459,8 +427,6 @@ with col_left:
 					)
 
 				st.session_state["__pending_calculate__"] = {
-					"ch1_sel": _ch1_sel,
-					"ch2_sel": _ch2_sel,
 					"synastry": _syn,
 					"custom2_snapshot": _custom2_snap,
 				}
@@ -902,22 +868,11 @@ with st.sidebar:
 		# Track which planet was just clicked for scrolling
 		if st.session_state.get("interactive_chart", False):
 			chart_click_event = st.session_state.get("chart_click_event")
-			print(f"[DEBUG] chart_click_event: {chart_click_event}")
-			print(f"[DEBUG] Type check: {type(chart_click_event)}")
 			if chart_click_event:
-				print(f"[DEBUG] Event keys: {chart_click_event.keys() if hasattr(chart_click_event, 'keys') else 'N/A'}")
 				if chart_click_event.get("type") == "click" and chart_click_event.get("element_type") == "object":
-					# Mark this planet for scrolling
 					target_planet = chart_click_event.get("element")
 					if target_planet:
 						st.session_state["_scroll_to_planet"] = target_planet
-						print(f"[DEBUG] ✓ Marked planet for scroll: {target_planet}")
-				else:
-					print(f"[DEBUG] Event type mismatch - type: {chart_click_event.get('type')}, element_type: {chart_click_event.get('element_type')}")
-			else:
-				print(f"[DEBUG] No chart_click_event")
-		else:
-			print(f"[DEBUG] Not in interactive chart mode")
 		
 		# Get visible_objects from render_result, with fallback to session state
 		rr = st.session_state.get("render_result")
@@ -927,102 +882,114 @@ with st.sidebar:
 			(chart_cached.unknown_time if chart_cached else False)
 			or st.session_state.get("profile_unknown_time")
 		)
-		ordered_rows = ordered_objects(
-			chart_cached,
-			visible_objects=visible_objects,
-			edges_major=edges_major,
-		)
-		print("[DEBUG] Sidebar ordered_rows objects:", [obj.object_name.name for obj in ordered_rows if obj.object_name])
-		print(f"[DEBUG] profile_mode: {profile_mode}")
-		if ordered_rows:
-			if profile_mode == "Stats":
-				formatter = lambda r: format_object_profile_html(
-					r,
-					house_label=_selected_house_system(),
-					include_house_data=not unknown_time_chart,
-				)
-			elif profile_mode == "Profile":
-				formatter = lambda r: format_planet_profile_html(
-					r,
-					chart_cached,
-					ordered_rows,
-					house_system=_selected_house_system(),
-				)
-			else:  # Full
-				formatter = lambda r: format_full_planet_profile_html(
-					r,
-					chart_cached,
-					ordered_rows,
-					house_system=_selected_house_system(),
-					include_house_data=not unknown_time_chart,
-				)
 
-			try:
-				blocks = []
-				planet_ids = []
-				for i, r in enumerate(ordered_rows):
-					try:
-						block = formatter(r)
-						# Extract planet name and create a safe ID
-						planet_name = r.object_name.name if hasattr(r, 'object_name') and r.object_name else "unknown"
-						planet_id = f"rosetta-planet-{planet_name.replace(' ', '-').lower()}"
-						planet_ids.append(planet_id)
-						
-						# Wrap block with ID div
-						wrapped_block = f"<div id='{planet_id}' class='planet-profile-card'>{block}</div>"
-						blocks.append(wrapped_block)
-					except Exception as e:
-						st.error(f"Error formatting {r.object_name.name if hasattr(r, 'object_name') else 'unknown'}: {e}")
-						import traceback
-						traceback.print_exc()
-				
-				html_content = "<div class='pf-root'>" + "\n".join(blocks) + "</div>"
-				print(f"[DEBUG] HTML content length: {len(html_content)}, blocks count: {len(blocks)}")
-				st.markdown(html_content, unsafe_allow_html=True)
-				
-				# Check if we need to scroll to a specific planet
-				target_planet = st.session_state.get("_scroll_to_planet")
-				if target_planet and st.session_state.get("interactive_chart", False):
-					planet_id = f"rosetta-planet-{target_planet.replace(' ', '-').lower()}"
-					print(f"[DEBUG] Scrolling to: {planet_id}")
-					
-					# components.html() creates a real iframe where JS actually executes.
-					# From inside the iframe, window.parent.document accesses the main page DOM.
-					components.html(f"""
-					<script>
-					(function() {{
-						const el = window.parent.document.getElementById('{planet_id}');
-						if (!el) return;
-						
-						// Find the best scrollable ancestor
-						let best = null, bestRange = 0, p = el.parentElement;
-						while (p) {{
-							const r = p.scrollHeight - p.clientHeight;
-							if (r > bestRange) {{ bestRange = r; best = p; }}
-							p = p.parentElement;
-						}}
-						
-						if (best && bestRange > 0) {{
-							// Scroll so the element top aligns with the top of the scrollable area
-							const elRect = el.getBoundingClientRect();
-							const containerRect = best.getBoundingClientRect();
-							best.scrollTop += elRect.top - containerRect.top;
-						}}
-						
-						el.style.transition = 'background-color 0.4s ease';
-						el.style.backgroundColor = 'rgba(100, 200, 255, 0.35)';
-						setTimeout(() => {{ el.style.backgroundColor = ''; }}, 1500);
-					}})();
-					</script>
-					""", height=0)
-					
-					# Clear the flag so we don't scroll again on next render
-					st.session_state["_scroll_to_planet"] = None
-			except Exception as e:
-				st.error(f"Error rendering profiles: {e}")
-				import traceback
-				traceback.print_exc()
+		# --- Sidebar HTML cache ---
+		# Build a cache key from everything that affects the sidebar output.
+		# If nothing changed, skip all the expensive profile formatting.
+		_house_sys = _selected_house_system()
+		_sidebar_cache_key = (
+			chart_cached.chart_datetime, chart_cached.latitude, chart_cached.longitude,
+			tuple(sorted(visible_objects)) if visible_objects else (),
+			profile_mode,
+			_house_sys,
+			unknown_time_chart,
+		)
+		_prev_sidebar = st.session_state.get("_sidebar_cache", {})
+
+		if _prev_sidebar.get("key") == _sidebar_cache_key:
+			# Cache hit — reuse pre-built HTML
+			html_content = _prev_sidebar["html"]
+		else:
+			# Cache miss — rebuild
+			ordered_rows = ordered_objects(
+				chart_cached,
+				visible_objects=visible_objects,
+				edges_major=edges_major,
+			)
+			if ordered_rows:
+				if profile_mode == "Stats":
+					formatter = lambda r: format_object_profile_html(
+						r,
+						house_label=_house_sys,
+						include_house_data=not unknown_time_chart,
+					)
+				elif profile_mode == "Profile":
+					formatter = lambda r: format_planet_profile_html(
+						r,
+						chart_cached,
+						ordered_rows,
+						house_system=_house_sys,
+					)
+				else:  # Full
+					formatter = lambda r: format_full_planet_profile_html(
+						r,
+						chart_cached,
+						ordered_rows,
+						house_system=_house_sys,
+						include_house_data=not unknown_time_chart,
+					)
+
+				try:
+					blocks = []
+					for i, r in enumerate(ordered_rows):
+						try:
+							block = formatter(r)
+							planet_name = r.object_name.name if hasattr(r, 'object_name') and r.object_name else "unknown"
+							planet_id = f"rosetta-planet-{planet_name.replace(' ', '-').lower()}"
+							wrapped_block = f"<div id='{planet_id}' class='planet-profile-card'>{block}</div>"
+							blocks.append(wrapped_block)
+						except Exception as e:
+							st.error(f"Error formatting {r.object_name.name if hasattr(r, 'object_name') else 'unknown'}: {e}")
+							import traceback
+							traceback.print_exc()
+
+					html_content = "<div class='pf-root'>" + "\n".join(blocks) + "</div>"
+				except Exception as e:
+					st.error(f"Error rendering profiles: {e}")
+					import traceback
+					traceback.print_exc()
+					html_content = ""
+			else:
+				html_content = ""
+
+			# Store in cache
+			st.session_state["_sidebar_cache"] = {
+				"key": _sidebar_cache_key,
+				"html": html_content,
+			}
+
+		# Render the HTML (cached or freshly built)
+		if html_content:
+			st.markdown(html_content, unsafe_allow_html=True)
 		else:
 			st.caption("No objects currently visible with the selected toggles.")
+
+		# Check if we need to scroll to a specific planet (interactive chart)
+		target_planet = st.session_state.get("_scroll_to_planet")
+		if target_planet and st.session_state.get("interactive_chart", False):
+			planet_id = f"rosetta-planet-{target_planet.replace(' ', '-').lower()}"
+			components.html(f"""
+			<script>
+			(function() {{
+				const el = window.parent.document.getElementById('{planet_id}');
+				if (!el) return;
+				let best = null, bestRange = 0, p = el.parentElement;
+				while (p) {{
+					const r = p.scrollHeight - p.clientHeight;
+					if (r > bestRange) {{ bestRange = r; best = p; }}
+					p = p.parentElement;
+				}}
+				if (best && bestRange > 0) {{
+					const elRect = el.getBoundingClientRect();
+					const containerRect = best.getBoundingClientRect();
+					best.scrollTop += elRect.top - containerRect.top;
+				}}
+				el.style.transition = 'background-color 0.4s ease';
+				el.style.backgroundColor = 'rgba(100, 200, 255, 0.35)';
+				setTimeout(() => {{ el.style.backgroundColor = ''; }}, 1500);
+			}})();
+			</script>
+			""", height=0)
+			st.session_state["_scroll_to_planet"] = None
 	else:
 		st.caption("Calculate a chart to see profiles.")
