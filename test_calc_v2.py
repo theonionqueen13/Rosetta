@@ -22,6 +22,7 @@ from supabase_profiles import (
 	save_user_profile_group_db, load_user_profile_groups_db,
 	load_user_profiles_by_group_db, delete_user_profile_group_db,
 )
+from beta_feedback import render_feedback_expander, render_admin_alert, render_admin_report_viewer
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
 from house_selector_v2 import _selected_house_system
@@ -45,6 +46,12 @@ st.set_page_config(layout="wide")
 # --- Auth gate: shows login UI and stops if user is not authenticated ---
 from auth_ui import render_auth_gate
 current_user_id = render_auth_gate()
+
+# --- Beta Feedback: Admin alert banner (shows only for admins with unread reports) ---
+render_admin_alert()
+
+# --- Beta Feedback: Report/Feedback form at top of app ---
+render_feedback_expander(auth_page=False)
 
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
@@ -951,3 +958,8 @@ with st.sidebar:
 			st.session_state["_scroll_to_planet"] = None
 	else:
 		st.caption("Calculate a chart to see profiles.")
+
+# ---------------------------------------------------------------------------
+# Admin Report Viewer (at very bottom of page)
+# ---------------------------------------------------------------------------
+render_admin_report_viewer()

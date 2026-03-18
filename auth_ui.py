@@ -236,3 +236,13 @@ def _render_login_ui() -> None:
                     "Make sure the Google provider is enabled in "
                     "Supabase → Authentication → Providers."
                 )
+
+    # ------------------------------------------------------------------
+    # Beta Feedback / Bug Report (available even on login page)
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.markdown("### Having trouble logging in?")
+    st.caption("If you're experiencing issues with login or account access, submit a report below.")
+    
+    from beta_feedback import render_feedback_expander
+    render_feedback_expander(auth_page=True)
