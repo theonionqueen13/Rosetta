@@ -19,10 +19,18 @@ Required Supabase table (run the SQL from supabase_setup.sql in the dashboard):
 Row-Level Security ensures every user can only read/write their own rows.
 """
 from __future__ import annotations
+import streamlit as st
 from typing import Any, Dict
 from supabase_client import get_authed_supabase
 
 TABLE = "user_profiles"
+
+
+def _clear_profile_caches() -> None:
+    """Invalidate all cached profile/group reads after a write."""
+    load_user_profiles_db.clear()
+    load_user_profile_groups_db.clear()
+    load_user_profiles_by_group_db.clear()
 
 
 def save_user_profile_db(user_id: str, profile_name: str, payload: Dict[str, Any]) -> None:
@@ -51,8 +59,10 @@ def save_user_profile_db(user_id: str, profile_name: str, payload: Dict[str, Any
                 f"Check that user_id '{user_id}' matches the logged-in account "
                 f"and that Row Level Security allows INSERT/UPDATE on '{TABLE}'."
             )
+    _clear_profile_caches()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
     """
     Returns all saved profiles for the given user as a dict:
@@ -80,6 +90,7 @@ def delete_user_profile_db(user_id: str, profile_name: str) -> None:
         .eq("profile_name", profile_name)
         .execute()
     )
+    _clear_profile_caches()
 
 
 def save_user_profile_group_db(user_id: str, group_name: str) -> Dict[str, Any]:
@@ -100,9 +111,11 @@ def save_user_profile_group_db(user_id: str, group_name: str) -> Dict[str, Any]:
             f"Could not create group '{group_name}'. "
             f"It may already exist or Row Level Security may be blocking the write."
         )
+    _clear_profile_caches()
     return response.data[0]
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def load_user_profile_groups_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     """
     Returns all profile groups for the given user as a dict:
@@ -136,8 +149,10 @@ def delete_user_profile_group_db(user_id: str, group_id: str) -> None:
         .eq("id", group_id)
         .execute()
     )
+    _clear_profile_caches()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def load_user_profiles_by_group_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     """
     Returns profiles organized by group:
@@ -149,35 +164,23 @@ def load_user_profiles_by_group_db(user_id: str) -> Dict[str, Dict[str, Any]]:
             ...
         }
     Profiles without a group_id (or with group_id=None) appear under "__ungrouped__".
+
+    Reuses the individually-cached load_user_profiles_db / load_user_profile_groups_db
+    so that the heavy Supabase round-trips are shared across call sites.
     """
-    client = get_authed_supabase()
-    response = (
-        client.table(TABLE)
-        .select("profile_name, payload")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    rows = response.data or []
-    
-    # Organize into groups
-    groups_response = (
-        client.table("user_profile_groups")
-        .select("id, group_name")
-        .eq("user_id", user_id)
-        .order("group_name")
-        .execute()
-    )
-    groups_data = {row["id"]: row["group_name"] for row in (groups_response.data or [])}
-    groups_data["__ungrouped__"] = "Ungrouped"
-    
+    # Reuse cached helpers instead of making fresh Supabase calls
+    all_profiles = load_user_profiles_db(user_id)
+    all_groups = load_user_profile_groups_db(user_id)
+
+    # Build result structure from groups
+    groups_data = {gid: gdata.get("group_name", gid) for gid, gdata in all_groups.items()}
     result = {gid: {"group_name": gname, "profiles": {}} for gid, gname in groups_data.items()}
-    
-    for row in rows:
-        # Extract group_id from payload (optional field)
-        gid = row["payload"].get("group_id") if isinstance(row["payload"], dict) else None
+
+    for name, payload in all_profiles.items():
+        gid = payload.get("group_id") if isinstance(payload, dict) else None
         gid = gid or "__ungrouped__"
         if gid not in result:
             result[gid] = {"group_name": "Unknown Group", "profiles": {}}
-        result[gid]["profiles"][row["profile_name"]] = row["payload"]
-    
+        result[gid]["profiles"][name] = payload
+
     return result

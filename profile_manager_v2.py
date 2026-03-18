@@ -83,8 +83,17 @@ def render_profile_manager(
     minute_val = st.session_state.get("minute_val") if minute_val is None else minute_val
     city_name = st.session_state.get("profile_city") if city_name is None else city_name
 
-    # ---- data load (safe to call repeatedly) ----
-    saved_profiles: Dict[str, Any] = load_user_profiles_db(current_user_id)
+    # ---- data load (lazy – only fetched when the active tab needs it) ----
+    # With @st.cache_data on the Supabase functions this is near-instant on
+    # repeat calls, but we still avoid the import-time call for tabs that
+    # don't need it.
+    _profiles_cache: Dict[str, Any] | None = None
+
+    def _get_saved_profiles() -> Dict[str, Any]:
+        nonlocal _profiles_cache
+        if _profiles_cache is None:
+            _profiles_cache = load_user_profiles_db(current_user_id)
+        return _profiles_cache
 
     # =====================
     # 👤 Profile Manager UI
@@ -136,6 +145,7 @@ def render_profile_manager(
                 else:
                     # keep or initialize circuit names
                     _patterns = _current_chart.aspect_groups or []
+                    saved_profiles = _get_saved_profiles()
                     if profile_name in saved_profiles and _patterns:
                         circuit_names = {
                             f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
@@ -189,8 +199,9 @@ def render_profile_manager(
                     try:
                         # Preserve existing group_id if updating a profile
                         existing_group_id = None
-                        if profile_name in saved_profiles:
-                            existing_group_id = saved_profiles[profile_name].get("group_id")
+                        _existing_profiles = _get_saved_profiles()
+                        if profile_name in _existing_profiles:
+                            existing_group_id = _existing_profiles[profile_name].get("group_id")
                         
                         profile_data = {
                             "year":   _save_yr,
@@ -291,7 +302,7 @@ def render_profile_manager(
                     "For now, your profiles are displayed without groups. After running the SQL, refresh the page."
                 )
                 # Fallback: show profiles flat without groups
-                profiles_by_group = {"__ungrouped__": {"group_name": "All Profiles", "profiles": saved_profiles}}
+                profiles_by_group = {"__ungrouped__": {"group_name": "All Profiles", "profiles": _get_saved_profiles()}}
             else:
                 raise
         
@@ -353,9 +364,9 @@ def render_profile_manager(
                                     st.caption("Move to group")
                                     
                                     try:
-                                        # Get all available groups
-                                        all_groups = load_user_profile_groups_db(current_user_id) if load_user_profile_groups_db else {}
-                                        group_options = {gid: gdata["group_name"] for gid, gdata in all_groups.items()}
+                                        # Reuse profiles_by_group keys as group list
+                                        # (avoids extra DB call per popover)
+                                        group_options = {gid: gdata["group_name"] for gid, gdata in profiles_by_group.items()}
                                         
                                         # Current group indicator
                                         current_group_name = group_options.get(group_id, "__ungrouped__")
@@ -404,9 +415,8 @@ def render_profile_manager(
                         f"circuit_name_{i}": st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
                         for i in range(len(_patterns))
                     }
-                    profiles = load_user_profiles_db(current_user_id)
                     prof_name = st.session_state["current_profile"]
-                    profile_data = profiles.get(prof_name, {}).copy()
+                    profile_data = _get_saved_profiles().get(prof_name, {}).copy()
 
                     if not profile_data:
                         st.error("No profile data found. Load a profile first.")
@@ -424,7 +434,7 @@ def render_profile_manager(
 
     # --- Delete (private, per-user) ---
     elif active_tab == "Delete Profile":
-        saved_profiles = load_user_profiles_db(current_user_id)
+        saved_profiles = _get_saved_profiles()
         if saved_profiles:
             delete_choice = st.selectbox(
                 "Select a profile to delete",
@@ -454,4 +464,4 @@ def render_profile_manager(
         else:
             st.info("No saved profiles yet.")
 
-    return saved_profiles
+    return _get_saved_profiles()

@@ -681,9 +681,7 @@ if chart_cached is not None:
 	)
 
 	# ---------- Toggles (moved to toggles_v2) ----------
-	# prepare saved_profiles for the call
-	saved_profiles = load_user_profiles_db(current_user_id)
-	
+	# Reuse cached profiles from profile manager (avoids redundant DB call)
 	# Safety check: ensure patterns, shapes, singleton_map exist
 	patterns = patterns or []
 	shapes = shapes or []

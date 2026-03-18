@@ -63,18 +63,27 @@ def get_supabase() -> Client:
 
 def get_authed_supabase() -> Client:
     """
-    Returns a fresh Supabase client with the current user's session injected.
+    Returns a Supabase client with the current user's session injected.
     This makes every DB query run as the logged-in user and activates RLS.
+
+    The client is cached per script rerun (same access token) to avoid
+    creating a brand-new HTTP client on every DB call.
     Raises RuntimeError if there is no active session (caller must re-auth).
     """
-    url, key = _credentials()
-    client = create_client(url, key)
     session = st.session_state.get("supabase_session")
     if not session:
         raise RuntimeError(
             "No Supabase session in st.session_state['supabase_session']. "
             "Please log in again."
         )
+    # Reuse the client within the same rerun as long as the access token hasn't changed
+    _cached = st.session_state.get("_supabase_authed_client")
+    _cached_token = st.session_state.get("_supabase_authed_token")
+    if _cached is not None and _cached_token == session.get("access_token"):
+        return _cached
+
+    url, key = _credentials()
+    client = create_client(url, key)
     try:
         client.auth.set_session(
             session["access_token"],
@@ -85,4 +94,7 @@ def get_authed_supabase() -> Client:
             f"Could not restore Supabase session (token may be expired). "
             f"Please log in again. Detail: {exc}"
         ) from exc
+    # Cache the client for subsequent calls in this script run
+    st.session_state["_supabase_authed_client"] = client
+    st.session_state["_supabase_authed_token"] = session.get("access_token")
     return client
