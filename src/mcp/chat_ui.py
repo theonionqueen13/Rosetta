@@ -63,6 +63,9 @@ _LOCATIONS_KEY  = "mcp_known_locations" # List[dict] — accumulated Location di
 _PENDING_Q_KEY       = "mcp_pending_question"   # str — original question when clarification is pending
 _STARTER_PROMPT_KEY = "mcp_starter_prompt"     # str — example prompt clicked by user before any history
 _AGENT_MEMORY_KEY   = "mcp_agent_memory"        # AgentMemory — structured private memory for the session
+_EQ_BASS_KEY    = "mcp_eq_bass"        # float -20 to +20 dB
+_EQ_MIDS_KEY    = "mcp_eq_mids"        # float -20 to +20 dB
+_EQ_TREBLE_KEY  = "mcp_eq_treble"      # float -20 to +20 dB
 
 # ── Example starter prompts ─────────────────────────────────────────────────
 
@@ -442,6 +445,9 @@ def _init_state() -> None:
     st.session_state.setdefault(_PERSONS_KEY, [])
     st.session_state.setdefault(_LOCATIONS_KEY, [])
     st.session_state.setdefault(_PENDING_Q_KEY, "")
+    st.session_state.setdefault(_EQ_BASS_KEY, 0.0)
+    st.session_state.setdefault(_EQ_MIDS_KEY, 0.0)
+    st.session_state.setdefault(_EQ_TREBLE_KEY, 0.0)
     if _AGENT_MEMORY_KEY not in st.session_state:
         st.session_state[_AGENT_MEMORY_KEY] = AgentMemory()
 
@@ -526,6 +532,36 @@ def render_chat_widget() -> None:
             ),
         )
 
+        # EQ Controls
+        st.markdown("### 🎛️ Audio EQ")
+        st.session_state[_EQ_BASS_KEY] = st.slider(
+            "Bass",
+            min_value=-20.0,
+            max_value=20.0,
+            value=st.session_state.get(_EQ_BASS_KEY, 0.0),
+            step=2.0,
+            key="mcp_eq_bass_slider",
+            help="Boost low frequencies to reduce tininess",
+        )
+        st.session_state[_EQ_MIDS_KEY] = st.slider(
+            "Mids",
+            min_value=-20.0,
+            max_value=20.0,
+            value=st.session_state.get(_EQ_MIDS_KEY, 0.0),
+            step=2.0,
+            key="mcp_eq_mids_slider",
+            help="Adjust mid frequencies for clarity",
+        )
+        st.session_state[_EQ_TREBLE_KEY] = st.slider(
+            "Treble",
+            min_value=-20.0,
+            max_value=20.0,
+            value=st.session_state.get(_EQ_TREBLE_KEY, 0.0),
+            step=2.0,
+            key="mcp_eq_treble_slider",
+            help="Reduce high frequencies to decrease treble/tinny sound",
+        )
+
     # ════════════════════════════════════════════════════════════════════════
     # LEFT COLUMN — chat
     # ════════════════════════════════════════════════════════════════════════
@@ -556,7 +592,13 @@ def render_chat_widget() -> None:
                         and msg.get("meta")
                         and not msg["meta"].get("fallback_to_interp")):
                     _render_caption(msg["meta"])
-                    _render_read_aloud_button(msg["content"], key=f"msg_{msg_idx}")
+                    _render_read_aloud_button(
+                        msg["content"],
+                        key=f"msg_{msg_idx}",
+                        bass=st.session_state.get(_EQ_BASS_KEY, 0.0),
+                        mids=st.session_state.get(_EQ_MIDS_KEY, 0.0),
+                        treble=st.session_state.get(_EQ_TREBLE_KEY, 0.0),
+                    )
 
         # Show example starter prompts when there is no history yet
         if not history:
@@ -1118,34 +1160,52 @@ def _render_dev_expander() -> None:
                 with _mem_tabs[4]:
                     st.json(mem.to_dict())
 
-def _render_read_aloud_button(text: str, key: str) -> None:
+def _render_read_aloud_button(text: str, key: str, bass: float = 0.0, mids: float = 0.0, treble: float = 0.0) -> None:
     """Render a set of playback controls using the browser SpeechSynthesis API.
 
-    Controls include play/pause, paragraph navigation, and speed adjustment.
+    Controls include play/pause, paragraph navigation, speed adjustment, and EQ controls.
+    
+    Args:
+        text: The content to speak
+        key: Unique identifier for this button set
+        bass: Bass adjustment in dB (-20 to +20)
+        mids: Mids adjustment in dB (-20 to +20)
+        treble: Treble adjustment in dB (-20 to +20)
     """
 
     # Use JSON to safely embed the text in JS (properly escapes quotes/newlines)
     js_text = json.dumps(text)
+    
+    # Calculate pitch and rate modifiers from EQ values
+    # Treble reduction = lower pitch; Bass boost = slower rate perception
+    pitch_mod = 1.0 - (treble * 0.01)  # Reduce pitch for treble cut
+    if pitch_mod < 0.5:
+        pitch_mod = 0.5  # Clamp to reasonable range
+    elif pitch_mod > 2.0:
+        pitch_mod = 2.0
+    
     html = r"""
     <div style="margin-top: 0.35rem; font-size: 0.85rem;">
-      <div style="display: flex; gap: 0.35rem; align-items: center;">
+      <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
         <button id="tts_play_{key}" style="padding: 0.25rem 0.5rem;">▶️</button>
         <button id="tts_pause_{key}" style="padding: 0.25rem 0.5rem;">⏸️</button>
         <button id="tts_prev_{key}" style="padding: 0.25rem 0.5rem;">⏮️</button>
         <button id="tts_next_{key}" style="padding: 0.25rem 0.5rem;">⏭️</button>
-        <label for="tts_speed_{key}" style="margin-left: 0.5rem;">speed</label>
-        <select id="tts_speed_{key}" style="padding: 0.2rem 0.3rem;">
+        <label for="tts_speed_{key}" style="margin-left: 0.5rem; font-size: 0.75rem;">speed</label>
+        <select id="tts_speed_{key}" style="padding: 0.2rem 0.3rem; font-size: 0.75rem;">
           <option value="0.75">0.75×</option>
           <option value="1.0" selected>1.0×</option>
           <option value="1.25">1.25×</option>
           <option value="1.5">1.5×</option>
           <option value="2.0">2.0×</option>
         </select>
-        <label for="tts_volume_{key}" style="margin-left: 0.5rem;">vol</label>
-        <input id="tts_volume_{key}" type="range" min="0" max="1" step="0.1" value="1" style="width: 90px;" />
-        <span id="tts_status_{key}" style="margin-left: 0.5rem; color: #8b949e;">(ready)</span>
+        <label for="tts_volume_{key}" style="margin-left: 0.5rem; font-size: 0.75rem;">vol</label>
+        <input id="tts_volume_{key}" type="range" min="0" max="1" step="0.1" value="1" style="width: 70px;" />
+        <label for="tts_pitch_{key}" style="margin-left: 0.5rem; font-size: 0.75rem;">pitch</label>
+        <input id="tts_pitch_{key}" type="range" min="0.5" max="2.0" step="0.1" value="{pitch_mod}" style="width: 70px;" />
+        <span id="tts_status_{key}" style="margin-left: 0.5rem; color: #8b949e; font-size: 0.75rem;">(ready)</span>
       </div>
-    </div>
+    </div>"
     <script>
       (function() {{
         if (typeof window === 'undefined' || !window.speechSynthesis) {{
@@ -1183,6 +1243,8 @@ def _render_read_aloud_button(text: str, key: str) -> None:
           u.rate = speed;
           const volume = parseFloat(document.getElementById('tts_volume_{key}').value) || 1.0;
           u.volume = volume;
+          const pitch = parseFloat(document.getElementById('tts_pitch_{key}').value) || 1.0;
+          u.pitch = pitch;
           u.onend = () => {{
             if (currentIndex < paragraphs.length - 1) {{
               currentIndex += 1;
@@ -1254,6 +1316,12 @@ def _render_read_aloud_button(text: str, key: str) -> None:
         document.getElementById('tts_volume_{key}')?.addEventListener('change', () => {{
           if (utter && speechSynthesis.speaking && !isPaused) {{
             // restart current paragraph at new volume
+            playCurrent();
+          }}
+        }});
+        document.getElementById('tts_pitch_{key}')?.addEventListener('change', () => {{
+          if (utter && speechSynthesis.speaking && !isPaused) {{
+            // restart current paragraph at new pitch
             playCurrent();
           }}
         }});

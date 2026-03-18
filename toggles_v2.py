@@ -772,7 +772,7 @@ def render_circuit_toggles(
 					with st.expander(members_label, expanded=False):
 						st.text_input("Circuit name", key=circuit_name_key)
 
-						# Auto-save when circuit name changes
+						# Auto-save when circuit name changes (only when a profile is active)
 						if st.session_state.get("current_profile"):
 							saved = st.session_state.get("saved_circuit_names", {})
 							current_name = st.session_state[circuit_name_key]
@@ -792,27 +792,70 @@ def render_circuit_toggles(
 								saved_profiles[profile_name] = payload
 								st.session_state["saved_circuit_names"] = current.copy()
 
-							# Sub-shapes
-							parent_shapes = [sh for sh in shapes if sh.parent == i]
-							shape_entries = []
-							if parent_shapes:
-								st.markdown("**Sub-shapes detected:**")
-								for sh in parent_shapes:
-									label_text = f"{sh.shape_type}: {', '.join(str(m) for m in sh.members)}"
-									unique_key = f"shape_{i}_{sh.shape_id}"
-									on = st.checkbox(
-										label_text,
-										key=unique_key,
-										value=st.session_state.get(unique_key, False),
-									)
-									shape_entries.append({"id": sh.shape_id, "on": on})
-							else:
-								st.markdown("_(no sub-shapes found)_")
+						# Sub-shapes (always visible, not gated on profile)
+						parent_shapes = [sh for sh in shapes if sh.parent == i]
+						shape_entries = []
+						if parent_shapes:
+							st.markdown("**Sub-shapes:**")
+							for sh in parent_shapes:
+								label_text = f"{sh.shape_type}: {', '.join(str(m) for m in sh.members)}"
+								unique_key = f"shape_{i}_{sh.shape_id}"
+								on = st.checkbox(
+									label_text,
+									key=unique_key,
+									value=st.session_state.get(unique_key, False),
+								)
+								shape_entries.append({"id": sh.shape_id, "on": on})
 
-							shape_toggle_map = st.session_state.setdefault(
-								"shape_toggles_by_parent", {}
-							)
-							shape_toggle_map[i] = shape_entries
+						shape_toggle_map = st.session_state.setdefault(
+							"shape_toggles_by_parent", {}
+						)
+						shape_toggle_map[i] = shape_entries
+
+						# ---------- Chart 2 Connections (Connected Circuits + synastry only) ----------
+						# Show connections when the circuit itself OR any of its sub-shapes is active.
+						any_shape_on = any(e["on"] for e in shape_entries)
+						if (synastry_mode or st.session_state.get("transit_mode", False)) and circuit_submode == "Connected Circuits" and (cbox or any_shape_on) and i in circuit_connected_shapes2:
+							cc2_items = circuit_connected_shapes2[i]
+
+							# When only sub-shapes are active (not the whole circuit),
+							# narrow down to Chart 2 shapes directly connected to
+							# the active sub-shape members via inter-chart aspects.
+							if not cbox and any_shape_on:
+								_active_sh1_ids = {e["id"] for e in shape_entries if e["on"]}
+								_active_sh1_members = set()
+								for _sh1 in parent_shapes:
+									if _sh1.shape_id in _active_sh1_ids:
+										_active_sh1_members.update(_sh1.members)
+								_inter = st.session_state.get("edges_inter_chart_cc", [])
+								_connected_to_active = {
+									ep2 for (ep1, ep2, _) in _inter
+									if ep1 in _active_sh1_members
+								}
+								cc2_items = [
+									sh2 for sh2 in cc2_items
+									if set(
+										sh2.get("members", []) if isinstance(sh2, dict)
+										else getattr(sh2, "members", [])
+									) & _connected_to_active
+								]
+
+							if cc2_items:
+								st.markdown("**Connected in Chart 2:**")
+								for sh2 in cc2_items:
+									sh2_type = (sh2.get("type", "Shape") if hasattr(sh2, "get")
+												else getattr(sh2, "shape_type", "Shape"))
+									sh2_members = (sh2.get("members", []) if hasattr(sh2, "get")
+												  else getattr(sh2, "members", []))
+									sh2_id = (sh2.get("id", f"x_{i}") if hasattr(sh2, "get")
+											  else getattr(sh2, "shape_id", f"x_{i}"))
+									if want_glyphs:
+										members_text = ", ".join(GLYPHS.get(m, m) for m in sh2_members)
+									else:
+										members_text = ", ".join(str(m) for m in sh2_members)
+									cc_key = f"cc_shape_{i}_{sh2_id}"
+									st.session_state.setdefault(cc_key, False)
+									st.checkbox(f"{sh2_type}: {members_text}", key=cc_key)
 
 			# Save Circuit Names (only if edits exist)
 			if st.session_state.get("current_profile"):

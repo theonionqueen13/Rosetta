@@ -748,6 +748,7 @@ def serialize_biwheel_for_rendering(
     pattern_labels: Optional[List] = None,
     major_edges_all: Optional[List] = None,
     circuit_mode: Optional[str] = None,  # "combined" | "connected" | None
+    visible_objects_outer: Optional[set] = None,  # Connected Circuits: only show these outer objects
 ) -> dict:
     """
     Convert two AstrologicalChart objects into a biwheel payload for the
@@ -801,8 +802,13 @@ def serialize_biwheel_for_rendering(
     for obj in chart_2.objects:
         if not obj.object_name:
             continue
-        # Append "_2" suffix to outer chart object names for disambiguation
-        serialized = _serialize_object(obj, house_system, chart_2, is_visible=True)
+        # In Connected Circuits mode, only show Chart 2 objects whose cc_shape
+        # toggle is active (visible_objects_outer contains _2-suffixed names).
+        _outer_visible = True
+        if visible_objects_outer is not None:
+            _name_2 = f"{obj.object_name.name}_2" if hasattr(obj.object_name, 'name') else f"{obj.object_name}_2"
+            _outer_visible = _name_2 in visible_objects_outer
+        serialized = _serialize_object(obj, house_system, chart_2, is_visible=_outer_visible)
         serialized["chart"] = "outer"
         objects_outer.append(serialized)
 
@@ -1004,6 +1010,10 @@ def serialize_biwheel_for_rendering(
         # Convert patterns_chart2 to lists as well
         patterns_chart2_as_lists = [list(p) if isinstance(p, (set, frozenset)) else list(p) for p in (patterns_chart2 or [])]
         
+        # In Connected Circuits mode, include visible Chart 2 objects
+        if visible_objects_outer:
+            visible_objs.update(visible_objects_outer)
+
         circuit_data = {
             "mode": circuit_mode,
             "patterns": patterns_as_lists,

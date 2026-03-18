@@ -91,7 +91,6 @@ st.session_state.setdefault("defaults_loaded", False)
 # Initialize birth data defaults for Chart 2 (if synastry is on)
 # (test_chart_2 selector removed; Chart 2 loaded via profile manager synastry slot)
 
-apply_custom_css() # Call the imported CSS function
 # current_user_id is now set by render_auth_gate() at startup (the logged-in user's UUID)
 COMPASS_KEY = "ui_compass_overlay"
 
@@ -122,6 +121,9 @@ resolved_dark_mode = set_background_for_theme(
 )
 
 st.session_state["dark_mode"] = resolved_dark_mode
+
+# Apply UI CSS once we know the resolved light/dark mode
+apply_custom_css(dark_mode=resolved_dark_mode)
 
 # (scroll handler is now done via components.html at the scroll target site)
 
@@ -471,12 +473,14 @@ with col_mid:
 			run_chart,
 			geocode_city_with_timezone,
 		)
+	st.write("Enter birth data on the left to calculate a chart. Use the Chart Manager on the right to save/load charts.") 
+	st.write("Once a chart is calculated, scroll down to ask the chat your astrology questions.")
 
 
 with col_right:
 	# Make sure the session keys exist before rendering any widgets in this panel
 	ensure_profile_session_defaults(MONTH_NAMES)
-	with st.expander("📂 Chart Profile Manager"):
+	with st.expander("📂 Chart Manager"):
 		saved_profiles = render_profile_manager(
 			MONTH_NAMES=MONTH_NAMES,
 			current_user_id=current_user_id,

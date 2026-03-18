@@ -292,6 +292,38 @@ def _refresh_chart_figure():
 				try:
 					highlights = st.session_state.get("chart_highlights", {})
 
+					# Pre-filter inter-chart edges & visible Chart 2 objects
+					# based on active circuit toggles and cc_shape toggles
+					# (mirrors the logic in drawing_v2.render_chart_connected_biwheel)
+					_active_circuit_members = set()
+					for _idx, _on in enumerate(toggles):
+						if _on and _idx < len(patterns_1):
+							_active_circuit_members.update(patterns_1[_idx])
+					# Include circuits that have an active sub-shape
+					for _pidx, _entries in shape_toggles_by_parent.items():
+						if any(e.get("on") for e in _entries):
+							if _pidx < len(patterns_1):
+								_active_circuit_members.update(patterns_1[_pidx])
+
+					# Visible Chart 2 objects: only those whose cc_shape is toggled on
+					_visible_chart2_plain = set()
+					for _ci in range(len(patterns_1)):
+						for _sh2 in circuit_connected_shapes2.get(_ci, []):
+							_sh2_id = (_sh2.get("id", "") if isinstance(_sh2, dict)
+							           else getattr(_sh2, "shape_id", ""))
+							if st.session_state.get(f"cc_shape_{_ci}_{_sh2_id}", False):
+								_members = (_sh2.get("members", []) if isinstance(_sh2, dict)
+								            else getattr(_sh2, "members", []))
+								_visible_chart2_plain.update(_members)
+
+					# Filter: keep only edges where p1 in active circuit & p2 in toggled cc_shape
+					filtered_edges_inter = [
+						(p1, p2, asp) for (p1, p2, asp) in edges_inter_chart_cc
+						if p1 in _active_circuit_members and p2 in _visible_chart2_plain
+					]
+					# Convert visible Chart 2 names to _2-suffixed set for outer objects
+					_visible_outer_objs = {f"{n}_2" for n in _visible_chart2_plain}
+
 					biwheel_data = serialize_biwheel_for_rendering(
 						chart_1,
 						chart_2,
@@ -301,10 +333,10 @@ def _refresh_chart_figure():
 						compass_on_inner=ts.get_compass_inner(),
 						compass_on_outer=ts.get_compass_outer(),
 						degree_markers=True,
-						edges_inter_chart=edges_inter_chart_cc,
+						edges_inter_chart=filtered_edges_inter,
 						edges_chart1=[],
 						edges_chart2=[],
-						show_inter=True,  # Show inter-chart aspects for connected circuits
+						show_inter=bool(filtered_edges_inter),
 						show_chart1_aspects=False,
 						show_chart2_aspects=False,
 						highlights=highlights,
@@ -320,6 +352,7 @@ def _refresh_chart_figure():
 						pattern_labels=pattern_labels,
 						major_edges_all=major_edges_all_1,
 						circuit_mode="connected",
+						visible_objects_outer=_visible_outer_objs,
 					)
 
 					event = st_interactive_chart(
@@ -720,14 +753,26 @@ def _refresh_chart_figure():
 				final_major = filtered_major
 				final_minor = filtered_minor
 			else:
-				# Standard Chart mode, or Circuits mode with no active toggles:
-				# show everything with default aspect colours.
-				vis_list = None
-				final_major = edges_major
-				final_minor = edges_minor
-				edge_color_map = {}
-				active_singletons = set()
-				layered_mode = False
+					edge_color_map = {}
+					active_singletons = set()
+					layered_mode = False
+					if chart_mode == "Standard Chart":
+						# Standard Chart: show all aspects.
+						vis_list = None
+						final_major = edges_major
+						final_minor = edges_minor
+					else:
+						# Circuits mode, nothing toggled: show nothing except compass axes.
+						compass_axes = (
+							[ax for ax in ("Ascendant", "Descendant", "AC", "DC",
+										  "Midheaven", "MC", "IC",
+										  "North Node", "South Node")
+							 if ax in pos]
+							if ts.get_compass_inner() else []
+						)
+						vis_list = compass_axes if compass_axes else []
+						final_major = []
+						final_minor = []
 
 			chart_data = serialize_chart_for_rendering(
 				chart,
@@ -744,21 +789,6 @@ def _refresh_chart_figure():
 				highlights=highlights,
 				visible_objects=vis_list,
 			)
-
-			# Post-process: apply group/shape colour overrides to aspect records.
-			# The JS renderer picks up asp.color directly, so overriding here is
-			# sufficient — no JS changes required.
-			if edge_color_map:
-				for asp in chart_data["aspects"]:
-					key_fwd = (asp["obj_a"], asp["obj_b"], asp["aspect"])
-					key_rev = (asp["obj_b"], asp["obj_a"], asp["aspect"])
-					override = edge_color_map.get(key_fwd) or edge_color_map.get(key_rev)
-					if override:
-						asp["color"] = override
-
-			# Embed active singletons + layered-mode flag for the JS renderer
-			chart_data["active_singletons"] = list(active_singletons)
-			chart_data["config"]["layered_mode"] = layered_mode
 
 			event = st_interactive_chart(
 				chart_data,

@@ -7,47 +7,80 @@ from typing import Optional
 
 COMPASS_KEY = "ui_compass_overlay"
 
-def apply_custom_css() -> None:
+def apply_custom_css(dark_mode: bool | None = None) -> None:
     """
     Applies custom CSS for expanders and sidebar profile styling.
-    (This replaces two large st.markdown blocks in the original file).
+
+    If `dark_mode` is provided (or can be inferred), the base text color is set
+    appropriately: black for light mode, white for dark mode.
     """
-    st.markdown("""
+    if dark_mode is None:
+        dark_mode = bool(st.session_state.get("ui_dark_mode", False))
+        try:
+            # Try Streamlit theme (light/dark)
+            base_theme = st.get_option("theme.base")
+            if base_theme in ("light", "dark"):
+                dark_mode = (base_theme == "dark")
+        except Exception:
+            pass
+
+    base_text_color = "#fff" if dark_mode else "#000"
+
+    st.markdown(f"""
 <style>
+/* Base text color for the current theme */
+.stApp {{
+    color: {base_text_color};
+}}
+
+/* Ensure Streamlit input labels (checkbox/radio/etc.) match the theme */
+.stApp [data-testid="stCheckbox"] label,
+.stApp [data-testid="stRadio"] label,
+.stApp [data-testid="stSelectbox"] label,
+.stApp [data-testid="stMultiselect"] label,
+
+/* Also cover nested spans/etc. used inside the controls */
+.stApp [data-testid="stCheckbox"] *,
+.stApp [data-testid="stRadio"] *,
+.stApp [data-testid="stSelectbox"] *,
+.stApp [data-testid="stMultiselect"] * {{
+    color: {base_text_color} !important;
+}}
+
 /* --- Custom Expander Styling --- */
 /* Full expander container */
-[data-testid="stExpander"] {
-    background-color: #333333 !important; /* dark gray */
-    color: white !important;
-    background-image: none !important;
-    border-radius: 10px !important;  /* rounded corners */
-    overflow: hidden !important;      /* prevents header/body corners showing square */
-}
+[data-testid="stExpander"] {{
+    background-color: #333333 !important; /* dark gray */
+    color: white !important;
+    background-image: none !important;
+    border-radius: 10px !important;  /* rounded corners */
+    overflow: hidden !important;      /* prevents header/body corners showing square */
+}}
 
 /* Expander header */
-[data-testid="stExpander"] > summary {
-    background-color: #333333 !important;
-    color: white !important;
-    border-radius: 10px !important;  /* same rounding */
-}
+[data-testid="stExpander"] > summary {{
+    background-color: #333333 !important;
+    color: white !important;
+    border-radius: 10px !important;  /* same rounding */
+}}
 
 /* Inner content area */
-[data-testid="stExpander"] .st-expander-content {
-    background-color: #333333 !important;
-    color: white !important;
-    border-radius: 0 0 10px 10px !important; /* rounded bottom corners */
-}
+[data-testid="stExpander"] .st-expander-content {{
+    background-color: #333333 !important;
+    color: white !important;
+    border-radius: 0 0 10px 10px !important; /* rounded bottom corners */
+}}
 
 /* --- Sidebar Profile Styling --- */
 /* Wrap each profile in .profile-card when rendering below */
-.profile-card {
+.profile-card {{
   line-height: 1.05;               /* keeps your single-spacing feel */
   white-space: pre-wrap;            /* preserves your <br> line breaks */
   border-bottom: 1px solid rgba(255,255,255,0.18);  /* thin divider */
   padding-bottom: 10px;
   margin-bottom: 10px;
-}
-.profile-card:last-child { border-bottom: none; }
+}}
+.profile-card:last-child {{ border-bottom: none; }}
 </style>
 """, unsafe_allow_html=True)
 
