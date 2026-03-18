@@ -8,12 +8,71 @@ Two modes are supported:
                            that Postgres RLS policies (auth.uid()) resolve
                            to the logged-in user.
 
-Each call returns a *new* Client object so that setting a session on one
-call never leaks into another user's requests (important in Streamlit where
-@st.cache_resource objects are shared across sessions).
+===== Root cause of [Errno 24] Too many open files =====
+
+supabase-py v2's `_listen_to_auth_events` fires on every SIGNED_IN /
+TOKEN_REFRESHED / SIGNED_OUT event and sets `self._postgrest = None`.  On
+the next `client.table()` call, `_init_postgrest_client` runs again and
+creates a brand-new httpx.Client (with a new SSL context + connection pool).
+Each discarded httpx.Client may hold file/socket handles that are never
+explicitly closed, so they accumulate until EMFILE.
+
+===== Fix =====
+
+Pass a single shared `httpx.Client` via `ClientOptions(httpx_client=...)`.
+supabase-py passes it as `http_client=self.options.httpx_client` every time
+it re-initialises the postgrest sub-client, so all re-creations reuse the
+same underlying transport — no new SSL contexts, no new connection pools,
+no leaked handles.
+
+One shared httpx.Client is created per credentials set (app lifetime).
+The authed client gets a separate shared transport so session headers
+don't bleed between the anon and authed paths.
 """
 import streamlit as st
-from supabase import create_client, Client
+import httpx
+from supabase import create_client, Client, ClientOptions
+
+# ---------------------------------------------------------------------------
+# Shared httpx transports (one per credential set, created lazily)
+# ---------------------------------------------------------------------------
+_shared_transport: httpx.Client | None = None
+_shared_transport_credentials: tuple[str, str] | None = None
+
+_shared_authed_transport: httpx.Client | None = None
+_shared_authed_transport_credentials: tuple[str, str] | None = None
+
+# Module-level singleton for the unauthenticated client
+_anon_client: Client | None = None
+_anon_client_credentials: tuple[str, str] | None = None
+
+
+def _get_shared_transport(url: str, key: str) -> httpx.Client:
+    """Return (or create) the shared httpx.Client for the anon supabase client."""
+    global _shared_transport, _shared_transport_credentials
+    if _shared_transport is None or _shared_transport_credentials != (url, key):
+        if _shared_transport is not None:
+            try:
+                _shared_transport.close()
+            except Exception:
+                pass
+        _shared_transport = httpx.Client(http2=True)
+        _shared_transport_credentials = (url, key)
+    return _shared_transport
+
+
+def _get_shared_authed_transport(url: str, key: str) -> httpx.Client:
+    """Return (or create) the shared httpx.Client for the authed supabase client."""
+    global _shared_authed_transport, _shared_authed_transport_credentials
+    if _shared_authed_transport is None or _shared_authed_transport_credentials != (url, key):
+        if _shared_authed_transport is not None:
+            try:
+                _shared_authed_transport.close()
+            except Exception:
+                pass
+        _shared_authed_transport = httpx.Client(http2=True)
+        _shared_authed_transport_credentials = (url, key)
+    return _shared_authed_transport
 
 
 def _credentials() -> tuple[str, str]:
@@ -56,9 +115,31 @@ def _credentials() -> tuple[str, str]:
 
 
 def get_supabase() -> Client:
-    """Returns a fresh Supabase client.  Safe for auth operations only."""
+    """Returns a cached anon Supabase client. Safe for auth operations.
+
+    A single client is reused for the entire process lifetime.  All postgrest
+    sub-client re-creations (triggered by supabase-py on every auth event)
+    reuse the shared httpx.Client, so no new SSL contexts or connection pools
+    are created.
+    """
+    global _anon_client, _anon_client_credentials
     url, key = _credentials()
-    return create_client(url, key)
+
+    if _anon_client is not None and _anon_client_credentials == (url, key):
+        return _anon_client
+
+    # Close old supabase client's auth httpx session if it has one
+    if _anon_client is not None:
+        try:
+            if hasattr(_anon_client, "auth") and hasattr(_anon_client.auth, "_client"):
+                _anon_client.auth._client.close()
+        except Exception:
+            pass
+
+    transport = _get_shared_transport(url, key)
+    _anon_client = create_client(url, key, options=ClientOptions(httpx_client=transport))
+    _anon_client_credentials = (url, key)
+    return _anon_client
 
 
 def get_authed_supabase() -> Client:
@@ -66,8 +147,9 @@ def get_authed_supabase() -> Client:
     Returns a Supabase client with the current user's session injected.
     This makes every DB query run as the logged-in user and activates RLS.
 
-    The client is cached per script rerun (same access token) to avoid
-    creating a brand-new HTTP client on every DB call.
+    The client is cached by access token to avoid recreating on every call.
+    All postgrest sub-client re-creations reuse a shared httpx.Client so
+    auth events never leak file handles.
     Raises RuntimeError if there is no active session (caller must re-auth).
     """
     session = st.session_state.get("supabase_session")
@@ -83,7 +165,10 @@ def get_authed_supabase() -> Client:
         return _cached
 
     url, key = _credentials()
-    client = create_client(url, key)
+    # Use a separate shared transport for authed calls (keeps auth headers
+    # isolated from the anon path)
+    transport = _get_shared_authed_transport(url, key)
+    client = create_client(url, key, options=ClientOptions(httpx_client=transport))
     try:
         client.auth.set_session(
             session["access_token"],

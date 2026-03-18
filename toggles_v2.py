@@ -5,6 +5,7 @@ import streamlit as st
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db, DetectedShape
 from src.state_manager import swap_primary_and_secondary_charts
+from src import toggle_state as ts
 
 GLYPHS = static_db.GLYPHS
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
@@ -12,6 +13,57 @@ ASPECTS = static_db.ASPECTS
 
 COMPASS_KEY = "ui_compass_overlay"
 COMPASS_KEY_2 = "ui_compass_overlay_2"  # separate overlay toggle for second chart (biwheel)
+
+
+# ---------------------------------------------------------------------------
+# Optimized callback functions for toggle state management
+# ---------------------------------------------------------------------------
+
+def _on_compass_inner_change():
+    """Sync inner compass toggle to unified state."""
+    ts.set_compass_inner(st.session_state.get(COMPASS_KEY, True))
+
+def _on_compass_outer_change():
+    """Sync outer compass toggle to unified state."""
+    ts.set_compass_outer(st.session_state.get(COMPASS_KEY_2, True))
+
+def _on_chart_mode_change():
+    """Sync chart mode to unified state."""
+    mode = st.session_state.get("__chart_mode_radio", "Circuits")
+    ts.set_chart_mode(mode)
+    st.session_state["chart_mode"] = mode
+
+def _on_circuit_submode_change():
+    """Sync circuit submode to unified state."""
+    submode = st.session_state.get("__circuit_submode_radio", "Combined Circuits")
+    ts.set_circuit_submode(submode)
+    st.session_state["circuit_submode"] = submode
+
+def _on_dark_mode_change():
+    """Sync dark mode to unified state."""
+    ts.set_dark_mode(st.session_state.get("dark_mode", False))
+
+def _on_interactive_chart_change():
+    """Sync interactive chart mode to unified state - NO toggle resets."""
+    ts.set_interactive_chart(st.session_state.get("interactive_chart", False))
+
+def _on_label_style_change():
+    """Sync label style to unified state."""
+    style = st.session_state.get("__label_style_choice_main", "Glyph").lower()
+    ts.set_label_style(style)
+    st.session_state["label_style"] = style
+
+def _on_synastry_inter_change():
+    """Sync synastry inter-chart aspects toggle."""
+    ts.set_synastry_aspects_inter(st.session_state.get("synastry_aspects_inter", True))
+
+def _on_synastry_chart1_change():
+    """Sync synastry chart 1 aspects toggle."""
+    ts.set_synastry_aspects_chart1(st.session_state.get("synastry_aspects_chart1", False))
+
+def _on_synastry_chart2_change():
+    """Sync synastry chart 2 aspects toggle."""
+    ts.set_synastry_aspects_chart2(st.session_state.get("synastry_aspects_chart2", False))
 
 # ---------------------------------------------------------------------------
 # Transit Date Navigation Intervals
@@ -159,37 +211,19 @@ def render_circuit_toggles(
 	save_user_profile_db,
 	load_user_profiles_db,
 ):
-	# --- PRE-INIT (so keys exist before any widgets render) ---
-	for i in range(len(patterns)):
-		st.session_state.setdefault(f"toggle_pattern_{i}", False)
-		for sh in [sh for sh in shapes if sh.parent == i]:
-			st.session_state.setdefault(f"shape_{i}_{sh.shape_id}", False)
-	if singleton_map:
-		for planet in singleton_map.keys():
-			st.session_state.setdefault(f"singleton_{planet}", False)
-
-	# Pre-init Connected Circuits Chart 2 shape toggle keys.
-	# These must exist before any widget render so Streamlit doesn't complain
-	# about missing keys when the circuit expanders open.
-	_biwheel_cc = (
-		(st.session_state.get("synastry_mode") or st.session_state.get("transit_mode", False))
-		and st.session_state.get("circuit_submode") == "Connected Circuits"
-	)
-	if _biwheel_cc:
-		_cc_shapes2_init = st.session_state.get("circuit_connected_shapes2", {})
-		for _ci in range(len(patterns)):
-			for _sh2 in _cc_shapes2_init.get(_ci, []):
-				_sh2_id = _sh2.shape_id if hasattr(_sh2, "shape_id") else _sh2.get("id", f"x_{_ci}")
-				st.session_state.setdefault(f"cc_shape_{_ci}_{_sh2_id}", False)
-
-	st.session_state.setdefault(COMPASS_KEY, True)
 	"""
 	Renders the Circuits UI (checkboxes, expanders, bulk buttons, compass rose, sub-shapes)
 	and handles saving circuit names.
 
+	Uses unified toggle state to preserve values across Interactive Chart mode toggling.
+
 	Returns:
 		toggles (list[bool]), pattern_labels (list[str]), saved_profiles (dict)
 	"""
+	# --- SYNC FROM UNIFIED STATE (preserves values across mode switches) ---
+	# Migrate any existing legacy keys to unified state on first run
+	ts.sync_from_legacy_keys()
+	
 	st.session_state.pop("events_block", None)
 	# guards
 	patterns = patterns or []
@@ -198,40 +232,81 @@ def render_circuit_toggles(
 	toggles: list[bool] = []
 	pattern_labels: list[str] = []
 
-	# ensure compass keys exist before any widgets render
-	st.session_state.setdefault(COMPASS_KEY, True)
-	st.session_state.setdefault(COMPASS_KEY_2, True)
-	# track previous checkbox values for delayed rerun
-	st.session_state.setdefault("_last_compass_value", st.session_state.get(COMPASS_KEY, False))
-	st.session_state.setdefault("_last_compass_value_2", st.session_state.get(COMPASS_KEY_2, False))
+	# --- PRE-INIT using unified state (batch initialization for speed) ---
+	# Patterns: ensure keys exist, preserve existing values
+	for i in range(len(patterns)):
+		key = f"toggle_pattern_{i}"
+		existing = ts.get_pattern_toggle(i)
+		st.session_state.setdefault(key, existing)
+		# Also sync to shapes for this pattern
+		for sh in [sh for sh in shapes if sh.parent == i]:
+			shape_key = f"shape_{i}_{sh.shape_id}"
+			existing_shape = ts.get_shape_toggle(i, sh.shape_id)
+			st.session_state.setdefault(shape_key, existing_shape)
+	
+	# Singletons: ensure keys exist, preserve existing values
+	if singleton_map:
+		for planet in singleton_map.keys():
+			key = f"singleton_{planet}"
+			existing = ts.get_singleton_toggle(planet)
+			st.session_state.setdefault(key, existing)
+
+	# Pre-init Connected Circuits Chart 2 shape toggle keys.
+	_biwheel_cc = (
+		(st.session_state.get("synastry_mode") or st.session_state.get("transit_mode", False))
+		and ts.get_circuit_submode() == "Connected Circuits"
+	)
+	if _biwheel_cc:
+		_cc_shapes2_init = st.session_state.get("circuit_connected_shapes2", {})
+		for _ci in range(len(patterns)):
+			for _sh2 in _cc_shapes2_init.get(_ci, []):
+				_sh2_id = _sh2.shape_id if hasattr(_sh2, "shape_id") else _sh2.get("id", f"x_{_ci}")
+				key = f"cc_shape_{_ci}_{_sh2_id}"
+				existing = ts.get_cc_shape_toggle(_ci, _sh2_id)
+				st.session_state.setdefault(key, existing)
+
+	# Compass keys from unified state
+	st.session_state.setdefault(COMPASS_KEY, ts.get_compass_inner())
+	st.session_state.setdefault(COMPASS_KEY_2, ts.get_compass_outer())
+	# Track previous checkbox values for delayed rerun
+	st.session_state.setdefault("_last_compass_value", st.session_state.get(COMPASS_KEY, True))
+	st.session_state.setdefault("_last_compass_value_2", st.session_state.get(COMPASS_KEY_2, True))
 
 	# --- Chart Mode Selector ---
-	st.session_state.setdefault("chart_mode", "Circuits")
+	# Use unified state as source of truth
+	_current_mode = ts.get_chart_mode()
+	st.session_state.setdefault("chart_mode", _current_mode)
 	mode_col1, mode_col2 = st.columns([1, 5])
 	with mode_col1:
 		chart_mode = st.radio(
 			"Chart Mode",
 			["Standard Chart", "Circuits"],
-			index=0 if st.session_state.get("chart_mode") == "Standard Chart" else 1,
+			index=0 if _current_mode == "Standard Chart" else 1,
 			key="__chart_mode_radio",
 			horizontal=False,
+			on_change=_on_chart_mode_change,
 		)
-		# Always sync the derived key; avoid st.rerun() here because it would
-		# abort before later widgets (e.g. transit_mode checkbox) render,
-		# causing Streamlit to drop those keys from session state.
+		# Sync both the derived key and unified state
+		ts.set_chart_mode(chart_mode)
 		st.session_state["chart_mode"] = chart_mode
 
 	# --- Handle pending "Hide All" (from previous run) safely ---
 	if st.session_state.get("__pending_hide_all__"):
+		# Use unified state for hide all
+		ts.hide_all(len(patterns), shapes, list(singleton_map.keys()))
+		# Also update legacy session keys for widgets
 		updates = {}
 		for i in range(len(patterns)):
 			updates[f"toggle_pattern_{i}"] = False
-		for sh in [sh for sh in shapes if sh.parent == i]:
-			updates[f"shape_{i}_{sh.shape_id}"] = False
+			ts.set_pattern_toggle(i, False)
+		for sh in shapes:
+			updates[f"shape_{sh.parent}_{sh.shape_id}"] = False
+			ts.set_shape_toggle(sh.parent, sh.shape_id, False)
 		if singleton_map:
 			for planet in singleton_map.keys():
 				updates[f"singleton_{planet}"] = False
-		updates[COMPASS_KEY] = False  # safe now; checkbox not yet instantiated
+				ts.set_singleton_toggle(planet, False)
+		updates[COMPASS_KEY] = False
 		updates[COMPASS_KEY_2] = False
 		st.session_state.update(updates)
 		st.session_state["__pending_hide_all__"] = False
@@ -239,13 +314,18 @@ def render_circuit_toggles(
 	
 	# --- Handle pending "Show All" (from previous run) safely ---
 	if st.session_state.get("__pending_show_all__"):
+		# Use unified state for show all
+		ts.show_all(len(patterns), list(singleton_map.keys()))
+		# Also update legacy session keys for widgets
 		updates = {}
 		for i in range(len(patterns)):
 			updates[f"toggle_pattern_{i}"] = True
+			ts.set_pattern_toggle(i, True)
 		if singleton_map:
 			for planet in singleton_map.keys():
 				updates[f"singleton_{planet}"] = True
-		updates[COMPASS_KEY] = True  # safe here, checkbox not yet instantiated
+				ts.set_singleton_toggle(planet, True)
+		updates[COMPASS_KEY] = True
 		updates[COMPASS_KEY_2] = True
 		st.session_state.update(updates)
 		st.session_state["__pending_show_all__"] = False
@@ -296,24 +376,25 @@ def render_circuit_toggles(
 		_synastry_now = st.session_state.get("synastry_mode", False) or st.session_state.get("transit_mode", False)
 		if _synastry_now:
 			# Force submode to Combined Circuits whenever we enter biwheel from single-chart
-			# (setdefault would leave the stale "single" value in place)
-			if st.session_state.get("circuit_submode") == "single":
-				st.session_state["circuit_submode"] = "Combined Circuits"
-			st.session_state.setdefault("circuit_submode", "Combined Circuits")
+			_current_submode = ts.get_circuit_submode()
+			if _current_submode == "single":
+				ts.set_circuit_submode("Combined Circuits")
+				_current_submode = "Combined Circuits"
+			st.session_state.setdefault("circuit_submode", _current_submode)
 			submode = st.radio(
 				"Circuit View Mode",
 				["Combined Circuits", "Connected Circuits"],
-				index=0 if st.session_state.get("circuit_submode") == "Combined Circuits" else 1,
+				index=0 if _current_submode == "Combined Circuits" else 1,
 				key="__circuit_submode_radio",
 				horizontal=False,
+				on_change=_on_circuit_submode_change,
 			)
-			# Just update session state — Streamlit already reruns when a widget changes,
-			# so the extra st.rerun() here is both redundant and harmful because it fires
-			# before the rest of this function (the transit checkbox) has rendered,
-			# which causes Streamlit to lose track of the transit_mode widget state.
+			# Sync to both unified state and session state
+			ts.set_circuit_submode(submode)
 			st.session_state["circuit_submode"] = submode
 		else:
 			# Single-chart: always use normal circuit view; clear any stale submode
+			ts.set_circuit_submode("single")
 			st.session_state["circuit_submode"] = "single"
 
 		c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
@@ -329,7 +410,7 @@ def render_circuit_toggles(
 				or st.session_state.get("profile_unknown_time")
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
-			new_value = st.checkbox(label1, key=COMPASS_KEY)
+			new_value = st.checkbox(label1, key=COMPASS_KEY, on_change=_on_compass_inner_change)
 
 			# second chart toggle if biwheel is active
 			if biwheel_active:
@@ -341,17 +422,19 @@ def render_circuit_toggles(
 					_c2 = st.session_state.get("last_chart_2")
 				unknown_time2 = bool(_c2.unknown_time if _c2 else False)
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
-				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
+				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2, on_change=_on_compass_outer_change)
 
-		# Track compass value change but do not rerun immediately
+		# Track compass value change and sync to unified state
 		prev_value = st.session_state.get("_last_compass_value")
 		if new_value != prev_value:
+			ts.set_compass_inner(new_value)
 			st.session_state["_last_compass_value"] = new_value
 			st.session_state["_pending_compass_rerun"] = True
 		# track second
 		if biwheel_active:
 			prev2 = st.session_state.get("_last_compass_value_2")
 			if new_value2 != prev2:
+				ts.set_compass_outer(new_value2)
 				st.session_state["_last_compass_value_2"] = new_value2
 				st.session_state["_pending_compass_rerun"] = True
 
@@ -366,7 +449,9 @@ def render_circuit_toggles(
 				st.session_state["__pending_hide_all__"] = True
 				st.rerun()
 
-		st.session_state.setdefault("label_style", "glyph")
+		# Use unified state for label style
+		_current_label_style = ts.get_label_style()
+		st.session_state.setdefault("label_style", _current_label_style)
 		with c4:
 			st.subheader("Single Placements")
 
@@ -406,7 +491,7 @@ def render_circuit_toggles(
 				or st.session_state.get("profile_unknown_time")
 			)
 			label1 = f"{chart1_name} {'Compass Needle' if unknown_time1 else 'Compass Rose'}"
-			new_value = st.checkbox(label1, key=COMPASS_KEY)
+			new_value = st.checkbox(label1, key=COMPASS_KEY, on_change=_on_compass_inner_change)
 
 			# optionally show second chart toggle
 			synastry_mode = st.session_state.get("synastry_mode", False)
@@ -420,17 +505,19 @@ def render_circuit_toggles(
 					_c2 = st.session_state.get("last_chart_2")
 				unknown_time2 = bool(_c2.unknown_time if _c2 else False)
 				label2 = f"{chart2_name} {'Compass Needle' if unknown_time2 else 'Compass Rose'}"
-				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2)
+				new_value2 = st.checkbox(label2, key=COMPASS_KEY_2, on_change=_on_compass_outer_change)
 
-			# Track compass value change but do not rerun immediately
+			# Track compass value change and sync to unified state
 			prev_value = st.session_state.get("_last_compass_value")
 			if new_value != prev_value:
+				ts.set_compass_inner(new_value)
 				st.session_state["_last_compass_value"] = new_value
 				st.session_state["_pending_compass_rerun"] = True
 			# second
 			if biwheel_active:
 				prev2 = st.session_state.get("_last_compass_value_2")
 				if new_value2 != prev2:
+					ts.set_compass_outer(new_value2)
 					st.session_state["_last_compass_value_2"] = new_value2
 					st.session_state["_pending_compass_rerun"] = True
 		st.markdown("---")
@@ -457,21 +544,21 @@ def render_circuit_toggles(
 				else:
 					chart2_name = "Transits"
 
-				# Initialize synastry aspect group toggles
-				st.session_state.setdefault("synastry_aspects_inter", True)   # Default on
-				st.session_state.setdefault("synastry_aspects_chart1", False)  # Default off
-				st.session_state.setdefault("synastry_aspects_chart2", False)  # Default off
+				# Initialize synastry aspect group toggles from unified state
+				st.session_state.setdefault("synastry_aspects_inter", ts.get_synastry_aspects_inter())
+				st.session_state.setdefault("synastry_aspects_chart1", ts.get_synastry_aspects_chart1())
+				st.session_state.setdefault("synastry_aspects_chart2", ts.get_synastry_aspects_chart2())
 
-				# Aspect group toggles
-				st.checkbox(f"{chart1_name} ↔ {chart2_name}", key="synastry_aspects_inter")
-				st.checkbox(f"{chart1_name} Aspects", key="synastry_aspects_chart1")
-				st.checkbox(f"{chart2_name} Aspects", key="synastry_aspects_chart2")
+				# Aspect group toggles with on_change callbacks
+				st.checkbox(f"{chart1_name} ↔ {chart2_name}", key="synastry_aspects_inter", on_change=_on_synastry_inter_change)
+				st.checkbox(f"{chart1_name} Aspects", key="synastry_aspects_chart1", on_change=_on_synastry_chart1_change)
+				st.checkbox(f"{chart2_name} Aspects", key="synastry_aspects_chart2", on_change=_on_synastry_chart2_change)
 
 				st.markdown("---")
 			with st.expander("Additional Aspects"):
 				
 				# Get current label style
-				label_style = st.session_state.get("label_style", "glyph")
+				label_style = ts.get_label_style()
 				want_glyphs = label_style == "glyph"
 				
 				# Select All checkbox
@@ -755,29 +842,34 @@ def render_circuit_toggles(
 			# render_house_system_selector()
 
 			# --- Label Style (keep visual location, fix instant sync) ---
-			st.session_state.setdefault("label_style", "glyph")
-			old_style = st.session_state["label_style"]
-			label_default_is_glyph = old_style == "glyph"
+			_current_label_style = ts.get_label_style()
+			st.session_state.setdefault("label_style", _current_label_style)
+			label_default_is_glyph = _current_label_style == "glyph"
 
 			label_choice = st.radio(
 				"Label Style",
 				["Text", "Glyph"],
 				index=(1 if label_default_is_glyph else 0),
 				horizontal=True,
-				key="__label_style_choice_main",  # unique key
+				key="__label_style_choice_main",
+				on_change=_on_label_style_change,
 			)
 			new_style = label_choice.lower()
 
-			# Always sync to session state; Streamlit reruns on widget change
+			# Sync to both unified state and session state
+			ts.set_label_style(new_style)
 			st.session_state["label_style"] = new_style
 
-			# Dark mode → persist to session
-			st.session_state.setdefault("dark_mode", False)
-			st.checkbox("🌙 Dark Mode", key="dark_mode")
+			# Dark mode → persist to session and unified state
+			_current_dark_mode = ts.get_dark_mode()
+			st.session_state.setdefault("dark_mode", _current_dark_mode)
+			st.checkbox("🌙 Dark Mode", key="dark_mode", on_change=_on_dark_mode_change)
 
-			# Interactive D3 chart toggle
-			st.session_state.setdefault("interactive_chart", False)
+			# Interactive D3 chart toggle - uses on_change to preserve other toggles
+			_current_interactive = ts.get_interactive_chart()
+			st.session_state.setdefault("interactive_chart", _current_interactive)
 			st.checkbox("✨ Interactive Chart", key="interactive_chart",
+						on_change=_on_interactive_chart_change,
 						help="Switch to the interactive D3.js/SVG chart with hover tooltips and click events")
 
 			# Transits toggle — visible whenever a chart is loaded and synastry is off
@@ -819,16 +911,39 @@ def render_circuit_toggles(
 		st.session_state["_pending_compass_rerun"] = False
 		st.rerun()
 
-	# return AFTER both columns render
-	chart_mode = st.session_state.get("chart_mode", "Circuits")
-	circuit_submode = st.session_state.get("circuit_submode", "Combined Circuits")
+	# --- SYNC back to unified state and legacy keys before return ---
+	# This ensures all toggle values are preserved across mode switches
 	
-	# Collect aspect toggles for Standard Chart mode
+	# Sync pattern toggles to unified state
+	for i in range(len(patterns)):
+		key = f"toggle_pattern_{i}"
+		val = st.session_state.get(key, False)
+		ts.set_pattern_toggle(i, val)
+	
+	# Sync singleton toggles to unified state
+	for planet in singleton_map.keys():
+		key = f"singleton_{planet}"
+		val = st.session_state.get(key, False)
+		ts.set_singleton_toggle(planet, val)
+	
+	# Sync shape toggles to unified state
+	for sh in shapes:
+		key = f"shape_{sh.parent}_{sh.shape_id}"
+		val = st.session_state.get(key, False)
+		ts.set_shape_toggle(sh.parent, sh.shape_id, val)
+	
+	# return AFTER both columns render
+	chart_mode = ts.get_chart_mode()
+	circuit_submode = ts.get_circuit_submode()
+	
+	# Collect aspect toggles for Standard Chart mode (from unified state)
 	aspect_toggles = {}
 	if chart_mode == "Standard Chart":
 		for body_name in TOGGLE_ASPECTS.keys():
 			key = f"aspect_toggle_{body_name}"
-			aspect_toggles[body_name] = st.session_state.get(key, False)
+			val = st.session_state.get(key, False)
+			aspect_toggles[body_name] = val
+			ts.set_aspect_toggle(body_name, val)
 	
 	return toggles, pattern_labels, saved_profiles, chart_mode, aspect_toggles, circuit_submode
 

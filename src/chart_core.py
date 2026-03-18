@@ -11,6 +11,7 @@ from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_link
 from src.geocoding import geocode_city_with_timezone
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db
+from src import toggle_state as ts
 
 EPHE_MAJOR_OBJECTS = static_db.EPHE_MAJOR_OBJECTS
 ALL_MAJOR_PLACEMENTS = static_db.ALL_MAJOR_PLACEMENTS  # Use this for filtering all major chart placements
@@ -66,7 +67,10 @@ def _positions_from_chart(chart):
 	}
 
 def _refresh_chart_figure():
-	"""Rebuild the chart figure using the current session-state toggles."""
+	"""Rebuild the chart figure using the current session-state toggles.
+	
+	Uses unified toggle state for consistent values across interactive/non-interactive modes.
+	"""
 	# Check if we're in synastry or transit mode (both use the biwheel renderer).
 	# Transit mode only activates the biwheel path in Standard Chart mode so it
 	# doesn't interfere with the Circuits-mode biwheel renderers.
@@ -85,14 +89,15 @@ def _refresh_chart_figure():
 			chart_2 = chart_1  # Use same chart for both rings as fallback
 		
 		house_system = st.session_state.get("house_system", "placidus")
-		label_style = st.session_state.get("label_style", "glyph")
-		dark_mode = st.session_state.get("dark_mode", False)
-		chart_mode = st.session_state.get("chart_mode", "Circuits")
+		# Use unified state for consistent toggle values
+		label_style = ts.get_label_style()
+		dark_mode = ts.get_dark_mode()
+		chart_mode = ts.get_chart_mode()
 		# Prefer the radio widget key (set by Streamlit before script runs) so the
 		# correct submode is used on the very first rerun after the user clicks.
 		circuit_submode = (
 			st.session_state.get("__circuit_submode_radio")
-			or st.session_state.get("circuit_submode", "Combined Circuits")
+			or ts.get_circuit_submode()
 		)
 		
 		# Compute aspects for Standard Chart mode
@@ -117,13 +122,13 @@ def _refresh_chart_figure():
 				# Charts haven't been loaded yet — nothing to draw.
 				return
 			
-			# Get toggle states for circuits
+			# Get toggle states for circuits from unified state
 			toggles = [
-				st.session_state.get(f"toggle_pattern_{i}", False)
+				ts.get_pattern_toggle(i)
 				for i in range(len(patterns_combined))
 			]
 			singleton_toggles = {
-				planet: st.session_state.get(f"singleton_{planet}", False)
+				planet: ts.get_singleton_toggle(planet)
 				for planet in singleton_map_combined
 			}
 			shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
@@ -135,13 +140,13 @@ def _refresh_chart_figure():
 			filaments = []  # For now, keep empty; can be computed later
 			
 			pattern_labels = [
-				st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+				ts.get_circuit_name(i)
 				for i in range(len(patterns_combined))
 			]
 			combo_toggles = {}
 			
 			# ── Interactive Biwheel Circuit Mode ──────────────────────────────
-			interactive_mode = st.session_state.get("interactive_chart", False)
+			interactive_mode = ts.get_interactive_chart()
 			if interactive_mode:
 				try:
 					highlights = st.session_state.get("chart_highlights", {})
@@ -152,8 +157,8 @@ def _refresh_chart_figure():
 						house_system=house_system,
 						dark_mode=dark_mode,
 						label_style=label_style,
-						compass_on_inner=st.session_state.get(COMPASS_KEY, True),
-						compass_on_outer=st.session_state.get(COMPASS_KEY_2, True),
+						compass_on_inner=ts.get_compass_inner(),
+						compass_on_outer=ts.get_compass_outer(),
 						degree_markers=True,
 						edges_inter_chart=[],
 						edges_chart1=[],
@@ -268,21 +273,21 @@ def _refresh_chart_figure():
 			filaments_1 = chart_1.filaments
 
 			pattern_labels = [
-				st.session_state.get(f"circuit_name_{ci}", f"Circuit {ci+1}")
+				ts.get_circuit_name(ci)
 				for ci in range(len(patterns_1))
 			]
 			toggles = [
-				st.session_state.get(f"toggle_pattern_{ci}", False)
+				ts.get_pattern_toggle(ci)
 				for ci in range(len(patterns_1))
 			]
 			singleton_toggles = {
-				planet: st.session_state.get(f"singleton_{planet}", False)
+				planet: ts.get_singleton_toggle(planet)
 				for planet in singleton_map_1
 			}
 			shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
 
 			# ── Interactive Connected Circuits Mode ──────────────────────────────
-			interactive_mode = st.session_state.get("interactive_chart", False)
+			interactive_mode = ts.get_interactive_chart()
 			if interactive_mode:
 				try:
 					highlights = st.session_state.get("chart_highlights", {})
@@ -293,8 +298,8 @@ def _refresh_chart_figure():
 						house_system=house_system,
 						dark_mode=dark_mode,
 						label_style=label_style,
-						compass_on_inner=st.session_state.get(COMPASS_KEY, True),
-						compass_on_outer=st.session_state.get(COMPASS_KEY_2, True),
+						compass_on_inner=ts.get_compass_inner(),
+						compass_on_outer=ts.get_compass_outer(),
 						degree_markers=True,
 						edges_inter_chart=edges_inter_chart_cc,
 						edges_chart1=[],
@@ -483,7 +488,7 @@ def _refresh_chart_figure():
 				edges_chart2 = []
 
 			# ── Interactive Biwheel Chart Mode ──────────────────────────────
-			interactive_mode = st.session_state.get("interactive_chart", False)
+			interactive_mode = ts.get_interactive_chart()
 			if interactive_mode:
 				try:
 					highlights = st.session_state.get("chart_highlights", {})
@@ -494,8 +499,8 @@ def _refresh_chart_figure():
 						house_system=house_system,
 						dark_mode=dark_mode,
 						label_style=label_style,
-						compass_on_inner=st.session_state.get(COMPASS_KEY, True),
-						compass_on_outer=st.session_state.get(COMPASS_KEY_2, True),
+						compass_on_inner=ts.get_compass_inner(),
+						compass_on_outer=ts.get_compass_outer(),
 						degree_markers=True,
 						edges_inter_chart=edges_inter_chart,
 						edges_chart1=edges_chart1,
@@ -597,30 +602,32 @@ def _refresh_chart_figure():
 	edges_major     = chart.edges_major
 	edges_minor     = chart.edges_minor
 
+	# Read toggles from unified state for consistency across interactive/non-interactive modes
 	pattern_labels = [
-		st.session_state.get(f"circuit_name_{i}", f"Circuit {i+1}")
+		ts.get_circuit_name(i)
 		for i in range(len(patterns))
 	]
 	toggles = [
-		st.session_state.get(f"toggle_pattern_{i}", False)
+		ts.get_pattern_toggle(i)
 		for i in range(len(patterns))
 	]
 	singleton_toggles = {
-		planet: st.session_state.get(f"singleton_{planet}", False)
+		planet: ts.get_singleton_toggle(planet)
 		for planet in singleton_map
 	}
 	shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
 	combo_toggles = st.session_state.get("combo_toggles", {})
 
 	house_system = st.session_state.get("house_system", "placidus")
-	label_style  = st.session_state.get("label_style", "glyph")
-	dark_mode    = st.session_state.get("dark_mode", False)
+	# Use unified state for consistent values
+	label_style  = ts.get_label_style()
+	dark_mode    = ts.get_dark_mode()
 
-	# Check if we're in Standard Chart mode
-	chart_mode = st.session_state.get("chart_mode", "Circuits")
+	# Check if we're in Standard Chart mode using unified state
+	chart_mode = ts.get_chart_mode()
 
 	# ── Interactive Chart Mode ──────────────────────────────────────────────
-	interactive_mode = st.session_state.get("interactive_chart", False)
+	interactive_mode = ts.get_interactive_chart()
 	if interactive_mode:
 		try:
 			highlights = st.session_state.get("chart_highlights", {})
@@ -703,7 +710,7 @@ def _refresh_chart_figure():
 				visible_objs.update(active_singletons)
 
 				# Always keep compass axes visible when compass rose is on
-				if st.session_state.get(COMPASS_KEY, True):
+				if ts.get_compass_inner():
 					for axis in ("Ascendant", "Descendant", "AC", "DC",
 								 "Midheaven", "MC", "IC",
 								 "North Node", "South Node"):
@@ -727,7 +734,7 @@ def _refresh_chart_figure():
 				house_system=house_system,
 				dark_mode=dark_mode,
 				label_style=label_style,
-				compass_on=st.session_state.get(COMPASS_KEY, True),
+				compass_on=ts.get_compass_inner(),
 				degree_markers=True,
 				edges_major=final_major,
 				edges_minor=final_minor,
@@ -827,7 +834,7 @@ def _refresh_chart_figure():
 		
 		# Use render_chart for standard mode with all MAJOR_OBJECTS visible
 		try:
-			compass_on = st.session_state.get(COMPASS_KEY, True)
+			compass_on = ts.get_compass_inner()
 			# Show all MAJOR_OBJECTS that actually exist in the chart
 			visible_objects = list(major_pos.keys())
 			# Ensure AC and DC are always included when compass rose is toggled
@@ -838,12 +845,12 @@ def _refresh_chart_figure():
 						visible_objects.append(axis)
 			rr = render_chart(
 				chart,
-				dark_mode=resolved_dark_mode,
+				dark_mode=ts.get_dark_mode(),
 				visible_toggle_state=visible_objects,  # Show all MAJOR_OBJECTS
 				edges_major=standard_edges,
 				edges_minor=[],
 				house_system=_selected_house_system(),
-				label_style=st.session_state.get("label_style", "glyph"),
+				label_style=ts.get_label_style(),
 				compass_on=compass_on,
 				degree_markers=True,
 				zodiac_labels=True,
@@ -885,13 +892,13 @@ def _refresh_chart_figure():
 			st.error(f"Complex chart rendering failed: {e}")
 			rr = render_chart(
 				chart,
-				dark_mode=resolved_dark_mode,
+				dark_mode=ts.get_dark_mode(),
 				visible_toggle_state=None,
 				edges_major=edges_major,
 				edges_minor=edges_minor,
 				house_system=_selected_house_system(),
-				label_style=st.session_state.get("label_style", "glyph"),
-				compass_on=st.session_state.get("toggle_compass_rose", True),
+				label_style=ts.get_label_style(),
+				compass_on=ts.get_compass_inner(),
 				degree_markers=True,
 				zodiac_labels=True,
 				figsize=(6.0, 6.0),
