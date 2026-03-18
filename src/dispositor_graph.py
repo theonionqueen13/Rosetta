@@ -8,6 +8,7 @@ from matplotlib import gridspec
 from house_selector_v2 import render_house_system_selector
 import matplotlib.patheffects as pe
 from models_v2 import static_db
+from calc_v2 import compute_plot_data_from_chart
 
 ABREVIATED_PLANET_NAMES = static_db.ABREVIATED_PLANET_NAMES
 _RECEPTION_ASPECTS = static_db._RECEPTION_ASPECTS
@@ -203,6 +204,12 @@ def render_dispositor_section(st, chart) -> None:
         )
 
     plot_data = chart.plot_data
+    
+    # Regenerate plot_data for profile-loaded charts that don't have it
+    if plot_data is None:
+        plot_data = compute_plot_data_from_chart(chart)
+        if plot_data is not None:
+            chart.plot_data = plot_data  # Cache for future use
     
     if plot_data is not None:
         # The rest of your logic now runs directly on the plot_data variable.

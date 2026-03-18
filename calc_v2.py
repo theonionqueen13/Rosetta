@@ -819,6 +819,72 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 		"by_house": by_house_result,
 	}
 
+
+def compute_plot_data_from_chart(chart: AstrologicalChart) -> dict:
+	"""
+	Rebuild plot_data from a chart object (useful for profile-loaded charts).
+	
+	Returns the same structure as plot_data in calculate_chart():
+	{
+		"by_sign": {"raw_links": [...], "sovereigns": [...], "self_ruling": [...]},
+		"Placidus": {...},
+		"Equal": {...},
+		"Whole Sign": {...}
+	}
+	"""
+	# Extract positions from chart objects
+	pos = {}
+	for obj in chart.objects:
+		if obj.object_name:
+			name = obj.object_name.name
+			# Skip non-planetary objects (angles, parts, etc.)
+			if name in MAJOR_OBJECTS or name in ABREVIATED_PLANET_NAMES.values():
+				pos[name] = obj.longitude
+	
+	if not pos:
+		return None
+	
+	# Extract cusps per house system
+	systems = ("placidus", "equal", "whole")
+	system_label = {"placidus": "Placidus", "equal": "Equal", "whole": "Whole Sign"}
+	cusps_by_system = {}
+	
+	for cusp in chart.house_cusps:
+		sys = (cusp.house_system or "placidus").strip().lower()
+		if sys not in cusps_by_system:
+			cusps_by_system[sys] = [0.0] * 12
+		if 1 <= cusp.cusp_number <= 12:
+			cusps_by_system[sys][cusp.cusp_number - 1] = float(cusp.absolute_degree)
+	
+	# Build plot_data structure
+	# 1) Sign-based dispositors
+	disp_sign = analyze_dispositors(pos, None)
+	by_sign = disp_sign.get("by_sign", {})
+	
+	plot_data = {
+		"by_sign": {
+			"raw_links": by_sign.get("raw_links", []),
+			"sovereigns": by_sign.get("sovereigns", []),
+			"self_ruling": by_sign.get("self_ruling", [])
+		}
+	}
+	
+	# 2) House-based dispositors for each system
+	for sys in systems:
+		cusps = cusps_by_system.get(sys, [])
+		if cusps and len(cusps) == 12 and any(c != 0.0 for c in cusps):
+			disp_sys = analyze_dispositors(pos, cusps)
+			by_house = disp_sys.get("by_house", {})
+			sys_lbl = system_label[sys]
+			plot_data[sys_lbl] = {
+				"raw_links": by_house.get("raw_links", []),
+				"sovereigns": by_house.get("sovereigns", []),
+				"self_ruling": by_house.get("self_ruling", [])
+			}
+	
+	return plot_data
+
+
 def build_dispositor_tables(chart: AstrologicalChart) -> tuple[list[dict], list[dict]]:
 	"""
 	Returns two UI-ready tables:

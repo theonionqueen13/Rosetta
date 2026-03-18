@@ -737,7 +737,6 @@ def render_circuit_toggles(
 					for i in range(len(patterns))
 				}
 				if current != saved:
-					st.markdown("---")
 					if st.button("💾 Save Circuit Names"):
 						profile_name = st.session_state["current_profile"]
 						payload = saved_profiles.get(profile_name, {}).copy()

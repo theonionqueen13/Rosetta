@@ -187,7 +187,13 @@
             const height = args.chart_height || 600;
 
             try {
-                RosettaChart.render(container, data, width, height);
+                // Check if this is a biwheel chart
+                const isBiwheel = data.config && data.config.is_biwheel;
+                if (isBiwheel) {
+                    RosettaChart.renderBiwheel(container, data, width, height);
+                } else {
+                    RosettaChart.render(container, data, width, height);
+                }
             } catch (e) {
                 _dbg.err("RosettaChart.render() threw: " + e.message);
                 _dbg.err("Stack: " + (e.stack || "").split("\n").slice(0, 5).join(" | "));

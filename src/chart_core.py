@@ -24,7 +24,7 @@ from calc_v2 import calculate_chart, chart_sect_from_chart, build_aspect_edges, 
 					build_conjunction_clusters
 from src.dispositor_graph import plot_dispositor_graph
 from circuit_sim import simulate_and_attach
-from src.chart_serializer import serialize_chart_for_rendering
+from src.chart_serializer import serialize_chart_for_rendering, serialize_biwheel_for_rendering
 from src.components.interactive_chart import st_interactive_chart
 
 
@@ -140,6 +140,81 @@ def _refresh_chart_figure():
 			]
 			combo_toggles = {}
 			
+			# ── Interactive Biwheel Circuit Mode ──────────────────────────────
+			interactive_mode = st.session_state.get("interactive_chart", False)
+			if interactive_mode:
+				try:
+					highlights = st.session_state.get("chart_highlights", {})
+
+					biwheel_data = serialize_biwheel_for_rendering(
+						chart_1,
+						chart_2,
+						house_system=house_system,
+						dark_mode=dark_mode,
+						label_style=label_style,
+						compass_on_inner=st.session_state.get(COMPASS_KEY, True),
+						compass_on_outer=st.session_state.get(COMPASS_KEY_2, True),
+						degree_markers=True,
+						edges_inter_chart=[],
+						edges_chart1=[],
+						edges_chart2=[],
+						show_inter=False,
+						show_chart1_aspects=False,
+						show_chart2_aspects=False,
+						highlights=highlights,
+						# Circuits mode data
+						patterns=patterns_combined,
+						shapes=shapes_combined,
+						singleton_map=singleton_map_combined,
+						toggles=toggles,
+						singleton_toggles=singleton_toggles,
+						shape_toggles_by_parent=shape_toggles_by_parent,
+						pattern_labels=pattern_labels,
+						major_edges_all=major_edges_all,
+						circuit_mode="combined",
+					)
+
+					event = st_interactive_chart(
+						biwheel_data,
+						highlights=highlights,
+						width=1250,
+						height=1250,
+						key="interactive_biwheel_combined_circuits",
+					)
+					if event:
+						st.session_state["chart_click_event"] = event
+
+					# Build a minimal RenderResult
+					positions_inner = {obj.object_name.name: obj.longitude
+									   for obj in chart_1.objects if obj.object_name}
+					positions_outer = {obj.object_name.name: obj.longitude
+									   for obj in chart_2.objects if obj.object_name}
+					cusps = [
+						float(c.absolute_degree) for c in chart_1.house_cusps
+						if (c.house_system or "").strip().lower() == house_system
+					]
+					rr = result(
+						fig=None, ax=None,
+						positions={**positions_inner, **{f"{k}_2": v for k, v in positions_outer.items()}},
+						cusps=cusps,
+						visible_objects=list(positions_inner.keys()) + [f"{k}_2" for k in positions_outer.keys()],
+						drawn_major_edges=[],
+						drawn_minor_edges=[],
+						patterns=patterns_combined,
+						shapes=shapes_combined,
+						singleton_map=singleton_map_combined,
+						plot_data={"chart_1": chart_1, "chart_2": chart_2},
+					)
+					st.session_state["render_result"] = rr
+					st.session_state["visible_objects"] = rr.visible_objects
+					st.session_state["active_shapes"] = shapes_combined
+					st.session_state["last_cusps"] = cusps
+					st.session_state["ai_text"] = None
+					return rr
+				except Exception as e:
+					st.warning(f"Interactive biwheel circuits chart failed, falling back to static: {e}")
+					# Fall through to matplotlib renderer
+			
 			try:
 				rr = render_biwheel_chart_with_circuits(
 					chart_1,
@@ -205,6 +280,79 @@ def _refresh_chart_figure():
 				for planet in singleton_map_1
 			}
 			shape_toggles_by_parent = st.session_state.get("shape_toggles_by_parent", {})
+
+			# ── Interactive Connected Circuits Mode ──────────────────────────────
+			interactive_mode = st.session_state.get("interactive_chart", False)
+			if interactive_mode:
+				try:
+					highlights = st.session_state.get("chart_highlights", {})
+
+					biwheel_data = serialize_biwheel_for_rendering(
+						chart_1,
+						chart_2,
+						house_system=house_system,
+						dark_mode=dark_mode,
+						label_style=label_style,
+						compass_on_inner=st.session_state.get(COMPASS_KEY, True),
+						compass_on_outer=st.session_state.get(COMPASS_KEY_2, True),
+						degree_markers=True,
+						edges_inter_chart=edges_inter_chart_cc,
+						edges_chart1=[],
+						edges_chart2=[],
+						show_inter=True,  # Show inter-chart aspects for connected circuits
+						show_chart1_aspects=False,
+						show_chart2_aspects=False,
+						highlights=highlights,
+						# Circuits mode data
+						patterns=patterns_1,
+						patterns_chart2=chart_2.aspect_groups if hasattr(chart_2, 'aspect_groups') else [],
+						shapes=shapes_1,
+						shapes_chart2=shapes_2,
+						singleton_map=singleton_map_1,
+						toggles=toggles,
+						singleton_toggles=singleton_toggles,
+						shape_toggles_by_parent=shape_toggles_by_parent,
+						pattern_labels=pattern_labels,
+						major_edges_all=major_edges_all_1,
+						circuit_mode="connected",
+					)
+
+					event = st_interactive_chart(
+						biwheel_data,
+						highlights=highlights,
+						width=1250,
+						height=1250,
+						key="interactive_biwheel_connected_circuits",
+					)
+					if event:
+						st.session_state["chart_click_event"] = event
+
+					# Build a minimal RenderResult
+					cusps = [
+						float(c.absolute_degree) for c in chart_1.house_cusps
+						if (c.house_system or "").strip().lower() == house_system
+					]
+					rr = result(
+						fig=None, ax=None,
+						positions=pos_1,
+						cusps=cusps,
+						visible_objects=list(pos_1.keys()) + list(pos_2.keys()),
+						drawn_major_edges=[],
+						drawn_minor_edges=[],
+						patterns=patterns_1,
+						shapes=shapes_1,
+						singleton_map=singleton_map_1,
+						plot_data={"chart_1": chart_1, "chart_2": chart_2},
+					)
+					st.session_state["render_result"] = rr
+					st.session_state["visible_objects"] = rr.visible_objects
+					st.session_state["active_shapes"] = shapes_1
+					st.session_state["last_cusps"] = cusps
+					st.session_state["ai_text"] = None
+					return rr
+				except Exception as e:
+					st.warning(f"Interactive connected circuits chart failed, falling back to static: {e}")
+					# Fall through to matplotlib renderer
 
 			try:
 				rr = render_biwheel_connected_circuits(
@@ -333,6 +481,72 @@ def _refresh_chart_figure():
 				]
 			else:
 				edges_chart2 = []
+
+			# ── Interactive Biwheel Chart Mode ──────────────────────────────
+			interactive_mode = st.session_state.get("interactive_chart", False)
+			if interactive_mode:
+				try:
+					highlights = st.session_state.get("chart_highlights", {})
+
+					biwheel_data = serialize_biwheel_for_rendering(
+						chart_1,
+						chart_2,
+						house_system=house_system,
+						dark_mode=dark_mode,
+						label_style=label_style,
+						compass_on_inner=st.session_state.get(COMPASS_KEY, True),
+						compass_on_outer=st.session_state.get(COMPASS_KEY_2, True),
+						degree_markers=True,
+						edges_inter_chart=edges_inter_chart,
+						edges_chart1=edges_chart1,
+						edges_chart2=edges_chart2,
+						show_inter=show_inter,
+						show_chart1_aspects=show_chart1,
+						show_chart2_aspects=show_chart2,
+						highlights=highlights,
+					)
+
+					event = st_interactive_chart(
+						biwheel_data,
+						highlights=highlights,
+						width=1250,
+						height=1250,
+						key="interactive_biwheel_chart",
+					)
+					# Store event for downstream consumers (chat, detail panel, etc.)
+					if event:
+						st.session_state["chart_click_event"] = event
+
+					# Build a minimal RenderResult so the rest of the app works
+					positions_inner = {obj.object_name.name: obj.longitude
+									   for obj in chart_1.objects if obj.object_name}
+					positions_outer = {obj.object_name.name: obj.longitude
+									   for obj in chart_2.objects if obj.object_name}
+					cusps = [
+						float(c.absolute_degree) for c in chart_1.house_cusps
+						if (c.house_system or "").strip().lower() == house_system
+					]
+					rr = result(
+						fig=None, ax=None,
+						positions={**positions_inner},  # Just use inner chart positions as primary
+						cusps=cusps,
+						visible_objects=list(positions_inner.keys()) + list(positions_outer.keys()),
+						drawn_major_edges=[(e[0], e[1], e[2]) for e in edges_inter_chart] if edges_inter_chart else [],
+						drawn_minor_edges=[],
+						patterns=[],
+						shapes=[],
+						singleton_map={},
+						plot_data={"chart_1": chart_1, "chart_2": chart_2},
+					)
+					st.session_state["render_result"] = rr
+					st.session_state["visible_objects"] = rr.visible_objects
+					st.session_state["active_shapes"] = []
+					st.session_state["last_cusps"] = cusps
+					st.session_state["ai_text"] = None
+					return rr
+				except Exception as e:
+					st.warning(f"Interactive biwheel chart failed, falling back to static: {e}")
+					# Fall through to matplotlib renderer
 		
 		# Determine unknown-time flags for each chart explicitly.
 		# unknown_time is now carried on the AstrologicalChart object itself.

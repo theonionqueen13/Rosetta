@@ -17,15 +17,39 @@ const RosettaTooltip = (() => {
     function _buildMaps(data) {
         _data = data;
         _objectMap = {};
-        _aspectList = data.aspects || [];
         _houseMap = {};
 
-        (data.objects || []).forEach((o) => {
-            _objectMap[o.name] = o;
-        });
-        (data.houses || []).forEach((h) => {
-            _houseMap[String(h.number)] = h;
-        });
+        // Check if this is biwheel data
+        const isBiwheel = data.config && data.config.is_biwheel;
+
+        if (isBiwheel) {
+            // Biwheel mode: combine inner and outer objects
+            _aspectList = [
+                ...(data.aspects_inter || []),
+                ...(data.aspects_chart1 || []),
+                ...(data.aspects_chart2 || []),
+            ];
+
+            (data.objects_inner || []).forEach((o) => {
+                _objectMap[o.name] = o;
+            });
+            (data.objects_outer || []).forEach((o) => {
+                _objectMap[o.name] = o;
+            });
+            (data.houses_inner || []).forEach((h) => {
+                _houseMap[String(h.number)] = h;
+            });
+            // Also add outer houses (they share the same numbers, so inner takes precedence)
+        } else {
+            // Single wheel mode
+            _aspectList = data.aspects || [];
+            (data.objects || []).forEach((o) => {
+                _objectMap[o.name] = o;
+            });
+            (data.houses || []).forEach((h) => {
+                _houseMap[String(h.number)] = h;
+            });
+        }
     }
 
     // -----------------------------------------------------------------------

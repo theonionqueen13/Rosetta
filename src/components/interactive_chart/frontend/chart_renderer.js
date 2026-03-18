@@ -915,7 +915,713 @@ const RosettaChart = (() => {
     }
 
     // -----------------------------------------------------------------------
+    // Biwheel geometry constants (matching drawing_v2.py render_biwheel_chart)
+    // -----------------------------------------------------------------------
+    const BIWHEEL = {
+        INNER_CIRCLE_R: 0.9,      // Inner degree circle
+        OUTER_CIRCLE_R: 1.2,      // Outer degree circle
+        INNER_LABEL_R: 1.1,       // Inner chart planet glyphs
+        INNER_DEGREE_R: 1.0,      // Inner chart degree numbers
+        OUTER_LABEL_R: 1.4,       // Outer chart planet glyphs
+        OUTER_DEGREE_R: 1.31,     // Outer chart degree numbers
+        OUTER_CUSP_R: 1.45,       // Where outer house cusps end
+    };
+
+    // -----------------------------------------------------------------------
+    // Biwheel render function
+    // -----------------------------------------------------------------------
+    function renderBiwheel(container, data, width, height) {
+        const size = Math.min(width, height);
+        const margin = 10;
+        const radius = (size - margin * 2) / 2;
+        const cx = size / 2;
+        const cy = size / 2;
+
+        const config = data.config || {};
+        const ascDeg = config.asc_degree || 0;
+        const darkMode = config.dark_mode || false;
+        const labelStyle = config.label_style || "glyph";
+        const compassOnInner = config.compass_on_inner !== false;
+        const compassOnOuter = config.compass_on_outer !== false;
+        const degreeMarkers = config.degree_markers !== false;
+        const unknownTimeInner = config.unknown_time_inner || false;
+        const unknownTimeOuter = config.unknown_time_outer || false;
+
+        // Scale: map abstract radius (0 → RLIM) to pixel radius
+        const rScale = (r) => (r / RLIM) * radius;
+
+        const svg = d3
+            .select(container)
+            .append("svg")
+            .attr("width", size)
+            .attr("height", size)
+            .attr("viewBox", `0 0 ${size} ${size}`)
+            .attr("class", darkMode ? "chart-svg dark biwheel" : "chart-svg biwheel");
+
+        // Background
+        svg
+            .append("rect")
+            .attr("width", size)
+            .attr("height", size)
+            .attr("fill", darkMode ? "#0E1117" : "#FFFFFF")
+            .attr("class", "chart-background");
+
+        // Main group — transform managed by D3 zoom
+        const g = svg.append("g");
+
+        // D3 Zoom
+        const zoom = d3.zoom()
+            .scaleExtent([0.4, 8])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+
+        svg.call(zoom)
+            .on("dblclick.zoom", null);
+
+        svg.call(zoom.transform, d3.zoomIdentity.translate(cx, cy));
+
+        // Layer groups
+        const layerZodiac = g.append("g").attr("class", "layer-zodiac");
+        const layerDegrees = g.append("g").attr("class", "layer-degrees");
+        const layerHousesInner = g.append("g").attr("class", "layer-houses-inner");
+        const layerHousesOuter = g.append("g").attr("class", "layer-houses-outer");
+        const layerAspectsInternal = g.append("g").attr("class", "layer-aspects-internal");
+        const layerAspectsInter = g.append("g").attr("class", "layer-aspects-inter");
+        const layerCompassInner = g.append("g").attr("class", "layer-compass-inner");
+        const layerCompassOuter = g.append("g").attr("class", "layer-compass-outer");
+        const layerPlanetsInner = g.append("g").attr("class", "layer-planets-inner");
+        const layerPlanetsOuter = g.append("g").attr("class", "layer-planets-outer");
+        const layerHighlights = g.append("g").attr("class", "layer-highlights");
+
+        // === Draw zodiac bands (outermost ring) ===
+        drawZodiacBands(layerZodiac, data.signs || [], ascDeg, rScale);
+
+        // === Draw TWO degree marker circles ===
+        if (degreeMarkers) {
+            drawBiwheelDegreeMarkers(layerDegrees, ascDeg, rScale, darkMode);
+        }
+
+        // === Draw inner chart house cusps (between inner and outer circles) ===
+        if (!unknownTimeInner) {
+            drawBiwheelHouseCusps(
+                layerHousesInner,
+                data.houses_inner || [],
+                ascDeg,
+                rScale,
+                darkMode,
+                BIWHEEL.INNER_CIRCLE_R,
+                BIWHEEL.OUTER_CIRCLE_R,
+                true
+            );
+        }
+
+        // === Draw outer chart house cusps (between outer circle and zodiac) ===
+        if (!unknownTimeOuter) {
+            drawBiwheelHouseCusps(
+                layerHousesOuter,
+                data.houses_outer || [],
+                ascDeg,
+                rScale,
+                darkMode,
+                BIWHEEL.OUTER_CIRCLE_R,
+                BIWHEEL.OUTER_CUSP_R,
+                true
+            );
+        }
+
+        // === Draw chart 1 internal aspects (if enabled) ===
+        const aspectsChart1 = data.aspects_chart1 || [];
+        if (aspectsChart1.length) {
+            drawBiwheelAspectLines(
+                layerAspectsInternal,
+                aspectsChart1,
+                data.objects_inner || [],
+                ascDeg,
+                rScale,
+                darkMode,
+                BIWHEEL.INNER_CIRCLE_R,
+                data.colors?.chart1_group_color
+            );
+        }
+
+        // === Draw chart 2 internal aspects (if enabled) ===
+        const aspectsChart2 = data.aspects_chart2 || [];
+        if (aspectsChart2.length) {
+            drawBiwheelAspectLines(
+                layerAspectsInternal,
+                aspectsChart2,
+                data.objects_outer || [],
+                ascDeg,
+                rScale,
+                darkMode,
+                BIWHEEL.INNER_CIRCLE_R,
+                data.colors?.chart2_group_color
+            );
+        }
+
+        // === Draw inter-chart aspects (connecting inner to outer wheel) ===
+        const aspectsInter = data.aspects_inter || [];
+        if (aspectsInter.length) {
+            drawBiwheelInterAspects(
+                layerAspectsInter,
+                aspectsInter,
+                data.objects_inner || [],
+                data.objects_outer || [],
+                ascDeg,
+                rScale,
+                darkMode
+            );
+        }
+
+        // === Draw circuit mode aspects (using circuit_data if present) ===
+        const circuitData = data.circuit_data;
+        if (circuitData && circuitData.aspects && circuitData.aspects.length) {
+            drawBiwheelCircuitAspects(
+                layerAspectsInternal,
+                circuitData.aspects,
+                data.objects_inner || [],
+                data.objects_outer || [],
+                ascDeg,
+                rScale,
+                darkMode
+            );
+        }
+
+        // === Draw compass rose for inner chart ===
+        if (compassOnInner && !unknownTimeInner) {
+            drawCompassRose(layerCompassInner, data.objects_inner || [], ascDeg, rScale);
+        }
+
+        // === Draw center earth ===
+        drawCenterEarth(g, rScale, darkMode);
+
+        // === Draw biwheel chart header ===
+        drawBiwheelHeader(
+            svg,
+            data.header_inner || {},
+            data.header_outer || {},
+            size,
+            darkMode
+        );
+
+        // === Draw planet labels for inner chart (between the circles) ===
+        drawBiwheelPlanetLabels(
+            layerPlanetsInner,
+            data.objects_inner || [],
+            ascDeg,
+            rScale,
+            labelStyle,
+            darkMode,
+            BIWHEEL.INNER_LABEL_R,
+            BIWHEEL.INNER_DEGREE_R,
+            "inner"
+        );
+
+        // === Draw planet labels for outer chart (outside outer circle) ===
+        drawBiwheelPlanetLabels(
+            layerPlanetsOuter,
+            data.objects_outer || [],
+            ascDeg,
+            rScale,
+            labelStyle,
+            darkMode,
+            BIWHEEL.OUTER_LABEL_R,
+            BIWHEEL.OUTER_DEGREE_R,
+            "outer"
+        );
+
+        // === Apply highlights ===
+        if (data.highlights && Object.keys(data.highlights).length) {
+            applyHighlights(svg, data.highlights);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Biwheel-specific drawing functions
+    // -----------------------------------------------------------------------
+
+    function drawBiwheelDegreeMarkers(layer, ascDeg, rScale, darkMode) {
+        const color = darkMode ? "#FFFFFF" : "#000000";
+
+        // Inner degree circle
+        layer
+            .append("circle")
+            .attr("cx", 0).attr("cy", 0)
+            .attr("r", rScale(BIWHEEL.INNER_CIRCLE_R))
+            .attr("fill", "none")
+            .attr("stroke", color)
+            .attr("stroke-width", 3)
+            .attr("class", "degree-circle-inner");
+
+        // Inner circle tick marks
+        for (let deg = 0; deg < 360; deg++) {
+            const rad = degToRad(deg, ascDeg);
+            let tickLen = 0.015;
+            let tickWidth = 0.5;
+            if (deg % 10 === 0) {
+                tickLen = 0.05;
+                tickWidth = 1.2;
+            } else if (deg % 5 === 0) {
+                tickLen = 0.03;
+                tickWidth = 0.8;
+            }
+
+            const [x1, y1] = polarToCartesian(rScale(BIWHEEL.INNER_CIRCLE_R), rad);
+            const [x2, y2] = polarToCartesian(rScale(BIWHEEL.INNER_CIRCLE_R + tickLen), rad);
+
+            layer
+                .append("line")
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("stroke", color)
+                .attr("stroke-width", tickWidth)
+                .attr("class", "degree-tick-inner");
+        }
+
+        // Outer degree circle
+        layer
+            .append("circle")
+            .attr("cx", 0).attr("cy", 0)
+            .attr("r", rScale(BIWHEEL.OUTER_CIRCLE_R))
+            .attr("fill", "none")
+            .attr("stroke", color)
+            .attr("stroke-width", 3)
+            .attr("class", "degree-circle-outer");
+
+        // Outer circle tick marks
+        for (let deg = 0; deg < 360; deg++) {
+            const rad = degToRad(deg, ascDeg);
+            let tickLen = 0.015;
+            let tickWidth = 0.5;
+            if (deg % 10 === 0) {
+                tickLen = 0.05;
+                tickWidth = 1.2;
+            } else if (deg % 5 === 0) {
+                tickLen = 0.03;
+                tickWidth = 0.8;
+            }
+
+            const [x1, y1] = polarToCartesian(rScale(BIWHEEL.OUTER_CIRCLE_R), rad);
+            const [x2, y2] = polarToCartesian(rScale(BIWHEEL.OUTER_CIRCLE_R + tickLen), rad);
+
+            layer
+                .append("line")
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("stroke", color)
+                .attr("stroke-width", tickWidth)
+                .attr("class", "degree-tick-outer");
+        }
+    }
+
+    function drawBiwheelHouseCusps(layer, houses, ascDeg, rScale, darkMode, rInner, rOuter, drawLabels) {
+        const lineColor = darkMode ? "#444444" : "#A0A0A0";
+        const lblColor = darkMode ? "#FFFFFF" : "#000000";
+
+        houses.forEach((house, i) => {
+            const rad = degToRad(house.cusp_degree, ascDeg);
+            const [x1, y1] = polarToCartesian(rScale(rInner), rad);
+            const [x2, y2] = polarToCartesian(rScale(rOuter), rad);
+
+            layer
+                .append("line")
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("stroke", lineColor)
+                .attr("stroke-width", 2)
+                .attr("class", "house-cusp")
+                .attr("data-house", house.number);
+
+            // House number label (midway through the house span)
+            if (drawLabels) {
+                const nextHouse = houses[(i + 1) % 12];
+                const span = ((nextHouse.cusp_degree - house.cusp_degree) % 360 + 360) % 360;
+                const labelDeg = (house.cusp_degree + span * 0.5) % 360;
+                const labelRad = degToRad(labelDeg, ascDeg);
+                const midR = (rInner + rOuter) / 2;
+                const [lx, ly] = polarToCartesian(rScale(midR), labelRad);
+
+                layer
+                    .append("text")
+                    .attr("x", lx).attr("y", ly)
+                    .attr("text-anchor", "middle")
+                    .attr("dominant-baseline", "central")
+                    .attr("font-size", "16px")
+                    .attr("fill", lblColor)
+                    .attr("class", "house-number")
+                    .attr("data-house", house.number)
+                    .text(house.number);
+            }
+        });
+    }
+
+    function drawBiwheelAspectLines(layer, aspects, objects, ascDeg, rScale, darkMode, aspectRadius, groupColor) {
+        const posMap = {};
+        objects.forEach((o) => {
+            posMap[o.name] = o.longitude;
+        });
+
+        const defs = layer.select("defs").empty()
+            ? layer.append("defs")
+            : layer.select("defs");
+        let gradIdx = 0;
+
+        aspects.forEach((asp) => {
+            const d1 = posMap[asp.obj_a];
+            const d2 = posMap[asp.obj_b];
+            if (d1 === undefined || d2 === undefined) return;
+
+            const r1 = degToRad(d1, ascDeg);
+            const r2 = degToRad(d2, ascDeg);
+            const [x1, y1] = polarToCartesian(rScale(aspectRadius), r1);
+            const [x2, y2] = polarToCartesian(rScale(aspectRadius), r2);
+
+            // Use group color if provided, otherwise use standard aspect colors
+            let baseColor = groupColor || asp.color || "gray";
+            if (asp.is_approx && !groupColor) {
+                baseColor = lightenColor(baseColor, 0.35);
+            }
+
+            const lw = 6;
+            let dashArray = "none";
+            const style = asp.style || "solid";
+            if (style === "dotted") dashArray = "3,3";
+            else if (style === "dashed") dashArray = "6,3";
+
+            layer
+                .append("line")
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("stroke", baseColor)
+                .attr("stroke-width", lw)
+                .attr("stroke-dasharray", dashArray === "none" ? null : dashArray)
+                .attr("class", "aspect-line internal")
+                .attr("data-aspect", asp.aspect)
+                .attr("data-obj-a", asp.obj_a)
+                .attr("data-obj-b", asp.obj_b)
+                .attr("data-aspect-group", asp.aspect_group || "internal");
+        });
+    }
+
+    function drawBiwheelInterAspects(layer, aspects, objectsInner, objectsOuter, ascDeg, rScale, darkMode) {
+        // Build position lookup for both charts
+        const posInner = {};
+        objectsInner.forEach((o) => {
+            posInner[o.name] = o.longitude;
+        });
+        const posOuter = {};
+        objectsOuter.forEach((o) => {
+            posOuter[o.name] = o.longitude;
+        });
+
+        const defs = layer.select("defs").empty()
+            ? layer.append("defs")
+            : layer.select("defs");
+        let gradIdx = 0;
+
+        aspects.forEach((asp) => {
+            // obj_a is from inner chart, obj_b is from outer chart
+            const d1 = posInner[asp.obj_a];
+            const d2 = posOuter[asp.obj_b];
+            if (d1 === undefined || d2 === undefined) return;
+
+            const r1 = degToRad(d1, ascDeg);
+            const r2 = degToRad(d2, ascDeg);
+            // Inner object at inner circle, outer object at inner circle too
+            // (aspects drawn inside the inner circle for clarity)
+            const [x1, y1] = polarToCartesian(rScale(BIWHEEL.INNER_CIRCLE_R), r1);
+            const [x2, y2] = polarToCartesian(rScale(BIWHEEL.INNER_CIRCLE_R), r2);
+
+            let baseColor = asp.color || "gray";
+            if (asp.is_approx) {
+                baseColor = lightenColor(baseColor, 0.35);
+            }
+            const startColor = isLuminaryOrPlanet(asp.obj_a) ? baseColor : lightVariant(baseColor);
+            const endColor = isLuminaryOrPlanet(asp.obj_b) ? baseColor : lightVariant(baseColor);
+
+            const lw = 8;
+            let dashArray = "none";
+            const style = asp.style || "solid";
+            if (style === "dotted") dashArray = "3,3";
+            else if (style === "dashed") dashArray = "6,3";
+
+            // Create gradient
+            const gradId = `biwheel-asp-grad-${gradIdx++}`;
+            const grad = defs
+                .append("linearGradient")
+                .attr("id", gradId)
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("gradientUnits", "userSpaceOnUse");
+            grad.append("stop").attr("offset", "0%").attr("stop-color", startColor);
+            grad.append("stop").attr("offset", "100%").attr("stop-color", endColor);
+
+            layer
+                .append("line")
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("stroke", `url(#${gradId})`)
+                .attr("stroke-width", lw)
+                .attr("stroke-dasharray", dashArray === "none" ? null : dashArray)
+                .attr("class", "aspect-line inter-chart")
+                .attr("data-aspect", asp.aspect)
+                .attr("data-obj-a", asp.obj_a)
+                .attr("data-obj-b", asp.obj_b)
+                .attr("data-aspect-group", "inter");
+        });
+    }
+
+    function drawBiwheelCircuitAspects(layer, aspects, objectsInner, objectsOuter, ascDeg, rScale, darkMode) {
+        // Build position lookup for both charts
+        const posInner = {};
+        objectsInner.forEach((o) => {
+            posInner[o.name] = o.longitude;
+        });
+        const posOuter = {};
+        objectsOuter.forEach((o) => {
+            posOuter[o.name] = o.longitude;
+        });
+        // Combined positions: inner objects + outer objects with _2 suffix
+        const posCombined = { ...posInner };
+        for (const [name, lon] of Object.entries(posOuter)) {
+            posCombined[name + "_2"] = lon;
+        }
+
+        const defs = layer.select("defs").empty()
+            ? layer.append("defs")
+            : layer.select("defs");
+        let gradIdx = 0;
+
+        aspects.forEach((asp) => {
+            // obj_a and obj_b may have _2 suffix for outer chart objects
+            let d1 = posCombined[asp.obj_a];
+            let d2 = posCombined[asp.obj_b];
+
+            // Fallback: try without _2 suffix in inner, with _2 in outer
+            if (d1 === undefined) d1 = posInner[asp.obj_a] || posOuter[asp.obj_a];
+            if (d2 === undefined) d2 = posInner[asp.obj_b] || posOuter[asp.obj_b];
+
+            if (d1 === undefined || d2 === undefined) return;
+
+            const r1 = degToRad(d1, ascDeg);
+            const r2 = degToRad(d2, ascDeg);
+
+            // Determine which circle each object is on
+            const isOuter1 = asp.obj_a.endsWith("_2");
+            const isOuter2 = asp.obj_b.endsWith("_2");
+            const circleR1 = isOuter1 ? BIWHEEL.OUTER_CIRCLE_R : BIWHEEL.INNER_CIRCLE_R;
+            const circleR2 = isOuter2 ? BIWHEEL.OUTER_CIRCLE_R : BIWHEEL.INNER_CIRCLE_R;
+
+            const [x1, y1] = polarToCartesian(rScale(circleR1), r1);
+            const [x2, y2] = polarToCartesian(rScale(circleR2), r2);
+
+            // Circuit aspects use the color from the serializer (group color)
+            let baseColor = asp.color || "gray";
+            if (asp.is_approx) {
+                baseColor = lightenColor(baseColor, 0.35);
+            }
+
+            // For circuit mode, use the circuit group color directly
+            const objA = asp.obj_a.replace(/_2$/, "");
+            const objB = asp.obj_b.replace(/_2$/, "");
+            const startColor = isLuminaryOrPlanet(objA) ? baseColor : lightVariant(baseColor);
+            const endColor = isLuminaryOrPlanet(objB) ? baseColor : lightVariant(baseColor);
+
+            const lw = 8;
+            let dashArray = "none";
+            const style = asp.style || "solid";
+            if (style === "dotted") dashArray = "3,3";
+            else if (style === "dashed") dashArray = "6,3";
+
+            // Create gradient
+            const gradId = `circuit-asp-grad-${gradIdx++}`;
+            const grad = defs
+                .append("linearGradient")
+                .attr("id", gradId)
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("gradientUnits", "userSpaceOnUse");
+            grad.append("stop").attr("offset", "0%").attr("stop-color", startColor);
+            grad.append("stop").attr("offset", "100%").attr("stop-color", endColor);
+
+            layer
+                .append("line")
+                .attr("x1", x1).attr("y1", y1)
+                .attr("x2", x2).attr("y2", y2)
+                .attr("stroke", `url(#${gradId})`)
+                .attr("stroke-width", lw)
+                .attr("stroke-dasharray", dashArray === "none" ? null : dashArray)
+                .attr("class", "aspect-line circuit")
+                .attr("data-aspect", asp.aspect)
+                .attr("data-obj-a", asp.obj_a)
+                .attr("data-obj-b", asp.obj_b)
+                .attr("data-circuit", "true");
+        });
+    }
+
+    function drawBiwheelPlanetLabels(layer, objects, ascDeg, rScale, labelStyle, darkMode, labelR, degreeR, chartId) {
+        if (!objects.length) return;
+
+        const color = darkMode ? "#FFFFFF" : "#000000";
+        const useGlyphs = (labelStyle || "glyph").toLowerCase() === "glyph";
+
+        // Compute display positions with cluster fan-out
+        const positioned = computeClusterPositions(objects);
+
+        positioned.forEach((obj) => {
+            const displayRad = degToRad(obj.displayDegree % 360, ascDeg);
+            const [gx, gy] = polarToCartesian(rScale(labelR), displayRad);
+            const [dx, dy] = polarToCartesian(rScale(degreeR), displayRad);
+
+            const label = useGlyphs ? (obj.glyph || obj.name) : obj.name;
+            const degInSign = obj.degree_in_sign !== undefined ? obj.degree_in_sign : Math.floor(obj.longitude % 30);
+            let degLabel = `${degInSign}°`;
+            if (obj.retrograde) degLabel += " Rx";
+
+            // Planet glyph/name
+            layer
+                .append("text")
+                .attr("x", gx).attr("y", gy)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "central")
+                .attr("font-size", chartId === "outer" ? "26px" : "28px")
+                .attr("fill", color)
+                .attr("class", `planet-glyph ${chartId}`)
+                .attr("data-object", obj.name)
+                .attr("data-chart", chartId)
+                .text(label);
+
+            // Degree label
+            layer
+                .append("text")
+                .attr("x", dx).attr("y", dy)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "central")
+                .attr("font-size", chartId === "outer" ? "20px" : "22px")
+                .attr("fill", color)
+                .attr("class", `planet-degree ${chartId}`)
+                .attr("data-object", obj.name)
+                .attr("data-chart", chartId)
+                .text(degLabel);
+
+            // Invisible hit area
+            layer
+                .append("circle")
+                .attr("cx", gx).attr("cy", gy)
+                .attr("r", 12)
+                .attr("fill", "transparent")
+                .attr("class", `planet-hitarea ${chartId}`)
+                .attr("data-object", obj.name)
+                .attr("data-chart", chartId)
+                .style("cursor", "pointer");
+        });
+    }
+
+    function drawBiwheelHeader(svg, headerInner, headerOuter, size, darkMode) {
+        const color = darkMode ? "#FFFFFF" : "#000000";
+        const subColor = darkMode ? "#CCCCCC" : "#333333";
+        const x0 = 14;
+        let y = 40;
+        const lineHeight = 22;
+
+        // Inner chart name (bold, larger)
+        if (headerInner.name) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "32px")
+                .attr("font-weight", "bold")
+                .attr("fill", color)
+                .attr("class", "chart-header-name inner")
+                .text(headerInner.name);
+            y += lineHeight;
+        }
+
+        // Inner chart date
+        if (headerInner.date_line) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "20px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-date inner")
+                .text(headerInner.date_line);
+            y += lineHeight;
+        }
+
+        // Inner chart time
+        if (headerInner.time_line) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "20px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-time inner")
+                .text(headerInner.time_line);
+            y += lineHeight;
+        }
+
+        // Inner chart city
+        if (headerInner.city) {
+            svg.append("text")
+                .attr("x", x0).attr("y", y)
+                .attr("font-size", "20px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-city inner")
+                .text(headerInner.city);
+        }
+
+        // Outer chart info (on the right side)
+        const rightX = size - 14;
+        let yRight = 40;
+
+        if (headerOuter.name) {
+            svg.append("text")
+                .attr("x", rightX).attr("y", yRight)
+                .attr("text-anchor", "end")
+                .attr("font-size", "32px")
+                .attr("font-weight", "bold")
+                .attr("fill", color)
+                .attr("class", "chart-header-name outer")
+                .text(headerOuter.name);
+            yRight += lineHeight;
+        }
+
+        if (headerOuter.date_line) {
+            svg.append("text")
+                .attr("x", rightX).attr("y", yRight)
+                .attr("text-anchor", "end")
+                .attr("font-size", "20px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-date outer")
+                .text(headerOuter.date_line);
+            yRight += lineHeight;
+        }
+
+        // Outer chart time
+        if (headerOuter.time_line) {
+            svg.append("text")
+                .attr("x", rightX).attr("y", yRight)
+                .attr("text-anchor", "end")
+                .attr("font-size", "20px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-time outer")
+                .text(headerOuter.time_line);
+            yRight += lineHeight;
+        }
+
+        // Outer chart city
+        if (headerOuter.city) {
+            svg.append("text")
+                .attr("x", rightX).attr("y", yRight)
+                .attr("text-anchor", "end")
+                .attr("font-size", "20px")
+                .attr("fill", subColor)
+                .attr("class", "chart-header-city outer")
+                .text(headerOuter.city);
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Public API
     // -----------------------------------------------------------------------
-    return { render, degToRad, polarToCartesian, computeClusterPositions, applyHighlights };
+    return { render, renderBiwheel, degToRad, polarToCartesian, computeClusterPositions, applyHighlights };
 })();

@@ -78,6 +78,25 @@ SIGN_NAMES = [
 
 
 # ---------------------------------------------------------------------------
+# JSON Serialization Safety
+# ---------------------------------------------------------------------------
+
+def _ensure_json_serializable(obj: Any) -> Any:
+    """Recursively convert sets to lists and ensure all values are JSON-serializable."""
+    if isinstance(obj, (set, frozenset)):
+        return [_ensure_json_serializable(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: _ensure_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_ensure_json_serializable(item) for item in obj]
+    elif hasattr(obj, '__dict__'):
+        # Handle dataclasses/objects - convert to dict
+        return _ensure_json_serializable(vars(obj))
+    else:
+        return obj
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -677,7 +696,7 @@ def serialize_chart_for_rendering(
     # --- Highlights ---
     hl = highlights or {}
 
-    return {
+    return _ensure_json_serializable({
         "objects": objects_data,
         "aspects": aspects_data,
         "houses": houses_data,
@@ -691,4 +710,357 @@ def serialize_chart_for_rendering(
         "highlights": hl,
         "header": header_data,
         "moon_phase": moon_data,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Biwheel (Synastry) Serialiser
+# ---------------------------------------------------------------------------
+
+def serialize_biwheel_for_rendering(
+    chart_1: AstrologicalChart,
+    chart_2: AstrologicalChart,
+    *,
+    house_system: str = "placidus",
+    dark_mode: bool = False,
+    label_style: str = "glyph",
+    compass_on_inner: bool = True,
+    compass_on_outer: bool = True,
+    degree_markers: bool = True,
+    edges_inter_chart: Optional[List] = None,
+    edges_chart1: Optional[List] = None,
+    edges_chart2: Optional[List] = None,
+    show_inter: bool = True,
+    show_chart1_aspects: bool = False,
+    show_chart2_aspects: bool = False,
+    highlights: Optional[dict] = None,
+    # Circuits mode parameters
+    patterns: Optional[List] = None,
+    patterns_chart2: Optional[List] = None,
+    shapes: Optional[List] = None,
+    shapes_chart2: Optional[List] = None,
+    singleton_map: Optional[dict] = None,
+    singleton_map_chart2: Optional[dict] = None,
+    filaments: Optional[List] = None,
+    toggles: Optional[List] = None,
+    singleton_toggles: Optional[dict] = None,
+    shape_toggles_by_parent: Optional[dict] = None,
+    pattern_labels: Optional[List] = None,
+    major_edges_all: Optional[List] = None,
+    circuit_mode: Optional[str] = None,  # "combined" | "connected" | None
+) -> dict:
+    """
+    Convert two AstrologicalChart objects into a biwheel payload for the
+    interactive D3.js chart component.
+
+    Parameters
+    ----------
+    chart_1 : AstrologicalChart
+        Inner wheel chart (natal chart).
+    chart_2 : AstrologicalChart
+        Outer wheel chart (transit/synastry partner chart).
+    house_system : str
+        Active house system name.
+    dark_mode : bool
+        Colour scheme.
+    label_style : str
+        "glyph" or "text".
+    compass_on_inner / compass_on_outer : bool
+        Whether to draw compass rose for each wheel.
+    degree_markers : bool
+        Whether to draw tick marks.
+    edges_inter_chart : list | None
+        Inter-chart aspects as [(p1, p2, aspect_name), ...].
+    edges_chart1 / edges_chart2 : list | None
+        Internal aspects within each chart.
+    show_inter / show_chart1_aspects / show_chart2_aspects : bool
+        Toggles for which aspect groups to render.
+    highlights : dict | None
+        Elements to highlight.
+
+    Returns
+    -------
+    dict
+        JSON-safe payload for the interactive biwheel chart component.
+    """
+    unknown_time_1 = getattr(chart_1, "unknown_time", False)
+    unknown_time_2 = getattr(chart_2, "unknown_time", False)
+    asc_deg_1 = _get_asc_degree(chart_1) if not unknown_time_1 else 0.0
+
+    # --- Inner chart objects ---
+    obj_map_1 = _object_map(chart_1)
+    objects_inner = []
+    for obj in chart_1.objects:
+        if not obj.object_name:
+            continue
+        objects_inner.append(_serialize_object(obj, house_system, chart_1, is_visible=True))
+
+    # --- Outer chart objects ---
+    obj_map_2 = _object_map(chart_2)
+    objects_outer = []
+    for obj in chart_2.objects:
+        if not obj.object_name:
+            continue
+        # Append "_2" suffix to outer chart object names for disambiguation
+        serialized = _serialize_object(obj, house_system, chart_2, is_visible=True)
+        serialized["chart"] = "outer"
+        objects_outer.append(serialized)
+
+    # --- Mark inner objects ---
+    for obj in objects_inner:
+        obj["chart"] = "inner"
+
+    # --- Inter-chart aspects ---
+    aspects_inter = []
+    if show_inter and edges_inter_chart:
+        for edge in edges_inter_chart:
+            a, b = edge[0], edge[1]
+            asp = edge[2] if len(edge) > 2 else ""
+            if isinstance(asp, dict):
+                asp = asp.get("aspect", "")
+            aspects_inter.append(_serialize_biwheel_aspect(a, b, asp, "inter", chart_1, chart_2))
+
+    # --- Chart 1 internal aspects ---
+    aspects_chart1 = []
+    if show_chart1_aspects and edges_chart1:
+        for edge in edges_chart1:
+            a, b = edge[0], edge[1]
+            asp = edge[2] if len(edge) > 2 else ""
+            if isinstance(asp, dict):
+                asp = asp.get("aspect", "")
+            aspects_chart1.append(_serialize_biwheel_aspect(a, b, asp, "inner", chart_1, chart_1))
+
+    # --- Chart 2 internal aspects ---
+    aspects_chart2 = []
+    if show_chart2_aspects and edges_chart2:
+        for edge in edges_chart2:
+            a, b = edge[0], edge[1]
+            asp = edge[2] if len(edge) > 2 else ""
+            if isinstance(asp, dict):
+                asp = asp.get("aspect", "")
+            aspects_chart2.append(_serialize_biwheel_aspect(a, b, asp, "outer", chart_2, chart_2))
+
+    # --- Houses for both charts ---
+    houses_inner = _serialize_houses(chart_1, house_system)
+    houses_outer = _serialize_houses(chart_2, house_system)
+
+    # --- Signs ---
+    signs_data = _serialize_signs(dark_mode)
+
+    # --- Config ---
+    config = {
+        "is_biwheel": True,
+        "asc_degree": asc_deg_1,
+        "unknown_time_inner": unknown_time_1,
+        "unknown_time_outer": unknown_time_2,
+        "dark_mode": dark_mode,
+        "label_style": label_style,
+        "compass_on_inner": compass_on_inner,
+        "compass_on_outer": compass_on_outer,
+        "degree_markers": degree_markers,
+        "house_system": house_system,
+        "show_inter_aspects": show_inter,
+        "show_chart1_aspects": show_chart1_aspects,
+        "show_chart2_aspects": show_chart2_aspects,
+    }
+
+    # --- Header info for both charts ---
+    header_inner = {}
+    header_outer = {}
+    try:
+        name1, date1, time1, city1, extra1 = chart_1.header_lines()
+        header_inner = {
+            "name": name1 or "",
+            "date_line": date1 or "",
+            "time_line": time1 or "",
+            "city": city1 or "",
+            "extra_line": extra1 or "",
+        }
+    except Exception:
+        pass
+    try:
+        name2, date2, time2, city2, extra2 = chart_2.header_lines()
+        header_outer = {
+            "name": name2 or "",
+            "date_line": date2 or "",
+            "time_line": time2 or "",
+            "city": city2 or "",
+            "extra_line": extra2 or "",
+        }
+    except Exception:
+        pass
+
+    # --- Color palettes ---
+    colors = {
+        "group_colors": list(GROUP_COLORS),
+        "subshape_colors": list(SUBSHAPE_COLORS),
+        "zodiac_colors": list(ZODIAC_COLORS),
+        "element_band_colors": ELEMENT_COLORS_DARK if dark_mode else ELEMENT_COLORS_LIGHT,
+        # Biwheel-specific group colors for aspect layering
+        "chart1_group_color": "#4E83AF",  # Blue for inner chart
+        "chart2_group_color": "#9B59B6",  # Purple for outer chart
+    }
+
+    hl = highlights or {}
+
+    # --- Circuits mode data ---
+    circuit_data = None
+    if circuit_mode:
+        # Determine which objects are visible based on toggles
+        visible_objs = set()
+        active_parents = set()
+        active_shape_ids = set()
+        
+        # Convert patterns to lists (they may be sets)
+        patterns_as_lists = [list(p) if isinstance(p, (set, frozenset)) else list(p) for p in (patterns or [])]
+        
+        if toggles and patterns_as_lists:
+            for idx, show in enumerate(toggles):
+                if show and idx < len(patterns_as_lists):
+                    active_parents.add(idx)
+                    visible_objs.update(patterns_as_lists[idx])
+        
+        # Singleton toggles
+        if singleton_toggles:
+            for planet, show in singleton_toggles.items():
+                if show:
+                    visible_objs.add(planet)
+        
+        # Shape toggles
+        if shape_toggles_by_parent:
+            for parent_idx, shape_list in shape_toggles_by_parent.items():
+                for shape_entry in shape_list:
+                    if isinstance(shape_entry, dict) and shape_entry.get("on"):
+                        active_shape_ids.add(shape_entry.get("id"))
+        
+        # Build filtered aspects based on active circuits
+        filtered_aspects = []
+        edge_colors = {}  # (p1, p2, asp) -> color
+        
+        if major_edges_all:
+            layered_mode = len(active_parents) + len(active_shape_ids) > 1
+            for edge in major_edges_all:
+                if isinstance(edge, tuple) and len(edge) >= 2:
+                    (p1, p2), asp = edge[0], edge[1] if len(edge) > 1 else ""
+                    if isinstance(edge[0], tuple):
+                        pass  # Already unpacked
+                    else:
+                        p1, p2, asp = edge[0], edge[1], edge[2] if len(edge) > 2 else ""
+                    
+                    # Check if both planets are in active circuits
+                    p1_active = any(p1 in patterns_as_lists[idx]
+                                   for idx in active_parents if idx < len(patterns_as_lists))
+                    p2_active = any(p2 in patterns_as_lists[idx]
+                                   for idx in active_parents if idx < len(patterns_as_lists))
+                    
+                    if p1_active and p2_active:
+                        # Find which circuit this belongs to for coloring
+                        color = None
+                        if layered_mode:
+                            for idx in active_parents:
+                                if idx < len(patterns_as_lists) and p1 in patterns_as_lists[idx] and p2 in patterns_as_lists[idx]:
+                                    color = GROUP_COLORS[idx % len(GROUP_COLORS)]
+                                    break
+                        
+                        clean_asp = asp.replace("_approx", "").strip() if isinstance(asp, str) else ""
+                        spec = ASPECTS.get(clean_asp, {})
+                        filtered_aspects.append({
+                            "obj_a": p1,
+                            "obj_b": p2,
+                            "aspect": clean_asp,
+                            "angle": spec.get("angle", 0),
+                            "orb": spec.get("orb", 0),
+                            "color": color or spec.get("color", "gray"),
+                            "style": spec.get("style", "solid"),
+                            "is_circuit": True,
+                        })
+        
+        # Shapes data - ensure members are lists, not sets
+        shapes_data = []
+        if shapes:
+            for sh in shapes:
+                if isinstance(sh, dict):
+                    members = sh.get("members", [])
+                    sh_dict = {
+                        "id": sh.get("id") or sh.get("shape_id"),
+                        "type": sh.get("type") or sh.get("shape_type", ""),
+                        "members": list(members) if isinstance(members, (set, frozenset)) else list(members),
+                        "parent": sh.get("parent", 0),
+                    }
+                else:
+                    members = getattr(sh, "members", [])
+                    sh_dict = {
+                        "id": getattr(sh, "shape_id", None),
+                        "type": getattr(sh, "shape_type", ""),
+                        "members": list(members) if isinstance(members, (set, frozenset)) else list(members),
+                        "parent": getattr(sh, "parent", 0),
+                    }
+                is_active = sh_dict.get("id") in active_shape_ids
+                shapes_data.append({
+                    **sh_dict,
+                    "active": is_active,
+                })
+        
+        # Convert patterns_chart2 to lists as well
+        patterns_chart2_as_lists = [list(p) if isinstance(p, (set, frozenset)) else list(p) for p in (patterns_chart2 or [])]
+        
+        circuit_data = {
+            "mode": circuit_mode,
+            "patterns": patterns_as_lists,
+            "patterns_chart2": patterns_chart2_as_lists,
+            "pattern_labels": pattern_labels or [],
+            "active_parents": list(active_parents),
+            "active_shape_ids": list(active_shape_ids),
+            "visible_objects": list(visible_objs),
+            "aspects": filtered_aspects,
+            "shapes": shapes_data,
+            "singleton_map": dict(singleton_map) if singleton_map else {},
+            "singleton_toggles": dict(singleton_toggles) if singleton_toggles else {},
+        }
+
+    result = {
+        "objects_inner": objects_inner,
+        "objects_outer": objects_outer,
+        "aspects_inter": aspects_inter,
+        "aspects_chart1": aspects_chart1,
+        "aspects_chart2": aspects_chart2,
+        "houses_inner": houses_inner,
+        "houses_outer": houses_outer,
+        "signs": signs_data,
+        "config": config,
+        "colors": colors,
+        "highlights": hl,
+        "header_inner": header_inner,
+        "header_outer": header_outer,
+    }
+    
+    if circuit_data:
+        result["circuit_data"] = circuit_data
+    
+    return _ensure_json_serializable(result)
+
+
+def _serialize_biwheel_aspect(
+    a_name: str,
+    b_name: str,
+    aspect_name: str,
+    aspect_group: str,  # "inter", "inner", or "outer"
+    chart_a: AstrologicalChart,
+    chart_b: AstrologicalChart,
+) -> dict:
+    """Build a JSON-safe biwheel aspect record."""
+    clean_name = aspect_name.replace("_approx", "").strip()
+    is_approx = "_approx" in aspect_name
+    spec = ASPECTS.get(clean_name, {})
+
+    return {
+        "obj_a": a_name,
+        "obj_b": b_name,
+        "aspect": clean_name,
+        "angle": spec.get("angle", 0),
+        "orb": spec.get("orb", 0),
+        "color": spec.get("color", "gray"),
+        "style": spec.get("style", "solid"),
+        "is_approx": is_approx,
+        "aspect_group": aspect_group,  # For determining which layer/color to use
     }

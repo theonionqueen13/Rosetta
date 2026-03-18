@@ -621,31 +621,6 @@ st.markdown(
 # Only show the bottom bar after a chart is calculated
 # now base the test on the chart object rather than the derived DataFrame
 if chart_cached is not None:
-	col_a, col_b, col_c = st.columns([1, 3, 1])
-	# -------------------------
-	# Wizard
-	# -------------------------
-	with col_a:
-		st.caption("🧙‍♀️💭 What can I help you find? →")
-	with col_b:
-		render_guided_wizard()
-	with col_c:
-		st.caption("← Chart features by topic 📜🔍")
-	
-	st.markdown(
-		"""
-		<style>
-		.thick-divider {
-			border-top: 5px solid #333; /* Adjust thickness and color as needed */
-			margin-top: 20px; /* Adjust spacing above the line */
-			margin-bottom: 20px; /* Adjust spacing below the line */
-		}
-		</style>
-		<div class="thick-divider"></div>
-		""",
-		unsafe_allow_html=True
-	)
-
 	# ---------- Toggles (moved to toggles_v2) ----------
 	# Reuse cached profiles from profile manager (avoids redundant DB call)
 	# Safety check: ensure patterns, shapes, singleton_map exist
@@ -812,18 +787,6 @@ with st.sidebar:
 
 	# Choose rendering mode for the profile cards
 	interactive_chart = st.session_state.get("interactive_chart", False)
-	prev_interactive = st.session_state.get("_prev_interactive_chart", False)
-
-	# When entering interactive chart mode, remember user's last selection so we can restore it later.
-	if interactive_chart and not prev_interactive:
-		st.session_state["_profile_mode_before_interactive"] = st.session_state.get("profile_view_mode", "Stats")
-
-	# When exiting interactive chart mode, restore the user's last selection.
-	if not interactive_chart and prev_interactive:
-		st.session_state["profile_view_mode"] = st.session_state.get("_profile_mode_before_interactive", "Stats")
-
-	# Track the latest interactive mode value for the next run.
-	st.session_state["_prev_interactive_chart"] = interactive_chart
 
 	# Create the radio widget (let it manage its own state via the key)
 	profile_mode = st.radio(
@@ -834,12 +797,7 @@ with st.sidebar:
 		),
 		key="profile_view_mode",
 		horizontal=True,
-		disabled=interactive_chart,
 	)
-
-	# When in interactive chart mode, override to use "Full" profile regardless of widget selection
-	if interactive_chart:
-		profile_mode = "Full"
 
 	# 1) Inject tight CSS once
 	st.markdown("""
