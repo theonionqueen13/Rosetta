@@ -13,9 +13,14 @@ from src.chart_core import run_chart, _refresh_chart_figure
 from src.state_manager import swap_primary_and_secondary_charts
 from src.dispositor_graph import render_dispositor_section
 from src.data_stubs import (
-	current_user_id, save_user_profile_db, load_user_profiles_db, 
-	delete_user_profile_db, community_save, community_list, 
-	community_get, community_load, community_delete, is_admin
+	community_save, community_list,
+	community_get, community_load, community_delete,
+)
+from supabase_admin import is_admin
+from supabase_profiles import (
+	save_user_profile_db, load_user_profiles_db, delete_user_profile_db,
+	save_user_profile_group_db, load_user_profile_groups_db,
+	load_user_profiles_by_group_db, delete_user_profile_group_db,
 )
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
@@ -36,6 +41,11 @@ import os, streamlit as st
 import matplotlib.pyplot as plt
 from interp_base_natal import NatalInterpreter
 st.set_page_config(layout="wide")
+
+# --- Auth gate: shows login UI and stops if user is not authenticated ---
+from auth_ui import render_auth_gate
+current_user_id = render_auth_gate()
+
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups, edges_from_major_list
 from wizard_v2 import render_guided_wizard
 from src.mcp.chat_ui import render_chat_widget
@@ -76,7 +86,7 @@ st.session_state.setdefault("defaults_loaded", False)
 st.session_state.setdefault("test_chart_2", "Custom")
 
 apply_custom_css() # Call the imported CSS function
-current_user_id = "test-user"
+# current_user_id is now set by render_auth_gate() at startup (the logged-in user's UUID)
 COMPASS_KEY = "ui_compass_overlay"
 
 import os
@@ -231,6 +241,71 @@ if synastry_mode and test_chart_2:
 
 	elif test_chart_2 == "Custom":
 		st.session_state["last_test_chart_2"] = "Custom"
+
+# --- Handle pending profile load (deferred until before form widgets are created) ---
+_pending_profile = st.session_state.pop("__pending_profile_load__", None)
+if _pending_profile:
+	_prof_name = _pending_profile["profile_name"]
+	_prof_data = _pending_profile["profile_data"]
+	
+	st.session_state["_loaded_profile"] = _prof_data
+	st.session_state["current_profile"] = _prof_name
+	st.session_state["profile_loaded"] = True
+
+	# Set profile-bound keys (not widget-bound)
+	st.session_state["profile_year"] = _prof_data["year"]
+	st.session_state["profile_month_name"] = MONTH_NAMES[_prof_data["month"] - 1]
+	st.session_state["profile_day"] = _prof_data["day"]
+	st.session_state["profile_hour"] = _prof_data["hour"]
+	st.session_state["profile_minute"] = _prof_data["minute"]
+	st.session_state["profile_city"] = _prof_data["city"]
+
+	# Set form-widget-bound keys (safe to do NOW before widgets are created)
+	st.session_state["year"] = _prof_data["year"]
+	st.session_state["month_name"] = MONTH_NAMES[_prof_data["month"] - 1]
+	st.session_state["day"] = _prof_data["day"]
+	st.session_state["city"] = _prof_data["city"]
+	# convert stored 24h hour back to 12h form widgets
+	_load_h24 = _prof_data["hour"]
+	_load_h12 = _load_h24 % 12 or 12
+	_load_ampm = "AM" if _load_h24 < 12 else "PM"
+	st.session_state["hour_12"]    = f"{_load_h12:02d}"
+	st.session_state["minute_str"] = f"{_prof_data['minute']:02d}"
+	st.session_state["ampm"]       = _load_ampm
+
+	# cache geocode result so profile manager & other widgets can read it
+	st.session_state["current_lat"]     = _prof_data.get("lat")
+	st.session_state["current_lon"]     = _prof_data.get("lon")
+	st.session_state["current_tz_name"] = _prof_data.get("tz_name")
+
+	st.session_state["hour_val"] = _prof_data["hour"]
+	st.session_state["minute_val"] = _prof_data["minute"]
+	st.session_state["city_input"] = _prof_data["city"]
+
+	st.session_state["last_location"] = _prof_data["city"]
+	st.session_state["last_timezone"] = _prof_data.get("tz_name")
+
+	# restore circuit names
+	if "circuit_names" in _prof_data:
+		for key, val in _prof_data["circuit_names"].items():
+			st.session_state[key] = val
+		st.session_state["saved_circuit_names"] = _prof_data["circuit_names"].copy()
+	else:
+		st.session_state["saved_circuit_names"] = {}
+
+	# Restore saved chart object if present; otherwise mark for recalculation
+	_stored_chart_raw = _prof_data.get("chart")
+	if isinstance(_stored_chart_raw, dict):
+		from models_v2 import AstrologicalChart
+		_stored_chart = AstrologicalChart.from_json(_stored_chart_raw)
+		st.session_state["last_chart"] = _stored_chart
+		st.session_state["chart_ready"] = True
+	elif any(v is None for v in (_prof_data.get("lat"), _prof_data.get("lon"), _prof_data.get("tz_name"))):
+		# Missing location info — show error once profile manager rendered
+		st.session_state["__profile_load_error__"] = f"Profile '{_prof_name}' is missing location/timezone info. Re-save it after a successful city lookup."
+	else:
+		# Will recalculate when run_chart() is called
+		pass
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
@@ -450,6 +525,11 @@ with col_right:
 			minute_val=st.session_state.get("minute_val"),
 			city_name=st.session_state.get("profile_city", ""),
 			chart_ready=st.session_state.get("chart_ready", False),
+			# Group management functions
+			save_user_profile_group_db=save_user_profile_group_db,
+			load_user_profile_groups_db=load_user_profile_groups_db,
+			load_user_profiles_by_group_db=load_user_profiles_by_group_db,
+			delete_user_profile_group_db=delete_user_profile_group_db,
 		)
 
 	if chart_cached is not None:

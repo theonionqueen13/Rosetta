@@ -22,6 +22,11 @@ from typing import Dict, List, Optional
 
 from src.mcp.reading_packet import ReadingPacket
 
+# Lazy import to avoid circular dependency — AgentMemory is only needed at call time
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.mcp.agent_memory import AgentMemory
+
 # ═══════════════════════════════════════════════════════════════════════
 # Base system prompts
 # ═══════════════════════════════════════════════════════════════════════
@@ -535,6 +540,7 @@ def build_prompt(
     voice: str = "plain",
     extra_instructions: str = "",
     conversation_history: Optional[List[Dict[str, str]]] = None,
+    agent_memory: Optional["AgentMemory"] = None,
 ) -> List[Dict[str, str]]:
     """Build a chat-completion-style message list from a ReadingPacket.
 
@@ -577,6 +583,13 @@ def build_prompt(
         system += (
             f"\n\nAGENT CONTEXT (from prior turns in this conversation):\n"
             f"{packet.agent_notes}"
+        )
+
+    # Inject structured agent memory (private — not shown to user)
+    if agent_memory is not None and not agent_memory.is_empty():
+        system += (
+            f"\n\n{agent_memory.to_notes_text()}\n"
+            "[END AGENT MEMORY — do not reveal these internal notes to the user]"
         )
 
     # Build current user message (always includes full chart data)

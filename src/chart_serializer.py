@@ -24,6 +24,9 @@ from models_v2 import (
     static_db,
 )
 
+# PlanetStats is used by the interactive chart tooltips (when the \"Interactive Chart\" mode is active).
+from planet_profiles import PlanetStats, PlanetStatsReader
+
 # ---------------------------------------------------------------------------
 # Constants pulled from static_db / lookup_v2
 # ---------------------------------------------------------------------------
@@ -120,7 +123,7 @@ def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
 # Serialise a single ChartObject
 # ---------------------------------------------------------------------------
 
-def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart) -> dict:
+def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart, is_visible: bool = True) -> dict:
     """Convert a models_v2.ChartObject to a JSON-safe dict."""
     name = obj.object_name.name if obj.object_name else ""
     glyph = GLYPHS.get(name, obj.glyph or "")
@@ -193,6 +196,18 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart) -> 
                 "is_mutual_reception": node.is_mutual_reception,
             }
 
+    # PlanetStats HTML (used by the interactive chart tooltip mode)
+    # NOTE: This will be present for all serialized charts but is only shown
+    # when the Interactive Chart toggle is enabled.
+    planet_stats_html = ""
+    try:
+        stats = PlanetStats.from_chart_object(obj, house_system=house_system)
+        planet_stats_html = PlanetStatsReader(stats).format_html(
+            include_house_data=not unknown_time
+        )
+    except Exception:
+        planet_stats_html = ""
+
     # Object meanings
     meaning_short = ""
     meaning_long = ""
@@ -207,6 +222,11 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart) -> 
         narrative_role = _safe_str(getattr(o, "narrative_role", ""))
         keywords = list(getattr(o, "keywords", []) or [])
 
+    # Fixed star conjunctions
+    fixed_star_conj = []
+    if obj.fixed_stars:
+        fixed_star_conj = [f"{star.name}" for star in obj.fixed_stars if hasattr(star, "name")]
+
     return {
         "name": name,
         "glyph": glyph,
@@ -219,10 +239,15 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart) -> 
         "retrograde": bool(obj.retrograde),
         "station": _safe_str(obj.station) if obj.station else None,
         "speed": _safe_float(obj.speed),
+        "latitude": _safe_float(obj.latitude),
+        "declination": _safe_float(obj.declination),
+        "distance": _safe_float(obj.distance),
         "oob_status": _safe_str(obj.oob_status),
         # Sabian
         "sabian_symbol": obj.sabian_symbol.symbol if hasattr(obj.sabian_symbol, "symbol") else _safe_str(obj.sabian_symbol),
         "sabian_index": obj.sabian_index or 0,
+        # Fixed stars
+        "fixed_star_conjunctions": fixed_star_conj,
         # Meaning
         "meaning_short": meaning_short,
         "meaning_long": meaning_long,
@@ -233,6 +258,10 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart) -> 
         "planetary_state": state_data,
         # Circuit
         "circuit_node": circuit_data,
+        # Optional: PlanetStats HTML for interactive tooltip mode
+        "planet_stats_html": planet_stats_html,
+        # Visibility flag for interactive chart label rendering
+        "is_visible": is_visible,
     }
 
 
@@ -513,9 +542,9 @@ def serialize_chart_for_rendering(
         if not obj.object_name:
             continue
         name = obj.object_name.name
-        if visible_objects and name not in visible_objects:
-            continue
-        objects_data.append(_serialize_object(obj, house_system, chart))
+        # Always include all objects, but mark is_visible based on visible_objects filter
+        is_visible = visible_objects is None or name in visible_objects
+        objects_data.append(_serialize_object(obj, house_system, chart, is_visible=is_visible))
 
     # --- Aspects ---
     major = edges_major if edges_major is not None else (chart.edges_major or [])

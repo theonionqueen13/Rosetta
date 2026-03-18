@@ -18,6 +18,11 @@ from typing import Any, Dict, List, Optional
 from src.mcp.prompt_templates import build_prompt, estimate_prompt_tokens
 from src.mcp.reading_packet import ReadingPacket
 
+# TYPE_CHECKING import to avoid circular dependency at runtime
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.mcp.agent_memory import AgentMemory
+
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = "google/gemini-2.0-flash-001"
@@ -165,6 +170,7 @@ def _openai_synthesize(
     extra_instructions: str = "",
     api_key: Optional[str] = None,
     conversation_history: Optional[List[Dict]] = None,
+    agent_memory: Optional["AgentMemory"] = None,
 ) -> SynthesisResult:
     """Call OpenAI's chat completion API."""
     try:
@@ -181,6 +187,7 @@ def _openai_synthesize(
         packet, mode=mode, voice=voice,
         extra_instructions=extra_instructions,
         conversation_history=conversation_history,
+        agent_memory=agent_memory,
     )
 
     response = client.chat.completions.create(
@@ -216,6 +223,7 @@ def _openrouter_synthesize(
     extra_instructions: str = "",
     api_key: Optional[str] = None,
     conversation_history: Optional[List[Dict]] = None,
+    agent_memory: Optional["AgentMemory"] = None,
 ) -> SynthesisResult:
     """Call OpenRouter via the OpenAI SDK with a base_url override."""
     try:
@@ -239,6 +247,7 @@ def _openrouter_synthesize(
         packet, mode=mode, voice=voice,
         extra_instructions=extra_instructions,
         conversation_history=conversation_history,
+        agent_memory=agent_memory,
     )
 
     response = client.chat.completions.create(
@@ -274,6 +283,7 @@ def _anthropic_synthesize(
     extra_instructions: str = "",
     api_key: Optional[str] = None,
     conversation_history: Optional[List[Dict]] = None,
+    agent_memory: Optional["AgentMemory"] = None,
 ) -> SynthesisResult:
     """Call Anthropic's messages API."""
     try:
@@ -290,6 +300,7 @@ def _anthropic_synthesize(
         packet, mode=mode, voice=voice,
         extra_instructions=extra_instructions,
         conversation_history=conversation_history,
+        agent_memory=agent_memory,
     )
 
     # Anthropic API separates system from messages
@@ -333,6 +344,7 @@ def synthesize(
     extra_instructions: str = "",
     api_key: Optional[str] = None,
     conversation_history: Optional[List[Dict]] = None,
+    agent_memory: Optional["AgentMemory"] = None,
 ) -> SynthesisResult:
     """Synthesize prose from a ReadingPacket.
 
@@ -366,6 +378,7 @@ def synthesize(
             "extra_instructions": extra_instructions,
             "api_key": api_key,
             "conversation_history": conversation_history,
+            "agent_memory": agent_memory,
         }
         if model:
             kw["model"] = model

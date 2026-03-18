@@ -634,6 +634,23 @@ class HouseCusp:
             "Longitude": self.absolute_degree,
         }
 
+    def to_json(self) -> dict:
+        """Serialise to a plain JSON-safe dict that preserves all raw fields."""
+        return {
+            "cusp_number": self.cusp_number,
+            "absolute_degree": self.absolute_degree,
+            "house_system": self.house_system,
+        }
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any]) -> "HouseCusp":
+        """Reconstruct from a dict produced by to_json()."""
+        return cls(
+            cusp_number=int(d["cusp_number"]),
+            absolute_degree=float(d["absolute_degree"]),
+            house_system=str(d["house_system"]),
+        )
+
 @dataclass
 class ChartHouse:
     number: House
@@ -1223,6 +1240,210 @@ class AstrologicalChart:
 
         # Concatenate
         return pd.concat([base_df, cusp_df], ignore_index=True)
+
+    def to_json(self) -> Dict[str, Any]:
+        """Serialise the chart to a JSON-safe dict for Supabase storage.
+
+        Heavy computed fields (planetary_states, circuit_simulation,
+        mutual_receptions) are omitted — they are recomputed on demand.
+        """
+        import json
+        import math
+
+        def _native(obj):
+            """Recursively convert numpy / pandas scalars to plain Python types."""
+            # Import lazily to avoid making numpy a hard dependency here
+            try:
+                import numpy as np
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                if isinstance(obj, np.floating):
+                    v = float(obj)
+                    return None if math.isnan(v) or math.isinf(v) else v
+                if isinstance(obj, np.ndarray):
+                    return [_native(x) for x in obj.tolist()]
+                if isinstance(obj, np.bool_):
+                    return bool(obj)
+            except ImportError:
+                pass
+            if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+                return None
+            if isinstance(obj, dict):
+                return {k: _native(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple, set, frozenset)):
+                return [_native(x) for x in obj]
+            return obj
+
+        def _safe_list(lst):
+            """Convert lst to native Python types and drop anything still un-serialisable."""
+            try:
+                native = _native(list(lst or []))
+                json.dumps(native)  # final check
+                return native
+            except (TypeError, ValueError):
+                return []
+
+        def _edge_list(edges):
+            """Convert [(str, str, dict), ...] edges to [[str, str, dict], ...]."""
+            out = []
+            for edge in (edges or []):
+                try:
+                    a, b, meta = edge
+                    safe_meta = _native(meta) if isinstance(meta, dict) else {}
+                    out.append([str(a), str(b), safe_meta])
+                except Exception:
+                    pass
+            return out
+
+        def _major_edges_all(edges):
+            """Convert [((a, b), type_str), ...] to [[[a, b], type_str], ...]."""
+            out = []
+            for edge in (edges or []):
+                try:
+                    (a, b), asp = edge
+                    out.append([[str(a), str(b)], str(asp)])
+                except Exception:
+                    pass
+            return out
+
+        def _df_to_records(df):
+            """Serialise DataFrame to JSON-safe list of records.
+
+            Uses df.to_json() which handles numpy types and NaN→null
+            automatically, then parses back to native Python dicts.
+            """
+            if df is None:
+                return None
+            try:
+                return json.loads(df.to_json(orient="records", default_handler=str))
+            except Exception:
+                return None
+
+        result = {
+            # ── Scalars ─────────────────────────────────────────────────
+            "display_name": self.display_name or "",
+            "city": self.city or "",
+            "chart_datetime": self.chart_datetime,
+            "timezone": self.timezone,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "unknown_time": bool(self.unknown_time),
+            "sect": self.sect,
+            "sect_error": self.sect_error,
+            "display_datetime": self.display_datetime.isoformat() if self.display_datetime else None,
+            "utc_datetime": self.utc_datetime.isoformat() if self.utc_datetime else None,
+            # ── Objects & cusps ─────────────────────────────────────────
+            "objects": [obj.to_dict() for obj in (self.objects or [])],
+            "house_cusps": [c.to_json() for c in (self.house_cusps or [])],
+            # ── DataFrames ───────────────────────────────────────────────
+            "df_positions": _df_to_records(self.df_positions),
+            "aspect_df": _df_to_records(self.aspect_df),
+            # ── Aspect graphs ────────────────────────────────────────────
+            "edges_major": _edge_list(self.edges_major),
+            "edges_minor": _edge_list(self.edges_minor),
+            "major_edges_all": _major_edges_all(self.major_edges_all),
+            # ── Patterns ─────────────────────────────────────────────────
+            "aspect_groups": [list(g) for g in (self.aspect_groups or [])],
+            "shapes": [s.to_dict() for s in (self.shapes or [])],
+            "singleton_map": _native(self.singleton_map or {}),
+            # ── Positions / circuit data ─────────────────────────────────
+            "positions": _native(self.positions or {}),
+            "filaments": _safe_list(self.filaments or []),
+            "combos": _safe_list(self.combos or []),
+            # ── Dispositor / cluster rows ────────────────────────────────
+            "dispositor_summary_rows": _safe_list(self.dispositor_summary_rows or []),
+            "dispositor_chains_rows": _safe_list(self.dispositor_chains_rows or []),
+            "conj_clusters_rows": _safe_list(self.conj_clusters_rows or []),
+        }
+        # Final safety pass: convert any remaining sets, numpy types, or
+        # non-serialisable objects that slipped through field-level helpers
+        # (e.g. DetectedShape.suppresses, aspect_groups as frozensets, etc.)
+        return _native(result)
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any], static: Optional["StaticLookup"] = None) -> "AstrologicalChart":
+        """Reconstruct an AstrologicalChart from a dict produced by to_json().
+
+        planetary_states and circuit_simulation are not restored; they are
+        recomputed by the caller when needed.
+        """
+        import datetime as _dt
+        static = static or static_db
+
+        objects = [
+            ChartObject.from_dict(row, static=static)
+            for row in (d.get("objects") or [])
+        ]
+        house_cusps = [
+            HouseCusp.from_json(c)
+            for c in (d.get("house_cusps") or [])
+        ]
+
+        def _parse_dt(s):
+            if not s:
+                return None
+            try:
+                return _dt.datetime.fromisoformat(s)
+            except (ValueError, TypeError):
+                return None
+
+        def _df(records):
+            if not records:
+                return None
+            try:
+                return pd.DataFrame(records)
+            except Exception:
+                return None
+
+        def _edge_list(raw):
+            out = []
+            for row in (raw or []):
+                try:
+                    out.append((row[0], row[1], row[2]))
+                except Exception:
+                    pass
+            return out
+
+        def _major_edges_all(raw):
+            out = []
+            for row in (raw or []):
+                try:
+                    (a, b), asp = row[0], row[1]
+                    out.append(((a, b), asp))
+                except Exception:
+                    pass
+            return out
+
+        chart = cls(
+            objects=objects,
+            house_cusps=house_cusps,
+            chart_datetime=d.get("chart_datetime", ""),
+            timezone=d.get("timezone", ""),
+            latitude=float(d.get("latitude") or 0.0),
+            longitude=float(d.get("longitude") or 0.0),
+            display_name=d.get("display_name", ""),
+            city=d.get("city", ""),
+            unknown_time=bool(d.get("unknown_time", False)),
+            display_datetime=_parse_dt(d.get("display_datetime")),
+            sect=d.get("sect"),
+            sect_error=d.get("sect_error"),
+            df_positions=_df(d.get("df_positions")),
+            aspect_df=_df(d.get("aspect_df")),
+            edges_major=_edge_list(d.get("edges_major")),
+            edges_minor=_edge_list(d.get("edges_minor")),
+            major_edges_all=_major_edges_all(d.get("major_edges_all")),
+            aspect_groups=[list(g) for g in (d.get("aspect_groups") or [])],
+            shapes=[DetectedShape.from_dict(s) for s in (d.get("shapes") or [])],
+            singleton_map=d.get("singleton_map") or {},
+            positions=d.get("positions") or {},
+            filaments=d.get("filaments") or [],
+            combos=d.get("combos") or [],
+            dispositor_summary_rows=d.get("dispositor_summary_rows") or [],
+            dispositor_chains_rows=d.get("dispositor_chains_rows") or [],
+            conj_clusters_rows=d.get("conj_clusters_rows") or [],
+            utc_datetime=_parse_dt(d.get("utc_datetime")),
+        )
+        return chart
 
     def get_object(self, name: str) -> Optional[ChartObject]:
         for obj in self.objects:

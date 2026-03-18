@@ -30,6 +30,7 @@ from src.mcp.comprehension import comprehend, QuestionGraph
 from src.mcp.comprehension_models import ComprehensionResult, PersonProfile, Location
 from src.mcp.circuit_query import query_circuit, CircuitReading
 from src.mcp.term_registry import TermIntent, assign_potency_tiers
+from src.mcp.agent_memory import AgentMemory
 from src.mcp.reading_packet import (
     AspectFact,
     CircuitFlowFact,
@@ -137,6 +138,7 @@ def build_reading(
     known_persons: Optional[List[PersonProfile]] = None,
     known_locations: Optional[List[Location]] = None,
     pending_clarification: Optional[str] = None,
+    agent_memory: Optional[AgentMemory] = None,
 ) -> ReadingPacket:
     """Produce a ReadingPacket for *question* against *chart*.
 
@@ -181,6 +183,12 @@ def build_reading(
     """
     static = _get_static_db()
 
+    # ── 0. Log the user's question in agent memory ───────────────────
+    _uq_id: Optional[str] = None
+    if agent_memory is not None:
+        _uq = agent_memory.add_user_question(text=question)
+        _uq_id = _uq.id
+
     # ── 1. Comprehend the question ───────────────────────────────────
     comp_result: ComprehensionResult = comprehend(
         question, chart, api_key=api_key,
@@ -192,9 +200,22 @@ def build_reading(
     # ── 1a. Handle clarification request ─────────────────────────────
     if comp_result.needs_clarification:
         clar = comp_result.clarification
+        follow_up = clar.follow_up_question if clar else ""
+
+        # Log a BotQuestion blocking the reading todo in agent memory
+        if agent_memory is not None and follow_up:
+            _todo = agent_memory.add_todo(
+                description=f"Build reading for: {question[:120]}",
+                source="pipeline",
+            )
+            agent_memory.add_bot_question(
+                text=follow_up,
+                prerequisite_for=[_todo.id],
+            )
+
         return ReadingPacket(
             question=question,
-            comprehension_note=f"CLARIFICATION_NEEDED: {clar.follow_up_question}" if clar else "",
+            comprehension_note=f"CLARIFICATION_NEEDED: {follow_up}" if clar else "",
             agent_notes=agent_notes,
             # Store serialized clarification for the UI to detect
             _clarification=clar.to_dict() if clar else {},
@@ -411,7 +432,29 @@ def build_reading(
         "power_summary": dict(circuit_reading.power_summary or {}),
     }
 
-    return ReadingPacket(
+    # ── 9. Update agent memory cross-tags & mark question answered ───
+    if agent_memory is not None and _uq_id is not None:
+        _shape_refs = [
+            getattr(cf, "shape_type", "") or getattr(cf, "name", "")
+            for cf in (circuit_flows or [])
+        ]
+        _circuit_refs = [
+            str(getattr(cp, "from_domain", "") or "") + "→" + str(getattr(cp, "to_domain", "") or "")
+            for cp in (circuit_paths or [])
+            if getattr(cp, "from_domain", None) or getattr(cp, "to_domain", None)
+        ]
+        for _uq in agent_memory.user_questions:
+            if _uq.id == _uq_id:
+                _uq.chart_object_refs = sorted(relevant_names)
+                _uq.shape_refs = [s for s in _shape_refs if s]
+                _uq.circuit_refs = [c for c in _circuit_refs if c]
+                _uq.memory_node_refs = list(merged_factors[:10])
+                break
+        # Answer text is the packet summary line (built after packing, so
+        # we store a placeholder now and patch it after the packet is built).
+        # We store the id on a local var; the actual answer is set below.
+
+    _packet = ReadingPacket(
         question=question,
         domain=q_graph.domain or (topic.domain if not q_graph.question_intent else ""),
         subtopic=q_graph.subtopic or (topic.subtopic if not q_graph.question_intent else ""),
@@ -478,6 +521,12 @@ def build_reading(
         debug_relevant_objects=sorted(relevant_names),
         debug_circuit_summary=_circuit_debug,
     )
+
+    # ── Mark UserQuestion answered now that we have the summary line ─
+    if agent_memory is not None and _uq_id is not None:
+        agent_memory.answer_user_question(_uq_id, _packet.summary_line())
+
+    return _packet
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -29,6 +29,7 @@ from src.mcp.prose_synthesizer import (
     SynthesisResult,
     synthesize,
 )
+from src.mcp.agent_memory import AgentMemory
 
 # ── Catalogue constants ───────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ _PERSONS_KEY    = "mcp_known_persons"  # List[dict] — accumulated PersonProfil
 _LOCATIONS_KEY  = "mcp_known_locations" # List[dict] — accumulated Location dicts
 _PENDING_Q_KEY       = "mcp_pending_question"   # str — original question when clarification is pending
 _STARTER_PROMPT_KEY = "mcp_starter_prompt"     # str — example prompt clicked by user before any history
+_AGENT_MEMORY_KEY   = "mcp_agent_memory"        # AgentMemory — structured private memory for the session
 
 # ── Example starter prompts ─────────────────────────────────────────────────
 
@@ -358,6 +360,62 @@ def _render_agent_notes_tree(notes_raw: str) -> None:
     components.html(html_content, height=360, scrolling=True)
 
 
+def _render_agent_memory_panel() -> None:
+    """Render a compact structured-memory panel in the right sidebar.
+
+    Shows open todos, pending bot questions, and unanswered user questions
+    from the session's AgentMemory.  Empty state is hidden silently.
+    """
+    import streamlit as st  # local reference — already imported globally but kept explicit
+    mem: AgentMemory = st.session_state.get(_AGENT_MEMORY_KEY) or AgentMemory()
+    if mem.is_empty():
+        return
+
+    stats = mem.stats()
+
+    with st.expander(
+        f"🧠 Memory  "
+        f"({stats['todos_open']} todo{'s' if stats['todos_open'] != 1 else ''} · "
+        f"{stats['bot_q_awaiting']} awaiting)",
+        expanded=False,
+    ):
+        # Open todos
+        open_t = mem.open_todos()
+        if open_t:
+            st.markdown("**☐ Open To-Dos**")
+            for t in open_t:
+                src = " *(user)*" if t.source == "user" else ""
+                st.markdown(f"- {t.description}{src}")
+
+        # Blocked todos
+        blocked = mem.blocked_todos()
+        if blocked:
+            st.markdown("**⏸ Blocked (waiting on reply)**")
+            for t in blocked:
+                st.markdown(f"- {t.description}")
+
+        # Pending bot questions
+        pending_bq = mem.pending_bot_questions()
+        if pending_bq:
+            st.markdown("**⏳ Awaiting user reply**")
+            for bq in pending_bq:
+                st.markdown(f"- *{bq.text[:140]}*")
+
+        # Unanswered user questions
+        unanswered_uq = mem.unanswered_user_questions()
+        if unanswered_uq:
+            st.markdown("**? Unanswered user questions**")
+            for uq in unanswered_uq:
+                st.markdown(f"- {uq.text[:120]}")
+
+        # Completed todos (last 5, collapsed)
+        done_t = [t for t in mem.todos if t.done]
+        if done_t:
+            with st.expander(f"✓ Completed ({len(done_t)})", expanded=False):
+                for t in done_t[-5:]:
+                    st.markdown(f"- ~~{t.description}~~")
+
+
 # ── Key resolution ────────────────────────────────────────────────────────────
 
 def _get_api_key() -> str:
@@ -384,6 +442,8 @@ def _init_state() -> None:
     st.session_state.setdefault(_PERSONS_KEY, [])
     st.session_state.setdefault(_LOCATIONS_KEY, [])
     st.session_state.setdefault(_PENDING_Q_KEY, "")
+    if _AGENT_MEMORY_KEY not in st.session_state:
+        st.session_state[_AGENT_MEMORY_KEY] = AgentMemory()
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -401,6 +461,7 @@ def render_chat_widget() -> None:
     # ════════════════════════════════════════════════════════════════════════
     with col_right:
         _render_agent_notes_tree(st.session_state.get(_NOTES_KEY, "") or "")
+        _render_agent_memory_panel()
 
         # Memory controls (stubbed for future wiring)
         b1, b2 = st.columns([1, 1])
@@ -483,6 +544,7 @@ def render_chat_widget() -> None:
                 st.session_state[_PERSONS_KEY] = []
                 st.session_state[_LOCATIONS_KEY] = []
                 st.session_state[_PENDING_Q_KEY] = ""
+                st.session_state[_AGENT_MEMORY_KEY] = AgentMemory()
                 st.rerun()
 
         # History replay
@@ -513,6 +575,21 @@ def render_chat_widget() -> None:
     if not prompt and _starter:
         prompt = _starter
     if prompt:
+        # ── /todo slash-command ───────────────────────────────────────
+        if prompt.strip().lower().startswith("/todo "):
+            description = prompt.strip()[len("/todo "):].strip()
+            if description:
+                _mem: AgentMemory = st.session_state[_AGENT_MEMORY_KEY]
+                new_todo = _mem.add_todo(description=description, source="user")
+                history.append({"role": "user", "content": prompt, "meta": {}})
+                history.append({
+                    "role": "assistant",
+                    "content": f"\u2713 To-do added: **{description}**",
+                    "meta": {"_is_todo_ack": True},
+                })
+            st.rerun()
+            return
+
         history.append({"role": "user", "content": prompt, "meta": {}})
 
         chart = st.session_state.get("last_chart")
@@ -537,6 +614,9 @@ def render_chat_widget() -> None:
             pending_clar = prompt            # their new reply is the clarification
             actual_question = stored_q       # re-ask the original question
             st.session_state[_PENDING_Q_KEY] = ""
+            # Mark any awaiting BotQuestions as answered with the user's reply
+            _mem_clar: AgentMemory = st.session_state[_AGENT_MEMORY_KEY]
+            _mem_clar.answer_all_pending_bot_questions(prompt)
 
         with st.spinner("Reading the chart…"):
             # Resolve pre-computed inter-chart aspects from whichever biwheel mode is active
@@ -560,6 +640,7 @@ def render_chat_widget() -> None:
                 known_persons=st.session_state.get(_PERSONS_KEY) or None,
                 known_locations=st.session_state.get(_LOCATIONS_KEY) or None,
                 pending_clarification=pending_clar,
+                agent_memory=st.session_state.get(_AGENT_MEMORY_KEY),
             )
 
         # ── Handle clarification request from pipeline ────────────────
@@ -941,6 +1022,102 @@ def _render_dev_expander() -> None:
             else:
                 st.caption("*(synthesis has not run yet — no API key or error)*")
 
+        st.markdown("---")
+
+        # ── Agent Memory state ────────────────────────────────────────────
+        with st.container():
+            st.markdown("#### 🧠 Agent Memory (session state)")
+            mem: AgentMemory = st.session_state.get(_AGENT_MEMORY_KEY) or AgentMemory()
+            if mem.is_empty():
+                st.caption("*(no memory recorded yet)*")
+            else:
+                _stats = mem.stats()
+                _mcols = st.columns(3)
+                _mcols[0].metric(
+                    "To-Dos",
+                    f"{_stats['todos_open']} open · {_stats['todos_done']} done"
+                    + (f" · {_stats['todos_blocked']} blocked" if _stats['todos_blocked'] else ""),
+                )
+                _mcols[1].metric(
+                    "User Questions",
+                    f"{_stats['user_q_total']} total · {_stats['user_q_unanswered']} pending",
+                )
+                _mcols[2].metric(
+                    "Bot Questions",
+                    f"{_stats['bot_q_total']} asked · {_stats['bot_q_awaiting']} awaiting",
+                )
+
+                _mem_tabs = st.tabs(["To-Dos", "User Questions", "Bot Questions", "Raw text", "JSON"])
+
+                with _mem_tabs[0]:
+                    if not mem.todos:
+                        st.caption("*(none)*")
+                    for t in mem.todos:
+                        icon = "✓" if t.done else ("⏸" if t.id in {bq.id for bq in mem.blocked_todos()} else "☐")
+                        src = f" *({t.source})*"
+                        blocked_note = ""
+                        if t.blocked_by:
+                            blocked_note = f"  \n⛔ blocked by: `{'`, `'.join(b[:8] for b in t.blocked_by)}`"
+                        done_note = f"  \n✓ completed: `{t.completed_at}`" if t.completed_at else ""
+                        st.markdown(
+                            f"**{icon} [{t.id[:8]}]** {t.description}{src}"
+                            f"  \ncreated: `{t.created_at}`{done_note}{blocked_note}"
+                        )
+                        st.markdown("---")
+
+                with _mem_tabs[1]:
+                    if not mem.user_questions:
+                        st.caption("*(none)*")
+                    for uq in mem.user_questions:
+                        status = "✓" if uq.answered else "?"
+                        tags: List[str] = []
+                        if uq.chart_object_refs:
+                            tags.append(f"objects: `{'`, `'.join(uq.chart_object_refs)}`")
+                        if uq.shape_refs:
+                            tags.append(f"shapes: `{'`, `'.join(uq.shape_refs)}`")
+                        if uq.circuit_refs:
+                            tags.append(f"circuits: `{'`, `'.join(uq.circuit_refs)}`")
+                        if uq.memory_node_refs:
+                            tags.append(f"factors: `{'`, `'.join(uq.memory_node_refs[:4])}`…")
+                        tag_block = "  \n" + "  \n".join(tags) if tags else ""
+                        answer_block = (
+                            f"  \n**Answer summary:** {uq.answer}"
+                            if uq.answered and uq.answer else ""
+                        )
+                        st.markdown(
+                            f"**{status} [{uq.id[:8]}]** {uq.text}"
+                            f"  \nasked: `{uq.asked_at}`"
+                            f"{tag_block}{answer_block}"
+                        )
+                        st.markdown("---")
+
+                with _mem_tabs[2]:
+                    if not mem.bot_questions:
+                        st.caption("*(none)*")
+                    for bq in mem.bot_questions:
+                        if bq.awaiting:
+                            status_icon = "⏳ AWAITING"
+                        elif bq.answered:
+                            status_icon = "✓"
+                        else:
+                            status_icon = "?"
+                        prereq_note = ""
+                        if bq.prerequisite_for:
+                            prereq_note = f"  \n🔗 prereq for todos: `{'`, `'.join(b[:8] for b in bq.prerequisite_for)}`"
+                        reply_note = f"  \n**Reply:** {bq.answer}" if bq.answered and bq.answer else ""
+                        st.markdown(
+                            f"**{status_icon} [{bq.id[:8]}]** {bq.text}"
+                            f"  \nasked: `{bq.asked_at}`"
+                            f"{prereq_note}{reply_note}"
+                        )
+                        st.markdown("---")
+
+                with _mem_tabs[3]:
+                    st.code(mem.to_notes_text(), language="text")
+
+                with _mem_tabs[4]:
+                    st.json(mem.to_dict())
+
 def _render_read_aloud_button(text: str, key: str) -> None:
     """Render a set of playback controls using the browser SpeechSynthesis API.
 
@@ -1136,6 +1313,7 @@ def _generate_response(
     known_persons: Optional[List[Dict[str, Any]]] = None,
     known_locations: Optional[List[Dict[str, Any]]] = None,
     pending_clarification: Optional[str] = None,
+    agent_memory: Optional[AgentMemory] = None,
 ) -> tuple[str, Dict[str, Any]]:
     """Run the full MCP pipeline. Returns (response_text, meta)."""
 
@@ -1182,6 +1360,7 @@ def _generate_response(
             known_persons=_persons,
             known_locations=_locations,
             pending_clarification=pending_clarification,
+            agent_memory=agent_memory,
         )
 
         # ── Handle clarification request ─────────────────────────────
@@ -1296,6 +1475,7 @@ def _generate_response(
             mode=_synthesize_mode,
             voice=voice_lower,
             api_key=api_key,
+            agent_memory=agent_memory,
         )
         meta.update({
             "model":             result.model,

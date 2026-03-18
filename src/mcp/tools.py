@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
+from src.mcp.agent_memory import AgentMemory
 from src.mcp.topic_maps import (
     all_factors_for_domain,
     list_domains,
@@ -364,6 +365,7 @@ class ToolContext:
         api_key: Optional[str] = None,
         chart_b: Any = None,
         edges_inter_chart: Optional[List] = None,
+        agent_memory: Optional[AgentMemory] = None,
     ):
         self.chart = chart
         self.house_system = house_system
@@ -373,6 +375,7 @@ class ToolContext:
         self.chart_b = chart_b
         self.edges_inter_chart = edges_inter_chart or []
         self.conversation_history: List[Dict[str, str]] = []
+        self.agent_memory: AgentMemory = agent_memory if agent_memory is not None else AgentMemory()
 
     def add_turn(self, question: str, response: str) -> None:
         """Append a user/assistant exchange to the conversation history.
