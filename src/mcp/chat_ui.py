@@ -1339,7 +1339,7 @@ def _render_read_aloud_button(text: str, key: str, bass: float = 0.0, mids: floa
         updateStatus();
       }})();
     </script>
-    """.format(js_text=js_text, key=key)
+    """.format(js_text=js_text, key=key, pitch_mod=pitch_mod)
 
     components.html(html, height=110)
 
