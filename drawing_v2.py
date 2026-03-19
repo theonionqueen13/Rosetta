@@ -1581,6 +1581,7 @@ def render_biwheel_chart_with_circuits(
 			asc_deg_1,
 			radius=INNER_CIRCLE_R,
 			include_axes=not unknown_time_2,
+			arrow_mutation_scale=15.0,
 			colors={
 				"nodal": "#4B0082",  # dark indigo
 				"acdc": "#203A59",   # deep blue
