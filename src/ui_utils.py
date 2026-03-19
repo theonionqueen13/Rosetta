@@ -7,12 +7,28 @@ from typing import Optional
 
 COMPASS_KEY = "ui_compass_overlay"
 
-def apply_custom_css(dark_mode: bool | None = None) -> None:
+def apply_custom_css(
+    dark_mode: bool | None = None,
+    expander_background: str = "#22223D",
+    expander_text: str = "#fff",
+    sidebar_background: str = "#1D1D41",
+    sidebar_text: str = "#fff",
+    dropdown_background: str = "#22223D",
+    dropdown_text: str = "#FFFFFF",
+) -> None:
     """
-    Applies custom CSS for expanders and sidebar profile styling.
+    Applies custom CSS for expanders and sidebar/profile styling.
 
     If `dark_mode` is provided (or can be inferred), the base text color is set
     appropriately: black for light mode, white for dark mode.
+
+    `expander_background` and `expander_text` control the background/text for
+    Streamlit expanders (the "Enter Birth Data" / "Chart Manager" panels, etc.).
+
+    `sidebar_background` / `sidebar_text` control the sidebar (left drawer).
+
+    `dropdown_background` / `dropdown_text` control the dropdown trigger + list
+    backgrounds (selectbox/multiselect menus).
     """
     if dark_mode is None:
         dark_mode = bool(st.session_state.get("ui_dark_mode", False))
@@ -33,25 +49,59 @@ def apply_custom_css(dark_mode: bool | None = None) -> None:
     color: {base_text_color};
 }}
 
-/* Ensure Streamlit input labels (checkbox/radio/etc.) match the theme */
+/* Ensure Streamlit input labels (checkbox/radio/etc.) match the theme.
+   Only the LABEL text above each widget inherits the light/dark base color.
+   The widget controls themselves (dropdown triggers, buttons) are excluded
+   so a separate rule can lock them to white (they always sit on dark backgrounds). */
 .stApp [data-testid="stCheckbox"] label,
 .stApp [data-testid="stRadio"] label,
 .stApp [data-testid="stSelectbox"] label,
 .stApp [data-testid="stMultiselect"] label,
-
-/* Also cover nested spans/etc. used inside the controls */
 .stApp [data-testid="stCheckbox"] *,
-.stApp [data-testid="stRadio"] *,
-.stApp [data-testid="stSelectbox"] *,
-.stApp [data-testid="stMultiselect"] * {{
+.stApp [data-testid="stRadio"] * {{
     color: {base_text_color} !important;
+}}
+
+/* All button and dropdown controls sit on dark backgrounds throughout the app.
+   Force white text on them unconditionally so they stay readable in light mode. */
+.stApp [data-testid="stButton"] button,
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"],
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] *,
+.stApp [data-testid="stMultiselect"] [data-baseweb="select"],
+.stApp [data-testid="stMultiselect"] [data-baseweb="select"] *,
+.stApp [data-testid="stSelectbox"] button,
+.stApp [data-testid="stMultiselect"] button,
+.stApp [data-testid="stDateInput"] button,
+.stApp [data-testid="stTimeInput"] button {{
+    color: #fff !important;
+}}
+
+/* Ensure dropdown triggers and option lists use the configured background color */
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"],
+.stApp [data-testid="stMultiselect"] [data-baseweb="select"],
+.stApp [data-testid="stSelectbox"] [role="listbox"],
+.stApp [data-testid="stMultiselect"] [role="listbox"] {{
+    background-color: {dropdown_background} !important;
+    color: {dropdown_text} !important;
+}}
+
+/* Sidebar background */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] > div,
+[data-testid="stSidebar"] section {{
+    background-color: {sidebar_background} !important;
+}}
+
+[data-testid="stSidebar"] *,
+[data-testid="stSidebar"] .css-1d391kg {{
+    color: {sidebar_text} !important;
 }}
 
 /* --- Custom Expander Styling --- */
 /* Full expander container */
 [data-testid="stExpander"] {{
-    background-color: #333333 !important; /* dark gray */
-    color: white !important;
+    background-color: {expander_background} !important;
+    color: {expander_text} !important;
     background-image: none !important;
     border-radius: 10px !important;  /* rounded corners */
     overflow: hidden !important;      /* prevents header/body corners showing square */
@@ -59,15 +109,15 @@ def apply_custom_css(dark_mode: bool | None = None) -> None:
 
 /* Expander header */
 [data-testid="stExpander"] > summary {{
-    background-color: #333333 !important;
-    color: white !important;
+    background-color: {expander_background} !important;
+    color: {expander_text} !important;
     border-radius: 10px !important;  /* same rounding */
 }}
 
 /* Inner content area */
 [data-testid="stExpander"] .st-expander-content {{
-    background-color: #333333 !important;
-    color: white !important;
+    background-color: {expander_background} !important;
+    color: {expander_text} !important;
     border-radius: 0 0 10px 10px !important; /* rounded bottom corners */
 }}
 

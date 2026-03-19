@@ -980,26 +980,73 @@ def serialize_biwheel_for_rendering(
                             "style": spec.get("style", "solid"),
                             "is_circuit": True,
                         })
-        
+
+        # --- Sub-shape edges (Combined Circuits uses only shape toggles) ---
+        if shapes and active_shape_ids:
+            layered_mode = (len(active_parents) + len(active_shape_ids)) > 1
+            edge_keys_seen: set = {(a["obj_a"], a["obj_b"], a["aspect"]) for a in filtered_aspects}
+            for sh in shapes:
+                sh_id = (sh.get("id") or sh.get("shape_id")) if isinstance(sh, dict) else getattr(sh, "shape_id", None)
+                if sh_id not in active_shape_ids:
+                    continue
+                sh_members = (sh.get("members", []) if isinstance(sh, dict) else getattr(sh, "members", []))
+                visible_objs.update(sh_members if not isinstance(sh_members, (set, frozenset)) else sh_members)
+                sh_edges = (sh.get("edges", []) if isinstance(sh, dict) else getattr(sh, "edges", []))
+                # Resolve colour for this sub-shape
+                color = None
+                if layered_mode:
+                    color = SUBSHAPE_COLORS[list(active_shape_ids).index(sh_id) % len(SUBSHAPE_COLORS)] if SUBSHAPE_COLORS else None
+                for edge_item in sh_edges:
+                    # edges are ((p1, p2), asp_name) tuples
+                    if isinstance(edge_item, (list, tuple)) and len(edge_item) >= 2:
+                        pair, asp_name = edge_item[0], edge_item[1]
+                        if isinstance(pair, (list, tuple)) and len(pair) == 2:
+                            p1, p2 = pair
+                        else:
+                            continue
+                    else:
+                        continue
+                    clean_asp = asp_name.replace("_approx", "").strip() if isinstance(asp_name, str) else ""
+                    k = (p1, p2, clean_asp)
+                    k_rev = (p2, p1, clean_asp)
+                    if k in edge_keys_seen or k_rev in edge_keys_seen:
+                        continue
+                    edge_keys_seen.add(k)
+                    spec = ASPECTS.get(clean_asp, {})
+                    filtered_aspects.append({
+                        "obj_a": p1,
+                        "obj_b": p2,
+                        "aspect": clean_asp,
+                        "angle": spec.get("angle", 0),
+                        "orb": spec.get("orb", 0),
+                        "color": color or spec.get("color", "gray"),
+                        "style": spec.get("style", "solid"),
+                        "is_circuit": True,
+                    })
+
         # Shapes data - ensure members are lists, not sets
         shapes_data = []
         if shapes:
             for sh in shapes:
                 if isinstance(sh, dict):
                     members = sh.get("members", [])
+                    edges_raw = sh.get("edges", [])
                     sh_dict = {
                         "id": sh.get("id") or sh.get("shape_id"),
                         "type": sh.get("type") or sh.get("shape_type", ""),
                         "members": list(members) if isinstance(members, (set, frozenset)) else list(members),
                         "parent": sh.get("parent", 0),
+                        "edges": [[list(pair), asp] for pair, asp in edges_raw] if edges_raw else [],
                     }
                 else:
                     members = getattr(sh, "members", [])
+                    edges_raw = getattr(sh, "edges", [])
                     sh_dict = {
                         "id": getattr(sh, "shape_id", None),
                         "type": getattr(sh, "shape_type", ""),
                         "members": list(members) if isinstance(members, (set, frozenset)) else list(members),
                         "parent": getattr(sh, "parent", 0),
+                        "edges": [[list(pair), asp] for pair, asp in edges_raw] if edges_raw else [],
                     }
                 is_active = sh_dict.get("id") in active_shape_ids
                 shapes_data.append({

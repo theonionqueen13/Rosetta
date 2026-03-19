@@ -678,8 +678,9 @@ def render_circuit_toggles(
 									value=st.session_state.get(unique_key, False),
 								)
 				
-				# Store shape toggle map for compatibility
-				shape_toggle_map = st.session_state.setdefault("shape_toggles_by_parent", {})
+				# Build shape toggle map fresh each rerun (not setdefault/append,
+				# which would accumulate stale entries across Streamlit reruns)
+				shape_toggle_map: dict = {}
 				for sh in shapes:
 					parent = sh.parent
 					if parent not in shape_toggle_map:
@@ -689,6 +690,7 @@ def render_circuit_toggles(
 						"id": sh.shape_id,
 						"on": st.session_state.get(unique_key, False)
 					})
+				st.session_state["shape_toggles_by_parent"] = shape_toggle_map
 			else:
 				st.info("No shapes detected in combined charts.")
 			

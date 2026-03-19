@@ -126,6 +126,16 @@ div[data-testid="stHorizontalBlock"]:has(div[data-testid="stChatInput"])
     border-radius: 10px;
     padding: 0.75rem 1rem 0.25rem 1rem;
     border: 1px solid #1f2937;
+    color: #fff; /* ensure all chat panel text stays white */
+}
+
+/* Also ensure any chat message bubbles, labels, and inputs inside the
+   chat pane remain white for readability on the dark background. */
+div[data-testid="stHorizontalBlock"]:has(div[data-testid="stChatInput"])
+    div[data-testid="stChatMessage"],
+div[data-testid="stHorizontalBlock"]:has(div[data-testid="stChatInput"])
+    div[data-testid="stChatInput"] {
+    color: #fff !important;
 }
 
 </style>
@@ -570,7 +580,7 @@ def render_chat_widget() -> None:
         # Header row
         col_title, col_clear = st.columns([7, 1])
         with col_title:
-            st.markdown("### 🔮 Ask your chart")
+            st.markdown("<h3 style='color: #fff; margin: 0;'>🔮 Ask your chart</h3>", unsafe_allow_html=True)
         with col_clear:
             if st.button("🗑", key="mcp_clear_chat", help="Clear chat history"):
                 st.session_state[_HISTORY_KEY] = []

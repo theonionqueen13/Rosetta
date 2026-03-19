@@ -510,7 +510,7 @@ const RosettaChart = (() => {
     // -----------------------------------------------------------------------
     // Compass rose
     // -----------------------------------------------------------------------
-    function drawCompassRose(layer, objects, ascDeg, rScale) {
+    function drawCompassRose(layer, objects, ascDeg, rScale, compassRadius) {
         const posMap = {};
         objects.forEach((o) => {
             posMap[o.name] = o.longitude;
@@ -518,7 +518,9 @@ const RosettaChart = (() => {
 
         const nodal = "#800080";
         const axisColor = "#4E83AF";
-        const r = rScale(R_ASPECT);
+        // Unique marker ID per compass instance to avoid SVG ID collisions
+        const markerId = "arrow-nn-" + (compassRadius || "default").toString().replace(".", "_");
+        const r = rScale(compassRadius !== undefined ? compassRadius : R_ASPECT);
 
         // AC–DC line
         const acDeg = posMap["Ascendant"] ?? posMap["AC"];
@@ -532,7 +534,7 @@ const RosettaChart = (() => {
             layer.append("line")
                 .attr("x1", x1).attr("y1", y1)
                 .attr("x2", x2).attr("y2", y2)
-                .attr("stroke", axisColor).attr("stroke-width", 2)
+                .attr("stroke", axisColor).attr("stroke-width", 6)
                 .attr("class", "compass-axis");
         }
 
@@ -548,7 +550,7 @@ const RosettaChart = (() => {
             layer.append("line")
                 .attr("x1", x1).attr("y1", y1)
                 .attr("x2", x2).attr("y2", y2)
-                .attr("stroke", axisColor).attr("stroke-width", 2)
+                .attr("stroke", axisColor).attr("stroke-width", 6)
                 .attr("class", "compass-axis");
         }
 
@@ -566,10 +568,10 @@ const RosettaChart = (() => {
                 ? layer.append("defs")
                 : layer.select("defs");
             defs.append("marker")
-                .attr("id", "arrow-nn")
+                .attr("id", markerId)
                 .attr("viewBox", "0 0 10 10")
                 .attr("refX", 10).attr("refY", 5)
-                .attr("markerWidth", 8).attr("markerHeight", 8)
+                .attr("markerWidth", 24).attr("markerHeight", 24)
                 .attr("orient", "auto-start-reverse")
                 .append("path")
                 .attr("d", "M 0 0 L 10 5 L 0 10 Z")
@@ -578,14 +580,14 @@ const RosettaChart = (() => {
             layer.append("line")
                 .attr("x1", sx).attr("y1", sy)
                 .attr("x2", nx).attr("y2", ny)
-                .attr("stroke", nodal).attr("stroke-width", 4)
-                .attr("marker-end", "url(#arrow-nn)")
+                .attr("stroke", nodal).attr("stroke-width", 12)
+                .attr("marker-end", `url(#${markerId})`)
                 .attr("class", "compass-nodal");
 
             // SN dot
             layer.append("circle")
                 .attr("cx", sx).attr("cy", sy)
-                .attr("r", 4)
+                .attr("r", 12)
                 .attr("fill", nodal)
                 .attr("class", "compass-sn-dot");
         }
@@ -604,17 +606,17 @@ const RosettaChart = (() => {
             .attr("r", r)
             .attr("fill", "none")
             .attr("stroke", color)
-            .attr("stroke-width", 2)
+            .attr("stroke-width", 6)
             .attr("class", "center-earth");
         g.append("line")
             .attr("x1", -r).attr("y1", 0)
             .attr("x2", r).attr("y2", 0)
-            .attr("stroke", color).attr("stroke-width", 1)
+            .attr("stroke", color).attr("stroke-width", 3)
             .attr("class", "center-earth");
         g.append("line")
             .attr("x1", 0).attr("y1", -r)
             .attr("x2", 0).attr("y2", r)
-            .attr("stroke", color).attr("stroke-width", 1)
+            .attr("stroke", color).attr("stroke-width", 3)
             .attr("class", "center-earth");
     }
 
@@ -1090,7 +1092,23 @@ const RosettaChart = (() => {
 
         // === Draw compass rose for inner chart ===
         if (compassOnInner && !unknownTimeInner) {
-            drawCompassRose(layerCompassInner, data.objects_inner || [], ascDeg, rScale);
+            drawCompassRose(layerCompassInner, data.objects_inner || [], ascDeg, rScale, BIWHEEL.INNER_CIRCLE_R);
+        }
+
+        // === Draw compass rose for outer chart ===
+        if (compassOnOuter && !unknownTimeOuter) {
+            drawCompassRose(layerCompassOuter, data.objects_outer || [], ascDeg, rScale, BIWHEEL.OUTER_CIRCLE_R);
+        }
+
+        // === Draw singleton dots ===
+        if (circuitData && circuitData.singleton_toggles) {
+            const activeSingletonsBi = Object.entries(circuitData.singleton_toggles)
+                .filter(([, on]) => on)
+                .map(([name]) => name);
+            if (activeSingletonsBi.length) {
+                const layerSingletons = g.append("g").attr("class", "layer-singletons");
+                drawSingletonDots(layerSingletons, data.objects_inner || [], activeSingletonsBi, ascDeg, rScale);
+            }
         }
 
         // === Draw center earth ===
@@ -1407,14 +1425,9 @@ const RosettaChart = (() => {
             const r1 = degToRad(d1, ascDeg);
             const r2 = degToRad(d2, ascDeg);
 
-            // Determine which circle each object is on
-            const isOuter1 = asp.obj_a.endsWith("_2");
-            const isOuter2 = asp.obj_b.endsWith("_2");
-            const circleR1 = isOuter1 ? BIWHEEL.OUTER_CIRCLE_R : BIWHEEL.INNER_CIRCLE_R;
-            const circleR2 = isOuter2 ? BIWHEEL.OUTER_CIRCLE_R : BIWHEEL.INNER_CIRCLE_R;
-
-            const [x1, y1] = polarToCartesian(rScale(circleR1), r1);
-            const [x2, y2] = polarToCartesian(rScale(circleR2), r2);
+            // Always draw circuit aspect lines to the inner circle
+            const [x1, y1] = polarToCartesian(rScale(BIWHEEL.INNER_CIRCLE_R), r1);
+            const [x2, y2] = polarToCartesian(rScale(BIWHEEL.INNER_CIRCLE_R), r2);
 
             // Circuit aspects use the color from the serializer (group color)
             let baseColor = asp.color || "gray";
