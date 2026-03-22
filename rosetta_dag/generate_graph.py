@@ -55,6 +55,7 @@ LAYER_RULES = [
     (lambda m, imps: any(x in imps for x in ["streamlit"]) and
                      ("chart_core" in m or "state_manager" in m or
                       "ui_state_helpers" in m or "ui_utils" in m),      "orchestration"),
+    (lambda m, imps: "mcp" in m,                                         "mcp"),
     (lambda m, imps: any(x in imps for x in ["streamlit"]),             "ui"),
     (lambda m, imps: "geocoding" in m,                                  "orchestration"),
     (lambda m, imps: "interp" in m,                                     "calc"),
@@ -70,6 +71,7 @@ LAYER_COLORS = {
     "db":            "#95A5A6",
     "test":          "#1ABC9C",
     "script":        "#7F8C8D",
+    "mcp":           "#E74C3C",
     "unknown":       "#BDC3C7",
 }
 
@@ -82,6 +84,7 @@ LAYER_DESCRIPTIONS = {
     "db":            "Database & migration scripts",
     "test":          "Test files",
     "script":        "Utility / one-off scripts",
+    "mcp":           "MCP pipeline — topic maps, reading engine, LLM synthesis",
     "unknown":       "Unclassified",
 }
 
@@ -133,15 +136,16 @@ def _resolve_local_edges(tree: ast.Module, module_id: str, known_modules: set) -
                 target = alias.name.split(".")[0]
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                # handle 'from src.chart_core import ...'  →  'src/chart_core'
+                # handle 'from src.mcp.chat_ui import ...'  →  'src/mcp/chat_ui'
+                # Try longest match first, then shorten until found
                 parts = node.module.split(".")
-                if len(parts) >= 2:
-                    candidate = "/".join(parts[:2])
+                target = None
+                for depth in range(len(parts), 0, -1):
+                    candidate = "/".join(parts[:depth])
                     if candidate in known_modules:
                         target = candidate
-                    else:
-                        target = parts[0]
-                else:
+                        break
+                if target is None:
                     target = parts[0]
 
         if target and target in known_modules and target != module_id:
@@ -206,15 +210,23 @@ def _extract_children(tree: ast.Module, module_id: str) -> list:
 # Main
 # ---------------------------------------------------------------------------
 def scan_workspace():
-    """Walk the workspace and collect all parsable .py files."""
+    """Walk the workspace recursively and collect all parsable .py files."""
     py_files = []
+    seen = set()
     for scan_dir in SCAN_DIRS:
         target = WORKSPACE / scan_dir if scan_dir != "." else WORKSPACE
         if not target.exists():
             continue
-        for item in sorted(target.iterdir()):
-            if item.is_file() and item.suffix == ".py" and item.name not in SKIP_FILES:
-                py_files.append(item)
+        for item in sorted(target.rglob("*.py")):
+            # Skip any path component that is in SKIP_DIRS
+            if any(part in SKIP_DIRS for part in item.parts):
+                continue
+            if item.name in SKIP_FILES:
+                continue
+            if item in seen:
+                continue
+            seen.add(item)
+            py_files.append(item)
     return py_files
 
 
@@ -238,7 +250,7 @@ def build_graph():
             source = fp.read_text(encoding="utf-8", errors="replace")
             tree = ast.parse(source, filename=str(fp))
         except SyntaxError as e:
-            print(f"  SKIP {mid}: SyntaxError — {e}")
+            print(f"  SKIP {mid}: SyntaxError - {e}")
             continue
 
         line_count = len(source.splitlines())
@@ -324,7 +336,7 @@ def build_graph():
     with open(OUTPUT, "w", encoding="utf-8") as f:
         json.dump(graph, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✓ Wrote {OUTPUT}")
+    print(f"\n[OK] Wrote {OUTPUT}")
     print(f"  Modules: {graph['metadata']['module_count']}")
     print(f"  Classes + Functions: {graph['metadata']['child_count']}")
     print(f"  Import edges: {graph['metadata']['edge_count']}")
