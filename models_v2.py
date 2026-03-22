@@ -1220,6 +1220,10 @@ class AstrologicalChart:
     # Circuit power simulation result (populated by circuit_sim.simulate_and_attach)
     circuit_simulation: Optional["CircuitSimulation"] = field(default=None)
 
+    # ── Profile metadata (persisted with Supabase chart profiles) ────
+    circuit_names: dict = field(default_factory=dict)       # {"circuit_name_0": "...", ...}
+    group_id: Optional[str] = field(default=None)           # UUID of user_profile_groups row
+
     def __getattr__(self, name: str):
         # Gracefully return None for fields that don't exist on cached instances
         # (e.g. after schema additions between hot-reloads / session resumes).
@@ -1354,6 +1358,9 @@ class AstrologicalChart:
             "dispositor_summary_rows": _safe_list(self.dispositor_summary_rows or []),
             "dispositor_chains_rows": _safe_list(self.dispositor_chains_rows or []),
             "conj_clusters_rows": _safe_list(self.conj_clusters_rows or []),
+            # ── Profile metadata ─────────────────────────────────────────
+            "circuit_names": _native(self.circuit_names or {}),
+            "group_id": self.group_id,
         }
         # Final safety pass: convert any remaining sets, numpy types, or
         # non-serialisable objects that slipped through field-level helpers
@@ -1442,6 +1449,8 @@ class AstrologicalChart:
             dispositor_chains_rows=d.get("dispositor_chains_rows") or [],
             conj_clusters_rows=d.get("conj_clusters_rows") or [],
             utc_datetime=_parse_dt(d.get("utc_datetime")),
+            circuit_names=d.get("circuit_names") or {},
+            group_id=d.get("group_id"),
         )
         return chart
 

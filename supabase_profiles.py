@@ -80,6 +80,24 @@ def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
     return {row["profile_name"]: row["payload"] for row in rows}
 
 
+def load_self_profile_db(user_id: str):
+    """Return the user's self-PersonProfile dict, or None if not yet created.
+
+    Scans the user's regular profiles for the one whose payload has
+    ``relationship_to_querent == "self"``.  No separate hidden record is used.
+    Skips any legacy ``__``-prefixed profile names that may still be in the DB.
+    Returns the raw payload dict (a PersonProfile.to_dict() output) on
+    success, or ``None`` if the user hasn't designated their own chart yet.
+    """
+    all_profiles = load_user_profiles_db(user_id)
+    for name, payload in all_profiles.items():
+        if name.startswith("__"):
+            continue
+        if isinstance(payload, dict) and payload.get("relationship_to_querent") == "self":
+            return payload
+    return None
+
+
 def delete_user_profile_db(user_id: str, profile_name: str) -> None:
     """Permanently deletes a single saved profile for the given user."""
     client = get_authed_supabase()
@@ -177,7 +195,17 @@ def load_user_profiles_by_group_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     result = {gid: {"group_name": gname, "profiles": {}} for gid, gname in groups_data.items()}
 
     for name, payload in all_profiles.items():
-        gid = payload.get("group_id") if isinstance(payload, dict) else None
+        # Skip legacy __-prefixed profile names (safety guard)
+        if name.startswith("__"):
+            continue
+        # Support both old-format (top-level group_id) and new-format (group_id inside chart)
+        gid = None
+        if isinstance(payload, dict):
+            gid = payload.get("group_id")
+            if gid is None:
+                _chart_d = payload.get("chart")
+                if isinstance(_chart_d, dict):
+                    gid = _chart_d.get("group_id")
         gid = gid or "__ungrouped__"
         if gid not in result:
             result[gid] = {"group_name": "Unknown Group", "profiles": {}}

@@ -21,6 +21,7 @@ from supabase_profiles import (
 	save_user_profile_db, load_user_profiles_db, delete_user_profile_db,
 	save_user_profile_group_db, load_user_profile_groups_db,
 	load_user_profiles_by_group_db, delete_user_profile_group_db,
+	load_self_profile_db,
 )
 from beta_feedback import render_feedback_expander, render_admin_alert, render_admin_report_viewer
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +47,22 @@ st.set_page_config(layout="wide")
 # --- Auth gate: shows login UI and stops if user is not authenticated ---
 from auth_ui import render_auth_gate
 current_user_id = render_auth_gate()
+
+# --- Auto-seed self-profile into chat memory (once per session) -----------
+if not st.session_state.get("__self_seeded__"):
+	_self_payload = load_self_profile_db(current_user_id)
+	if _self_payload is not None:
+		# Build a lightweight dict (name + relationship) for the chat agent
+		_seed = {
+			"name": _self_payload.get("name", "Me"),
+			"relationship_to_querent": "self",
+		}
+		_persons = st.session_state.get("mcp_known_persons", [])
+		# Only prepend if not already present
+		if not any(p.get("relationship_to_querent") == "self" for p in _persons):
+			_persons.insert(0, _seed)
+			st.session_state["mcp_known_persons"] = _persons
+	st.session_state["__self_seeded__"] = True
 
 # --- Beta Feedback: Admin alert banner (shows only for admins with unread reports) ---
 render_admin_alert()
@@ -87,8 +104,13 @@ st.session_state.setdefault("ampm", "PM")
 st.session_state.setdefault("city", "New York, NY")
 st.session_state.setdefault("chart_dt_utc", None)
 st.session_state.setdefault("defaults_loaded", False)
-
-# Initialize birth data defaults for Chart 2 (if synastry is on)
+st.session_state.setdefault("birth_name", "")
+st.session_state.setdefault("is_my_chart", False)
+st.session_state.setdefault("birth_gender", None)
+st.session_state.setdefault("birth_form_mode", "new")    # "new" | "edit"
+st.session_state.setdefault("birth_form_open", True)
+st.session_state.setdefault("editing_profile_name", None)
+st.session_state.setdefault("editing_profile_data", {})
 # (test_chart_2 selector removed; Chart 2 loaded via profile manager synastry slot)
 
 # current_user_id is now set by render_auth_gate() at startup (the logged-in user's UUID)
@@ -166,6 +188,54 @@ if _pending_calc:
 	# Chart 1 — always from current form / profile data
 	run_chart(suffix="")
 
+	# --- Auto-close the birth data form after any calculation ---
+	st.session_state["birth_form_open"] = False
+
+	# --- Profile update (Edit Chart flow) --- overwrite saved profile with new chart ---
+	_update_prof_name = _pending_calc.get("update_profile_name")
+	if _update_prof_name:
+		_chart_obj = st.session_state.get("last_chart")
+		if _chart_obj is not None:
+			from src.mcp.comprehension_models import PersonProfile as _PP
+			# Preserve existing metadata (relationship, gender, etc.) if available
+			_orig_edit_data = st.session_state.pop("editing_profile_data", {}) or {}
+			if _orig_edit_data:
+				_upd_pp = _PP.from_dict(_orig_edit_data)
+				_upd_pp.astro_chart = _chart_obj
+				if _pending_calc.get("birth_gender"):
+					_upd_pp.gender = _pending_calc["birth_gender"]
+			else:
+				_upd_pp = _PP(
+					name=_update_prof_name,
+					chart_id=_update_prof_name,
+					relationship_to_querent="other",
+					gender=_pending_calc.get("birth_gender"),
+					significant_places=[_chart_obj.city] if _chart_obj.city else [],
+					astro_chart=_chart_obj,
+				)
+			save_user_profile_db(current_user_id, _update_prof_name, _upd_pp.to_dict())
+		# Reset edit mode
+		st.session_state["birth_form_mode"] = "new"
+		st.session_state["editing_profile_name"] = None
+	if _pending_calc.get("is_my_chart"):
+		_self_existing = load_self_profile_db(current_user_id)
+		if _self_existing is None:
+			_chart_obj = st.session_state.get("last_chart")
+			if _chart_obj is not None:
+				from src.mcp.comprehension_models import PersonProfile as _PP
+				_self_name = (_pending_calc.get("birth_name") or "").strip() or "User"
+				# Save a single profile with relationship_to_querent="self" —
+				# no hidden duplicate needed; load_self_profile_db scans by that field.
+				_self_pp = _PP(
+					name=_self_name,
+					chart_id=_self_name,
+					relationship_to_querent="self",
+					gender=_pending_calc.get("birth_gender"),
+					significant_places=[_chart_obj.city] if _chart_obj.city else [],
+					astro_chart=_chart_obj,
+				)
+				save_user_profile_db(current_user_id, _self_name, _self_pp.to_dict())
+
 	# Chart 2 (synastry only) — only recalculate if no chart object loaded
 	if _syn and st.session_state.get("last_chart_2") is None:
 		if _custom2_snapshot:
@@ -181,43 +251,218 @@ if _pending_profile_2:
 	_prof_name_2 = _pending_profile_2["profile_name"]
 	_prof_data_2 = _pending_profile_2["profile_data"]
 
-	# Restore Chart 2 from saved profile
-	_stored_chart_raw_2 = _prof_data_2.get("chart")
-	if isinstance(_stored_chart_raw_2, dict):
-		from models_v2 import AstrologicalChart
-		_stored_chart_2 = AstrologicalChart.from_json(_stored_chart_raw_2)
-		_stored_chart_2.display_name = _prof_name_2
-		st.session_state["last_chart_2"] = _stored_chart_2
+	# Reconstruct PersonProfile (handles both old-format and new-format payloads)
+	from src.mcp.comprehension_models import PersonProfile as _PP2
+	_pp2 = _PP2.from_dict(_prof_data_2)
+	_chart2 = _pp2.astro_chart
+
+	if _chart2 is not None:
+		_chart2.display_name = _prof_name_2
+		st.session_state["last_chart_2"] = _chart2
 		st.session_state["chart_2_source"] = "synastry"
 		st.session_state["last_test_chart_2"] = _prof_name_2
 		st.success(f"\u2705 Outer chart '{_prof_name_2}' loaded for Synastry.")
-	elif any(v is None for v in (_prof_data_2.get("lat"), _prof_data_2.get("lon"), _prof_data_2.get("tz_name"))):
-		st.error(f"Profile '{_prof_name_2}' is missing location/timezone data. Re-save it after a city lookup.")
 	else:
-		# Profile has coords but no cached chart — calculate it
-		for _k2, _v2 in [
-			("year_2", _prof_data_2["year"]),
-			("month_name_2", MONTH_NAMES[_prof_data_2["month"] - 1]),
-			("day_2", _prof_data_2["day"]),
-			("city_2", _prof_data_2["city"]),
-			("current_lat_2", _prof_data_2.get("lat")),
-			("current_lon_2", _prof_data_2.get("lon")),
-			("current_tz_name_2", _prof_data_2.get("tz_name")),
-		]:
-			st.session_state[_k2] = _v2
-		_h24_2 = _prof_data_2["hour"]
-		_h12_2 = _h24_2 % 12 or 12
-		_ampm_2 = "AM" if _h24_2 < 12 else "PM"
-		st.session_state["hour_12_2"] = f"{_h12_2:02d}"
-		st.session_state["minute_str_2"] = f"{_prof_data_2['minute']:02d}"
-		st.session_state["ampm_2"] = _ampm_2
-		st.session_state["chart_2_source"] = "synastry"
-		if run_chart(suffix="_2"):
-			if st.session_state.get("last_chart_2"):
-				st.session_state["last_chart_2"].display_name = _prof_name_2
-			st.success(f"\u2705 Outer chart '{_prof_name_2}' calculated for Synastry.")
+		# Old-format fallback: try raw chart dict or flat birth keys
+		_stored_chart_raw_2 = _prof_data_2.get("chart")
+		if isinstance(_stored_chart_raw_2, dict):
+			from models_v2 import AstrologicalChart
+			_stored_chart_2 = AstrologicalChart.from_json(_stored_chart_raw_2)
+			_stored_chart_2.display_name = _prof_name_2
+			st.session_state["last_chart_2"] = _stored_chart_2
+			st.session_state["chart_2_source"] = "synastry"
+			st.session_state["last_test_chart_2"] = _prof_name_2
+			st.success(f"\u2705 Outer chart '{_prof_name_2}' loaded for Synastry.")
+		elif any(v is None for v in (_prof_data_2.get("lat"), _prof_data_2.get("lon"), _prof_data_2.get("tz_name"))):
+			st.error(f"Profile '{_prof_name_2}' is missing location/timezone data. Re-save it after a city lookup.")
 		else:
-			st.error(f"Failed to calculate outer chart for '{_prof_name_2}'.")
+			for _k2, _v2 in [
+				("year_2", _prof_data_2["year"]),
+				("month_name_2", MONTH_NAMES[_prof_data_2["month"] - 1]),
+				("day_2", _prof_data_2["day"]),
+				("city_2", _prof_data_2["city"]),
+				("current_lat_2", _prof_data_2.get("lat")),
+				("current_lon_2", _prof_data_2.get("lon")),
+				("current_tz_name_2", _prof_data_2.get("tz_name")),
+			]:
+				st.session_state[_k2] = _v2
+			_h24_2 = _prof_data_2["hour"]
+			_h12_2 = _h24_2 % 12 or 12
+			_ampm_2 = "AM" if _h24_2 < 12 else "PM"
+			st.session_state["hour_12_2"] = f"{_h12_2:02d}"
+			st.session_state["minute_str_2"] = f"{_prof_data_2['minute']:02d}"
+			st.session_state["ampm_2"] = _ampm_2
+			st.session_state["chart_2_source"] = "synastry"
+			if run_chart(suffix="_2"):
+				if st.session_state.get("last_chart_2"):
+					st.session_state["last_chart_2"].display_name = _prof_name_2
+				st.success(f"\u2705 Outer chart '{_prof_name_2}' calculated for Synastry.")
+			else:
+				st.error(f"Failed to calculate outer chart for '{_prof_name_2}'.")
+
+# ── Shared helper: apply profile data to session state ───────────────────────────────
+def _birth_data_from_chart(chart):
+	"""Parse local-time birth data from chart's display_datetime / fields."""
+	import datetime as _dt
+	dt = chart.display_datetime
+	if dt is None and chart.chart_datetime:
+		try:
+			dt = _dt.datetime.fromisoformat(chart.chart_datetime)
+		except (ValueError, TypeError):
+			dt = None
+	if dt:
+		return dt.year, dt.month, dt.day, dt.hour, dt.minute, chart.city or ""
+	return None, None, None, None, None, chart.city or ""
+
+def _apply_profile_to_session(prof_name, prof_data):
+	"""Populate all form/session keys from a profile dict. Used by load and edit flows."""
+	from src.mcp.comprehension_models import PersonProfile as _PP
+	_pp = _PP.from_dict(prof_data)
+	_loaded_chart = _pp.astro_chart
+
+	if _loaded_chart is not None:
+		_loaded_chart.display_name = prof_name
+		_yr, _mo, _dy, _hr24, _mn, _ct = _birth_data_from_chart(_loaded_chart)
+
+		# Set profile-bound keys
+		if _yr is not None:
+			st.session_state["profile_year"] = _yr
+			st.session_state["profile_month_name"] = MONTH_NAMES[_mo - 1]
+			st.session_state["profile_day"] = _dy
+			st.session_state["profile_hour"] = _hr24
+			st.session_state["profile_minute"] = _mn
+			st.session_state["profile_city"] = _ct
+
+			# Set form-widget-bound keys
+			st.session_state["year"] = _yr
+			st.session_state["month_name"] = MONTH_NAMES[_mo - 1]
+			st.session_state["day"] = _dy
+			st.session_state["city"] = _ct
+			_load_h12 = _hr24 % 12 or 12
+			_load_ampm = "AM" if _hr24 < 12 else "PM"
+			st.session_state["hour_12"]    = f"{_load_h12:02d}"
+			st.session_state["minute_str"] = f"{_mn:02d}"
+			st.session_state["ampm"]       = _load_ampm
+
+			st.session_state["hour_val"] = _hr24
+			st.session_state["minute_val"] = _mn
+			st.session_state["city_input"] = _ct
+
+		# Restore unknown time flag + time slots
+		_chart_unknown_time = bool(getattr(_loaded_chart, "unknown_time", False))
+		st.session_state["profile_unknown_time"] = _chart_unknown_time
+		if _chart_unknown_time:
+			st.session_state["hour_12"]    = "--"
+			st.session_state["minute_str"] = "--"
+			st.session_state["ampm"]       = "--"
+
+		# Geocode from chart
+		st.session_state["current_lat"]     = _loaded_chart.latitude
+		st.session_state["current_lon"]     = _loaded_chart.longitude
+		st.session_state["current_tz_name"] = _loaded_chart.timezone
+
+		st.session_state["last_location"] = _loaded_chart.city or ""
+		st.session_state["last_timezone"] = _loaded_chart.timezone
+
+		# Restore name, gender, and self-flag
+		st.session_state["birth_name"]  = _pp.name or prof_name
+		st.session_state["birth_gender"] = _pp.gender  # None if not stored
+		st.session_state["is_my_chart"] = (_pp.relationship_to_querent == "self")
+
+		# Restore circuit names from chart object
+		_circuit_names = getattr(_loaded_chart, "circuit_names", None) or {}
+		if _circuit_names:
+			for key, val in _circuit_names.items():
+				st.session_state[key] = val
+			st.session_state["saved_circuit_names"] = _circuit_names.copy()
+		else:
+			st.session_state["saved_circuit_names"] = {}
+
+		st.session_state["last_chart"] = _loaded_chart
+		st.session_state["chart_ready"] = True
+		return True  # new-format success
+	else:
+		# ── Old-format fallback ───────────────────────────────────────
+		# Set profile-bound keys (not widget-bound)
+		st.session_state["profile_year"] = prof_data["year"]
+		st.session_state["profile_month_name"] = MONTH_NAMES[prof_data["month"] - 1]
+		st.session_state["profile_day"] = prof_data["day"]
+		st.session_state["profile_hour"] = prof_data["hour"]
+		st.session_state["profile_minute"] = prof_data["minute"]
+		st.session_state["profile_city"] = prof_data["city"]
+
+		# Set form-widget-bound keys
+		st.session_state["year"] = prof_data["year"]
+		st.session_state["month_name"] = MONTH_NAMES[prof_data["month"] - 1]
+		st.session_state["day"] = prof_data["day"]
+		st.session_state["city"] = prof_data["city"]
+		_load_h24 = prof_data["hour"]
+		_load_h12 = _load_h24 % 12 or 12
+		_load_ampm = "AM" if _load_h24 < 12 else "PM"
+		st.session_state["hour_12"]    = f"{_load_h12:02d}"
+		st.session_state["minute_str"] = f"{prof_data['minute']:02d}"
+		st.session_state["ampm"]       = _load_ampm
+
+		st.session_state["current_lat"]     = prof_data.get("lat")
+		st.session_state["current_lon"]     = prof_data.get("lon")
+		st.session_state["current_tz_name"] = prof_data.get("tz_name")
+
+		st.session_state["hour_val"] = prof_data["hour"]
+		st.session_state["minute_val"] = prof_data["minute"]
+		st.session_state["city_input"] = prof_data["city"]
+
+		st.session_state["last_location"] = prof_data["city"]
+		st.session_state["last_timezone"] = prof_data.get("tz_name")
+
+		# Restore name, gender, unknown-time, and self-flag (old format)
+		st.session_state["birth_name"] = prof_data.get("name") or prof_name
+		st.session_state["birth_gender"] = prof_data.get("gender")  # None if not stored
+		_unk = bool(prof_data.get("unknown_time", False))
+		st.session_state["profile_unknown_time"] = _unk
+		if _unk:
+			st.session_state["hour_12"]    = "--"
+			st.session_state["minute_str"] = "--"
+			st.session_state["ampm"]       = "--"
+		st.session_state["is_my_chart"] = (prof_data.get("relationship_to_querent") == "self")
+
+		# Restore circuit names (old format: top-level key)
+		if "circuit_names" in prof_data:
+			for key, val in prof_data["circuit_names"].items():
+				st.session_state[key] = val
+			st.session_state["saved_circuit_names"] = prof_data["circuit_names"].copy()
+		else:
+			st.session_state["saved_circuit_names"] = {}
+
+		# Try loading chart from old-format raw dict
+		_stored_chart_raw = prof_data.get("chart")
+		if isinstance(_stored_chart_raw, dict):
+			from models_v2 import AstrologicalChart
+			_stored_chart = AstrologicalChart.from_json(_stored_chart_raw)
+			_stored_chart.display_name = prof_name
+			st.session_state["last_chart"] = _stored_chart
+			st.session_state["chart_ready"] = True
+		elif any(v is None for v in (prof_data.get("lat"), prof_data.get("lon"), prof_data.get("tz_name"))):
+			st.session_state["__profile_load_error__"] = f"Profile '{prof_name}' is missing location/timezone info. Re-save it after a successful city lookup."
+		# else: will recalculate when run_chart() is called
+		return False  # old-format path
+
+# --- Handle pending Edit Chart (pre-fills form and switches to edit mode) ---
+_pending_edit = st.session_state.pop("__pending_edit_chart__", None)
+if _pending_edit:
+	_edit_name = _pending_edit["profile_name"]
+	_edit_data = _pending_edit["profile_data"]
+
+	st.session_state["_loaded_profile"] = _edit_data
+	st.session_state["current_profile"] = _edit_name
+	st.session_state["profile_loaded"] = True
+
+	_apply_profile_to_session(_edit_name, _edit_data)
+
+	# Switch form to edit mode; store original data to preserve metadata on save
+	st.session_state["birth_form_mode"] = "edit"
+	st.session_state["editing_profile_name"] = _edit_name
+	st.session_state["editing_profile_data"] = _edit_data
+	st.session_state["birth_form_open"] = True
 
 # --- Handle pending profile load (deferred until before form widgets are created) ---
 _pending_profile = st.session_state.pop("__pending_profile_load__", None)
@@ -229,62 +474,7 @@ if _pending_profile:
 	st.session_state["current_profile"] = _prof_name
 	st.session_state["profile_loaded"] = True
 
-	# Set profile-bound keys (not widget-bound)
-	st.session_state["profile_year"] = _prof_data["year"]
-	st.session_state["profile_month_name"] = MONTH_NAMES[_prof_data["month"] - 1]
-	st.session_state["profile_day"] = _prof_data["day"]
-	st.session_state["profile_hour"] = _prof_data["hour"]
-	st.session_state["profile_minute"] = _prof_data["minute"]
-	st.session_state["profile_city"] = _prof_data["city"]
-
-	# Set form-widget-bound keys (safe to do NOW before widgets are created)
-	st.session_state["year"] = _prof_data["year"]
-	st.session_state["month_name"] = MONTH_NAMES[_prof_data["month"] - 1]
-	st.session_state["day"] = _prof_data["day"]
-	st.session_state["city"] = _prof_data["city"]
-	# convert stored 24h hour back to 12h form widgets
-	_load_h24 = _prof_data["hour"]
-	_load_h12 = _load_h24 % 12 or 12
-	_load_ampm = "AM" if _load_h24 < 12 else "PM"
-	st.session_state["hour_12"]    = f"{_load_h12:02d}"
-	st.session_state["minute_str"] = f"{_prof_data['minute']:02d}"
-	st.session_state["ampm"]       = _load_ampm
-
-	# cache geocode result so profile manager & other widgets can read it
-	st.session_state["current_lat"]     = _prof_data.get("lat")
-	st.session_state["current_lon"]     = _prof_data.get("lon")
-	st.session_state["current_tz_name"] = _prof_data.get("tz_name")
-
-	st.session_state["hour_val"] = _prof_data["hour"]
-	st.session_state["minute_val"] = _prof_data["minute"]
-	st.session_state["city_input"] = _prof_data["city"]
-
-	st.session_state["last_location"] = _prof_data["city"]
-	st.session_state["last_timezone"] = _prof_data.get("tz_name")
-
-	# restore circuit names
-	if "circuit_names" in _prof_data:
-		for key, val in _prof_data["circuit_names"].items():
-			st.session_state[key] = val
-		st.session_state["saved_circuit_names"] = _prof_data["circuit_names"].copy()
-	else:
-		st.session_state["saved_circuit_names"] = {}
-
-	# Restore saved chart object if present; otherwise mark for recalculation
-	_stored_chart_raw = _prof_data.get("chart")
-	if isinstance(_stored_chart_raw, dict):
-		from models_v2 import AstrologicalChart
-		_stored_chart = AstrologicalChart.from_json(_stored_chart_raw)
-		# Update display_name to match the currently loaded profile (real-time sync)
-		_stored_chart.display_name = _prof_name
-		st.session_state["last_chart"] = _stored_chart
-		st.session_state["chart_ready"] = True
-	elif any(v is None for v in (_prof_data.get("lat"), _prof_data.get("lon"), _prof_data.get("tz_name"))):
-		# Missing location info — show error once profile manager rendered
-		st.session_state["__profile_load_error__"] = f"Profile '{_prof_name}' is missing location/timezone info. Re-save it after a successful city lookup."
-	else:
-		# Will recalculate when run_chart() is called
-		pass
+	_apply_profile_to_session(_prof_name, _prof_data)
 
 # Track the most recent chart figure so the wheel column can always render.
 st.session_state.setdefault("render_fig", None)
@@ -294,38 +484,15 @@ col_left, col_mid, col_right = st.columns([3, 2, 3])
 # Left column: Birth Data (FORM)
 # -------------------------
 with col_left:
-	with st.expander("📆 Enter Birth Data", expanded=True):
-		# --- Unknown Time (live) OUTSIDE the form ---
-		# Model/state keys used by the rest of your app
-		st.session_state.setdefault("profile_unknown_time", False)
-		st.session_state.setdefault("hour_12", "12")
-		st.session_state.setdefault("minute_str", "00")
-		st.session_state.setdefault("ampm", "AM")
-
-		# UI widget gets its OWN key to avoid collisions with any other widget/modules
-		st.session_state.setdefault("unknown_time_ui", st.session_state["profile_unknown_time"])
-
-		def _apply_unknown_time():
-			ut = st.session_state["unknown_time_ui"]  # read the UI widget
-			st.session_state["profile_unknown_time"] = ut  # sync canonical state
-			if ut:
-				st.session_state["hour_12"]    = "--"
-				st.session_state["minute_str"] = "--"
-				st.session_state["ampm"]       = "--"
-			else:
-				# restore defaults only if placeholders were in use
-				if st.session_state["hour_12"] == "--":
-					st.session_state["hour_12"] = "12"
-				if st.session_state["minute_str"] == "--":
-					st.session_state["minute_str"] = "00"
-				if st.session_state["ampm"] == "--":
-					st.session_state["ampm"] = "AM"
-
+	_form_title = "✏️ Edit Birth Data" if st.session_state.get("birth_form_mode") == "edit" else "📆 Enter Birth Data"
+	with st.expander(_form_title, expanded=st.session_state.get("birth_form_open", True)):
 		# --- Unknown Time (live) OUTSIDE the form ---
 		st.session_state.setdefault("profile_unknown_time", False)
 		st.session_state.setdefault("hour_12", "12")
 		st.session_state.setdefault("minute_str", "00")
 		st.session_state.setdefault("ampm", "AM")
+
+		st.markdown('<p style="color:#cc0000; font-size:0.78em; margin-bottom:2px;">* required fields</p>', unsafe_allow_html=True)
 
 		def _apply_unknown_time():
 			if st.session_state.get("profile_unknown_time", False):
@@ -342,6 +509,22 @@ with col_left:
 			key="profile_unknown_time",
 			on_change=_apply_unknown_time,
 		)
+
+		# Optional gender selector
+		st.radio(
+			"Gender (optional):",
+			["Female", "Male", "Non-binary"],
+			key="birth_gender",
+			horizontal=True,
+			index=None,
+		)
+
+		# Only show "This is my chart" if no self-profile saved yet
+		if load_self_profile_db(current_user_id) is None:
+			st.checkbox(
+				"This is my chart",
+				key="is_my_chart",
+			)
 		
 		with st.form("birth_form", clear_on_submit=False):
 			# --- Two columns: Date/Day (left) and City (right) ---
@@ -349,8 +532,10 @@ with col_left:
 
 			# Left: Date & Day
 			with col1:
+				st.text_input("Name :red[*]", key="birth_name")
+
 				year = st.number_input(
-					"Year",
+					"Year :red[*]",
 					min_value=1000,
 					max_value=3000,
 					step=1,
@@ -359,7 +544,7 @@ with col_left:
 
 				import calendar
 				month_name = st.selectbox(
-					"Month",
+					"Month :red[*]",
 					MONTH_NAMES,
 					key="month_name",
 				)
@@ -367,14 +552,14 @@ with col_left:
 				days_in_month = calendar.monthrange(year, month)[1]
 
 				day = st.selectbox(
-					"Day",
+					"Day :red[*]",
 					list(range(1, days_in_month + 1)),
 					key="day",
 				)
 
 			# Right: City of Birth (restored)
 			with col2:
-				st.text_input("City of Birth", key="city")
+				st.text_input("City of Birth :red[*]", key="city")
 
 			# --- Time widgets row ---
 			unknown_time = st.session_state["profile_unknown_time"]
@@ -414,7 +599,9 @@ with col_left:
 			#             st.session_state["profile_birth_hour_24"] = birth_hour_24
 			#             st.session_state["profile_birth_minute"]  = birth_minute
 
-			submitted = st.form_submit_button("Calculate Chart")
+			_is_edit_mode = st.session_state.get("birth_form_mode") == "edit"
+			_submit_label = "Update Chart" if _is_edit_mode else "Calculate Chart"
+			submitted = st.form_submit_button(_submit_label)
 
 			if submitted:
 				# Defer the actual calculation to the NEXT rerun so that
@@ -438,6 +625,10 @@ with col_left:
 				st.session_state["__pending_calculate__"] = {
 					"synastry": _syn,
 					"custom2_snapshot": _custom2_snap,
+					"is_my_chart": st.session_state.get("is_my_chart", False),
+					"birth_name": st.session_state.get("birth_name", ""),
+					"birth_gender": st.session_state.get("birth_gender"),
+					"update_profile_name": st.session_state.get("editing_profile_name") if _is_edit_mode else None,
 				}
 				st.rerun()
 

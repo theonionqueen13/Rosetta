@@ -788,7 +788,11 @@ def render_circuit_toggles(
 								}
 								profile_name = st.session_state["current_profile"]
 								payload = saved_profiles.get(profile_name, {}).copy()
+								# Update circuit_names in both old-format payload and chart object
 								payload["circuit_names"] = current
+								_chart_d = payload.get("chart")
+								if isinstance(_chart_d, dict):
+									_chart_d["circuit_names"] = current
 								save_user_profile_db(current_user_id, profile_name, payload)
 								# Update local dict (cache was already cleared by save)
 								saved_profiles[profile_name] = payload
@@ -872,7 +876,11 @@ def render_circuit_toggles(
 					if st.button("💾 Save Circuit Names"):
 						profile_name = st.session_state["current_profile"]
 						payload = saved_profiles.get(profile_name, {}).copy()
+						# Update circuit_names in both old-format payload and chart object
 						payload["circuit_names"] = current
+						_chart_d = payload.get("chart")
+						if isinstance(_chart_d, dict):
+							_chart_d["circuit_names"] = current
 						save_user_profile_db(current_user_id, profile_name, payload)
 						# Update local dict (cache was already cleared by save)
 						saved_profiles[profile_name] = payload

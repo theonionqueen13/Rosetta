@@ -101,7 +101,7 @@ def render_profile_manager(
     # =====================
     # 👤 Profile Manager UI
     # =====================
-    tab_labels = ["Add Chart", "Load Chart", "Delete Chart"]
+    tab_labels = ["Add Chart", "Load Chart"]
     default_tab = st.session_state.get("active_profile_tab", "Load Chart")
     if default_tab not in tab_labels:
         default_tab = tab_labels[0]
@@ -204,26 +204,31 @@ def render_profile_manager(
                         existing_group_id = None
                         _existing_profiles = _get_saved_profiles()
                         if profile_name in _existing_profiles:
-                            existing_group_id = _existing_profiles[profile_name].get("group_id")
-                        
-                        profile_data = {
-                            "year":   _save_yr,
-                            "month":  int(MONTH_NAMES.index(_save_mname) + 1),
-                            "day":    _save_day,
-                            "hour":   _save_hour,
-                            "minute": _save_min,
-                            "city":   _save_city,
-                            "lat":    _save_lat,
-                            "lon":    _save_lon,
-                            "tz_name": _save_tz,
-                            "circuit_names": circuit_names,
-                            # Serialise the fully-computed chart for instant reload
-                            "chart": _current_chart.to_json(),
-                        }
-                        # Preserve group_id if it exists
-                        if existing_group_id:
-                            profile_data["group_id"] = existing_group_id
-                        
+                            _existing_pp = _existing_profiles[profile_name]
+                            # Try PersonProfile.group_id first, then fall back to chart dict for backwards compatibility
+                            existing_group_id = (
+                                _existing_pp.get("group_id")
+                                or (_existing_pp.get("chart") or {}).get("group_id")
+                            )
+
+                        # Move circuit_names onto the chart object, group_id onto PersonProfile
+                        _current_chart.circuit_names = circuit_names
+
+                        # Build a PersonProfile wrapping the chart
+                        from src.mcp.comprehension_models import PersonProfile, LocationLink
+                        _pp = PersonProfile(
+                            name=st.session_state.get("birth_name") or profile_name,
+                            chart_id=profile_name,
+                            significant_places=[_save_city] if _save_city else [],
+                            locations=(
+                                [LocationLink(location_name=_save_city, connection="born there")]
+                                if _save_city else []
+                            ),
+                            astro_chart=_current_chart,
+                            group_id=existing_group_id,
+                        )
+                        profile_data = _pp.to_dict()
+
                         print(f"[ProfileManager] Saving profile '{profile_name}' for user {current_user_id}")
                         save_user_profile_db(current_user_id, profile_name, profile_data)
                         print(f"[ProfileManager] Save succeeded.")
@@ -331,6 +336,28 @@ def render_profile_manager(
             def _format_profile_label(name: str, data: Dict[str, Any]) -> str:
                 """Format profile info for display: [Name] - [MM/DD/YYYY] [HH:MM AM/PM] [City, St]"""
                 try:
+                    # New-format: birth data lives inside the chart dict
+                    chart_d = data.get("chart")
+                    if isinstance(chart_d, dict) and "chart_datetime" in chart_d:
+                        import datetime as _dt
+                        _ddt = chart_d.get("display_datetime") or chart_d.get("chart_datetime", "")
+                        try:
+                            dt = _dt.datetime.fromisoformat(_ddt)
+                        except (ValueError, TypeError):
+                            dt = None
+                        if dt:
+                            date_str = f"{dt.month:02d}/{dt.day:02d}/{dt.year}"
+                            h12 = dt.hour % 12 or 12
+                            ampm = "AM" if dt.hour < 12 else "PM"
+                            time_str = f"{h12:02d}:{dt.minute:02d} {ampm}"
+                        else:
+                            date_str = "?"
+                            time_str = "?"
+                        city = chart_d.get("city", "Unknown")
+                        display_name = data.get("name", name)
+                        return f"{display_name} - {date_str} {time_str} {city}"
+
+                    # Old-format: flat keys
                     year = data.get("year", 1990)
                     month = data.get("month", 1)
                     day = data.get("day", 1)
@@ -363,6 +390,9 @@ def render_profile_manager(
                 with st.expander(f"📁 {group_name} ({profile_count})", expanded=False):
                     if profiles_in_group:
                         for name, data in profiles_in_group.items():
+                            # Skip legacy __-prefixed profile names
+                            if name.startswith("__"):
+                                continue
                             col1, col2 = st.columns([4, 1])
                             
                             # Load button with formatted label
@@ -389,8 +419,36 @@ def render_profile_manager(
                             # Group management popover
                             with col2:
                                 with st.popover("⋯"):
-                                    st.caption("Move to group")
-                                    
+                                    # --- Edit / Delete buttons ---
+                                    if st.button("✏️ Edit Chart", key=f"edit_{group_id}_{name}"):
+                                        st.session_state["__pending_edit_chart__"] = {
+                                            "profile_name": name,
+                                            "profile_data": data,
+                                        }
+                                        st.rerun()
+
+                                    _del_confirm_key = f"delete_confirm_{group_id}_{name}"
+                                    if not st.session_state.get(_del_confirm_key):
+                                        if st.button("🗑️ Delete Chart", key=f"delete_btn_{group_id}_{name}"):
+                                            st.session_state[_del_confirm_key] = True
+                                            st.rerun()
+                                    else:
+                                        st.warning(f"Delete **{name}**?")
+                                        _dc1, _dc2 = st.columns(2)
+                                        with _dc1:
+                                            if st.button("Yes, delete", key=f"delete_yes_{group_id}_{name}", use_container_width=True):
+                                                delete_user_profile_db(current_user_id, name)
+                                                st.session_state.pop(_del_confirm_key, None)
+                                                st.session_state.pop("__self_seeded__", None)
+                                                st.rerun()
+                                        with _dc2:
+                                            if st.button("No!", key=f"delete_no_{group_id}_{name}", use_container_width=True):
+                                                st.session_state.pop(_del_confirm_key, None)
+                                                st.rerun()
+
+                                    st.divider()
+
+                                    # --- Move to group ---
                                     try:
                                         # Reuse profiles_by_group keys as group list
                                         # (avoids extra DB call per popover)
@@ -406,6 +464,10 @@ def render_profile_manager(
                                                 # Move to ungrouped by updating payload
                                                 updated_data = data.copy()
                                                 updated_data["group_id"] = None
+                                                # Also update group_id inside nested chart dict
+                                                _chart_d = updated_data.get("chart")
+                                                if isinstance(_chart_d, dict):
+                                                    _chart_d["group_id"] = None
                                                 save_user_profile_db(current_user_id, name, updated_data)
                                                 st.success(f"Moved '{name}' to Ungrouped")
                                                 st.rerun()
@@ -422,10 +484,12 @@ def render_profile_manager(
                                             if st.button("✓ Move", key=f"move_confirm_{group_id}_{name}"):
                                                 # Update profile with new group_id
                                                 updated_data = data.copy()
-                                                if selected_group_id != "__ungrouped__":
-                                                    updated_data["group_id"] = selected_group_id
-                                                else:
-                                                    updated_data["group_id"] = None
+                                                _new_gid = selected_group_id if selected_group_id != "__ungrouped__" else None
+                                                updated_data["group_id"] = _new_gid
+                                                # Also update group_id inside nested chart dict
+                                                _chart_d = updated_data.get("chart")
+                                                if isinstance(_chart_d, dict):
+                                                    _chart_d["group_id"] = _new_gid
                                                 save_user_profile_db(current_user_id, name, updated_data)
                                                 st.success(f"Moved '{name}' to {group_options[selected_group_id]}")
                                                 st.rerun()
@@ -449,46 +513,19 @@ def render_profile_manager(
                     if not profile_data:
                         st.error("No chart data found. Load a chart first.")
                     else:
+                        # Update circuit_names on both payload and nested chart dict
                         profile_data["circuit_names"] = circuit_names
-                        # Refresh the stored chart object so it stays in sync
+                        _chart_d = profile_data.get("chart")
+                        if isinstance(_chart_d, dict):
+                            _chart_d["circuit_names"] = circuit_names
+                        # Also update the live chart object
                         _curr_chart = st.session_state.get("last_chart")
                         if _curr_chart is not None:
+                            _curr_chart.circuit_names = circuit_names
                             profile_data["chart"] = _curr_chart.to_json()
                         save_user_profile_db(current_user_id, prof_name, profile_data)
                         st.session_state["saved_circuit_names"] = circuit_names.copy()
                         st.success("Circuit names updated.")
-        else:
-            st.info("No saved profiles yet.")
-
-    # --- Delete (private, per-user) ---
-    elif active_tab == "Delete Chart":
-        saved_profiles = _get_saved_profiles()
-        if saved_profiles:
-            delete_choice = st.selectbox(
-                "Select a chart to delete",
-                options=sorted(saved_profiles.keys()),
-                key="profile_delete"
-            )
-
-            if st.button("🗑️ Delete Selected Chart", key="priv_delete_ask"):
-                st.session_state["priv_delete_target"] = delete_choice
-                st.rerun()
-
-            target = st.session_state.get("priv_delete_target")
-            if target:
-                st.warning(f"Are you sure you want to delete this chart: **{target}**?")
-                d1, d2 = st.columns([1, 1], gap="small")
-                with d1:
-                    if st.button("Delete", key="priv_delete_yes", use_container_width=True):
-                        delete_user_profile_db(current_user_id, target)
-                        st.session_state.pop("priv_delete_target", None)
-                        st.success(f"Deleted profile '{target}'.")
-                        st.rerun()
-                with d2:
-                    if st.button("No!", key="priv_delete_no", use_container_width=True):
-                        st.session_state.pop("priv_delete_target", None)
-                        st.info("Delete canceled.")
-                        st.rerun()
         else:
             st.info("No saved profiles yet.")
 
