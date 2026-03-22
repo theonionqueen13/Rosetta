@@ -107,14 +107,24 @@ class LocationLink:
 
 @dataclass
 class PersonProfile:
-    """A person mentioned in the querent's question/story (not the querent)."""
+    """A person relevant to the querent's story.
+
+    When ``relationship_to_querent`` is ``"self"``, this represents the
+    querent themselves (the logged-in user).  Otherwise it describes a
+    third party mentioned in the querent's question or conversation.
+    """
     name: Optional[str] = None                                      # "John", "my partner", etc.
-    relationship_to_querent: Optional[str] = None                   # "partner", "mother", "boss"
+    relationship_to_querent: Optional[str] = None                   # "partner", "mother", "boss", "self"
+    gender: Optional[str] = None                                    # "Female", "Male", "Non-binary"
     relationships_to_others: List[str] = field(default_factory=list) # ["married to Sarah"]
     memories: List[str] = field(default_factory=list)               # contextual details mentioned
     significant_places: List[str] = field(default_factory=list)     # place names associated
     chart_id: Optional[str] = None                                  # saved chart name if available
     locations: List[LocationLink] = field(default_factory=list)     # structured place connections
+    astro_chart: Optional[Any] = None                               # Optional AstrologicalChart
+    group_id: Optional[str] = None                                  # group affiliation when profile is grouped
+
+    # ── Serialisation ─────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
@@ -122,6 +132,8 @@ class PersonProfile:
             d["name"] = self.name
         if self.relationship_to_querent:
             d["relationship_to_querent"] = self.relationship_to_querent
+        if self.gender:
+            d["gender"] = self.gender
         if self.relationships_to_others:
             d["relationships_to_others"] = self.relationships_to_others
         if self.memories:
@@ -132,7 +144,49 @@ class PersonProfile:
             d["chart_id"] = self.chart_id
         if self.locations:
             d["locations"] = [loc.to_dict() for loc in self.locations]
+        if self.group_id:
+            d["group_id"] = self.group_id
+        if self.astro_chart is not None and hasattr(self.astro_chart, "to_json"):
+            d["chart"] = self.astro_chart.to_json()
         return d
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "PersonProfile":
+        """Reconstruct a PersonProfile from a dict produced by ``to_dict()``.
+
+        If the dict contains a ``"chart"`` key with an AstrologicalChart
+        JSON payload, it will be deserialised via
+        ``AstrologicalChart.from_json()``.
+        """
+        locs = [
+            LocationLink(
+                location_name=ld.get("location", ""),
+                connection=ld.get("connection", ""),
+            )
+            for ld in d.get("locations", [])
+        ]
+
+        astro_chart = None
+        chart_raw = d.get("chart")
+        if isinstance(chart_raw, dict) and "objects" in chart_raw:
+            try:
+                from models_v2 import AstrologicalChart as _AC
+                astro_chart = _AC.from_json(chart_raw)
+            except Exception:
+                pass  # leave as None if deserialisation fails
+
+        return cls(
+            name=d.get("name"),
+            relationship_to_querent=d.get("relationship_to_querent"),
+            gender=d.get("gender"),
+            relationships_to_others=d.get("relationships_to_others", []),
+            memories=d.get("memories", []),
+            significant_places=d.get("significant_places", []),
+            chart_id=d.get("chart_id"),
+            locations=locs,
+            astro_chart=astro_chart,
+            group_id=d.get("group_id"),
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════

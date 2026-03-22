@@ -50,6 +50,7 @@ if _PROJECT_ROOT not in sys.path:
 
 from src.mcp.topic_maps import resolve_factors, TopicMatch
 from src.mcp.term_registry import load_terms, match_terms, TermIntent
+from src.mcp.grammar_parse import parse_grammar, GrammarDiagram, grammar_summary_line
 from src.mcp.comprehension_models import (
     AimType, Depth, Urgency, Specificity,
     EmotionalTone, CertaintyLevel, GuidanceOpenness,
@@ -130,6 +131,9 @@ class QuestionGraph:
     # ── HOW — Querent state ──────────────────────────────────────────
     querent_state: Optional[QuerentState] = None
 
+    # ── Step 0 — Grammar diagram ──────────────────────────────────────
+    grammar: Optional[GrammarDiagram] = None
+
     # ── Sufficiency metadata ─────────────────────────────────────────
     comprehension_confidence: float = 0.0    # LLM self-assessed 0.0–1.0
     ambiguities: List[str] = field(default_factory=list)
@@ -179,6 +183,8 @@ class QuestionGraph:
             d["ambiguities"] = self.ambiguities
         if self.contradictions:
             d["contradictions"] = self.contradictions
+        if self.grammar:
+            d["grammar"] = self.grammar.to_dict()
         return d
 
 
@@ -523,6 +529,7 @@ def _comprehend_llm(
     known_persons: Optional[List[PersonProfile]] = None,
     known_locations: Optional[List[Location]] = None,
     pending_clarification: Optional[str] = None,
+    grammar: Optional[GrammarDiagram] = None,
 ) -> Optional[QuestionGraph]:
     """
     Two-phase LLM comprehension with full 5W+H extraction.
@@ -558,6 +565,26 @@ def _comprehend_llm(
         parts.append(
             f"USER'S CLARIFICATION (answering a prior follow-up):\n{pending_clarification}"
         )
+    if grammar and grammar.confidence > 0:
+        grammar_ctx = (
+            f"GRAMMAR_PARSE (pre-parsed sentence structure):\n"
+            f"  Subject: {grammar.subject}\n"
+            f"  Verb: {grammar.verb} ({grammar.verb_tense})\n"
+            f"  Direct object: {grammar.direct_object or '(none)'}\n"
+            f"  Indirect object: {grammar.indirect_object or '(none)'}\n"
+            f"  Sentence type: {grammar.sentence_type}"
+        )
+        if grammar.prepositional_phrases:
+            pp_lines = "; ".join(
+                f"{pp.preposition} → {pp.object}" for pp in grammar.prepositional_phrases
+            )
+            grammar_ctx += f"\n  Prep phrases: {pp_lines}"
+        if grammar.clauses:
+            cl_lines = "; ".join(
+                f"[{c.clause_type}] {c.text} ({c.role})" for c in grammar.clauses
+            )
+            grammar_ctx += f"\n  Clauses: {cl_lines}"
+        parts.append(grammar_ctx)
     parts.append(f"Question: {question}")
     user_msg = "\n\n".join(parts)
 
@@ -971,7 +998,12 @@ def comprehend(
     pending_clarification : str, optional
         The user's answer to a prior ClarificationRequest.
     """
-    # ── Step 1: Term registry — always runs first ──────────────────
+    # ── Step 0: Grammar diagram — always runs first when key avail ──
+    grammar_diagram: Optional[GrammarDiagram] = None
+    if api_key:
+        grammar_diagram = parse_grammar(question, api_key, model=llm_model)
+
+    # ── Step 1: Term registry ─────────────────────────────────────
     _terms = load_terms()
     _matched_term = match_terms(question, _terms)
 
@@ -986,6 +1018,7 @@ def comprehend(
             known_persons=known_persons,
             known_locations=known_locations,
             pending_clarification=pending_clarification,
+            grammar=grammar_diagram,
         )
 
     # ── Step 3: Term-only fallback (term matched, no API key) ────────
@@ -1008,6 +1041,10 @@ def comprehend(
     # ── Step 4: Keyword fallback (no term, no API key) ──────────────
     if graph is None:
         graph = _comprehend_keyword(question)
+
+    # ── Attach grammar diagram to graph ───────────────────────────
+    if grammar_diagram is not None:
+        graph.grammar = grammar_diagram
 
     # ── Stamp intent from term registry ───────────────────────────
     if _matched_term:
@@ -1034,6 +1071,9 @@ def comprehend(
     aim_fragment = f" | aim: {graph.answer_aim.aim_type.value}" if graph.answer_aim else ""
     tone_fragment = f" | tone: {graph.querent_state.emotional_tone.value}" if graph.querent_state and graph.querent_state.emotional_tone != EmotionalTone.NEUTRAL else ""
     persons_fragment = f" | persons: {[p.name or p.relationship_to_querent for p in graph.persons]}" if graph.persons else ""
+    grammar_fragment = ""
+    if graph.grammar and graph.grammar.confidence > 0:
+        grammar_fragment = f" | grammar: {grammar_summary_line(graph.grammar)}"
     graph.comprehension_note = (
         f"Q: {question} -> {graph.question_type} | "
         f"intent: {graph.question_intent or 'none'} | "
@@ -1047,6 +1087,7 @@ def comprehend(
         + aim_fragment
         + tone_fragment
         + persons_fragment
+        + grammar_fragment
     )
 
     return ComprehensionResult(graph=graph, clarification=None)

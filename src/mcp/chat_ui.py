@@ -127,6 +127,9 @@ div[data-testid="stHorizontalBlock"]:has(div[data-testid="stChatInput"])
     padding: 0.75rem 1rem 0.25rem 1rem;
     border: 1px solid #1f2937;
     color: #fff; /* ensure all chat panel text stays white */
+    max-height: 68vh;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 /* Also ensure any chat message bubbles, labels, and inputs inside the
@@ -758,6 +761,73 @@ def _render_dev_expander() -> None:
             st.markdown(f"**Question:** {question}")
         st.markdown("---")
 
+        # ── Step 0: Grammar Parse ─────────────────────────────────────────
+        with st.container():
+            st.markdown("#### Step 0 — Grammar Parse")
+            s0 = trace.get("step0_grammar")
+            if s0 and isinstance(s0, dict) and s0.get("confidence", 0) > 0:
+                # Sentence type badge
+                _stype = s0.get("sentence_type", "unknown")
+                st.markdown(f"**Sentence type:** `{_stype}`")
+
+                # Subject → Verb → Object chain
+                _subj = s0.get("subject", "")
+                _verb = s0.get("verb", "")
+                _vtense = s0.get("verb_tense", "")
+                _dobj = s0.get("direct_object", "")
+                _iobj = s0.get("indirect_object", "")
+                svo_parts = []
+                if _subj:
+                    svo_parts.append(f"**Subject:** {_subj}")
+                if _verb:
+                    tense_tag = f" *({_vtense})*" if _vtense else ""
+                    svo_parts.append(f"**Verb:** {_verb}{tense_tag}")
+                if _dobj:
+                    svo_parts.append(f"**Direct Object:** {_dobj}")
+                if _iobj:
+                    svo_parts.append(f"**Indirect Object:** {_iobj}")
+                if svo_parts:
+                    st.markdown(" → ".join(svo_parts))
+
+                # Prepositional phrases
+                _pps = s0.get("prepositional_phrases", [])
+                if _pps:
+                    st.markdown("**Prepositional phrases:**")
+                    for pp in _pps:
+                        st.markdown(f"  • *{pp.get('preposition', '')}* → {pp.get('object', '')}")
+
+                # Modifiers table
+                _mods = s0.get("modifiers", [])
+                if _mods:
+                    st.markdown("**Modifiers:**")
+                    for m in _mods:
+                        st.markdown(
+                            f'  • "{m.get("word", "")}" modifies '
+                            f'"{m.get("modifies", "")}" ({m.get("type", "")})'
+                        )
+
+                # Clauses
+                _cls = s0.get("clauses", [])
+                if _cls:
+                    st.markdown("**Clauses:**")
+                    for cl in _cls:
+                        st.markdown(
+                            f'  • [{cl.get("clause_type", "")}] "{cl.get("text", "")}" → {cl.get("role", "")}'
+                        )
+
+                # Parse tree
+                _tree = s0.get("raw_parse_tree", "")
+                if _tree:
+                    st.markdown("**Parse tree:**")
+                    st.code(_tree, language=None)
+
+                # Confidence
+                st.metric("Grammar confidence", f"{s0.get('confidence', 0):.0%}")
+            else:
+                st.caption("Grammar parse skipped (no API key or failed)")
+
+        st.markdown("---")
+
         # ── Step 1: Comprehension ─────────────────────────────────────────
         with st.container():
             st.markdown("#### Step 1 — Question Comprehension")
@@ -1346,16 +1416,31 @@ def _render_read_aloud_button(text: str, key: str, bass: float = 0.0, mids: floa
 # ── Session accumulator helpers ───────────────────────────────────────────────
 
 def _merge_persons(new_persons: List[Dict[str, Any]]) -> None:
-    """Merge newly-discovered person dicts into session-state list (by name)."""
+    """Merge newly-discovered person dicts into session-state list (by name).
+
+    The ``"self"`` entry (relationship_to_querent == "self") is protected:
+    if a new person dict shares the same name as the existing self-entry,
+    the self-entry is kept unchanged.
+    """
     if not new_persons:
         return
     existing: List[Dict[str, Any]] = st.session_state.get(_PERSONS_KEY, [])
     names = {p.get("name", "").lower() for p in existing}
+    # Collect names that belong to the protected self-entry
+    _self_names = {
+        p.get("name", "").lower()
+        for p in existing
+        if p.get("relationship_to_querent") == "self"
+    }
     for p in new_persons:
         key = (p.get("name") or "").lower()
-        if key and key not in names:
-            existing.append(p)
-            names.add(key)
+        if not key or key in names:
+            continue
+        # Never let a new entry overwrite / collide with the self-entry
+        if key in _self_names:
+            continue
+        existing.append(p)
+        names.add(key)
     st.session_state[_PERSONS_KEY] = existing
 
 
@@ -1464,6 +1549,8 @@ def _generate_response(
         # ── Dev trace — full inner-monologue snapshot ──────────────
         meta["_dev"] = {
             "question": question,
+            # Step 0 — grammar diagram
+            "step0_grammar": packet.debug_q_graph.get("grammar") if packet.debug_q_graph else None,
             # Step 1 — comprehension
             "step1_comprehension": {
                 "source": packet.debug_comprehension_source or "keyword",
