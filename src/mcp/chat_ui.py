@@ -832,14 +832,158 @@ def _render_dev_expander() -> None:
         with st.container():
             st.markdown("#### Step 1 — Question Comprehension")
             s1 = trace.get("step1_comprehension", {})
-            _paraphrase = s1.get("paraphrase", "")
-            if _paraphrase and not _paraphrase.startswith("("):
-                st.info(f'**Understood as:** "{_paraphrase}"')
+
             if s1.get("needs_chart_b"):
                 st.warning(
                     "This question involves another person. For a full synastry "
                     "reading, load a second chart using the biwheel panel."
                 )
+
+            # ── 5W+H Extraction (always shown first) ─────────────────
+            with st.expander("🧠 5W+H Extraction", expanded=False):
+                # ── WHO ────────────────────────────────────────────
+                _persons = s1.get("persons") or []
+                st.markdown("##### 👤 WHO — Persons")
+                if _persons:
+                    for p in _persons:
+                        name = p.get("name") or "*(unnamed)*"
+                        rel = p.get("relationship_to_querent") or ""
+                        locs = p.get("locations") or []
+                        loc_str = ", ".join(
+                            f"{loc.get('location', '?')} ({loc.get('connection', '')})"
+                            for loc in locs
+                        ) if locs else ""
+                        parts = [f"**{name}**"]
+                        if rel:
+                            parts.append(f"({rel})")
+                        if loc_str:
+                            parts.append(f"— 📍 {loc_str}")
+                        st.markdown("- " + " ".join(parts))
+                else:
+                    st.caption("*(not detected)*")
+
+                # ── WHAT ───────────────────────────────────────────
+                _story = s1.get("story_objects") or []
+                _dilemma = s1.get("dilemma")
+                _aim = s1.get("answer_aim")
+                st.markdown("##### 🎯 WHAT — Story & Aim")
+                if _story:
+                    for so in _story:
+                        sig = so.get("significance") or ""
+                        st.markdown(
+                            f"- **{so.get('name', '?')}**"
+                            + (f" — *{sig}*" if sig else "")
+                        )
+                if _dilemma:
+                    desc = _dilemma.get("description") or ""
+                    opts = _dilemma.get("options") or []
+                    stakes = _dilemma.get("stakes") or ""
+                    st.warning(
+                        f"**Dilemma:** {desc}"
+                        + (f"  \nOptions: {', '.join(opts)}" if opts else "")
+                        + (f"  \nStakes: *{stakes}*" if stakes else "")
+                    )
+                if _aim:
+                    aim_parts = []
+                    for k in ("aim_type", "depth", "urgency", "specificity"):
+                        v = _aim.get(k)
+                        if v:
+                            aim_parts.append(f"{k}: `{v}`")
+                    st.markdown(f"**Answer aim:** {' · '.join(aim_parts)}")
+                if not _story and not _dilemma and not _aim:
+                    st.caption("*(not detected)*")
+
+                # ── WHEN ───────────────────────────────────────────
+                _setting = s1.get("setting_time")
+                _transits = s1.get("transits") or []
+                st.markdown("##### ⏱️ WHEN — Temporal")
+                if _setting:
+                    st.markdown(f"**Setting time:** {_setting}")
+                if _transits:
+                    for t in _transits:
+                        bodies = " ".join(filter(None, [
+                            t.get("transiting_body"), "→", t.get("natal_body"),
+                        ]))
+                        asp = t.get("aspect_type") or ""
+                        tf = t.get("timeframe") or ""
+                        st.markdown(
+                            f"- {bodies}"
+                            + (f" ({asp})" if asp else "")
+                            + (f" — *{tf}*" if tf else "")
+                        )
+                if not _setting and not _transits:
+                    st.caption("*(not detected)*")
+
+                # ── WHERE ──────────────────────────────────────────
+                _locations = s1.get("locations") or []
+                st.markdown("##### 📍 WHERE — Locations")
+                if _locations:
+                    for loc in _locations:
+                        lname = loc.get("name") or "?"
+                        ltype = loc.get("location_type") or ""
+                        conn = loc.get("connected_persons") or []
+                        conn_str = ", ".join(
+                            f"{c.get('person', '?')} ({c.get('connection', '')})"
+                            for c in conn
+                        ) if conn else ""
+                        st.markdown(
+                            f"- **{lname}**"
+                            + (f" *({ltype})*" if ltype else "")
+                            + (f" — {conn_str}" if conn_str else "")
+                        )
+                else:
+                    st.caption("*(not detected)*")
+
+                # ── WHY ────────────────────────────────────────────
+                _intent_ctx = s1.get("intent_context")
+                _desired = s1.get("desired_input")
+                st.markdown("##### 💡 WHY — Intent & Desired Input")
+                if _intent_ctx:
+                    st.markdown(f"**Context:** {_intent_ctx}")
+                if _desired:
+                    st.markdown(f"**Desired input:** {_desired}")
+                if not _intent_ctx and not _desired:
+                    st.caption("*(not detected)*")
+
+                # ── HOW ────────────────────────────────────────────
+                _qs = s1.get("querent_state")
+                st.markdown("##### 🫀 HOW — Querent State")
+                if _qs:
+                    qs_parts = []
+                    for k in ("emotional_tone", "certainty_level", "guidance_openness"):
+                        v = _qs.get(k)
+                        if v:
+                            label = k.replace("_", " ").title()
+                            qs_parts.append(f"{label}: `{v}`")
+                    if qs_parts:
+                        st.markdown(" · ".join(qs_parts))
+                    feelings = _qs.get("expressed_feelings") or []
+                    if feelings:
+                        st.markdown(f"**Expressed feelings:** {', '.join(feelings)}")
+                    demeanor = _qs.get("demeanor_notes")
+                    if demeanor:
+                        st.caption(f"Demeanor: {demeanor}")
+                else:
+                    st.caption("*(not detected)*")
+
+            # ── QuestionGraph detail (placeholder) ────────────────────
+            with st.expander("QuestionGraph detail", expanded=False):
+                st.caption(
+                    "Concept node mapping will be rebuilt in a future step. "
+                    "This section is intentionally empty."
+                )
+                q_graph = s1.get("q_graph") or {}
+                _qi = q_graph.get("question_intent") or ""
+                if _qi:
+                    st.success(f"**Routing intent:** `{_qi}`")
+                focus = q_graph.get("focus_circuits", [])
+                if focus:
+                    st.markdown(f"**Focus circuit IDs:** {focus}")
+                all_f = q_graph.get("all_factors", [])
+                if all_f:
+                    st.markdown(f"**All factors:** {', '.join(all_f)}")
+
+            # ── Metadata ──────────────────────────────────────────────
             c1, c2, c3 = st.columns(3)
             c1.metric("Domain", s1.get("domain") or "—")
             c2.metric("Subtopic", s1.get("subtopic") or "—")
@@ -859,159 +1003,10 @@ def _render_dev_expander() -> None:
             if note:
                 st.info(f"📝 {note}")
 
-            q_graph = s1.get("q_graph") or {}
-            if q_graph:
-                with st.expander("QuestionGraph detail", expanded=False):
-                    _qi = q_graph.get("question_intent") or ""
-                    if _qi:
-                        st.success(f"**Routing intent:** `{_qi}`")
-                    nodes = q_graph.get("nodes", [])
-                    if nodes:
-                        st.markdown("**Concept nodes:**")
-                        for n in nodes:
-                            st.markdown(
-                                f"- `{n.get('label', '?')}` "
-                                f"(source: *{n.get('source', '?')}*) — "
-                                f"factors: {', '.join(n.get('factors', [])) or '*(none — intent-driven)*'}"
-                            )
-                    edges = q_graph.get("edges", [])
-                    if edges:
-                        st.markdown("**Concept edges:**")
-                        for e in edges:
-                            st.markdown(
-                                f"- `{e.get('a', '?')}` ↔ `{e.get('b', '?')}` "
-                                f"(*{e.get('rel', '?')}*)"
-                            )
-                    focus = q_graph.get("focus_circuits", [])
-                    if focus:
-                        st.markdown(f"**Focus circuit IDs:** {focus}")
-                    all_f = q_graph.get("all_factors", [])
-                    if all_f:
-                        st.markdown(f"**All factors:** {', '.join(all_f)}")
-
-            # ── 5W+H Extraction Detail ────────────────────────────────
-            _has_5wh = any(s1.get(k) for k in (
-                "persons", "story_objects", "locations", "dilemma",
-                "answer_aim", "querent_state", "transits",
-                "setting_time", "intent_context", "desired_input",
-            ))
-            if _has_5wh:
-                with st.expander("🧠 5W+H Extraction", expanded=False):
-                    # ── WHO ────────────────────────────────────────────
-                    _persons = s1.get("persons") or []
-                    if _persons:
-                        st.markdown("##### 👤 WHO — Persons")
-                        for p in _persons:
-                            name = p.get("name") or "*(unnamed)*"
-                            rel = p.get("relationship_to_querent") or ""
-                            locs = p.get("locations") or []
-                            loc_str = ", ".join(
-                                f"{loc.get('location', '?')} ({loc.get('connection', '')})"
-                                for loc in locs
-                            ) if locs else ""
-                            parts = [f"**{name}**"]
-                            if rel:
-                                parts.append(f"({rel})")
-                            if loc_str:
-                                parts.append(f"— 📍 {loc_str}")
-                            st.markdown("- " + " ".join(parts))
-
-                    # ── WHAT ───────────────────────────────────────────
-                    _story = s1.get("story_objects") or []
-                    _dilemma = s1.get("dilemma")
-                    _aim = s1.get("answer_aim")
-                    if _story or _dilemma or _aim:
-                        st.markdown("##### 🎯 WHAT — Story & Aim")
-                    if _story:
-                        for so in _story:
-                            sig = so.get("significance") or ""
-                            st.markdown(
-                                f"- **{so.get('name', '?')}**"
-                                + (f" — *{sig}*" if sig else "")
-                            )
-                    if _dilemma:
-                        desc = _dilemma.get("description") or ""
-                        opts = _dilemma.get("options") or []
-                        stakes = _dilemma.get("stakes") or ""
-                        st.warning(
-                            f"**Dilemma:** {desc}"
-                            + (f"  \nOptions: {', '.join(opts)}" if opts else "")
-                            + (f"  \nStakes: *{stakes}*" if stakes else "")
-                        )
-                    if _aim:
-                        aim_parts = []
-                        for k in ("aim_type", "depth", "urgency", "specificity"):
-                            v = _aim.get(k)
-                            if v:
-                                aim_parts.append(f"{k}: `{v}`")
-                        st.markdown(f"**Answer aim:** {' · '.join(aim_parts)}")
-
-                    # ── WHEN ───────────────────────────────────────────
-                    _setting = s1.get("setting_time")
-                    _transits = s1.get("transits") or []
-                    if _setting or _transits:
-                        st.markdown("##### ⏱️ WHEN — Temporal")
-                    if _setting:
-                        st.markdown(f"**Setting time:** {_setting}")
-                    if _transits:
-                        for t in _transits:
-                            bodies = " ".join(filter(None, [
-                                t.get("transiting_body"), "→", t.get("natal_body"),
-                            ]))
-                            asp = t.get("aspect_type") or ""
-                            tf = t.get("timeframe") or ""
-                            st.markdown(
-                                f"- {bodies}"
-                                + (f" ({asp})" if asp else "")
-                                + (f" — *{tf}*" if tf else "")
-                            )
-
-                    # ── WHERE ──────────────────────────────────────────
-                    _locations = s1.get("locations") or []
-                    if _locations:
-                        st.markdown("##### 📍 WHERE — Locations")
-                        for loc in _locations:
-                            lname = loc.get("name") or "?"
-                            ltype = loc.get("location_type") or ""
-                            conn = loc.get("connected_persons") or []
-                            conn_str = ", ".join(
-                                f"{c.get('person', '?')} ({c.get('connection', '')})"
-                                for c in conn
-                            ) if conn else ""
-                            st.markdown(
-                                f"- **{lname}**"
-                                + (f" *({ltype})*" if ltype else "")
-                                + (f" — {conn_str}" if conn_str else "")
-                            )
-
-                    # ── WHY ────────────────────────────────────────────
-                    _intent_ctx = s1.get("intent_context")
-                    _desired = s1.get("desired_input")
-                    if _intent_ctx or _desired:
-                        st.markdown("##### 💡 WHY — Intent & Desired Input")
-                    if _intent_ctx:
-                        st.markdown(f"**Context:** {_intent_ctx}")
-                    if _desired:
-                        st.markdown(f"**Desired input:** {_desired}")
-
-                    # ── HOW ────────────────────────────────────────────
-                    _qs = s1.get("querent_state")
-                    if _qs:
-                        st.markdown("##### 🫀 HOW — Querent State")
-                        qs_parts = []
-                        for k in ("emotional_tone", "certainty_level", "guidance_openness"):
-                            v = _qs.get(k)
-                            if v:
-                                label = k.replace("_", " ").title()
-                                qs_parts.append(f"{label}: `{v}`")
-                        if qs_parts:
-                            st.markdown(" · ".join(qs_parts))
-                        feelings = _qs.get("expressed_feelings") or []
-                        if feelings:
-                            st.markdown(f"**Expressed feelings:** {', '.join(feelings)}")
-                        demeanor = _qs.get("demeanor_notes")
-                        if demeanor:
-                            st.caption(f"Demeanor: {demeanor}")
+            # ── Paraphrase (last) ─────────────────────────────────────
+            _paraphrase = s1.get("paraphrase", "")
+            if _paraphrase and not _paraphrase.startswith("("):
+                st.info(f'**Understood as:** "{_paraphrase}"')
 
         st.markdown("---")
 

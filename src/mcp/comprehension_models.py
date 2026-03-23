@@ -123,6 +123,7 @@ class PersonProfile:
     locations: List[LocationLink] = field(default_factory=list)     # structured place connections
     astro_chart: Optional[Any] = None                               # Optional AstrologicalChart
     group_id: Optional[str] = None                                  # group affiliation when profile is grouped
+    emoji: Optional[str] = None                                     # emoji avatar for the profile
 
     # ── Serialisation ─────────────────────────────────────────────
 
@@ -146,6 +147,8 @@ class PersonProfile:
             d["locations"] = [loc.to_dict() for loc in self.locations]
         if self.group_id:
             d["group_id"] = self.group_id
+        if self.emoji:
+            d["emoji"] = self.emoji
         if self.astro_chart is not None and hasattr(self.astro_chart, "to_json"):
             d["chart"] = self.astro_chart.to_json()
         return d
@@ -186,6 +189,7 @@ class PersonProfile:
             locations=locs,
             astro_chart=astro_chart,
             group_id=d.get("group_id"),
+            emoji=d.get("emoji"),
         )
 
 

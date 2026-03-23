@@ -334,7 +334,7 @@ def render_profile_manager(
         if profiles_by_group:
             # Helper to format profile display
             def _format_profile_label(name: str, data: Dict[str, Any]) -> str:
-                """Format profile info for display: [Name] - [MM/DD/YYYY] [HH:MM AM/PM] [City, St]"""
+                """Format profile info for display: [Emoji] [Name] - [MM/DD/YYYY] [HH:MM AM/PM] [City, St]"""
                 try:
                     # New-format: birth data lives inside the chart dict
                     chart_d = data.get("chart")
@@ -355,7 +355,9 @@ def render_profile_manager(
                             time_str = "?"
                         city = chart_d.get("city", "Unknown")
                         display_name = data.get("name", name)
-                        return f"{display_name} - {date_str} {time_str} {city}"
+                        emoji = data.get("emoji", "")
+                        emoji_prefix = f"{emoji} " if emoji else ""
+                        return f"{emoji_prefix}{display_name} - {date_str} {time_str} {city}"
 
                     # Old-format: flat keys
                     year = data.get("year", 1990)
@@ -373,10 +375,96 @@ def render_profile_manager(
                     ampm = "AM" if hour < 12 else "PM"
                     time_str = f"{h12:02d}:{minute:02d} {ampm}"
                     
-                    return f"{name} - {date_str} {time_str} {city}"
+                    emoji = data.get("emoji", "")
+                    emoji_prefix = f"{emoji} " if emoji else ""
+                    return f"{emoji_prefix}{name} - {date_str} {time_str} {city}"
                 except Exception:
                     return name
             
+            # Show self profile at top (outside of group expanders)
+            _self_profile_name = None
+            _self_profile_data = None
+            _self_profile_group_id = None
+            for _gid, _gdata in profiles_by_group.items():
+                for _name, _data in _gdata["profiles"].items():
+                    if isinstance(_data, dict) and _data.get("relationship_to_querent") == "self":
+                        _self_profile_name = _name
+                        _self_profile_data = _data
+                        _self_profile_group_id = _gid
+                        break
+                if _self_profile_name:
+                    break
+
+            if _self_profile_name and _self_profile_data:
+
+                col1, col2, col3 = st.columns([1, 4, 1])
+                with col1:
+                    st.markdown("### Me:")
+                with col2:
+                    _label = _format_profile_label(_self_profile_name, _self_profile_data)
+                    if st.button(_label, key=f"load_self_{_self_profile_name}", use_container_width=True):
+                        _syn_on = st.session_state.get("synastry_mode", False)
+                        _syn_slot = st.session_state.get("pm_synastry_slot", "Outer Chart")
+                        if _syn_on and _syn_slot == "Outer Chart":
+                            st.session_state["__pending_profile_load_2__"] = {
+                                "profile_name": _self_profile_name,
+                                "profile_data": _self_profile_data,
+                            }
+                        else:
+                            st.session_state["__pending_profile_load__"] = {
+                                "profile_name": _self_profile_name,
+                                "profile_data": _self_profile_data,
+                                "group_id": _self_profile_group_id,
+                            }
+                        st.rerun()
+                with col3:
+                    with st.popover("⋯"):
+                        # Self emoji picker (avatar)
+                        _self_emoji_options = ["😊", "😎", "🤔", "😍", "🚀", "💪", "🎯", "🌟", "💎", "🔥",
+                                              "🎨", "🎭", "🎪", "🎬", "🎵", "📚", "🏆", "⭐", "🌈", "💫",
+                                              "🐱", "🐶", "🦁", "🦅", "🐉", "🦄", "🐼", "🦊", "🐢", "🦋",
+                                              "❤️", "💜", "💙", "🌺", "🌸", "🌻", "🌷", "🌹", "💐", "🌼"]
+                        _current_self_emoji = _self_profile_data.get("emoji", "")
+                        _selected_self_emoji = st.selectbox(
+                            "Avatar emoji",
+                            options=_self_emoji_options,
+                            index=_self_emoji_options.index(_current_self_emoji) if _current_self_emoji in _self_emoji_options else 0,
+                            key=f"self_emoji_{_self_profile_name}"
+                        )
+                        if _selected_self_emoji != _current_self_emoji:
+                            updated_self_data = _self_profile_data.copy()
+                            updated_self_data["emoji"] = _selected_self_emoji
+                            save_user_profile_db(current_user_id, _self_profile_name, updated_self_data)
+                            st.success(f"Avatar updated to {_selected_self_emoji}")
+                            st.rerun()
+
+                        st.divider()
+
+                        if st.button("✏️ Edit Chart", key=f"edit_self_{_self_profile_name}"):
+                            st.session_state["__pending_edit_chart__"] = {
+                                "profile_name": _self_profile_name,
+                                "profile_data": _self_profile_data,
+                            }
+                            st.rerun()
+                        _del_key = f"delete_confirm_self_{_self_profile_name}"
+                        if not st.session_state.get(_del_key):
+                            if st.button("🗑️ Delete Chart", key=f"delete_self_{_self_profile_name}"):
+                                st.session_state[_del_key] = True
+                                st.rerun()
+                        else:
+                            st.warning(f"Delete **{_self_profile_name}**?")
+                            _dc1, _dc2 = st.columns(2)
+                            with _dc1:
+                                if st.button("Yes, delete", key=f"delete_self_yes_{_self_profile_name}", use_container_width=True):
+                                    delete_user_profile_db(current_user_id, _self_profile_name)
+                                    st.session_state.pop(_del_key, None)
+                                    st.session_state.pop("__self_seeded__", None)
+                                    st.rerun()
+                            with _dc2:
+                                if st.button("No!", key=f"delete_self_no_{_self_profile_name}", use_container_width=True):
+                                    st.session_state.pop(_del_key, None)
+                                    st.rerun()
+
             # Display each group as a collapsible section (even if empty, so user can see newly created groups)
             for group_id, group_data in sorted(
                 profiles_by_group.items(),
@@ -384,7 +472,11 @@ def render_profile_manager(
             ):
                 group_name = group_data["group_name"]
                 profiles_in_group = group_data["profiles"]
-                profile_count = len(profiles_in_group)
+                # Count only profiles that will actually be displayed (exclude self profile and legacy names)
+                profile_count = sum(
+                    1 for name, data in profiles_in_group.items()
+                    if not name.startswith("__") and not (isinstance(data, dict) and data.get("relationship_to_querent") == "self")
+                )
                 
                 # Show all groups, even if empty (so user sees newly created ones)
                 with st.expander(f"📁 {group_name} ({profile_count})", expanded=False):
@@ -392,6 +484,9 @@ def render_profile_manager(
                         for name, data in profiles_in_group.items():
                             # Skip legacy __-prefixed profile names
                             if name.startswith("__"):
+                                continue
+                            # Self profile is rendered above groups
+                            if isinstance(data, dict) and data.get("relationship_to_querent") == "self":
                                 continue
                             col1, col2 = st.columns([4, 1])
                             
@@ -445,6 +540,27 @@ def render_profile_manager(
                                             if st.button("No!", key=f"delete_no_{group_id}_{name}", use_container_width=True):
                                                 st.session_state.pop(_del_confirm_key, None)
                                                 st.rerun()
+
+                                    st.divider()
+
+                                    # --- Emoji Avatar ---
+                                    _emoji_options = ["😊", "😎", "🤔", "😍", "🚀", "💪", "🎯", "🌟", "💎", "🔥",
+                                                      "🎨", "🎭", "🎪", "🎬", "🎵", "📚", "🏆", "⭐", "🌈", "💫",
+                                                      "🐱", "🐶", "🦁", "🦅", "🐉", "🦄", "🐼", "🦊", "🐢", "🦋",
+                                                      "❤️", "💜", "💙", "🌺", "🌸", "🌻", "🌷", "🌹", "💐", "🌼"]
+                                    _current_emoji = data.get("emoji", "")
+                                    _selected_emoji = st.selectbox(
+                                        "Avatar emoji",
+                                        options=_emoji_options,
+                                        index=_emoji_options.index(_current_emoji) if _current_emoji in _emoji_options else 0,
+                                        key=f"emoji_{group_id}_{name}"
+                                    )
+                                    if _selected_emoji != _current_emoji:
+                                        updated_data = data.copy()
+                                        updated_data["emoji"] = _selected_emoji
+                                        save_user_profile_db(current_user_id, name, updated_data)
+                                        st.success(f"Avatar updated to {_selected_emoji}")
+                                        st.rerun()
 
                                     st.divider()
 

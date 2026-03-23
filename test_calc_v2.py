@@ -601,7 +601,21 @@ with col_left:
 
 			_is_edit_mode = st.session_state.get("birth_form_mode") == "edit"
 			_submit_label = "Update Chart" if _is_edit_mode else "Calculate Chart"
-			submitted = st.form_submit_button(_submit_label)
+			
+			if _is_edit_mode:
+				_btn_col1, _btn_col2 = st.columns([1, 1])
+				with _btn_col1:
+					submitted = st.form_submit_button(_submit_label, use_container_width=True)
+				with _btn_col2:
+					cancelled = st.form_submit_button("Cancel", use_container_width=True)
+					if cancelled:
+						st.session_state["birth_form_mode"] = "new"
+						st.session_state["editing_profile_name"] = None
+						st.session_state["editing_profile_data"] = {}
+						st.session_state["birth_form_open"] = False
+						st.rerun()
+			else:
+				submitted = st.form_submit_button(_submit_label)
 
 			if submitted:
 				# Defer the actual calculation to the NEXT rerun so that

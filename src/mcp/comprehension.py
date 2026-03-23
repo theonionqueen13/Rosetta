@@ -345,40 +345,17 @@ def _split_concepts(question: str, topic: TopicMatch) -> List[Tuple[str, List[st
 # ═══════════════════════════════════════════════════════════════════════
 
 def _comprehend_keyword(question: str) -> QuestionGraph:
-    """Decompose a question using topic_maps keyword matching only."""
+    """Decompose a question using topic_maps keyword matching only.
+
+    Concept nodes are intentionally empty — will be re-implemented in a
+    future step.  Only domain/subtopic/confidence from topic_maps are used.
+    """
     topic = resolve_factors(question)
-    clusters = _split_concepts(question, topic)
-
-    nodes: List[QuestionNode] = []
-    for label, factors in clusters:
-        nodes.append(QuestionNode(label=label, factors=factors, source="keyword"))
-
-    # Determine question type
-    if len(nodes) == 0:
-        q_type = "open_exploration"
-    elif len(nodes) == 1:
-        q_type = "single_focus"
-    elif len(nodes) == 2:
-        q_type = "relationship"
-    else:
-        q_type = "multi_node"
-
-    # Build edges
-    edges: List[QuestionEdge] = []
-    if len(nodes) >= 2:
-        rel_type = _detect_relationship_type(question)
-        for i in range(len(nodes)):
-            for j in range(i + 1, len(nodes)):
-                edges.append(QuestionEdge(
-                    node_a=nodes[i].label,
-                    node_b=nodes[j].label,
-                    relationship=rel_type,
-                ))
 
     return QuestionGraph(
-        nodes=nodes,
-        edges=edges,
-        question_type=q_type,
+        nodes=[],            # gutted — will be re-implemented
+        edges=[],            # gutted — will be re-implemented
+        question_type="single_focus",
         domain=topic.domain,
         subtopic=topic.subtopic,
         confidence=topic.confidence,
@@ -390,66 +367,364 @@ def _comprehend_keyword(question: str) -> QuestionGraph:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Grammar-driven deterministic 5W+H extraction (hybrid Step 1)
+# ═══════════════════════════════════════════════════════════════════════
+
+# Pronouns / determiners that signal the querent (self)
+_SELF_PRONOUNS: Set[str] = {"i", "me", "my", "mine", "myself", "we", "us", "our"}
+
+# Relationship nouns that signal a third-party person
+_RELATIONSHIP_NOUNS: Dict[str, str] = {
+    "partner": "partner", "spouse": "spouse", "husband": "husband",
+    "wife": "wife", "boyfriend": "boyfriend", "girlfriend": "girlfriend",
+    "mother": "mother", "mom": "mother", "father": "father", "dad": "father",
+    "parent": "parent", "parents": "parent", "brother": "brother",
+    "sister": "sister", "sibling": "sibling", "child": "child",
+    "son": "son", "daughter": "daughter", "boss": "boss",
+    "friend": "friend", "ex": "ex-partner", "coworker": "coworker",
+    "colleague": "colleague", "teacher": "teacher", "mentor": "mentor",
+}
+
+# Temporal prepositions / adverbs for WHEN extraction
+_TEMPORAL_PREPOSITIONS: Set[str] = {
+    "in", "during", "after", "before", "since", "until", "by", "within",
+    "throughout", "over", "past", "next", "last",
+}
+
+# Temporal modifier words
+_TEMPORAL_MODIFIERS: Set[str] = {
+    "long", "short", "recent", "upcoming", "current", "future", "past",
+    "new", "old", "next", "last", "early", "late",
+}
+
+# Temporal nouns that signal a time reference (objects of temporal prepositions)
+_TEMPORAL_NOUNS: Set[str] = {
+    "year", "years", "month", "months", "week", "weeks", "day", "days",
+    "term", "time", "period", "season", "decade", "future", "past",
+    "present", "moment", "phase", "chapter", "while",
+}
+
+# Locational prepositions for WHERE extraction
+_LOCATIONAL_PREPOSITIONS: Set[str] = {"in", "at", "to", "from", "near", "around"}
+
+# Conceptual / figurative domain words — NOT physical locations.
+# When these appear as the object of a locational preposition (e.g. "in my
+# personality"), the phrase describes a topic/domain, not a place.
+_CONCEPTUAL_DOMAINS: Set[str] = {
+    # personality / self
+    "personality", "character", "nature", "temperament", "identity",
+    "self", "ego", "psyche", "shadow",
+    # mind / emotion
+    "mind", "brain", "consciousness", "subconscious", "unconscious",
+    "heart", "soul", "spirit", "energy", "aura",
+    "emotions", "feelings", "thoughts", "intuition",
+    # life areas
+    "life", "lifestyle", "existence", "world", "universe",
+    "career", "work", "job", "profession", "vocation", "calling",
+    "relationship", "relationships", "marriage", "partnership", "love",
+    "family", "friendship", "friendships",
+    "finances", "money", "wealth", "income",
+    "health", "wellbeing", "wellness", "body",
+    "education", "learning", "studies", "school",
+    "creativity", "art", "expression",
+    # astrology-specific
+    "chart", "horoscope", "birth", "natal",
+    # abstract containers
+    "area", "areas", "domain", "sphere", "realm", "zone", "space",
+    "field", "aspect", "aspects", "sector", "department",
+    # metaphorical journey
+    "path", "journey", "direction", "way", "road",
+    "situation", "circumstances", "experience", "experiences",
+    "story", "narrative", "chapter", "phase",
+    # inner states
+    "faith", "belief", "beliefs", "values", "purpose", "potential",
+    "growth", "development", "evolution", "transformation",
+    "pattern", "patterns", "habit", "habits", "behavior", "behaviour",
+}
+
+
+def _extract_5wh_from_grammar(
+    grammar: GrammarDiagram,
+    question: str,
+    *,
+    known_persons: Optional[List[PersonProfile]] = None,
+    known_locations: Optional[List[Location]] = None,
+) -> Dict[str, Any]:
+    """Deterministic 5W+H extraction from a parsed grammar diagram.
+
+    Extracts WHO, WHAT, WHEN, WHERE from the sentence structure.
+    WHY and HOW require inference and are left for the LLM call.
+
+    Returns a dict with keys: persons, story_objects, setting_time,
+    locations, dilemma (all may be empty lists / None).
+    """
+    result: Dict[str, Any] = {
+        "persons": [],
+        "story_objects": [],
+        "setting_time": None,
+        "locations": [],
+        "dilemma": None,
+    }
+
+    if not grammar or grammar.confidence <= 0:
+        return result
+
+    _known_persons = known_persons or []
+    _known_locations = known_locations or []
+
+    # ── WHO — scan subject, objects, clauses for person references ──
+    _all_text_fields: List[str] = [
+        grammar.subject or "",
+        grammar.direct_object or "",
+        grammar.indirect_object or "",
+    ]
+    for clause in grammar.clauses:
+        _all_text_fields.append(clause.text or "")
+
+    persons: List[PersonProfile] = []
+    _seen_person_keys: Set[str] = set()  # lowercase name / relationship
+    _mentions_self = False
+
+    for text_field in _all_text_fields:
+        words = text_field.lower().split()
+        # Check for self-reference
+        if any(w in _SELF_PRONOUNS for w in words):
+            _mentions_self = True
+        # Check for relationship nouns
+        for word in words:
+            clean = word.strip(".,;:!?'\"")
+            if clean in _RELATIONSHIP_NOUNS:
+                rel = _RELATIONSHIP_NOUNS[clean]
+                if rel not in _seen_person_keys:
+                    _seen_person_keys.add(rel)
+                    # Try to match against known session persons
+                    matched = _match_known_person(rel, _known_persons)
+                    if matched:
+                        persons.append(matched)
+                    else:
+                        persons.append(PersonProfile(
+                            name=clean,
+                            relationship_to_querent=rel,
+                        ))
+
+    # If the question explicitly references self, pull up the session self-profile
+    if _mentions_self:
+        self_profile = _find_self_profile(_known_persons)
+        if self_profile and "self" not in _seen_person_keys:
+            persons.insert(0, self_profile)
+            _seen_person_keys.add("self")
+
+    result["persons"] = persons
+
+    # ── WHAT — direct object + story objects from modifiers/clauses ──
+    story_objects: List[StoryObject] = []
+    _dobj = (grammar.direct_object or "").strip()
+    if _dobj:
+        # Filter out pure pronouns / self-references from being story objects
+        dobj_words = _dobj.lower().split()
+        is_self_only = all(w.strip(".,") in _SELF_PRONOUNS for w in dobj_words)
+        is_person_ref = any(w.strip(".,") in _RELATIONSHIP_NOUNS for w in dobj_words)
+        if not is_self_only and not is_person_ref:
+            # Strip possessive modifiers for the label
+            label = _dobj
+            for mod in grammar.modifiers:
+                if mod.type == "possessive" and mod.modifies and mod.modifies.lower() in _dobj.lower():
+                    label = re.sub(r'\b' + re.escape(mod.word) + r'\b', '', label, flags=re.I).strip()
+            story_objects.append(StoryObject(
+                name=label or _dobj,
+                significance="direct object of the question",
+            ))
+
+    # Check clauses for additional story objects (e.g., infinitive complements)
+    for clause in grammar.clauses:
+        if clause.clause_type in ("adverbial", "infinitive", "purpose"):
+            # These describe goals/conditions, not separate story objects
+            continue
+
+    result["story_objects"] = story_objects
+
+    # ── Dilemma detection from clause structure ─────────────────────
+    q_lower = question.lower()
+    if re.search(r'\b(should\s+i|whether\s+to|or\s+should|choose\s+between)\b', q_lower):
+        # Basic dilemma signal; full details left to LLM
+        result["dilemma"] = Dilemma(description="(detected from grammar — details pending)")
+
+    # ── WHEN — verb tense + temporal prepositions + temporal modifiers
+    # Map verb tense to broad setting_time
+    tense_map: Dict[str, str] = {
+        "past": "past", "past_perfect": "past", "past_continuous": "past",
+        "present": "present", "present_perfect": "present",
+        "present_continuous": "present",
+        "future": "future", "future_perfect": "future",
+        "conditional": "future",
+    }
+    setting_time = tense_map.get(grammar.verb_tense or "", None)
+
+    # Scan prepositional phrases for temporal references
+    for pp in grammar.prepositional_phrases:
+        prep_lower = pp.preposition.lower()
+        obj_lower = (pp.object or "").lower()
+        obj_words = set(obj_lower.split())
+        # If the preposition is temporal AND the object contains a time noun
+        if (prep_lower in _TEMPORAL_PREPOSITIONS
+                and obj_words & _TEMPORAL_NOUNS):
+            # Use the phrase to refine setting_time
+            if any(w in obj_words for w in ("future", "next", "upcoming")):
+                setting_time = "future"
+            elif any(w in obj_words for w in ("past", "last", "previous")):
+                setting_time = "past"
+            # else keep existing tense-based setting_time
+
+    # Scan modifiers for temporal signals
+    for mod in grammar.modifiers:
+        if mod.word.lower() in _TEMPORAL_MODIFIERS:
+            target = (mod.modifies or "").lower()
+            if target in _TEMPORAL_NOUNS:
+                # "long term" → future-oriented
+                if mod.word.lower() in ("long", "upcoming", "next", "future"):
+                    setting_time = setting_time or "future"
+                elif mod.word.lower() in ("recent", "past", "last"):
+                    setting_time = setting_time or "past"
+
+    result["setting_time"] = setting_time
+
+    # ── WHERE — locational prepositional phrases ────────────────────
+    # Conceptual / figurative phrases ("in my personality") are routed
+    # to story_objects instead of locations.
+    locations: List[Location] = []
+    for pp in grammar.prepositional_phrases:
+        prep_lower = pp.preposition.lower()
+        obj_text = (pp.object or "").strip()
+        if not obj_text:
+            continue
+        obj_words = set(obj_text.lower().split())
+        # Skip if not a locational preposition or if it's temporal
+        if prep_lower not in _LOCATIONAL_PREPOSITIONS:
+            continue
+        if obj_words & _TEMPORAL_NOUNS:
+            continue
+
+        # Strip possessive pronouns ("my", "your", "their") for lookup
+        _stripped_words = [
+            w for w in obj_words
+            if w not in {"my", "your", "his", "her", "their", "our", "its",
+                         "the", "a", "an", "this", "that"}
+        ]
+
+        # Check if any core word is a conceptual domain
+        if _stripped_words and any(w in _CONCEPTUAL_DOMAINS for w in _stripped_words):
+            # Route to story_objects as a contextual domain, not a location
+            story_objects.append(StoryObject(
+                name=obj_text,
+                significance="contextual domain / frame of the question",
+            ))
+            continue
+
+        # Genuine location — try to match against known locations
+        matched_loc = _match_known_location(obj_text, _known_locations)
+        if matched_loc:
+            locations.append(matched_loc)
+        else:
+            locations.append(Location(name=obj_text))
+
+    result["locations"] = locations
+
+    return result
+
+
+def _find_self_profile(
+    known_persons: Optional[List[PersonProfile]],
+) -> Optional[PersonProfile]:
+    """Find the querent's self PersonProfile from session-accumulated profiles."""
+    if not known_persons:
+        return None
+    for p in known_persons:
+        if p.relationship_to_querent == "self":
+            return p
+    return None
+
+
+def _match_known_person(
+    relationship: str,
+    known_persons: List[PersonProfile],
+) -> Optional[PersonProfile]:
+    """Match a relationship noun against accumulated session persons."""
+    rel_lower = relationship.lower()
+    for p in known_persons:
+        if (p.relationship_to_querent or "").lower() == rel_lower:
+            return p
+        if (p.name or "").lower() == rel_lower:
+            return p
+    return None
+
+
+def _match_known_location(
+    name: str,
+    known_locations: List[Location],
+) -> Optional[Location]:
+    """Match a location name against accumulated session locations."""
+    name_lower = name.lower()
+    for loc in known_locations:
+        if loc.name.lower() == name_lower:
+            return loc
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # LLM-based comprehension (structured output, two-phase)
 # ═══════════════════════════════════════════════════════════════════════
 
 _COMPREHENSION_SYSTEM = """\
-You are the comprehension layer of an astrology chatbot. Your job is to
-deeply understand what the user is genuinely asking BEFORE you touch any
-astrology.  Extract the full 5W+H from their question or story.
+You are the comprehension layer of an astrology chatbot.
 
-Work in two phases:
+The sentence has already been grammatically parsed and the WHO, WHAT, WHEN,
+and WHERE have been extracted deterministically from the grammar diagram.
+Those pre-extracted facts are provided under PRE_EXTRACTED_5WH below.
 
---- PHASE 1: ACTIVE LISTENING --- understand the human question ---
-Restate the user's question in one plain sentence. No astrology yet.
-Ask yourself: what does this person actually want to know?
+Your job is to provide ONLY the fields that require human-level inference:
 
-Extract the full context:
+1. WHY — Intent & desired input
+   intent_context: why is the user asking? What context did they give?
+   desired_input: what actionable output are they hoping to receive?
 
-WHO:
-  - Is it just the querent, or are other people involved?
-  - For each person mentioned (besides the user), record:
-    name (or label like "partner"), relationship_to_querent,
-    any locations they're connected to (with how: "lives there", etc.)
+2. HOW — Querent state (assess the tone and stance of the message)
+   emotional_tone: "neutral" | "curious" | "hopeful" | "anxious" |
+                   "distressed" | "desperate" | "discouraged" | "excited"
+   certainty_level: "unsure" | "somewhat_sure" | "confident"
+   guidance_openness: "minimal" | "moderate" | "extensive"
+   expressed_feelings: list of emotional statements from their message
+   demeanor_notes: your brief observation of their overall presentation
 
-WHAT:
-  - Topics of the question
-  - Story objects: any notable things mentioned (job offer, house, instrument, etc.)
-  - Dilemma: if the user faces a decision, capture: description, options, stakes,
-    constraints, desired_outcome
-  - Answer aim: what KIND of answer do they need?
-    aim_type: "diagnostic" (why?), "advisory" (how?), "predictive" (when?),
-              "validating" (is this true?), "exploratory" (tell me about)
-    depth: "overview" | "moderate" | "deep_dive"
-    urgency: "low" | "moderate" | "high" | "immediate"
-    specificity: "broad" | "focused" | "pinpoint"
+3. Answer aim — what KIND of answer do they need?
+   aim_type: "diagnostic" (why?), "advisory" (how?), "predictive" (when?),
+             "validating" (is this true?), "exploratory" (tell me about)
+   depth: "overview" | "moderate" | "deep_dive"
+   urgency: "low" | "moderate" | "high" | "immediate"
+   specificity: "broad" | "focused" | "pinpoint"
 
-WHEN:
-  - setting_time: "past" | "present" | "future" | specific date/period
-  - Any transits mentioned: transiting_body, natal_body, aspect_type, timeframe
-  - temporal_dimension: "natal" | "transit" | "synastry" | "solar_return" |
-    "relocation" | "cycle" | "timing_predict"
+4. Dilemma enrichment — if PRE_EXTRACTED_5WH flags a dilemma, fill in:
+   description, options, stakes, constraints, desired_outcome.
+   If no dilemma was detected, omit.
 
-WHERE:
-  - Locations mentioned: name, type (city/venue/home/workplace/country),
-    connected persons, relevance
+5. Transit references — if the question mentions astrological transits:
+   transiting_body, natal_body, aspect_type, timeframe, description.
 
-WHY:
-  - intent_context: why is the user asking? What context did they give?
-  - desired_input: what actionable output are they hoping to receive?
+6. Domain classification — select from DOMAINS list which life-domains apply.
 
-HOW:
-  - How did they ask? Assess the querent's state:
-    emotional_tone: "neutral" | "curious" | "hopeful" | "anxious" |
-                    "distressed" | "desperate" | "discouraged" | "excited"
-    certainty_level: "unsure" | "somewhat_sure" | "confident"
-    guidance_openness: "minimal" | "moderate" | "extensive"
-    expressed_feelings: list of emotional statements from their message
-    demeanor_notes: your brief observation of their overall presentation
+7. Classification metadata
+   question_type: "single_focus" | "relationship" | "multi_node" | "open_exploration"
+   temporal_dimension: "natal" | "transit" | "synastry" | "solar_return" |
+                       "relocation" | "cycle" | "timing_predict". Default "natal".
+   subject_config: "single" | "dyadic" | "familial". Default "single".
 
-Identify which DOMAINS from the DOMAINS list genuinely apply.
-Also self-assess your comprehension_confidence (0.0\u20131.0).
-Flag any ambiguities or contradictions in the question.
+8. Paraphrase — one sentence restating the question and the pre-extracted
+   context in plain language. This should reflect all 5W+H dimensions
+   that were found, not just the surface question. No astrology jargon.
+
+9. Self-assessment
+   comprehension_confidence: 0.0–1.0 how well you understood the question.
+   ambiguities: list of unclear aspects
+   contradictions: list of conflicting signals
 
 CRITICAL — STATEMENTS vs QUESTIONS:
 If the user's message is a STATEMENT or ANECDOTE with NO clear question or
@@ -458,61 +733,36 @@ request for insight, you MUST:
   - Put "no_explicit_question" in the ambiguities list
   - Do NOT fabricate an intent_context or desired_input — leave them empty/null
   - Do NOT guess what the user "probably" wants to know
-  - The user may just be sharing context for a follow-up question
 Examples of statements (NOT questions):
   "I told my brother about my job and he was upset."
   "My Saturn return started last month."
   "I've been feeling restless lately."
 These deserve clarification, not assumptions.
 
---- PHASE 2: ASTROLOGICAL MAPPING ---
-Given your Phase 1 understanding, select specific planets, signs, or houses
-from VALID_FACTORS that a skilled astrologer would use to answer this question.
-If the question is about a structural concept (e.g. "which planet is strongest"),
-factors MUST be empty \u2014 the engine will handle factor selection itself.
-NEVER invent factor names outside VALID_FACTORS.
-
 RULES:
-1. paraphrase: one sentence in plain language, no jargon.
-2. domains: list of matching domain names from DOMAINS; may be empty.
-3. question_type: "single_focus" | "relationship" | "multi_node" | "open_exploration".
-4. temporal_dimension: one of the values listed above. Default "natal".
-5. subject_config: "single" | "dyadic" | "familial". Default "single".
-6. nodes: each concept the user mentions. label is 1-3 words lowercase.
-7. factors in each node: ONLY items from VALID_FACTORS, or empty list.
-8. NEVER guess or hallucinate factor names.
-9. If a RECOGNIZED_TERM is provided, its meaning takes precedence.
-10. comprehension_confidence: 0.0\u20131.0 how well you understood the question.
-11. Omit any optional object/array that would be empty or null.
+1. If a RECOGNIZED_TERM is provided, its meaning takes precedence.
+2. Omit any optional object/array that would be empty or null.
+3. Do NOT re-extract WHO, WHAT, WHEN, WHERE — those come from the grammar.
+   Only provide WHY, HOW, answer_aim, domains, paraphrase, and metadata.
 
 Respond with ONLY valid JSON matching this schema:
 {
-  "paraphrase": "string",
-  "domains": ["string"],
-  "question_type": "string",
-  "temporal_dimension": "string",
-  "subject_config": "string",
-  "nodes": [{"label": "string", "factors": ["string"]}],
-  "edges": [{"node_a": "string", "node_b": "string", "relationship": "string"}],
-  "persons": [{"name": "string", "relationship_to_querent": "string",
-               "locations": [{"location_name": "string", "connection": "string"}]}],
-  "story_objects": [{"name": "string", "description": "string", "significance": "string",
-                     "related_persons": ["string"], "related_locations": ["string"]}],
-  "dilemma": {"description": "string", "options": ["string"], "stakes": "string",
-              "constraints": ["string"], "desired_outcome": "string"},
-  "answer_aim": {"aim_type": "string", "depth": "string", "urgency": "string",
-                 "specificity": "string"},
-  "setting_time": "string",
-  "transits": [{"transiting_body": "string", "natal_body": "string",
-                "aspect_type": "string", "timeframe": "string", "description": "string"}],
-  "locations": [{"name": "string", "location_type": "string",
-                 "connected_persons": [{"person": "string", "connection": "string"}],
-                 "relevance": "string"}],
   "intent_context": "string",
   "desired_input": "string",
   "querent_state": {"emotional_tone": "string", "certainty_level": "string",
                     "guidance_openness": "string", "expressed_feelings": ["string"],
                     "demeanor_notes": "string"},
+  "answer_aim": {"aim_type": "string", "depth": "string", "urgency": "string",
+                 "specificity": "string"},
+  "dilemma": {"description": "string", "options": ["string"], "stakes": "string",
+              "constraints": ["string"], "desired_outcome": "string"},
+  "transits": [{"transiting_body": "string", "natal_body": "string",
+                "aspect_type": "string", "timeframe": "string", "description": "string"}],
+  "domains": ["string"],
+  "question_type": "string",
+  "temporal_dimension": "string",
+  "subject_config": "string",
+  "paraphrase": "string",
   "comprehension_confidence": 0.85,
   "ambiguities": ["string"],
   "contradictions": ["string"]
@@ -532,7 +782,11 @@ def _comprehend_llm(
     grammar: Optional[GrammarDiagram] = None,
 ) -> Optional[QuestionGraph]:
     """
-    Two-phase LLM comprehension with full 5W+H extraction.
+    Hybrid comprehension: deterministic 5W+H from grammar + LLM for
+    subjective fields (WHY, HOW, aim, paraphrase, domain).
+
+    Phase A: ``_extract_5wh_from_grammar()`` — deterministic WHO/WHAT/WHEN/WHERE
+    Phase B: Slimmed LLM call — WHY, HOW, AnswerAim, domain, paraphrase
 
     Returns None on any failure (caller should fall back to keyword path).
     """
@@ -541,30 +795,31 @@ def _comprehend_llm(
     except ImportError:
         return None
 
+    # ── Phase A: deterministic extraction from grammar ───────────────
+    grammar_5wh = _extract_5wh_from_grammar(
+        grammar or GrammarDiagram(),
+        question,
+        known_persons=known_persons,
+        known_locations=known_locations,
+    )
+
+    # ── Phase B: LLM call for subjective fields ──────────────────────
     from src.mcp.topic_maps import list_domains
     domain_names = [d["name"] for d in list_domains()]
 
-    vocab = _build_vocabulary(chart)
     parts = [
         f"DOMAINS:\n{json.dumps(domain_names)}",
-        f"VALID_FACTORS:\n{json.dumps(vocab)}",
     ]
     if matched_term is not None:
         parts.append(
             f"RECOGNIZED_TERM: \"{matched_term.canonical}\" — {matched_term.description}"
         )
-    if known_persons:
-        parts.append(
-            f"KNOWN_PERSONS (from prior turns):\n{json.dumps([p.to_dict() for p in known_persons], ensure_ascii=False)}"
-        )
-    if known_locations:
-        parts.append(
-            f"KNOWN_LOCATIONS (from prior turns):\n{json.dumps([loc.to_dict() for loc in known_locations], ensure_ascii=False)}"
-        )
     if pending_clarification:
         parts.append(
             f"USER'S CLARIFICATION (answering a prior follow-up):\n{pending_clarification}"
         )
+
+    # Inject the grammar diagram as structured context
     if grammar and grammar.confidence > 0:
         grammar_ctx = (
             f"GRAMMAR_PARSE (pre-parsed sentence structure):\n"
@@ -585,6 +840,31 @@ def _comprehend_llm(
             )
             grammar_ctx += f"\n  Clauses: {cl_lines}"
         parts.append(grammar_ctx)
+
+    # Inject the deterministic 5W+H extractions so the LLM can see them
+    pre_5wh_summary: Dict[str, Any] = {}
+    if grammar_5wh["persons"]:
+        pre_5wh_summary["WHO"] = [
+            {"name": p.name, "relationship": p.relationship_to_querent}
+            for p in grammar_5wh["persons"]
+        ]
+    if grammar_5wh["story_objects"]:
+        pre_5wh_summary["WHAT"] = [
+            {"name": o.name, "significance": o.significance}
+            for o in grammar_5wh["story_objects"]
+        ]
+    if grammar_5wh["setting_time"]:
+        pre_5wh_summary["WHEN"] = grammar_5wh["setting_time"]
+    if grammar_5wh["locations"]:
+        pre_5wh_summary["WHERE"] = [loc.name for loc in grammar_5wh["locations"]]
+    if grammar_5wh["dilemma"]:
+        pre_5wh_summary["DILEMMA_DETECTED"] = True
+    if pre_5wh_summary:
+        parts.append(
+            f"PRE_EXTRACTED_5WH (from grammar — do NOT re-extract these):\n"
+            f"{json.dumps(pre_5wh_summary, ensure_ascii=False)}"
+        )
+
     parts.append(f"Question: {question}")
     user_msg = "\n\n".join(parts)
 
@@ -621,26 +901,7 @@ def _comprehend_llm(
     except (json.JSONDecodeError, ValueError):
         return None
 
-    # ── Parse core fields (same as before) ──────────────────────────
-    valid_set = set(vocab)
-    nodes: List[QuestionNode] = []
-    for nd in data.get("nodes", []):
-        label = str(nd.get("label", "")).strip().lower()
-        factors = [f for f in nd.get("factors", []) if f in valid_set]
-        if label:
-            nodes.append(QuestionNode(label=label, factors=factors, source="llm"))
-
-    edges: List[QuestionEdge] = []
-    valid_rels = {"connection", "tension", "support", "timing"}
-    for ed in data.get("edges", []):
-        rel = ed.get("relationship", "connection")
-        if rel not in valid_rels:
-            rel = "connection"
-        edges.append(QuestionEdge(
-            node_a=str(ed.get("node_a", "")),
-            node_b=str(ed.get("node_b", "")),
-            relationship=rel,
-        ))
+    # ── Parse LLM-only fields ───────────────────────────────────────
 
     q_type = data.get("question_type", "single_focus")
     if q_type not in {"single_focus", "relationship", "multi_node", "open_exploration"}:
@@ -664,95 +925,11 @@ def _comprehend_llm(
     if subject not in valid_subject:
         subject = _detect_subject(question)
 
-    # ── Parse WHO — persons ─────────────────────────────────────────
-    persons: List[PersonProfile] = []
-    for p_data in data.get("persons", []):
-        locs: List[LocationLink] = []
-        for loc_d in p_data.get("locations", []):
-            locs.append(LocationLink(
-                location_name=str(loc_d.get("location_name", "")),
-                connection=str(loc_d.get("connection", "")),
-            ))
-        persons.append(PersonProfile(
-            name=p_data.get("name"),
-            relationship_to_querent=p_data.get("relationship_to_querent"),
-            relationships_to_others=p_data.get("relationships_to_others", []),
-            memories=p_data.get("memories", []),
-            significant_places=p_data.get("significant_places", []),
-            locations=locs,
-        ))
-
-    # ── Parse WHAT — story objects, dilemma, aim ────────────────────
-    story_objects: List[StoryObject] = []
-    for so_data in data.get("story_objects", []):
-        story_objects.append(StoryObject(
-            name=str(so_data.get("name", "")),
-            description=so_data.get("description"),
-            significance=so_data.get("significance"),
-            related_persons=so_data.get("related_persons", []),
-            related_locations=so_data.get("related_locations", []),
-        ))
-
-    dilemma: Optional[Dilemma] = None
-    dil_data = data.get("dilemma")
-    if dil_data and isinstance(dil_data, dict) and dil_data.get("description"):
-        dilemma = Dilemma(
-            description=str(dil_data.get("description", "")),
-            options=dil_data.get("options", []),
-            stakes=dil_data.get("stakes"),
-            constraints=dil_data.get("constraints", []),
-            desired_outcome=dil_data.get("desired_outcome"),
-        )
-
-    answer_aim: Optional[AnswerAim] = None
-    aim_data = data.get("answer_aim")
-    if aim_data and isinstance(aim_data, dict):
-        _aim_type_map = {e.value: e for e in AimType}
-        _depth_map = {e.value: e for e in Depth}
-        _urgency_map = {e.value: e for e in Urgency}
-        _specificity_map = {e.value: e for e in Specificity}
-        answer_aim = AnswerAim(
-            aim_type=_aim_type_map.get(aim_data.get("aim_type", ""), AimType.EXPLORATORY),
-            depth=_depth_map.get(aim_data.get("depth", ""), Depth.MODERATE),
-            urgency=_urgency_map.get(aim_data.get("urgency", ""), Urgency.MODERATE),
-            specificity=_specificity_map.get(aim_data.get("specificity", ""), Specificity.FOCUSED),
-        )
-
-    # ── Parse WHEN — setting, transits ──────────────────────────────
-    setting_time = data.get("setting_time") or None
-
-    transits: List[Transit] = []
-    for tr_data in data.get("transits", []):
-        transits.append(Transit(
-            transiting_body=tr_data.get("transiting_body"),
-            natal_body=tr_data.get("natal_body"),
-            aspect_type=tr_data.get("aspect_type"),
-            timeframe=tr_data.get("timeframe"),
-            description=tr_data.get("description"),
-        ))
-
-    # ── Parse WHERE — locations ─────────────────────────────────────
-    locations: List[Location] = []
-    for loc_data in data.get("locations", []):
-        conn_persons: List[Tuple[str, str]] = []
-        for cp in loc_data.get("connected_persons", []):
-            if isinstance(cp, dict):
-                conn_persons.append((
-                    str(cp.get("person", "")),
-                    str(cp.get("connection", "")),
-                ))
-        locations.append(Location(
-            name=str(loc_data.get("name", "")),
-            location_type=loc_data.get("location_type"),
-            connected_persons=conn_persons,
-            relevance=loc_data.get("relevance"),
-        ))
-
-    # ── Parse WHY — intent context ──────────────────────────────────
+    # ── WHY — intent context (LLM-only) ────────────────────────────
     intent_context = data.get("intent_context") or None
     desired_input = data.get("desired_input") or None
 
-    # ── Parse HOW — querent state ───────────────────────────────────
+    # ── HOW — querent state (LLM-only) ─────────────────────────────
     querent_state: Optional[QuerentState] = None
     qs_data = data.get("querent_state")
     if qs_data and isinstance(qs_data, dict):
@@ -767,14 +944,54 @@ def _comprehend_llm(
             demeanor_notes=qs_data.get("demeanor_notes"),
         )
 
-    # ── Parse sufficiency metadata ──────────────────────────────────
+    # ── Answer aim (LLM-only) ──────────────────────────────────────
+    answer_aim: Optional[AnswerAim] = None
+    aim_data = data.get("answer_aim")
+    if aim_data and isinstance(aim_data, dict):
+        _aim_type_map = {e.value: e for e in AimType}
+        _depth_map = {e.value: e for e in Depth}
+        _urgency_map = {e.value: e for e in Urgency}
+        _specificity_map = {e.value: e for e in Specificity}
+        answer_aim = AnswerAim(
+            aim_type=_aim_type_map.get(aim_data.get("aim_type", ""), AimType.EXPLORATORY),
+            depth=_depth_map.get(aim_data.get("depth", ""), Depth.MODERATE),
+            urgency=_urgency_map.get(aim_data.get("urgency", ""), Urgency.MODERATE),
+            specificity=_specificity_map.get(aim_data.get("specificity", ""), Specificity.FOCUSED),
+        )
+
+    # ── Dilemma enrichment (LLM fills in details if grammar detected one)
+    dilemma: Optional[Dilemma] = grammar_5wh.get("dilemma")
+    dil_data = data.get("dilemma")
+    if dil_data and isinstance(dil_data, dict) and dil_data.get("description"):
+        dilemma = Dilemma(
+            description=str(dil_data.get("description", "")),
+            options=dil_data.get("options", []),
+            stakes=dil_data.get("stakes"),
+            constraints=dil_data.get("constraints", []),
+            desired_outcome=dil_data.get("desired_outcome"),
+        )
+
+    # ── Transit references (LLM-only) ──────────────────────────────
+    transits: List[Transit] = []
+    for tr_data in data.get("transits", []):
+        transits.append(Transit(
+            transiting_body=tr_data.get("transiting_body"),
+            natal_body=tr_data.get("natal_body"),
+            aspect_type=tr_data.get("aspect_type"),
+            timeframe=tr_data.get("timeframe"),
+            description=tr_data.get("description"),
+        ))
+
+    # ── Sufficiency metadata ────────────────────────────────────────
     comprehension_confidence = float(data.get("comprehension_confidence", 0.85))
     ambiguities = data.get("ambiguities", [])
     contradictions = data.get("contradictions", [])
 
+    # ── Merge deterministic + LLM results into QuestionGraph ────────
+    # Concept nodes are intentionally empty — will be rebuilt in a future step.
     return QuestionGraph(
-        nodes=nodes,
-        edges=edges,
+        nodes=[],            # gutted — will be re-implemented
+        edges=[],            # gutted — will be re-implemented
         question_type=q_type,
         domain=domain,
         source="llm",
@@ -782,14 +999,16 @@ def _comprehend_llm(
         paraphrase=paraphrase,
         temporal_dimension=temporal,
         subject_config=subject,
-        # 5W+H rich fields
-        persons=persons,
-        story_objects=story_objects,
+        # WHO, WHAT, WHERE from grammar (deterministic)
+        persons=grammar_5wh["persons"],
+        story_objects=grammar_5wh["story_objects"],
+        locations=grammar_5wh["locations"],
+        # WHEN: prefer grammar-derived, override if LLM disagrees
+        setting_time=grammar_5wh["setting_time"],
+        # WHY, HOW, aim from LLM (inferential)
         dilemma=dilemma,
         answer_aim=answer_aim,
-        setting_time=setting_time,
         transits=transits,
-        locations=locations,
         intent_context=intent_context,
         desired_input=desired_input,
         querent_state=querent_state,
@@ -1024,11 +1243,8 @@ def comprehend(
     # ── Step 3: Term-only fallback (term matched, no API key) ────────
     if graph is None and _matched_term is not None:
         graph = QuestionGraph(
-            nodes=[QuestionNode(
-                label=_matched_term.canonical,
-                factors=list(_matched_term.factors),
-                source="term_registry",
-            )],
+            nodes=[],            # gutted — will be re-implemented
+            edges=[],            # gutted — will be re-implemented
             question_type="single_focus",
             domain=_matched_term.domain,
             confidence=0.9,
@@ -1049,10 +1265,6 @@ def comprehend(
     # ── Stamp intent from term registry ───────────────────────────
     if _matched_term:
         graph.question_intent = _matched_term.intent
-        if _matched_term.factors and graph.nodes:
-            for f in _matched_term.factors:
-                if f not in graph.nodes[0].factors:
-                    graph.nodes[0].factors.append(f)
 
     # ── Sufficiency check ─────────────────────────────────────────
     clarification = _check_sufficiency(graph)
@@ -1064,7 +1276,6 @@ def comprehend(
     _anchor_to_chart(graph, chart)
 
     # ── Final comprehension note for the dev monologue ──────────────
-    node_labels = [n.label for n in graph.nodes]
     paraphrase_fragment = f" | understood: \"{graph.paraphrase}\"" if graph.paraphrase and not graph.paraphrase.startswith("(") else ""
     temporal_fragment = f" | temporal: {graph.temporal_dimension}" if graph.temporal_dimension != "natal" else ""
     subject_fragment = f" | subject: {graph.subject_config}" if graph.subject_config != "single" else ""
@@ -1077,7 +1288,6 @@ def comprehend(
     graph.comprehension_note = (
         f"Q: {question} -> {graph.question_type} | "
         f"intent: {graph.question_intent or 'none'} | "
-        f"nodes: {node_labels} | "
         f"shapes: {graph.focus_circuits} | "
         f"source: {graph.source} | "
         f"conf: {graph.confidence:.0%}"
