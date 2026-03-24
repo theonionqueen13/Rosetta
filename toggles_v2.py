@@ -6,6 +6,7 @@ from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db, DetectedShape
 from src.state_manager import swap_primary_and_secondary_charts
 from src import toggle_state as ts
+from mode_map import render_mode_map
 
 GLYPHS = static_db.GLYPHS
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
@@ -271,6 +272,9 @@ def render_circuit_toggles(
 	# Track previous checkbox values for delayed rerun
 	st.session_state.setdefault("_last_compass_value", st.session_state.get(COMPASS_KEY, True))
 	st.session_state.setdefault("_last_compass_value_2", st.session_state.get(COMPASS_KEY_2, True))
+
+	# --- Mode Map (interactive DAG of all modes & toggles) ---
+	render_mode_map(patterns=patterns, shapes=shapes, singleton_map=singleton_map)
 
 	# --- Chart Mode Selector ---
 	# Use unified state as source of truth
