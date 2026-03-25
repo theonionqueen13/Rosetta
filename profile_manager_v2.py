@@ -418,7 +418,7 @@ def render_profile_manager(
                             }
                         st.rerun()
                 with col3:
-                    with st.popover("⋯"):
+                    with st.popover(""):
                         # Self emoji picker (avatar)
                         _self_emoji_options = ["😊", "😎", "🤔", "😍", "🚀", "💪", "🎯", "🌟", "💎", "🔥",
                                               "🎨", "🎭", "🎪", "🎬", "🎵", "📚", "🏆", "⭐", "🌈", "💫",
@@ -513,7 +513,7 @@ def render_profile_manager(
                             
                             # Group management popover
                             with col2:
-                                with st.popover("⋯"):
+                                with st.popover(""):
                                     # --- Edit / Delete buttons ---
                                     if st.button("✏️ Edit Chart", key=f"edit_{group_id}_{name}"):
                                         st.session_state["__pending_edit_chart__"] = {

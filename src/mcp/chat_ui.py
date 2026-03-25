@@ -435,14 +435,12 @@ def _render_agent_memory_panel() -> None:
 # ── Key resolution ────────────────────────────────────────────────────────────
 
 def _get_api_key() -> str:
-    """Read OpenRouter key: secrets.toml [openrouter].api_key -> env var."""
-    try:
-        key = st.secrets.get("openrouter", {}).get("api_key", "")
-        if key and key != "PASTE_YOUR_KEY_HERE":
-            return key
-    except Exception:
-        pass
-    return os.environ.get("OPENROUTER_API_KEY", "")
+    """Read OpenRouter key via config.get_secret (env var → st.secrets fallback)."""
+    from config import get_secret
+    key = get_secret("openrouter", "api_key", default="")
+    if key and key != "PASTE_YOUR_KEY_HERE":
+        return key
+    return ""
 
 
 # ── Session init ──────────────────────────────────────────────────────────────

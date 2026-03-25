@@ -1,0 +1,131 @@
+# src/nicegui_state.py
+"""
+Lightweight per-user state for the NiceGUI entry point.
+
+Stored in ``app.storage.user`` so it survives page refreshes.  The shape
+mirrors the keys used by test_calc_v2.py / st.session_state where it
+matters (profile load/save), but NiceGUI-specific fields live here too.
+
+Usage:
+    from src.nicegui_state import ensure_state
+    state = ensure_state()       # inside a @ui.page handler
+"""
+from __future__ import annotations
+
+from typing import Any, Dict
+
+from nicegui import app
+
+
+# ---------------------------------------------------------------------------
+# Default state template
+# ---------------------------------------------------------------------------
+
+_DEFAULTS: Dict[str, Any] = {
+    # ── Form values ──────────────────────────────────────────────────
+    "name": "",
+    "year": 2000,
+    "month_name": "January",
+    "day": 1,
+    "hour_12": "12",
+    "minute_str": "00",
+    "ampm": "AM",
+    "city": "",
+    "unknown_time": False,
+    "gender": None,
+    "is_my_chart": False,
+
+    # ── Geocoded location (filled after Calculate) ───────────────────
+    "current_lat": None,
+    "current_lon": None,
+    "current_tz_name": None,
+    "last_location": "",
+    "last_timezone": None,
+
+    # ── Chart results ────────────────────────────────────────────────
+    # NOTE: NiceGUI user storage is JSON-backed, so we store the chart
+    # as its serializable dict (via AstrologicalChart.to_json()).
+    # Use get_chart_object() in app.py to reconstruct the Python object.
+    "last_chart_json": None,       # AstrologicalChart.to_json() dict
+    "last_chart_2_json": None,     # outer chart (synastry / transit)
+    "last_chart_2": None,          # second chart (synastry / transit)
+    "chart_2_source": None,        # "profile" | "transit" | None
+    "chart_ready": False,
+
+    # ── Toggle values ────────────────────────────────────────────────
+    "compass": True,
+    "chart_mode": "Circuits",      # "Standard Chart" | "Circuits"
+    "circuit_submode": "Combined",
+    "pattern_toggles": {},         # {int: bool}
+    "shape_toggles": {},           # {str: bool}
+    "singleton_toggles": {},       # {str: bool}
+    "aspect_toggles": {},          # {str: bool}
+    "label_style": "glyph",       # "glyph" | "text"
+    "dark_mode": False,
+    "interactive_chart": False,
+    "house_system": "placidus",
+
+    # ── Synastry / transit ──────────────────────────────────────────
+    "synastry_mode": False,
+    "transit_mode": False,
+    "synastry_inter": True,
+    "synastry_chart1": False,
+    "synastry_chart2": False,
+    "chart_2_profile_name": None,      # name of loaded outer-chart profile
+    "transit_dt_iso": None,            # ISO-8601 string of current transit UTC
+    "transit_nav_interval": "1 day",   # step size for ◀/▶ buttons
+
+    # ── Chat ─────────────────────────────────────────────────────────
+    "mcp_chat_history": [],            # [{role, content, caption}]
+    "mcp_model": "google/gemini-2.0-flash-001",
+    "mcp_chat_mode": "Query",          # "Query" | "Map" | "Execute"
+    "mcp_voice_mode": "Plain",         # "Plain" | "Circuit"
+    "mcp_eq_bass": 0.0,
+    "mcp_eq_mids": 0.0,
+    "mcp_eq_treble": 0.0,
+    "mcp_agent_notes": "",
+    "mcp_pending_question": "",
+
+    # ── Profile management ───────────────────────────────────────────
+    "current_profile": None,
+    "profile_loaded": False,
+    "saved_circuit_names": {},
+    "birth_form_open": True,
+    "editing_profile_name": None,
+    "birth_form_mode": "new",      # "new" | "edit"
+}
+
+
+def ensure_state() -> Dict[str, Any]:
+    """Return (and lazily initialise) the per-user NiceGUI state dict.
+
+    Merges any missing keys from ``_DEFAULTS`` so the state schema can
+    evolve without breaking existing sessions.
+    """
+    state = app.storage.user.setdefault("rosetta_state", {})
+    for key, default in _DEFAULTS.items():
+        state.setdefault(key, default)
+    return state
+
+
+def get_chart_object(state: Dict[str, Any]):
+    """Reconstruct an AstrologicalChart from the stored JSON dict, or None.
+
+    The chart is stored as ``state["last_chart_json"]`` (a plain dict from
+    ``AstrologicalChart.to_json()``).  This helper deserialises it back into
+    a live Python object on demand.
+    """
+    raw = state.get("last_chart_json")
+    if raw is None or not isinstance(raw, dict):
+        return None
+    from models_v2 import AstrologicalChart
+    return AstrologicalChart.from_json(raw)
+
+
+def get_chart_2_object(state: Dict[str, Any]):
+    """Reconstruct the second (outer / transit) AstrologicalChart, or None."""
+    raw = state.get("last_chart_2_json")
+    if raw is None or not isinstance(raw, dict):
+        return None
+    from models_v2 import AstrologicalChart
+    return AstrologicalChart.from_json(raw)

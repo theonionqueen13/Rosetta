@@ -1,10 +1,11 @@
 # event_lookup_v2.py
 
+import functools
 import json
 from datetime import datetime
-import streamlit as st
 
-@st.cache_data
+
+@functools.lru_cache(maxsize=1)
 def load_events(path="events.jsonl"):
     with open(path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
@@ -79,6 +80,10 @@ def update_events_html_state(target_dt: datetime, events_path: str = "events.jso
     ALWAYS blanks first, then tries to compute. If anything fails, it stays blank.
     This guarantees no carry-over if the compute step is skipped or errors.
     """
+    # Lazy import — only Streamlit callers use this helper;
+    # NiceGUI callers use build_events_html() directly.
+    import streamlit as st  # noqa: E401
+
     # 1) Blank first so stale content is wiped even if we crash/return early
     st.session_state["events_lookup_html"] = ""
 

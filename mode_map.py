@@ -287,7 +287,7 @@ _CYTOSCAPE_HTML = """
     layout: {
       name: 'dagre',
       rankDir: 'LR',
-      rankSep: 70,
+      rankSep: 45,
       nodeSep: 18,
       edgeSep: 10,
       animate: false,

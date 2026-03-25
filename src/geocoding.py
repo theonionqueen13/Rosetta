@@ -1,30 +1,43 @@
 # src/geocoding.py
 
-import os
+import logging
 from typing import Optional, Tuple
-import streamlit as st
 from opencage.geocoder import OpenCageGeocode
 from timezonefinder import TimezoneFinder
 
+from config import get_secret
+
+_log = logging.getLogger(__name__)
+
 # --- Configuration ---
-try:
-    _OPENCAGE_KEY = st.secrets["opencage"]["api_key"]
-except KeyError:
-    _OPENCAGE_KEY = None
-    st.error("Error: OpenCage API key not found in st.secrets.")
+_OPENCAGE_KEY = get_secret("opencage", "api_key")
+if not _OPENCAGE_KEY:
+    _log.warning("OpenCage API key not found. Geocoding will be unavailable.")
 
-# Use cache_resource so these are constructed ONCE per server process and
-# survive Streamlit hot-reloads without re-opening all their file handles.
-@st.cache_resource(show_spinner=False)
+# Module-level singletons (constructed once per process — replaces @st.cache_resource)
+_geolocator: Optional[OpenCageGeocode] = None
+_tzfinder: Optional[TimezoneFinder] = None
+
+
 def _get_geolocator() -> Optional[OpenCageGeocode]:
-    return OpenCageGeocode(_OPENCAGE_KEY) if _OPENCAGE_KEY else None
+    global _geolocator
+    if _geolocator is None and _OPENCAGE_KEY:
+        _geolocator = OpenCageGeocode(_OPENCAGE_KEY)
+    return _geolocator
 
-@st.cache_resource(show_spinner=False)
+
 def _get_tzfinder() -> TimezoneFinder:
-    return TimezoneFinder(in_memory=True)
+    global _tzfinder
+    if _tzfinder is None:
+        _tzfinder = TimezoneFinder(in_memory=True)
+    return _tzfinder
 
 
-@st.cache_data(show_spinner=False)
+# LRU cache replaces @st.cache_data — same city string → same result
+from functools import lru_cache
+
+
+@lru_cache(maxsize=256)
 def geocode_city_with_timezone(
     city_query: str,
 ) -> Tuple[Optional[float], Optional[float], Optional[str], Optional[str]]:
@@ -45,7 +58,7 @@ def geocode_city_with_timezone(
     try:
         results = geolocator.geocode(city_query, no_annotations='1', limit=1)
     except Exception as e:
-        st.error(f"Geocoding API failed: {e}")
+        _log.error(f"Geocoding API failed: {e}")
         return lat, lon, tz_name, formatted_address
 
     if results:

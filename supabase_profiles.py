@@ -19,18 +19,26 @@ Required Supabase table (run the SQL from supabase_setup.sql in the dashboard):
 Row-Level Security ensures every user can only read/write their own rows.
 """
 from __future__ import annotations
-import streamlit as st
+import threading
 from typing import Any, Dict
+from cachetools import TTLCache
 from supabase_client import get_authed_supabase
+
+# TTL caches replace @st.cache_data(ttl=120) — thread-safe, framework-agnostic
+_profiles_cache: TTLCache = TTLCache(maxsize=128, ttl=120)
+_groups_cache: TTLCache = TTLCache(maxsize=128, ttl=120)
+_by_group_cache: TTLCache = TTLCache(maxsize=128, ttl=120)
+_cache_lock = threading.Lock()
 
 TABLE = "user_profiles"
 
 
 def _clear_profile_caches() -> None:
     """Invalidate all cached profile/group reads after a write."""
-    load_user_profiles_db.clear()
-    load_user_profile_groups_db.clear()
-    load_user_profiles_by_group_db.clear()
+    with _cache_lock:
+        _profiles_cache.clear()
+        _groups_cache.clear()
+        _by_group_cache.clear()
 
 
 def save_user_profile_db(user_id: str, profile_name: str, payload: Dict[str, Any]) -> None:
@@ -62,13 +70,15 @@ def save_user_profile_db(user_id: str, profile_name: str, payload: Dict[str, Any
     _clear_profile_caches()
 
 
-@st.cache_data(ttl=120, show_spinner=False)
 def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
     """
     Returns all saved profiles for the given user as a dict:
         { profile_name: payload_dict, ... }
     Returns an empty dict if the user has no profiles yet.
     """
+    with _cache_lock:
+        if user_id in _profiles_cache:
+            return _profiles_cache[user_id]
     client = get_authed_supabase()
     response = (
         client.table(TABLE)
@@ -77,7 +87,10 @@ def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
         .execute()
     )
     rows = response.data or []
-    return {row["profile_name"]: row["payload"] for row in rows}
+    result = {row["profile_name"]: row["payload"] for row in rows}
+    with _cache_lock:
+        _profiles_cache[user_id] = result
+    return result
 
 
 def load_self_profile_db(user_id: str):
@@ -133,7 +146,6 @@ def save_user_profile_group_db(user_id: str, group_name: str) -> Dict[str, Any]:
     return response.data[0]
 
 
-@st.cache_data(ttl=120, show_spinner=False)
 def load_user_profile_groups_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     """
     Returns all profile groups for the given user as a dict:
@@ -141,6 +153,9 @@ def load_user_profile_groups_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     Also includes a special key "__ungrouped__" for profiles without a group.
     Returns an empty dict if the user has no groups yet.
     """
+    with _cache_lock:
+        if user_id in _groups_cache:
+            return _groups_cache[user_id]
     client = get_authed_supabase()
     response = (
         client.table("user_profile_groups")
@@ -152,6 +167,8 @@ def load_user_profile_groups_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     result = {row["id"]: row for row in (response.data or [])}
     # Add a special virtual group for ungrouped profiles
     result["__ungrouped__"] = {"id": "__ungrouped__", "group_name": "Ungrouped"}
+    with _cache_lock:
+        _groups_cache[user_id] = result
     return result
 
 
@@ -170,7 +187,6 @@ def delete_user_profile_group_db(user_id: str, group_id: str) -> None:
     _clear_profile_caches()
 
 
-@st.cache_data(ttl=120, show_spinner=False)
 def load_user_profiles_by_group_db(user_id: str) -> Dict[str, Dict[str, Any]]:
     """
     Returns profiles organized by group:

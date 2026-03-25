@@ -29,9 +29,49 @@ One shared httpx.Client is created per credentials set (app lifetime).
 The authed client gets a separate shared transport so session headers
 don't bleed between the anon and authed paths.
 """
-import streamlit as st
 import httpx
 from supabase import create_client, Client, ClientOptions
+
+from config import get_secret
+
+# ---------------------------------------------------------------------------
+# Framework-agnostic session lookup
+# ---------------------------------------------------------------------------
+
+def _get_session_dict() -> dict:
+    """Return the Supabase session dict from whichever framework is active.
+
+    Tries NiceGUI app.storage.user first, then Streamlit st.session_state.
+    Returns a dict with access_token/refresh_token keys.
+    Raises RuntimeError if no session is found in either framework.
+    """
+    # --- Try NiceGUI first ---
+    try:
+        from nicegui import app as _ng_app
+        _store = _ng_app.storage.user
+        _sess = _store.get("supabase_session")
+        if _sess:
+            return _sess
+    except Exception:
+        pass
+
+    # --- Fall back to Streamlit ---
+    try:
+        import streamlit as _st
+        _sess = _st.session_state.get("supabase_session")
+        if _sess:
+            return _sess
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "No Supabase session found. Please log in again."
+    )
+
+
+# In-memory client cache keyed by access_token (avoids JSON serialisation
+# issues with NiceGUI's file-backed storage).
+_authed_client_cache: dict[str, Client] = {}  # {access_token: Client}
 
 # ---------------------------------------------------------------------------
 # Shared httpx transports (one per credential set, created lazily)
@@ -78,39 +118,18 @@ def _get_shared_authed_transport(url: str, key: str) -> httpx.Client:
 def _credentials() -> tuple[str, str]:
     """Return (url, anon_key) for Supabase.
 
-    This supports two common config formats:
-      1) [supabase] url/key (recommended)
-      2) SUPABASE_URL / SUPABASE_ANON_KEY (legacy/alternate)
-
-    If neither works, we raise a clear error explaining how to fix it.
+    Uses config.get_secret() which checks env vars first, then falls back
+    to st.secrets when running under Streamlit.
     """
-
-    supabase = st.secrets.get("supabase")
-    if supabase is not None:
-        def _get(m, *keys):
-            for k in keys:
-                try:
-                    if k in m:
-                        return m[k]
-                except Exception:
-                    pass
-            return None
-
-        url = _get(supabase, "url", "URL")
-        key = _get(supabase, "key", "KEY")
-        if url and key:
-            return url, key
-
-    # Fallback to top-level keys (commonly used in older examples)
-    url = st.secrets.get("SUPABASE_URL")
-    key = st.secrets.get("SUPABASE_ANON_KEY")
+    url = get_secret("supabase", "url")
+    key = get_secret("supabase", "key")
     if url and key:
         return url, key
 
     raise KeyError(
-        "st.secrets does not contain Supabase credentials. "
-        "Add a [supabase] section with 'url' and 'key', or define "
-        "SUPABASE_URL and SUPABASE_ANON_KEY in .streamlit/secrets.toml."
+        "Supabase credentials not found. "
+        "Set SUPABASE_URL and SUPABASE_KEY environment variables (or in .env), "
+        "or add a [supabase] section with 'url' and 'key' in .streamlit/secrets.toml."
     )
 
 
@@ -147,22 +166,21 @@ def get_authed_supabase() -> Client:
     Returns a Supabase client with the current user's session injected.
     This makes every DB query run as the logged-in user and activates RLS.
 
-    The client is cached by access token to avoid recreating on every call.
+    Session is resolved via _get_session_dict(), which checks NiceGUI
+    storage first, then Streamlit session_state.
+    The client is cached by access token in a module-level dict (avoids
+    JSON serialisation issues with NiceGUI's file-backed storage).
     All postgrest sub-client re-creations reuse a shared httpx.Client so
     auth events never leak file handles.
     Raises RuntimeError if there is no active session (caller must re-auth).
     """
-    session = st.session_state.get("supabase_session")
-    if not session:
-        raise RuntimeError(
-            "No Supabase session in st.session_state['supabase_session']. "
-            "Please log in again."
-        )
-    # Reuse the client within the same rerun as long as the access token hasn't changed
-    _cached = st.session_state.get("_supabase_authed_client")
-    _cached_token = st.session_state.get("_supabase_authed_token")
-    if _cached is not None and _cached_token == session.get("access_token"):
-        return _cached
+    session = _get_session_dict()
+    token = session.get("access_token")
+
+    # Reuse the client as long as the access token hasn't changed
+    cached = _authed_client_cache.get(token)
+    if cached is not None:
+        return cached
 
     url, key = _credentials()
     # Use a separate shared transport for authed calls (keeps auth headers
@@ -179,7 +197,6 @@ def get_authed_supabase() -> Client:
             f"Could not restore Supabase session (token may be expired). "
             f"Please log in again. Detail: {exc}"
         ) from exc
-    # Cache the client for subsequent calls in this script run
-    st.session_state["_supabase_authed_client"] = client
-    st.session_state["_supabase_authed_token"] = session.get("access_token")
+    # Cache the client in-memory (keyed by token)
+    _authed_client_cache[token] = client
     return client

@@ -835,7 +835,6 @@ def render_chart_with_shapes(
 	asc_deg = _get_ascendant_degree(chart)
 	if unknown_time_chart:
 		asc_deg = 0.0
-	fig, ax = plt.subplots(figsize=(5, 5), dpi=100, subplot_kw={"projection": "polar"})
 	if dark_mode:
 		ax.set_facecolor("black")
 		fig.patch.set_facecolor("black")

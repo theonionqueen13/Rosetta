@@ -17,13 +17,14 @@ Features:
 from __future__ import annotations
 import socket
 import streamlit as st
+from config import get_secret
 from supabase_client import get_supabase
 
 
 def _format_network_error(exc: Exception) -> str:
     """Format helpful guidance for network/DNS failures."""
     if isinstance(exc, socket.gaierror):
-        host = st.secrets.get("supabase", {}).get("url", "").split("//")[-1].split("/")[0]
+        host = (get_secret("supabase", "url") or "").split("//")[-1].split("/")[0]
         return (
             f"Network/DNS error connecting to Supabase host '{host}'. "
             "This usually means your machine cannot resolve the hostname or has no internet access. "
@@ -205,7 +206,7 @@ def _render_login_ui() -> None:
 
         # Determine the redirect URL (where Supabase sends the user back after OAuth)
         redirect_url = (
-            st.secrets.get("auth", {}).get("redirect_url", "http://localhost:8501")
+            get_secret("auth", "redirect_url", default="http://localhost:8501")
         )
 
         if st.button("🔴 Sign in with Google", key="btn_google", use_container_width=True):
