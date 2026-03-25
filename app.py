@@ -173,102 +173,188 @@ def login_page():
         ui.navigate.to("/")
         return
 
-    with ui.column().classes("absolute-center items-center gap-4").style("width: 360px"):
-        ui.label("🌙 Rosetta").classes("text-h4 text-weight-bold")
-        ui.label("Please sign in to continue.").classes("text-subtitle1 text-grey-7")
-        ui.separator()
+    ui.add_head_html("""
+<style>
+:root {
+    --rosetta-tan: #867557; /* Change this value to your exact tan shade */
+}
+body, .q-layout, .q-page-container, .q-page {
+    background: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 100vh !important;
+}
+.q-page {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+}
+.login-tan {
+    color: var(--rosetta-tan) !important;
+}
+.login-input .q-field__control {
+    background: #1f1b14 !important;
+    color: var(--rosetta-tan) !important;
+}
+.login-input .q-field__input {
+    color: var(--rosetta-tan) !important;
+}
+.login-input .q-field__native {
+    background: #1f1b14 !important;
+    color: var(--rosetta-tan) !important;
+}
+.login-card {
+    background: rgba(30, 26, 19, 0.95) !important;
+    border: 1px solid #3e3524 !important;
+}
+.login-divider {
+    background-color: var(--rosetta-tan) !important;
+}
+.login-tab-panel {
+    background: rgba(237, 224, 196, 0.45) !important;
+    border-radius: 8px;
+    padding: 0.9rem !important;
+}
+.login-input .q-field__control {
+    background: rgba(237, 224, 196, 0.42) !important;
+    color: var(--rosetta-tan) !important;
+}
+.login-input .q-field__append .q-icon,
+.login-input .q-field__append .q-btn {
+    background: var(--rosetta-tan) !important;
+    color: #2e1e0f !important;
+    border-radius: 2px !important;
+}
+.q-btn.rosetta-button {
+    background: #41301c !important;
+    background-color: #41301c !important;
+    color: #ffffff !important;
+}
+.q-btn.rosetta-button .q-btn__wrapper {
+    background: #41301c !important;
+    color: #ffffff !important;
+}
+.q-btn.rosetta-button:hover,
+.q-btn.rosetta-button:focus {
+    background: #5a3f25 !important;
+    background-color: #5a3f25 !important;
+}
+    .login-tab .q-tab__label,
+.login-tab .q-tab--active .q-tab__label {
+    color: var(--rosetta-tan) !important;
+}
+</style>
+""")
 
-        # --- Tabs: Sign In / Create Account ---
-        with ui.tabs().classes("w-full") as tabs:
-            tab_signin = ui.tab("Sign In")
-            tab_signup = ui.tab("Create Account")
+    with ui.row().style("width: 100vw; min-height: 100vh; background: black; margin: 0; padding: 0; flex-wrap: nowrap;"):
+        with ui.column().classes("items-center justify-center").style(
+            "flex: 1; background: black; padding: 0; height: 100vh; overflow: hidden;"
+        ):
+            ui.label().classes("q-pa-none q-ma-none").style(
+                "width: 100%; height: 100%; background-image: url('/pngs/rosetta_vert.png'); background-repeat: no-repeat; background-position: center center; background-size: contain;"
+            )
 
-        # Shared state for form inputs
-        signin_email = {"value": ""}
-        signin_password = {"value": ""}
-        signup_email = {"value": ""}
-        signup_password = {"value": ""}
-
-        # Status message container
-        status_container = ui.column().classes("w-full")
-
-        def _show_error(msg: str):
-            status_container.clear()
-            with status_container:
-                ui.label(msg).classes("text-negative text-body2")
-
-        def _show_success(msg: str):
-            status_container.clear()
-            with status_container:
-                ui.label(msg).classes("text-positive text-body2")
-
-        def _clear_status():
-            status_container.clear()
-
-        # --- Sign In ---
-        async def _do_sign_in():
-            _clear_status()
-            email = signin_email["value"].strip()
-            password = signin_password["value"]
-            if not email or not password:
-                _show_error("Please enter your email and password.")
-                return
-            try:
-                resp = get_supabase().auth.sign_in_with_password(
-                    {"email": email, "password": password}
-                )
-                _store_session_nicegui(resp)
-                ui.navigate.to("/")
-            except Exception as e:
-                _show_error(f"Sign in failed: {e}")
-
-        # --- Sign Up ---
-        async def _do_sign_up():
-            _clear_status()
-            email = signup_email["value"].strip()
-            password = signup_password["value"]
-            if not email or not password:
-                _show_error("Please fill in both fields.")
-                return
-            if len(password) < 6:
-                _show_error("Password must be at least 6 characters.")
-                return
-            try:
-                resp = get_supabase().auth.sign_up(
-                    {"email": email, "password": password}
-                )
-                if resp.user:
-                    _show_success(
-                        "Account created! Check your email to confirm, then sign in."
+        with ui.column().classes("items-center justify-center").style("flex: 1; background: black; padding: 2rem;"):
+            with ui.card().classes("q-pa-xl login-card").style("width: 360px;"):
+                with ui.column().classes("items-center gap-4"):
+                    ui.label().style(
+                        "width: 260px; height: 72px; background-image: url('/pngs/rosetta_banner.png');"
+                        " background-repeat: no-repeat; background-position: center center; background-size: contain;"
                     )
-                else:
-                    _show_error("Sign up failed — please try again.")
-            except Exception as e:
-                _show_error(f"Sign up failed: {e}")
+                    ui.label("Please sign in to continue.").classes("text-subtitle1 login-tan")
+                    ui.separator().classes("login-divider")
 
-        # --- Tab panels ---
-        with ui.tab_panels(tabs, value=tab_signin).classes("w-full"):
-            with ui.tab_panel(tab_signin):
-                ui.label("Sign in with email & password").classes("text-subtitle2 q-mb-sm")
-                email_in = ui.input("Email").classes("w-full").on(
-                    "update:model-value", lambda e: signin_email.update(value=e.args)
-                )
-                pass_in = ui.input("Password", password=True, password_toggle_button=True).classes("w-full").on(
-                    "update:model-value", lambda e: signin_password.update(value=e.args)
-                )
-                pass_in.on("keydown.enter", _do_sign_in)
-                ui.button("Sign In", on_click=_do_sign_in).classes("w-full q-mt-md")
+                # --- Tabs: Sign In / Create Account ---
+                with ui.tabs().classes("w-full login-tab") as tabs:
+                    tab_signin = ui.tab("Sign In").classes("login-tan")
+                    tab_signup = ui.tab("Create Account").classes("login-tan")
 
-            with ui.tab_panel(tab_signup):
-                ui.label("Create a new account").classes("text-subtitle2 q-mb-sm")
-                ui.input("Email").classes("w-full").on(
-                    "update:model-value", lambda e: signup_email.update(value=e.args)
-                )
-                pw_input = ui.input("Password (min 6 chars)", password=True, password_toggle_button=True).classes("w-full").on(
-                    "update:model-value", lambda e: signup_password.update(value=e.args)
-                )
-                pw_input.on("keydown.enter", _do_sign_up)
-                ui.button("Create Account", on_click=_do_sign_up).classes("w-full q-mt-md")
+                # Shared state for form inputs
+                signin_email = {"value": ""}
+                signin_password = {"value": ""}
+                signup_email = {"value": ""}
+                signup_password = {"value": ""}
+
+                # Status message container
+                status_container = ui.column().classes("w-full")
+
+                def _show_error(msg: str):
+                    status_container.clear()
+                    with status_container:
+                        ui.label(msg).classes("text-negative text-body2")
+
+                def _show_success(msg: str):
+                    status_container.clear()
+                    with status_container:
+                        ui.label(msg).classes("text-positive text-body2")
+
+                def _clear_status():
+                    status_container.clear()
+
+                # --- Sign In ---
+                async def _do_sign_in():
+                    _clear_status()
+                    email = signin_email["value"].strip()
+                    password = signin_password["value"]
+                    if not email or not password:
+                        _show_error("Please enter your email and password.")
+                        return
+                    try:
+                        resp = get_supabase().auth.sign_in_with_password(
+                            {"email": email, "password": password}
+                        )
+                        _store_session_nicegui(resp)
+                        ui.navigate.to("/")
+                    except Exception as e:
+                        _show_error(f"Sign in failed: {e}")
+
+                # --- Sign Up ---
+                async def _do_sign_up():
+                    _clear_status()
+                    email = signup_email["value"].strip()
+                    password = signup_password["value"]
+                    if not email or not password:
+                        _show_error("Please fill in both fields.")
+                        return
+                    if len(password) < 6:
+                        _show_error("Password must be at least 6 characters.")
+                        return
+                    try:
+                        resp = get_supabase().auth.sign_up(
+                            {"email": email, "password": password}
+                        )
+                        if resp.user:
+                            _show_success(
+                                "Account created! Check your email to confirm, then sign in."
+                            )
+                        else:
+                            _show_error("Sign up failed — please try again.")
+                    except Exception as e:
+                        _show_error(f"Sign up failed: {e}")
+
+                # --- Tab panels ---
+                with ui.tab_panels(tabs, value=tab_signin).classes("w-full login-tab-panels"):
+                    with ui.tab_panel(tab_signin).classes("login-tab-panel"):
+                        ui.label("Sign in with email & password").classes("text-subtitle2 q-mb-sm login-tan")
+                        email_in = ui.input("Email").classes("w-full login-input").on(
+                            "update:model-value", lambda e: signin_email.update(value=e.args)
+                        )
+                        pass_in = ui.input("Password", password=True, password_toggle_button=True).classes("w-full login-input").on(
+                            "update:model-value", lambda e: signin_password.update(value=e.args)
+                        )
+                        pass_in.on("keydown.enter", _do_sign_in)
+                        ui.button("Sign In", on_click=_do_sign_in).classes("w-full q-mt-md rosetta-button")
+
+                    with ui.tab_panel(tab_signup).classes("login-tab-panel"):
+                        ui.label("Create a new account").classes("text-subtitle2 q-mb-sm login-tan")
+                        ui.input("Email").classes("w-full login-input").on(
+                            "update:model-value", lambda e: signup_email.update(value=e.args)
+                        )
+                        pw_input = ui.input("Password (min 6 chars)", password=True, password_toggle_button=True).classes("w-full login-input").on(
+                            "update:model-value", lambda e: signup_password.update(value=e.args)
+                        )
+                        pw_input.on("keydown.enter", _do_sign_up)
+                        ui.button("Create Account", on_click=_do_sign_up).classes("w-full q-mt-md rosetta-button")
 
 
 # ---------------------------------------------------------------------------
@@ -436,10 +522,13 @@ body.body--dark {
     # ===================================================================
     # TOP BAR
     # ===================================================================
-    with ui.header().classes("items-center justify-between q-px-md"):
+    with ui.header().classes("items-center justify-between q-px-md").style("background: black !important; border-bottom: 1px solid #333;"):
         with ui.row().classes("items-center gap-2"):
             ui.button(icon="menu", on_click=drawer.toggle).props("flat round color=white")
-            ui.label("🌙 Rosetta").classes("text-h6 text-weight-bold")
+            ui.label().style(
+                "width: 300px; height: 60px; background-image: url('/pngs/rosetta_banner.png');"
+                " background-repeat: no-repeat; background-position: left center; background-size: contain;"
+            )
         with ui.row().classes("items-center gap-2"):
             ui.label(f"👤 {email}").classes("text-body2")
             ui.button("Sign Out", on_click=_do_logout).props("flat color=white size=sm")
