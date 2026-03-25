@@ -86,6 +86,9 @@ _DEFAULTS: Dict[str, Any] = {
     "mcp_agent_notes": "",
     "mcp_pending_question": "",
 
+    # ── Startup behaviour ────────────────────────────────────────────
+    "auto_load_on_startup": True,    # load self chart automatically on sign-in
+
     # ── Profile management ───────────────────────────────────────────
     "current_profile": None,
     "profile_loaded": False,

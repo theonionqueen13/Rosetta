@@ -1009,13 +1009,8 @@ body.body--dark {
         # ---------------------------------------------------------------
         # Transit / Synastry controls
         # ---------------------------------------------------------------
-        transit_row = ui.row().classes("w-full items-center gap-3 q-mt-sm")
-
-        with transit_row:
-            transit_cb = ui.checkbox(
-                "🌐 Transits",
-                value=state.get("transit_mode", False),
-            )
+        # `transit_cb` is moved into the Standard Chart tab row next to Compass Rose.
+        transit_cb = None
 
         # --- Transit date navigation (hidden until transit_mode is on) ---
         transit_nav_row = ui.row().classes("w-full items-center gap-2 q-mt-xs")
@@ -1123,7 +1118,7 @@ body.body--dark {
                 # Turn off transit — back to single chart
                 _rerender_active_tab()
 
-        transit_cb.on_value_change(_on_transit_toggle)
+        # transit_cb is wired after it is created in the Standard Chart tab.
 
         def _on_transit_now():
             now_utc = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
@@ -1195,7 +1190,8 @@ body.body--dark {
                     state["synastry_mode"] = True
                     state["transit_mode"] = False
                     state["chart_2_profile_name"] = selected
-                    transit_cb.value = False
+                    if transit_cb is not None:
+                        transit_cb.value = False
                     transit_nav_row.set_visibility(False)
                     _rerender_active_tab()
             except Exception as exc:
@@ -1210,7 +1206,8 @@ body.body--dark {
             state["transit_mode"] = False
             state["chart_2_profile_name"] = None
             state["transit_dt_iso"] = None
-            transit_cb.value = False
+            if transit_cb is not None:
+                transit_cb.value = False
             transit_nav_row.set_visibility(False)
             _rerender_active_tab()
 
@@ -1383,9 +1380,13 @@ body.body--dark {
             # STANDARD CHART TAB
             # ===========================================================
             with ui.tab_panel(tab_standard):
-                std_compass_cb = ui.checkbox(
-                    "Compass Rose", value=state.get("compass", True),
-                ).classes("q-mb-sm")
+                with ui.row().classes("w-full items-center justify-between q-mb-sm"):
+                    std_compass_cb = ui.checkbox(
+                        "Compass Rose", value=state.get("compass", True)
+                    )
+                    transit_cb = ui.checkbox(
+                        "🌐 Transits", value=state.get("transit_mode", False)
+                    )
 
                 std_chart_container = ui.column().classes("w-full items-center")
 
@@ -1461,13 +1462,22 @@ body.body--dark {
 
                 std_compass_cb.on_value_change(_on_std_compass_change)
 
+                if transit_cb is not None:
+                    transit_cb.on_value_change(_on_transit_toggle)
+
             # ===========================================================
             # CIRCUITS TAB
             # ===========================================================
             with ui.tab_panel(tab_circuits):
-                cir_compass_cb = ui.checkbox(
-                    "Compass Rose", value=state.get("compass", True),
-                ).classes("q-mb-sm")
+                with ui.row().classes("w-full items-center justify-between q-mb-sm"):
+                    cir_compass_cb = ui.checkbox(
+                        "Compass Rose", value=state.get("compass", True)
+                    )
+                    cir_transit_cb = ui.checkbox(
+                        "🌐 Transits", value=state.get("transit_mode", False)
+                    )
+
+                cir_transit_cb.on_value_change(_on_transit_toggle)
 
                 # Circuit submode (visible only in biwheel mode)
                 cir_submode_row = ui.row().classes("gap-2 q-mb-sm")
@@ -1501,6 +1511,12 @@ body.body--dark {
 
                     chart_obj = get_chart_object(state)
                     if chart_obj is None:
+                        cir_patterns_container.clear()
+                        with cir_patterns_container:
+                            ui.label(
+                                "Calculate or load a chart to view circuits here."
+                            ).classes("text-body2 text-grey q-pa-md")
+                        cir_singletons_container.clear()
                         return
 
                     patterns = getattr(chart_obj, "aspect_groups", None) or []
@@ -1895,6 +1911,21 @@ body.body--dark {
                             chat_clear_btn = ui.button(
                                 icon="delete", color="grey",
                             ).props("flat dense size=sm").tooltip("Clear chat history")
+
+                        # No-chart notice (shown when no chart is loaded)
+                        chat_no_chart_notice = ui.label(
+                            "No chart loaded.  Calculate or load a chart using the"
+                            " birth data panel to get meaningful responses."
+                        ).classes(
+                            "text-body2 q-pa-xs q-mt-xs rounded-borders"
+                        ).style(
+                            "background: rgba(255,193,7,0.12);"
+                            " border: 1px solid rgba(255,193,7,0.35);"
+                            " color: #b8860b;"
+                        )
+                        chat_no_chart_notice.set_visibility(
+                            get_chart_object(state) is None
+                        )
 
                         # Scrollable message area
                         chat_scroll = ui.scroll_area().classes(
@@ -2655,6 +2686,24 @@ body.body--dark {
 
                         settings_house.on_value_change(_on_house_change)
 
+                # ---- Startup settings ----
+                ui.separator().classes("q-mt-lg")
+                ui.label("Startup").classes("text-subtitle1 text-weight-medium q-mt-sm")
+                settings_auto_load = ui.checkbox(
+                    "Auto-load my chart on startup",
+                    value=state.get("auto_load_on_startup", True),
+                )
+                ui.label(
+                    "When checked, your saved \u2018self\u2019 profile is loaded automatically "
+                    "each time you sign in.  When unchecked, the app opens with no "
+                    "chart loaded so you can choose what to view."
+                ).classes("text-caption text-grey-7 q-mb-sm")
+
+                def _on_auto_load_change(e):
+                    state["auto_load_on_startup"] = e.value
+
+                settings_auto_load.on_value_change(_on_auto_load_change)
+
                 # Apply dark mode on page load if saved
                 if state.get("dark_mode", False):
                     ui.dark_mode().enable()
@@ -3011,9 +3060,27 @@ body.body--dark {
 
         def _rerender_active_tab():
             """Re-render chart in the currently active tab with current toggles."""
+            _NO_CHART_MSG = "Calculate or load a chart to view it here."
             active = tabs.value
             chart_obj = get_chart_object(state)
             if chart_obj is None:
+                if active == "Standard Chart":
+                    std_chart_container.clear()
+                    with std_chart_container:
+                        ui.label(_NO_CHART_MSG).classes("text-body2 text-grey q-pa-md")
+                elif active == "Circuits":
+                    _build_circuit_toggles()
+                    cir_chart_container.clear()
+                    with cir_chart_container:
+                        ui.label(_NO_CHART_MSG).classes("text-body2 text-grey q-pa-md")
+                elif active == "Rulers":
+                    _render_rulers_graph()
+                elif active == "Specs":
+                    _refresh_specs_tab()
+                try:
+                    chat_no_chart_notice.set_visibility(True)
+                except Exception:
+                    pass
                 return
 
             # Update events panel
@@ -3042,6 +3109,11 @@ body.body--dark {
 
             # Refresh planet profiles drawer
             _refresh_drawer()
+            # Hide chat no-chart notice now that a chart is loaded
+            try:
+                chat_no_chart_notice.set_visibility(False)
+            except Exception:
+                pass
 
         def _refresh_events():
             """Update the events panel with nearby events for the current chart."""
@@ -3191,11 +3263,132 @@ body.body--dark {
         calc_btn.on_click(_on_calculate)
 
         # ---------------------------------------------------------------
-        # Initial render — if chart already in state from previous session
+        # Startup: auto-load self chart (or show empty-state messages)
         # ---------------------------------------------------------------
-        if get_chart_object(state) is not None:
+        # Helper: render ALL chart containers directly so we don't depend on
+        # tabs.value being resolved during page construction.
+        def _startup_render_with_chart():
+            """Populate every tab's chart area from whatever is currently in state."""
             _build_circuit_toggles()
-            _rerender_active_tab()
+            _display_chart_in(std_chart_container,  _render_chart_png("Standard Chart"))
+            _display_chart_in(cir_chart_container,  _render_chart_png("Circuits"))
+            _render_rulers_graph()
+            _refresh_specs_tab()
+            _refresh_events()
+            _refresh_drawer()
+            try:
+                chat_no_chart_notice.set_visibility(False)
+            except Exception:
+                pass
+
+        def _startup_show_empty():
+            """Put empty-state messages in every tab's chart area."""
+            _NO_CHART_MSG = "Calculate or load a chart to view it here."
+            _build_circuit_toggles()          # writes empty msg into circuit containers
+            std_chart_container.clear()
+            with std_chart_container:
+                ui.label(_NO_CHART_MSG).classes("text-body2 text-grey q-pa-md")
+            cir_chart_container.clear()
+            with cir_chart_container:
+                ui.label(_NO_CHART_MSG).classes("text-body2 text-grey q-pa-md")
+            _render_rulers_graph()            # handles None gracefully
+            _refresh_specs_tab()              # handles None gracefully
+            try:
+                chat_no_chart_notice.set_visibility(True)
+            except Exception:
+                pass
+
+        def _clear_chart_state():
+            """Wipe all cached chart data from persistent state."""
+            state["last_chart_json"] = None
+            state["last_chart_2_json"] = None
+            state["chart_ready"] = False
+            state["pattern_toggles"] = {}
+            state["shape_toggles"] = {}
+            state["singleton_toggles"] = {}
+
+        _auto_load = state.get("auto_load_on_startup", True)
+        _cached_chart = get_chart_object(state)
+        _cached_is_self = state.get("is_my_chart", False)
+
+        # Always clear a non-self chart — we never silently carry over another
+        # person's chart to the next session.
+        if _cached_chart is not None and not _cached_is_self:
+            _clear_chart_state()
+            _cached_chart = None
+
+        if not _auto_load:
+            # Auto-load is disabled: erase the cached chart entirely so that
+            # tab-change navigation can't accidentally resurface it.
+            _clear_chart_state()
+            _startup_show_empty()
+        elif _cached_chart is not None:
+            # Self chart already in cache — render it, preserving all data.
+            # Also fix any legacy __-prefixed display_name that may have been
+            # written by an older session (e.g. display_name == "__self__").
+            _cached_display = getattr(_cached_chart, "display_name", "") or ""
+            if _cached_display.startswith("__"):
+                _fixed_name = (
+                    state.get("birth_name") or state.get("name")
+                    or app.storage.user.get("birth_form", {}).get("name")
+                    or ""
+                )
+                if _fixed_name:
+                    _cached_chart.display_name = _fixed_name
+                    state["last_chart_json"] = _cached_chart.to_json()
+            _startup_render_with_chart()
+        else:
+            # Auto-load is on but nothing suitable is cached — try loading the
+            # 'self' profile from Supabase.
+            _uid = _get_user_id()
+            _self_loaded = False
+            if _uid:
+                try:
+                    from supabase_profiles import load_user_profiles_db
+                    _profiles = load_user_profiles_db(_uid)
+                    for _pname, _pdata in (_profiles or {}).items():
+                        # Skip legacy __-prefixed sentinel profiles (e.g. "__self__")
+                        # — matches the logic in load_self_profile_db().
+                        if _pname.startswith("__"):
+                            continue
+                        if (_pdata or {}).get("relationship_to_querent") == "self":
+                            from src.profile_helpers import apply_profile
+                            apply_profile(_pname, _pdata, state)
+                            _chart_tmp = state.pop("last_chart", None)
+                            if _chart_tmp is not None and hasattr(_chart_tmp, "to_json"):
+                                state["last_chart_json"] = _chart_tmp.to_json()
+                            state["is_my_chart"] = True
+
+                            # Use the real person name (from PersonProfile.name),
+                            # not the raw DB key, so the drawing header is correct.
+                            _real_name = (
+                                state.get("birth_name") or state.get("name") or _pname
+                            )
+                            # Re-stamp display_name on the chart JSON so the drawing
+                            # header shows the actual name and not the DB key.
+                            _chart_fix = get_chart_object(state)
+                            if _chart_fix is not None:
+                                _chart_fix.display_name = _real_name
+                                state["last_chart_json"] = _chart_fix.to_json()
+
+                            form["name"] = _real_name
+                            form["city"] = state.get("city", "")
+                            form["year"] = state.get("year", 2000)
+                            form["month_name"] = state.get("month_name", "January")
+                            form["day"] = state.get("day", 1)
+                            form["hour_12"] = state.get("hour_12", "12")
+                            form["minute_str"] = state.get("minute_str", "00")
+                            form["ampm"] = state.get("ampm", "AM")
+                            save_name_input.value = _pname
+                            is_my_chart_cb.value = True
+                            if get_chart_object(state) is not None:
+                                _startup_render_with_chart()
+                                _self_loaded = True
+                            break
+                except Exception as _exc:
+                    _log.warning("Startup auto-load of self chart failed: %s", _exc)
+            if not _self_loaded:
+                _startup_show_empty()
 
         # ===============================================================
         # FEEDBACK FAB + DIALOG  (Step 11)
