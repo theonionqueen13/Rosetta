@@ -397,6 +397,10 @@ def main_page():
     email = app.storage.user.get("supabase_user_email", "")
     state = ensure_state()
 
+    # --- Apply dark mode immediately on page load (before any tabs are built) ---
+    if state.get("dark_mode", False):
+        ui.dark_mode().enable()
+
     # --- Background images (light: nebula2.jpg, dark: galaxies.jpg) ---
     # Quasar adds body.body--dark when dark mode is enabled, so we use that
     # selector to swap the background automatically — no extra JS needed.
@@ -899,6 +903,27 @@ body.body--dark {
             # Populate profile list on page load
             _refresh_profiles()
 
+            # ---- Synastry toggle + Chart 2 selector ----
+            ui.separator().classes("q-mt-sm")
+            synastry_cb = ui.checkbox(
+                "👭 Synastry", value=state.get("synastry_mode", False)
+            ).classes("q-mt-xs")
+
+            # Chart 2 profile selector (visible only when Synastry is checked)
+            synastry_row = ui.row().classes("w-full items-center gap-3 q-mt-xs")
+            with synastry_row:
+                ui.label("Chart 2:").classes("text-body2")
+                chart2_profile_sel = ui.select(
+                    options=[], label="Select profile for Chart 2",
+                ).classes("w-56")
+                chart2_load_btn = ui.button("Load Chart 2", icon="download").props(
+                    "outline dense size=sm"
+                )
+                chart2_clear_btn = ui.button("Clear Chart 2", icon="clear").props(
+                    "flat dense size=sm color=negative"
+                )
+            synastry_row.set_visibility(False)
+
         # ===============================================================
         # SHARED CONTROLS  (visible when a chart exists)
         # ===============================================================
@@ -1034,21 +1059,6 @@ body.body--dark {
                 "outline dense size=sm"
             )
 
-        # --- Chart 2 profile selector (synastry) ---
-        synastry_row = ui.row().classes("w-full items-center gap-3 q-mt-xs")
-        with synastry_row:
-            chart2_label = ui.label("Chart 2:").classes("text-body2")
-            chart2_profile_sel = ui.select(
-                options=[], label="Select profile for Chart 2",
-            ).classes("w-56")
-            chart2_load_btn = ui.button("Load Chart 2", icon="download").props(
-                "outline dense size=sm"
-            )
-            chart2_clear_btn = ui.button("Clear Chart 2", icon="clear").props(
-                "flat dense size=sm color=negative"
-            )
-        synastry_row.set_visibility(False)  # shown when we have profiles
-
         def _refresh_chart2_profiles():
             """Populate the Chart 2 profile selector."""
             uid = _get_user_id()
@@ -1060,7 +1070,6 @@ body.body--dark {
                 names = sorted(profiles.keys())
                 chart2_profile_sel.options = names
                 chart2_profile_sel.update()
-                synastry_row.set_visibility(bool(names))
             except Exception:
                 pass
 
@@ -1194,6 +1203,12 @@ body.body--dark {
                         transit_cb.value = False
                     transit_nav_row.set_visibility(False)
                     _rerender_active_tab()
+                    # Force UI update to avoid stale cache
+                    try:
+                        std_chart_container.update()
+                        cir_chart_container.update()
+                    except Exception:
+                        pass
             except Exception as exc:
                 _log.exception("Chart 2 load failed")
 
@@ -1210,11 +1225,39 @@ body.body--dark {
                 transit_cb.value = False
             transit_nav_row.set_visibility(False)
             _rerender_active_tab()
+            # Force UI update to avoid stale cache
+            try:
+                std_chart_container.update()
+                cir_chart_container.update()
+            except Exception:
+                pass
 
         chart2_clear_btn.on_click(_on_clear_chart2)
 
-        # Populate Chart 2 profiles on page load
-        _refresh_chart2_profiles()
+        def _on_synastry_toggle(e):
+            """Show/hide the Chart 2 selector based on the Synastry checkbox."""
+            if e.value:
+                state["synastry_mode"] = True
+                _refresh_chart2_profiles()
+                synastry_row.set_visibility(True)
+                # Force re-render to show biwheel if Chart 2 is already loaded
+                if state.get("last_chart_2_json"):
+                    _rerender_active_tab()
+                    try:
+                        std_chart_container.update()
+                        cir_chart_container.update()
+                    except Exception:
+                        pass
+            else:
+                synastry_row.set_visibility(False)
+                _on_clear_chart2()
+
+        synastry_cb.on_value_change(_on_synastry_toggle)
+
+        # Restore Chart 2 selector if synastry was already active (page reload)
+        if state.get("synastry_mode", False):
+            _refresh_chart2_profiles()
+            synastry_row.set_visibility(True)
 
         # ===============================================================
         # WIZARD DIALOG  (Step 11)
@@ -1406,15 +1449,19 @@ body.body--dark {
                             aspect_cbs[asp_name] = cb
 
                     def _on_select_all(e):
+                        at = dict(state.get("aspect_toggles", {}))
                         for name, cb in aspect_cbs.items():
                             cb.value = e.value
-                            state.setdefault("aspect_toggles", {})[name] = e.value
+                            at[name] = e.value
+                        state["aspect_toggles"] = at
                         _rerender_active_tab()
 
                     std_select_all.on_value_change(_on_select_all)
 
                     def _on_aspect_toggle(name, e):
-                        state.setdefault("aspect_toggles", {})[name] = e.value
+                        at = dict(state.get("aspect_toggles", {}))
+                        at[name] = e.value
+                        state["aspect_toggles"] = at
                         _rerender_active_tab()
 
                     for name, cb in aspect_cbs.items():
@@ -1505,8 +1552,72 @@ body.body--dark {
 
                 cir_chart_container = ui.column().classes("w-full items-center q-mt-sm")
 
+                def _get_biwheel_connected_data():
+                    """Compute Connected Circuits data: inter-chart aspects,
+                    and for each Chart 1 circuit, which Chart 2 shapes/singletons
+                    are connected to it via inter-chart aspects.
+
+                    Returns (circuit_connected_shapes2, edges_inter_chart_cc)
+                    or (None, None) if not in biwheel mode.
+                    """
+                    from lookup_v2 import ASPECTS as _ASP
+                    chart_obj = get_chart_object(state)
+                    chart_2_obj = get_chart_2_object(state)
+                    if chart_obj is None or chart_2_obj is None:
+                        return {}, []
+
+                    pos_inner = getattr(chart_obj, "positions", None) or {}
+                    pos_outer = getattr(chart_2_obj, "positions", None) or {}
+                    patterns_1 = getattr(chart_obj, "aspect_groups", None) or []
+                    shapes_2 = getattr(chart_2_obj, "shapes", None) or []
+
+                    # Build inter-chart aspects (Chart 1 × Chart 2)
+                    edges_inter: list = []
+                    for ep1, d1 in pos_inner.items():
+                        for ep2, d2 in pos_outer.items():
+                            angle = abs(d1 - d2) % 360
+                            if angle > 180:
+                                angle = 360 - angle
+                            for asp_name, asp_data in _ASP.items():
+                                if abs(angle - asp_data["angle"]) <= asp_data["orb"]:
+                                    edges_inter.append((ep1, ep2, asp_name))
+                                    break
+
+                    # For each Chart 1 circuit, find connected Chart 2 shapes + singletons
+                    circuit_connected_shapes2: dict = {}
+                    for ci, component in enumerate(patterns_1):
+                        comp_set = set(component)
+                        connected_c2_planets = {ep2 for (ep1, ep2, _) in edges_inter if ep1 in comp_set}
+                        linked_shapes = []
+                        for sh in shapes_2:
+                            sh_members = sh.get("members", []) if isinstance(sh, dict) else getattr(sh, "members", [])
+                            if set(sh_members) & connected_c2_planets:
+                                linked_shapes.append(sh)
+                        # Singletons: connected Chart 2 planets not in any linked shape
+                        covered = set()
+                        for sh in linked_shapes:
+                            sh_members = sh.get("members", []) if isinstance(sh, dict) else getattr(sh, "members", [])
+                            covered.update(sh_members)
+                        for planet in sorted(connected_c2_planets - covered):
+                            linked_shapes.append({
+                                "type": "Single object",
+                                "members": [planet],
+                                "id": f"singleton_{ci}_{planet}",
+                            })
+                        if linked_shapes:
+                            circuit_connected_shapes2[ci] = linked_shapes
+
+                    return circuit_connected_shapes2, edges_inter
+
                 def _build_circuit_toggles():
-                    """Build circuit pattern + singleton checkboxes from current chart data."""
+                    """Build circuit pattern + singleton checkboxes from current chart data.
+
+                    Three modes:
+                    - Single chart: shows Chart 1 circuits/shapes/singletons.
+                    - Combined biwheel: shows merged shapes grouped by type.
+                    - Connected biwheel: shows Chart 1 circuits with dynamically
+                      revealed Chart 2 connections based on active toggles.
+                    """
                     from lookup_v2 import GLYPHS as _GLYPHS
 
                     chart_obj = get_chart_object(state)
@@ -1519,14 +1630,9 @@ body.body--dark {
                         cir_singletons_container.clear()
                         return
 
-                    patterns = getattr(chart_obj, "aspect_groups", None) or []
-                    singleton_map = getattr(chart_obj, "singleton_map", None) or {}
-                    shapes = getattr(chart_obj, "shapes", None) or []
-
                     want_glyphs = state.get("label_style", "glyph") == "glyph"
 
                     def _fmt(name: str) -> str:
-                        """Format a planet/point name using glyph or text per user setting."""
                         if want_glyphs:
                             return _GLYPHS.get(name, name)
                         return name
@@ -1535,31 +1641,121 @@ body.body--dark {
                         return ", ".join(_fmt(n) for n in names)
 
                     # Detect biwheel and resolve chart names
-                    biwheel = bool(state.get("synastry_mode") or state.get("transit_mode"))
+                    is_biwheel = bool(
+                        (state.get("synastry_mode") or state.get("transit_mode"))
+                        and state.get("last_chart_2_json")
+                    )
                     chart1_name = state.get("current_profile") or "Chart 1"
                     chart2_name = "Transits" if state.get("transit_mode") else "Chart 2"
+                    submode = state.get("circuit_submode", "Combined") if is_biwheel else None
+
+                    # ==========================================================
+                    # COMBINED CIRCUITS (biwheel): shapes grouped by type
+                    # ==========================================================
+                    if is_biwheel and submode == "Combined":
+                        from src.chart_adapter import compute_combined_circuits
+                        chart_2_obj = get_chart_2_object(state)
+                        if chart_2_obj is None:
+                            cir_patterns_container.clear()
+                            cir_singletons_container.clear()
+                            return
+                        combined = compute_combined_circuits(chart_obj, chart_2_obj)
+                        shapes_combined = combined.get("shapes_combined", [])
+                        singleton_map = combined.get("singleton_map_combined", {})
+
+                        # shape node counts for sorting
+                        SHAPE_NODE_COUNTS = {
+                            "Envelope": 5, "Grand Cross": 4, "Mystic Rectangle": 4,
+                            "Cradle": 4, "Kite": 4, "Lightning Bolt": 4,
+                            "Grand Trine": 3, "T-Square": 3, "Wedge": 3,
+                            "Sextile Wedge": 3, "Yod": 3, "Wide Yod": 3,
+                            "Unnamed": 3, "Remainder": 2,
+                        }
+
+                        # Group shapes by type
+                        shapes_by_type: dict = {}
+                        for sh in shapes_combined:
+                            s_type = sh.get("type", "Shape") if isinstance(sh, dict) else getattr(sh, "shape_type", "Shape")
+                            shapes_by_type.setdefault(s_type, []).append(sh)
+
+                        sorted_types = sorted(
+                            shapes_by_type.keys(),
+                            key=lambda t: (-SHAPE_NODE_COUNTS.get(t, 1), t),
+                        )
+
+                        cir_patterns_container.clear()
+                        with cir_patterns_container:
+                            if sorted_types:
+                                ui.label("Combined Shapes").classes("text-subtitle2 q-mb-xs")
+                                half = (len(sorted_types) + 1) // 2
+                                with ui.row().classes("w-full gap-4 items-start"):
+                                    for col_types in (sorted_types[:half], sorted_types[half:]):
+                                        with ui.column().classes("flex-1"):
+                                            for s_type in col_types:
+                                                type_shapes = shapes_by_type[s_type]
+                                                with ui.expansion(
+                                                    f"{s_type} – {len(type_shapes)} found"
+                                                ).classes("w-full q-mb-xs"):
+                                                    for sh in type_shapes:
+                                                        sid = sh.get("id", "") if isinstance(sh, dict) else getattr(sh, "shape_id", "")
+                                                        s_members = sh.get("members", []) if isinstance(sh, dict) else getattr(sh, "members", [])
+                                                        s_on = state.get("shape_toggles", {}).get(str(sid), False)
+                                                        m1 = [m for m in s_members if not str(m).endswith("_2")]
+                                                        m2 = [str(m)[:-2] for m in s_members if str(m).endswith("_2")]
+                                                        parts = f"{chart1_name}: {_fmt_list(m1)}"
+                                                        if m2:
+                                                            parts += f"; {chart2_name}: {_fmt_list(m2)}"
+                                                        scb = ui.checkbox(parts, value=s_on)
+                                                        scb.on_value_change(functools.partial(_on_shape_toggle, str(sid)))
+                            else:
+                                ui.label("No shapes detected in combined charts.").classes("text-body2 text-grey q-pa-md")
+
+                        # Singletons for combined
+                        cir_singletons_container.clear()
+                        with cir_singletons_container:
+                            if singleton_map:
+                                ui.label("Singletons").classes("text-subtitle2 q-mb-xs")
+                                with ui.row().classes("gap-4 flex-wrap"):
+                                    for planet in sorted(singleton_map.keys()):
+                                        s_on = state.get("singleton_toggles", {}).get(planet, False)
+                                        lbl = _fmt(planet.replace("_2", "") if planet.endswith("_2") else planet)
+                                        if planet.endswith("_2"):
+                                            lbl = f"{lbl} ({chart2_name})"
+                                        cb = ui.checkbox(lbl, value=s_on)
+                                        cb.on_value_change(functools.partial(_on_singleton_toggle, planet))
+                        return  # done with Combined mode
+
+                    # ==========================================================
+                    # SINGLE CHART or CONNECTED CIRCUITS
+                    # ==========================================================
+                    patterns = getattr(chart_obj, "aspect_groups", None) or []
+                    singleton_map = getattr(chart_obj, "singleton_map", None) or {}
+                    shapes = getattr(chart_obj, "shapes", None) or []
+
+                    # For Connected mode, compute Chart 2 connections
+                    cc_shapes2 = {}
+                    cc_edges_inter = []
+                    if is_biwheel and submode == "Connected":
+                        cc_shapes2, cc_edges_inter = _get_biwheel_connected_data()
+                        # Cache for renderer
+                        state["_cc_shapes2"] = cc_shapes2
+                        state["_cc_edges_inter"] = cc_edges_inter
 
                     def _render_one_circuit(idx):
                         """Render a single circuit card (checkbox + expander with shapes)."""
                         component = patterns[idx]
                         pat_on = state.get("pattern_toggles", {}).get(str(idx), False)
 
-                        # Circuit name (editable, stored in state)
                         circuit_name_key = f"circuit_name_{idx}"
                         circuit_names = state.get("circuit_names", {})
                         circuit_title = circuit_names.get(circuit_name_key, f"Circuit {idx + 1}")
-
-                        # Members label for expander header
                         members_label = _fmt_list(component)
 
                         with ui.card().classes("w-full q-mb-sm").props("bordered"):
-                            # Top-level circuit checkbox
                             cb = ui.checkbox(circuit_title, value=pat_on)
                             cb.on_value_change(functools.partial(_on_pattern_toggle, idx))
 
-                            # Expander: members + sub-shapes
                             with ui.expansion(members_label).classes("w-full"):
-                                # Editable circuit name
                                 name_input = ui.input(
                                     "Circuit name",
                                     value=circuit_title,
@@ -1567,7 +1763,6 @@ body.body--dark {
 
                                 def _on_name_change(e, _key=circuit_name_key):
                                     state.setdefault("circuit_names", {})[_key] = e.value
-
                                 name_input.on("blur", _on_name_change)
 
                                 # Sub-shapes for this circuit
@@ -1579,28 +1774,60 @@ body.body--dark {
                                         s_type = s.get("type", "Shape")
                                         s_members = s.get("members", [])
                                         s_on = state.get("shape_toggles", {}).get(str(sid), False)
-
-                                        # Format shape label like Streamlit:
-                                        # "Grand Trine: Sun, Moon, Jupiter"
-                                        # In biwheel: "Grand Trine: Chart1: Sun, Moon; Chart2: Jupiter"
-                                        if biwheel:
-                                            m1 = [m for m in s_members if not str(m).endswith("_2")]
-                                            m2 = [str(m)[:-2] for m in s_members if str(m).endswith("_2")]
-                                            parts = f"{chart1_name}: {_fmt_list(m1)}"
-                                            if m2:
-                                                parts += f"; {chart2_name}: {_fmt_list(m2)}"
-                                            shape_label = f"{s_type}: {parts}"
-                                        else:
-                                            shape_label = f"{s_type}: {_fmt_list(s_members)}"
-
+                                        shape_label = f"{s_type}: {_fmt_list(s_members)}"
                                         scb = ui.checkbox(shape_label, value=s_on)
                                         scb.on_value_change(functools.partial(_on_shape_toggle, str(sid)))
+
+                                # --- Connected Circuits: Chart 2 connections ---
+                                if is_biwheel and submode == "Connected" and idx in cc_shapes2:
+                                    # Only show Chart 2 connections when this circuit
+                                    # OR any of its sub-shapes are currently active.
+                                    any_shape_on = any(
+                                        state.get("shape_toggles", {}).get(str(s.get("id", "")), False)
+                                        for s in parent_shapes
+                                    )
+                                    if pat_on or any_shape_on:
+                                        cc2_items = cc_shapes2[idx]
+
+                                        # When only sub-shapes active (not the whole circuit),
+                                        # narrow to Chart 2 connections linked to active sub-shape members.
+                                        if not pat_on and any_shape_on:
+                                            active_sh1_members = set()
+                                            for s in parent_shapes:
+                                                if state.get("shape_toggles", {}).get(str(s.get("id", "")), False):
+                                                    active_sh1_members.update(s.get("members", []))
+                                            connected_to_active = {
+                                                ep2 for (ep1, ep2, _) in cc_edges_inter
+                                                if ep1 in active_sh1_members
+                                            }
+                                            cc2_items = [
+                                                sh2 for sh2 in cc2_items
+                                                if set(
+                                                    sh2.get("members", []) if isinstance(sh2, dict)
+                                                    else getattr(sh2, "members", [])
+                                                ) & connected_to_active
+                                            ]
+
+                                        if cc2_items:
+                                            ui.label(f"Connected in {chart2_name}:").classes(
+                                                "text-caption text-bold q-mt-sm"
+                                            )
+                                            for sh2 in cc2_items:
+                                                sh2_type = sh2.get("type", "Shape") if isinstance(sh2, dict) else getattr(sh2, "shape_type", "Shape")
+                                                sh2_members = sh2.get("members", []) if isinstance(sh2, dict) else getattr(sh2, "members", [])
+                                                sh2_id = sh2.get("id", f"x_{idx}") if isinstance(sh2, dict) else getattr(sh2, "shape_id", f"x_{idx}")
+                                                cc_key = f"cc_shape_{idx}_{sh2_id}"
+                                                cc_on = state.get("cc_shape_toggles", {}).get(cc_key, False)
+                                                cc_label = f"{sh2_type}: {_fmt_list(sh2_members)}"
+                                                cc_cb = ui.checkbox(cc_label, value=cc_on)
+                                                cc_cb.on_value_change(functools.partial(_on_cc_shape_toggle, cc_key))
 
                     # --- Pattern checkboxes (two-column layout with bordered cards) ---
                     cir_patterns_container.clear()
                     with cir_patterns_container:
                         if patterns:
-                            ui.label("Circuits").classes("text-subtitle2 q-mb-xs")
+                            mode_label = "Connected Circuits" if (is_biwheel and submode == "Connected") else "Circuits"
+                            ui.label(mode_label).classes("text-subtitle2 q-mb-xs")
                             half = (len(patterns) + 1) // 2
                             with ui.row().classes("w-full gap-4 items-start"):
                                 with ui.column().classes("flex-1"):
@@ -1610,7 +1837,7 @@ body.body--dark {
                                     for idx in range(half, len(patterns)):
                                         _render_one_circuit(idx)
 
-                    # --- Singleton checkboxes (horizontal row, glyphs or text) ---
+                    # --- Singleton checkboxes ---
                     cir_singletons_container.clear()
                     with cir_singletons_container:
                         if singleton_map:
@@ -1625,36 +1852,98 @@ body.body--dark {
                                     )
 
                 def _on_pattern_toggle(idx, e):
-                    state.setdefault("pattern_toggles", {})[str(idx)] = e.value
-                    _rerender_active_tab()
+                    pt = dict(state.get("pattern_toggles", {}))
+                    pt[str(idx)] = e.value
+                    state["pattern_toggles"] = pt
+                    # In Connected mode, toggling a circuit changes which Chart 2
+                    # connections are visible, so rebuild toggles.
+                    is_bw = bool(
+                        (state.get("synastry_mode") or state.get("transit_mode"))
+                        and state.get("last_chart_2_json")
+                    )
+                    if is_bw and state.get("circuit_submode") == "Connected":
+                        _build_circuit_toggles()
+                    _rerender_circuits_chart_only()
 
                 def _on_shape_toggle(sid, e):
-                    state.setdefault("shape_toggles", {})[sid] = e.value
-                    _rerender_active_tab()
+                    st_toggles = dict(state.get("shape_toggles", {}))
+                    st_toggles[sid] = e.value
+                    state["shape_toggles"] = st_toggles
+                    # In Connected mode, toggling a sub-shape may reveal/hide
+                    # Chart 2 connections, so rebuild toggles.
+                    is_bw = bool(
+                        (state.get("synastry_mode") or state.get("transit_mode"))
+                        and state.get("last_chart_2_json")
+                    )
+                    if is_bw and state.get("circuit_submode") == "Connected":
+                        _build_circuit_toggles()
+                    _rerender_circuits_chart_only()
 
                 def _on_singleton_toggle(planet, e):
-                    state.setdefault("singleton_toggles", {})[planet] = e.value
-                    _rerender_active_tab()
+                    sg = dict(state.get("singleton_toggles", {}))
+                    sg[planet] = e.value
+                    state["singleton_toggles"] = sg
+                    _rerender_circuits_chart_only()
+
+                def _on_cc_shape_toggle(cc_key, e):
+                    """Toggle a Connected Circuits Chart 2 shape."""
+                    cc = dict(state.get("cc_shape_toggles", {}))
+                    cc[cc_key] = e.value
+                    state["cc_shape_toggles"] = cc
+                    _rerender_circuits_chart_only()
 
                 def _on_show_all():
                     chart_obj = get_chart_object(state)
                     if chart_obj is None:
                         return
-                    patterns = getattr(chart_obj, "aspect_groups", None) or []
-                    singleton_map = getattr(chart_obj, "singleton_map", None) or {}
-                    for idx in range(len(patterns)):
-                        state.setdefault("pattern_toggles", {})[str(idx)] = True
-                    for planet in singleton_map:
-                        state.setdefault("singleton_toggles", {})[planet] = True
+                    is_bw = bool(
+                        (state.get("synastry_mode") or state.get("transit_mode"))
+                        and state.get("last_chart_2_json")
+                    )
+                    submode = state.get("circuit_submode", "Combined") if is_bw else None
+
+                    if is_bw and submode == "Combined":
+                        from src.chart_adapter import compute_combined_circuits
+                        chart_2_obj = get_chart_2_object(state)
+                        if chart_2_obj:
+                            combined = compute_combined_circuits(chart_obj, chart_2_obj)
+                            shapes_c = combined.get("shapes_combined", [])
+                            singleton_map_c = combined.get("singleton_map_combined", {})
+                            state["shape_toggles"] = {
+                                str(sh.get("id", "") if isinstance(sh, dict) else getattr(sh, "shape_id", "")): True
+                                for sh in shapes_c
+                            }
+                            state["singleton_toggles"] = {p: True for p in singleton_map_c}
+                    elif is_bw and submode == "Connected":
+                        patterns = getattr(chart_obj, "aspect_groups", None) or []
+                        singleton_map = getattr(chart_obj, "singleton_map", None) or {}
+                        state["pattern_toggles"] = {str(i): True for i in range(len(patterns))}
+                        state["singleton_toggles"] = {p: True for p in singleton_map}
+                        # Also turn on all cc_shape toggles
+                        cc_shapes2, _ = _get_biwheel_connected_data()
+                        cc_all = {}
+                        for ci, items in cc_shapes2.items():
+                            for sh2 in items:
+                                sh2_id = sh2.get("id", "") if isinstance(sh2, dict) else getattr(sh2, "shape_id", "")
+                                cc_all[f"cc_shape_{ci}_{sh2_id}"] = True
+                        state["cc_shape_toggles"] = cc_all
+                    else:
+                        # Single chart
+                        patterns = getattr(chart_obj, "aspect_groups", None) or []
+                        singleton_map = getattr(chart_obj, "singleton_map", None) or {}
+                        state["pattern_toggles"] = {str(i): True for i in range(len(patterns))}
+                        state["singleton_toggles"] = {p: True for p in singleton_map}
+
                     _build_circuit_toggles()
-                    _rerender_active_tab()
+                    _rerender_circuits_chart_only()
 
                 def _on_hide_all():
                     state["pattern_toggles"] = {}
                     state["singleton_toggles"] = {}
                     state["shape_toggles"] = {}
+                    state["cc_shape_toggles"] = {}
                     _build_circuit_toggles()
-                    _rerender_active_tab()
+                    _rerender_circuits_chart_only()
 
                 show_all_btn.on_click(_on_show_all)
                 hide_all_btn.on_click(_on_hide_all)
@@ -2704,10 +2993,6 @@ body.body--dark {
 
                 settings_auto_load.on_value_change(_on_auto_load_change)
 
-                # Apply dark mode on page load if saved
-                if state.get("dark_mode", False):
-                    ui.dark_mode().enable()
-
             # ===========================================================
             # ADMIN TAB  (Step 10)
             # ===========================================================
@@ -2980,19 +3265,100 @@ body.body--dark {
                         submode = state.get("circuit_submode", "Combined")
                         if submode == "Combined":
                             combined_data = compute_combined_circuits(chart_obj, chart_2_obj)
-                        # For "Connected" submode we'd need render_biwheel_connected_circuits
-                        # which is a more complex feature — leave as Combined for now
+                            return render_biwheel_image(
+                                chart_obj,
+                                chart_2_obj,
+                                toggles=toggles,
+                                combined_data=combined_data,
+                                inter_chart_aspects=None,
+                            )
+                        elif submode == "Connected":
+                            # Connected Circuits: call drawing_v2 directly
+                            import matplotlib
+                            matplotlib.use("Agg")
+                            import matplotlib.pyplot as plt
+                            from drawing_v2 import render_biwheel_connected_circuits
+
+                            pos_1 = getattr(chart_obj, "positions", None) or {}
+                            pos_2 = getattr(chart_2_obj, "positions", None) or {}
+                            patterns_1 = getattr(chart_obj, "aspect_groups", None) or []
+                            shapes_1 = getattr(chart_obj, "shapes", None) or []
+                            shapes_2_list = getattr(chart_2_obj, "shapes", None) or []
+                            major_edges_1 = getattr(chart_obj, "major_edges_all", None) or []
+                            singleton_map_1 = getattr(chart_obj, "singleton_map", None) or {}
+                            filaments_1 = getattr(chart_obj, "filaments", None) or []
+
+                            # Flatten shape_toggles into dict expected by renderer
+                            shape_toggles_by_parent = {}
+                            for sh in shapes_1:
+                                s_id = sh.get("id", "") if isinstance(sh, dict) else getattr(sh, "shape_id", "")
+                                shape_toggles_by_parent[str(s_id)] = state.get("shape_toggles", {}).get(str(s_id), False)
+
+                            pattern_toggles_list = [
+                                state.get("pattern_toggles", {}).get(str(i), False)
+                                for i in range(len(patterns_1))
+                            ]
+                            pattern_labels = [f"Circuit {i+1}" for i in range(len(patterns_1))]
+                            singleton_toggles_dict = {
+                                p: state.get("singleton_toggles", {}).get(p, False)
+                                for p in singleton_map_1
+                            }
+
+                            # Use cached connected data from _build_circuit_toggles
+                            cc_shapes2 = state.get("_cc_shapes2", {})
+                            cc_edges_inter = state.get("_cc_edges_inter", [])
+
+                            # Convert cc_shapes2 keys to int (state may serialize as str)
+                            cc_shapes2_int = {}
+                            for k, v in cc_shapes2.items():
+                                cc_shapes2_int[int(k)] = v
+
+                            rr = render_biwheel_connected_circuits(
+                                chart_obj,
+                                chart_2_obj,
+                                pos_1=pos_1,
+                                pos_2=pos_2,
+                                patterns=patterns_1,
+                                shapes=shapes_1,
+                                shapes_2=shapes_2_list,
+                                circuit_connected_shapes2=cc_shapes2_int,
+                                edges_inter_chart=cc_edges_inter,
+                                major_edges_all=major_edges_1,
+                                pattern_labels=pattern_labels,
+                                toggles=pattern_toggles_list,
+                                singleton_map=singleton_map_1,
+                                singleton_toggles=singleton_toggles_dict,
+                                shape_toggles_by_parent=shape_toggles_by_parent,
+                                filaments=filaments_1,
+                                house_system=toggles.house_system,
+                                dark_mode=toggles.dark_mode,
+                                label_style=toggles.label_style,
+                                figsize=toggles.figsize,
+                                dpi=toggles.dpi,
+                                compass_inner=toggles.compass_inner,
+                                cc_shape_toggles=state.get("cc_shape_toggles", {}),
+                            )
+                            import io
+                            buf = io.BytesIO()
+                            try:
+                                rr.fig.savefig(
+                                    buf, format="png", bbox_inches="tight",
+                                    facecolor=rr.fig.get_facecolor(), edgecolor="none",
+                                )
+                                buf.seek(0)
+                                return buf.read()
+                            finally:
+                                plt.close(rr.fig)
                     else:
                         # Standard biwheel — compute inter-chart aspects
                         inter_aspects = compute_inter_chart_aspects(chart_obj, chart_2_obj)
-
-                    return render_biwheel_image(
-                        chart_obj,
-                        chart_2_obj,
-                        toggles=toggles,
-                        combined_data=combined_data,
-                        inter_chart_aspects=inter_aspects,
-                    )
+                        return render_biwheel_image(
+                            chart_obj,
+                            chart_2_obj,
+                            toggles=toggles,
+                            combined_data=None,
+                            inter_chart_aspects=inter_aspects,
+                        )
                 except Exception as exc:
                     _log.exception("Biwheel render failed")
                     return None
@@ -3057,6 +3423,18 @@ body.body--dark {
                     f'style="width:100%; max-width:720px; '
                     f'image-rendering:auto; display:block; margin:0 auto" />'
                 )
+
+        def _rerender_circuits_chart_only():
+            """Re-render only the Circuits chart image without rebuilding toggles.
+
+            Called from individual circuit toggle handlers to avoid destroying
+            the checkbox that is currently handling the click event.
+            """
+            chart_obj = get_chart_object(state)
+            if chart_obj is None:
+                return
+            png = _render_chart_png("Circuits")
+            _display_chart_in(cir_chart_container, png)
 
         def _rerender_active_tab():
             """Re-render chart in the currently active tab with current toggles."""

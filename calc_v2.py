@@ -270,7 +270,6 @@ def calculate_chart(
 
 	rows = []
 	pos_for_dispositors = {}  # object -> longitude (exclude cusps)
-	print(pos_for_dispositors.keys())
 
 	# --- Main loop (object rows) ---
 	for name, ident in loop_objects:
@@ -434,7 +433,6 @@ def calculate_chart(
 
 	for sys in systems:  # systems = ("placidus", "equal", "whole")
 		cusps = cusps_by_system.get(sys, [])  # 12 cusp degrees for this system
-		print(f"\n🏠 Calculating dispositors for {sys.upper()} house system...")
 		disp_sys = analyze_dispositors(pos_for_dispositors, cusps)
 		by_house = disp_sys.get("by_house", {})
 
@@ -550,13 +548,6 @@ def calculate_chart(
 			"sovereigns": by_house.get("sovereigns", []),
 			"self_ruling": by_house.get("self_ruling", [])
 		}
-	
-	print(f"\n🔍 DEBUG plot_data structure:")
-	for key, data in plot_data.items():
-		print(f"   [{key}]:")
-		print(f"      raw_links count: {len(data.get('raw_links', []))}")
-		print(f"      sovereigns: {data.get('sovereigns', [])}")
-		print(f"      self_ruling: {data.get('self_ruling', [])}")
 
 	# --- Planetary Strength Scoring ---
 	try:
@@ -733,10 +724,9 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 			return list(x)
 		return [x]
 
-	def _build_scope(cusps_scope=None, debug_label=""):
+	def _build_scope(cusps_scope=None):
 		edges = []
 		mode = "HOUSE-BASED" if cusps_scope else "SIGN-BASED"
-		print(f"\n🔍 _build_scope {debug_label} - Mode: {mode}")
 		for obj, deg in pos.items():
 			# Use house rulership if cusps provided, else sign rulership
 			if cusps_scope:
@@ -744,14 +734,11 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 				if h:
 					cusp_sign = SIGNS[_sign_index(cusps_scope[h - 1])]
 					rulers = _ensure_list(PLANETARY_RULERS.get(cusp_sign, []))
-					print(f"   {obj} @ {deg:.2f}° → House {h} → Cusp sign {cusp_sign} → Rulers: {rulers}")
 				else:
 					rulers = []
-					print(f"   {obj} @ {deg:.2f}° → No house found → No rulers")
 			else:
 				sign = SIGNS[_sign_index(deg)]
 				rulers = _ensure_list(PLANETARY_RULERS.get(sign, []))
-				print(f"   {obj} @ {deg:.2f}° → Sign {sign} → Rulers: {rulers}")
 
 			# Add edges
 			# Edge direction: (ruler, ruled) means "ruler -> ruled"
@@ -800,19 +787,12 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 			"loops": loops,
 		}
 
-	by_sign_result = _build_scope(None, debug_label="[BY_SIGN]")
-	by_house_result = _build_scope(cusps if cusps and len(cusps) == 12 else None, 
-	                                debug_label=f"[BY_HOUSE - {len(cusps) if cusps else 0} cusps]")
-	
-	print(f"\n📊 analyze_dispositors returning:")
-	print(f"   by_sign raw_links count: {len(by_sign_result.get('raw_links', []))}")
-	print(f"   by_house raw_links count: {len(by_house_result.get('raw_links', []))}")
+	by_sign_result = _build_scope(None)
+	by_house_result = _build_scope(cusps if cusps and len(cusps) == 12 else None)
 	
 	# Check for any Saturn edges
 	saturn_edges_sign = [(p, c) for p, c in by_sign_result.get('raw_links', []) if 'Saturn' in (p, c)]
 	saturn_edges_house = [(p, c) for p, c in by_house_result.get('raw_links', []) if 'Saturn' in (p, c)]
-	print(f"   🔍 Saturn edges in by_sign: {saturn_edges_sign}")
-	print(f"   🔍 Saturn edges in by_house: {saturn_edges_house}")
 	
 	return {
 		"by_sign": by_sign_result,
@@ -961,9 +941,6 @@ def build_dispositor_trees(disp_data):
 			ruler_map.setdefault(parent, set()).add(child)
 		# ensure last node exists in ruler_map
 		ruler_map.setdefault(nodes[-1], set())
-
-	# ---- DEBUG: Check the parent → children mapping ----
-	print("RULER MAP:", ruler_map)
 
 	trees = {}
 
@@ -1168,7 +1145,6 @@ def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> 
 	  })
 	Pairs are de-duplicated (A,B) only once (A < B by index).
 	"""
-	print("[DEBUG] build_aspect_edges called")
 	if chart is None:
 		return [], []
 	# Backward-compatible: accept a DataFrame if passed accidentally
@@ -1254,8 +1230,6 @@ def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> 
 					"decl_diff": decl_diff,
 				}
 				edges_major.append((ac, dc, meta))
-	print(f"[DEBUG] edges_major: {edges_major}")
-	print(f"[DEBUG] edges_minor: {edges_minor}")
 	return edges_major, edges_minor
 
 
@@ -1528,7 +1502,6 @@ def build_clustered_aspect_edges(chart: AstrologicalChart, edges_major: list[tup
 		# Always sort by DF order
 		for m in members:
 			if m not in names:
-				print(f"[build_clustered_aspect_edges] PATCH: adding missing member '{m}' to names list and all_sets.")
 				names.append(m)
 				missing_members.add(m)
 		cluster_display_names[cid] = ", ".join(sorted(members, key=lambda x: names.index(x)))
@@ -1565,7 +1538,6 @@ def build_clustered_aspect_edges(chart: AstrologicalChart, edges_major: list[tup
 		if aspect == "Conjunction":
 			continue
 		if a not in obj_to_setidx or b not in obj_to_setidx:
-			print(f"[build_clustered_aspect_edges] WARNING: skipping edge ({a}, {b}) -- missing in obj_to_setidx")
 			continue
 		set_a = obj_to_setidx[a]
 		set_b = obj_to_setidx[b]

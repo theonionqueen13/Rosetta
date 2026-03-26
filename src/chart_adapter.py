@@ -551,11 +551,12 @@ def render_chart_image(
             house_system=house_system,
             dark_mode=toggles.dark_mode,
             shapes=chart_result.shapes,
-            shape_toggles_by_parent={},
+            shape_toggles_by_parent=toggles.shape_toggles,
             singleton_toggles=singleton_toggles_dict,
             major_edges_all=chart_result.major_edges_all,
             figsize=toggles.figsize,
             dpi=toggles.dpi,
+            compass_on=toggles.compass_inner,
         )
     else:
         # Standard Chart mode rendering
@@ -666,26 +667,31 @@ def render_biwheel_image(
             singleton_map=singleton_map,
             singleton_toggles=singleton_toggles_dict,
             shapes=shapes,
-            shape_toggles_by_parent={},
+            shape_toggles_by_parent=toggles.shape_toggles,
             major_edges_all=combined_edges,
             house_system=house_system,
             dark_mode=toggles.dark_mode,
             label_style=toggles.label_style,
             figsize=toggles.figsize,
             dpi=toggles.dpi,
+            compass_inner=toggles.compass_inner,
+            compass_outer=toggles.compass_outer,
         )
     else:
         # Standard biwheel with inter-chart aspects
         inter_aspects = inter_chart_aspects or []
 
-        # Filter edges by synastry aspect group toggles
-        edges_inter = inter_aspects if toggles.synastry_inter else []
-
-        # Internal aspects for each chart (filtered like single-chart standard)
+        # Build the set of aspect-enabled bodies (same logic as single-chart standard)
         aspect_bodies = set(_STANDARD_BASE_BODIES)
         for body_name, enabled in toggles.aspect_toggles.items():
             if enabled:
                 aspect_bodies.add(body_name)
+
+        # Filter inter-chart aspects: both endpoints must be in aspect_bodies
+        edges_inter = (
+            [e for e in inter_aspects if e[0] in aspect_bodies and e[1] in aspect_bodies]
+            if toggles.synastry_inter else []
+        )
 
         edges_chart1 = []
         edges_chart2 = []
@@ -717,6 +723,8 @@ def render_biwheel_image(
             label_style=toggles.label_style,
             figsize=toggles.figsize,
             dpi=toggles.dpi,
+            compass_inner=toggles.compass_inner,
+            compass_outer=toggles.compass_outer,
         )
 
     buf = io.BytesIO()

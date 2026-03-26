@@ -111,22 +111,21 @@ def get_shapes(pos, patterns, major_edges_all, *, chart: AstrologicalChart = Non
 		return chart.shapes
 	return detect_shapes(pos, patterns, major_edges_all)
 
+# Module-level colour cache so it works in both Streamlit and NiceGUI.
+_shape_color_cache: dict[Any, str] = {}
+
 def shape_color_for(shape_id: Any) -> str:
 	"""Return a stable solid colour for the given shape identifier."""
 
 	palette: Sequence[str] = SUBSHAPE_COLORS or ("teal",)
-	key = "_shape_color_map_v2"
+	# Try Streamlit session state first (for backwards compat), fall back to module cache
 	try:
-		color_map = st.session_state.setdefault(key, {})
+		color_map = st.session_state.setdefault("_shape_color_map_v2", {})
 	except Exception:
-		color_map = {}
+		color_map = _shape_color_cache
 	if shape_id not in color_map:
 		idx = len(color_map) % len(palette)
 		color_map[shape_id] = palette[idx]
-		try:
-			st.session_state[key] = color_map
-		except Exception:
-			pass
 	return color_map[shape_id]
 
 _HS_LABEL = {"equal": "Equal", "whole": "Whole Sign", "placidus": "Placidus"}
@@ -717,7 +716,10 @@ def render_chart(
 	positions = _chart_positions(chart, visible_names)
 	visible_canon = _expand_visible_canon(visible_names)
 
-	st.session_state["resolved_visible_objects"] = visible_names
+	try:
+		st.session_state["resolved_visible_objects"] = visible_names
+	except Exception:
+		pass
 
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	if dark_mode:
@@ -826,8 +828,9 @@ def render_chart_with_shapes(
 	filaments, combo_toggles, label_style, singleton_map, chart: AstrologicalChart,
 	house_system, dark_mode, shapes, shape_toggles_by_parent, singleton_toggles,
 	major_edges_all,
-	figsize=(5.0, 5.0),  # Add this
-	dpi=144
+	figsize=(5.0, 5.0),
+	dpi=144,
+	compass_on: bool = True,
 ):
 	plt.close('all')  # Kill any background figures before starting
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
@@ -867,7 +870,9 @@ def render_chart_with_shapes(
 
 	active_parents = set(i for i, show in enumerate(toggles) if show)
 	active_shape_ids = [
-		s["id"] for s in shapes if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+		s["id"] for s in shapes
+		if shape_toggles_by_parent.get(str(s["id"]), False)
+		or shape_toggles_by_parent.get(s["id"], False)
 	]
 	active_shapes = [s for s in shapes if s["id"] in active_shape_ids]
 
@@ -974,7 +979,7 @@ def render_chart_with_shapes(
 		draw_singleton_dots(ax, pos, active_singletons, shape_edges, asc_deg, line_width=2.0)
 
 	# Compass
-	if st.session_state.get("ui_compass_overlay", True):
+	if compass_on:
 		compass_positions = _chart_compass_positions(chart)
 		compass_source = compass_positions or pos
 		draw_compass_rose(
@@ -1071,6 +1076,8 @@ def render_biwheel_chart(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
+	compass_inner: bool = True,
+	compass_outer: bool = True,
 ):
 	"""
 	Render a bi-wheel chart with two concentric rings:
@@ -1315,8 +1322,6 @@ def render_biwheel_chart(
 
 	# Draw compass overlays if requested
 	# inner chart uses normal colors, outer gets darker variants
-	compass_inner = st.session_state.get("ui_compass_overlay", True)
-	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
 	if compass_inner:
 		compass_positions = _chart_compass_positions(chart_1)
 		# same orientation as everything else (based on inner ascendant)
@@ -1389,6 +1394,8 @@ def render_biwheel_chart_with_circuits(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
+	compass_inner: bool = True,
+	compass_outer: bool = True,
 ):
 	"""
 	Render a bi-wheel chart with Combined Circuits mode:
@@ -1498,7 +1505,9 @@ def render_biwheel_chart_with_circuits(
 	# Determine which circuits are toggled on
 	active_parents = set(i for i, show in enumerate(toggles) if show)
 	active_shape_ids = [
-		s["id"] for s in shapes if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+		s["id"] for s in shapes
+		if shape_toggles_by_parent.get(str(s["id"]), False)
+		or shape_toggles_by_parent.get(s["id"], False)
 	]
 	active_shapes = [s for s in shapes if s["id"] in active_shape_ids]
 	
@@ -1559,9 +1568,6 @@ def render_biwheel_chart_with_circuits(
 		draw_singleton_dots(ax, pos_combined, active_singletons, shape_edges, asc_deg_1, line_width=2.0)
 
 	# Draw compass overlays if requested
-	compass_inner = st.session_state.get("ui_compass_overlay", True)
-	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
-	
 	if compass_inner:
 		compass_positions = _chart_compass_positions(chart_1)
 		draw_compass_rose(
@@ -1641,6 +1647,9 @@ def render_biwheel_connected_circuits(
 	label_style: str = "glyph",
 	figsize: tuple[float, float] = (5.0, 5.0),
 	dpi: int = 144,
+	compass_inner: bool = True,
+	compass_outer: bool = True,
+	cc_shape_toggles: dict[str, bool] | None = None,
 ):
 	"""
 	Render a bi-wheel chart in Connected Circuits mode.
@@ -1751,10 +1760,14 @@ def render_biwheel_connected_circuits(
 	# --- CONNECTED CIRCUITS DRAWING ---
 	active_parents = {i for i, show in enumerate(toggles) if show}
 
+	# Resolve cc_shape_toggles (defaults to empty dict if not provided)
+	_cc_toggles = cc_shape_toggles or {}
+
 	# Chart 1 sub-shapes toggled on independently
 	active_shapes_1 = [
 		s for s in shapes
-		if st.session_state.get(f"shape_{s['parent']}_{s['id']}", False)
+		if shape_toggles_by_parent.get(str(s["id"]), False)
+		or shape_toggles_by_parent.get(s["id"], False)
 	]
 	# circuits that have at least one sub-shape active (even without the full circuit on)
 	circuits_with_active_shapes = {s["parent"] for s in active_shapes_1}
@@ -1769,7 +1782,7 @@ def render_biwheel_connected_circuits(
 		1
 		for i in (active_parents | circuits_with_active_shapes)
 		for sh2 in circuit_connected_shapes2.get(i, [])
-		if st.session_state.get(f"cc_shape_{i}_{sh2['id']}", False)
+		if _cc_toggles.get(f"cc_shape_{i}_{sh2['id']}", False)
 	)
 	active_toggle_count = len(active_parents) + len(active_shapes_1) + num_active_cc
 	layered_mode = active_toggle_count > 1
@@ -1802,7 +1815,7 @@ def render_biwheel_connected_circuits(
 		# Chart 2 shape connections for this circuit
 		for sh2 in circuit_connected_shapes2.get(idx, []):
 			cc_key = f"cc_shape_{idx}_{sh2['id']}"
-			if not st.session_state.get(cc_key, False):
+			if not _cc_toggles.get(cc_key, False):
 				continue
 
 			# Chart 2 member names need _2 suffix to match pos_draw keys.
@@ -1849,8 +1862,6 @@ def render_biwheel_connected_circuits(
 		draw_singleton_dots(ax, pos_draw, active_singletons, shape_edges_1, asc_deg_1, line_width=2.0)
 
 	# Compass overlays
-	compass_inner = st.session_state.get("ui_compass_overlay", True)
-	compass_outer = st.session_state.get("ui_compass_overlay_2", True)
 	if compass_inner:
 		draw_compass_rose(
 			ax, _chart_compass_positions(chart_1), asc_deg_1,
