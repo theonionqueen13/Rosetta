@@ -386,7 +386,9 @@ def compute_combined_circuits(chart_1, chart_2):
         pos_combined, patterns_combined, shapes_combined,
         singleton_map_combined, combined_edges
     """
-    from lookup_v2 import ASPECTS
+    from models_v2 import static_db
+    ASPECTS = {k: v for k, v in static_db.ASPECTS.items()
+               if v.get("aspect_type") in ("Major", "Minor")}
     from patterns_v2 import connected_components_from_edges, detect_shapes
 
     pos_1 = {obj.object_name.name: obj.longitude
@@ -443,7 +445,9 @@ def compute_inter_chart_aspects(chart_1, chart_2):
 
     Returns list of (planet1, planet2, aspect_name) tuples.
     """
-    from lookup_v2 import ASPECTS
+    from models_v2 import static_db
+    ASPECTS = {k: v for k, v in static_db.ASPECTS.items()
+               if v.get("aspect_type") in ("Major", "Minor")}
 
     pos_1 = {obj.object_name.name: obj.longitude
              for obj in chart_1.objects if obj.object_name}

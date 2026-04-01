@@ -19,16 +19,15 @@ import math
 import re
 from typing import Optional, Dict, List, Tuple
 
-from lookup_v2 import (
-	DIGNITIES,
-	DIGNITY_SCORES,
-	TRIPLICITY_RULERS,
-	TERMS,
-	FACES,
-	SIGN_ELEMENT,
-	ELEMENT,
-	PLANETARY_RULERS,
-)
+from models_v2 import static_db
+DIGNITIES = static_db.DIGNITIES
+DIGNITY_SCORES = static_db.DIGNITY_SCORES
+TRIPLICITY_RULERS = static_db.TRIPLICITY_RULERS
+TERMS = static_db.TERMS
+FACES = static_db.FACES
+SIGN_ELEMENT = static_db.SIGN_ELEMENT
+ELEMENT = static_db.ELEMENT
+PLANETARY_RULERS = static_db.PLANETARY_RULERS
 from models_v2 import (
 	EssentialDignity,
 	PlanetaryState,

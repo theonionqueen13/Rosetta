@@ -305,7 +305,8 @@ def _generate_narrative_seeds(
     resonant_membrane) get additional structural-resonance seeds with
     element-span tagging.
     """
-    from lookup_v2 import ASPECT_CONDUCTANCE
+    from models_v2 import static_db
+    ASPECT_CONDUCTANCE = static_db.ASPECT_CONDUCTANCE
     from src.mcp.reading_packet import (
         _qualify_resonance,
         _qualify_friction,

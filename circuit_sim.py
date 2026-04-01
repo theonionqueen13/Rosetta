@@ -45,14 +45,15 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from lookup_v2 import ASPECT_CONDUCTANCE
 from models_v2 import (
+    static_db,
     AstrologicalChart,
     CircuitEdge,
     CircuitNode,
     CircuitSimulation,
     ShapeCircuit,
 )
+ASPECT_CONDUCTANCE = static_db.ASPECT_CONDUCTANCE
 
 # ---------------------------------------------------------------------------
 # Constants

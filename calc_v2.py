@@ -988,36 +988,20 @@ def _resolve_dignity(obj: str, sign_name: str):
 	return None
 
 # === Aspect helpers & builders ===
-_SEPTILE  = 51 + 26/60
-_BISEPT   = 102 + 52/60
-_TRISEPT  = 154 + 17/60
-
-_ASPECTS_MAJOR = {
-	"Conjunction":   {"angle": 0,   "orb": 4},  # minor, kept here for unified scan; we'll sort into minors later
-	"Sextile":       {"angle": 60,  "orb": 3},
-	"Square":        {"angle": 90,  "orb": 3},
-	"Trine":         {"angle": 120, "orb": 3},
-	"Opposition":    {"angle": 180, "orb": 3},
+# Derive all aspect lookup tables from the unified static_db.ASPECTS.
+# aspect_type: "Major" (structural), "Minor" (filaments), "Harmonic" (extended families)
+# harmonic:    int — the harmonic number (orthogonal to aspect_type)
+_ASPECTS_ALL = {
+    name: {"angle": v["angle"], "orb": v["orb"]}
+    for name, v in static_db.ASPECTS.items()
+    if v.get("aspect_type") in ("Major", "Minor")
 }
-
-# Minor-only set (we'll classify major vs minor after detection)
-_ASPECTS_MINOR = {
-	"Sesquisquare":  {"angle": 135, "orb": 2},   # 135°
-	"Quincunx":      {"angle": 150, "orb": 3},
-	"Semi-square":   {"angle": 45,   "orb": 2},
-	"Quintile":      {"angle": 72,   "orb": 2},
-	"Biquintile":    {"angle": 144,  "orb": 2},
-	"Septile":       {"angle": _SEPTILE,  "orb": 2},
-	"Biseptile":     {"angle": _BISEPT,   "orb": 2},
-	"Triseptile":    {"angle": _TRISEPT,  "orb": 2},
-	"Semisextile":  {"angle": 30,  "orb": 2}, 
-}
-
-# One combined lookup for detection pass
-_ASPECTS_ALL = {**_ASPECTS_MAJOR, **_ASPECTS_MINOR}
 
 # Which names count as "major" for output bucketing
-_MAJOR_NAMES = {"Conjunction", "Sextile", "Square", "Trine", "Opposition"}
+_MAJOR_NAMES = {
+    name for name, v in static_db.ASPECTS.items()
+    if v.get("aspect_type") == "Major"
+}
 _MINOR_NAMES = set(_ASPECTS_ALL.keys()) - _MAJOR_NAMES
 
 def _norm360(x: float) -> float:

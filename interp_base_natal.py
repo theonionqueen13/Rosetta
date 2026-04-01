@@ -33,7 +33,6 @@ import re
 import pandas as pd
 
 from models_v2 import static_db, ObjectSign, ObjectHouse
-from lookup_v2 import SETNENCE_ASPECT_NAMES, SENTENCE_ASPECT_MEANINGS
 from planet_profiles import (
     PlanetProfile,
     PlanetProfileReader,

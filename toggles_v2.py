@@ -588,6 +588,25 @@ def render_circuit_toggles(
 						st.session_state.setdefault(key, False)
 						st.checkbox(label_text, key=key)
 
+			with st.expander("Harmonics"):
+				# Harmonic aspect groups, each keyed by session state "harmonic_toggle_{AspectName}"
+				_HARMONIC_GROUPS = [
+					("H5 · Quintile Family",  ["Quintile", "Biquintile"]),
+					("H7 · Septile Family",   ["Septile", "Biseptile", "Triseptile"]),
+					("H8 · Semi-square",      ["Semi-square"]),
+					("H9 · Novile Family",    ["Novile"]),
+					("H10 · Decile Family",   ["Decile", "Vigintile"]),
+					("H11 · Undecile",        ["Undecile"]),
+				]
+				for _h_header, _h_aspects in _HARMONIC_GROUPS:
+					st.markdown(f"**{_h_header}**")
+					_h_cols = st.columns(len(_h_aspects))
+					for _h_i, _asp_name in enumerate(_h_aspects):
+						with _h_cols[_h_i]:
+							_h_key = f"harmonic_toggle_{_asp_name}"
+							st.session_state.setdefault(_h_key, False)
+							st.checkbox(_asp_name, key=_h_key)
+
 	with spacer_col:
 		st.write("")  # just a spacer
 

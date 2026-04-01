@@ -1163,7 +1163,8 @@ class AspectProfile:
             {canon_root: [member_name, ...]} from _build_conjunction_cluster_map.
             When provided, cluster members are displayed as "[A + B]".
         """
-        from lookup_v2 import SETNENCE_ASPECT_NAMES, SENTENCE_ASPECT_MEANINGS
+        SETNENCE_ASPECT_NAMES = static_db.SETNENCE_ASPECT_NAMES
+        SENTENCE_ASPECT_MEANINGS = static_db.SENTENCE_ASPECT_MEANINGS
 
         # Extract aspect name
         if isinstance(meta, str):

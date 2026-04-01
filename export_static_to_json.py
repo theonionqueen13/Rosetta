@@ -5,8 +5,8 @@ Run this once to generate the JSON files, then the app will use them.
 import json
 import os
 
-# Import the data from lookup_v2
-from lookup_v2 import SABIAN_SYMBOLS, OBJECT_SIGN_COMBO, OBJECT_HOUSE_COMBO
+# Import the data from static_data
+from static_data import SABIAN_SYMBOLS, OBJECT_SIGN_COMBO, OBJECT_HOUSE_COMBO
 
 OUTPUT_DIR = os.path.dirname(__file__)
 

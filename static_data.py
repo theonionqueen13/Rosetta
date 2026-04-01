@@ -1,3 +1,13 @@
+"""
+static_data.py — Raw astrological constants extracted from lookup_v2.py
+
+This file is the single source of truth for all static lookup data:
+astrological meanings, glyphs, colors, rules, dignity tables, etc.
+
+It has no business logic, no external dependencies, and no framework imports.
+models_v2.py imports from here and transforms the raw data into
+structured dataclass instances (Sign, House, Aspect, etc.).
+"""
 import swisseph as swe
 GLYPHS = {
     "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
@@ -563,23 +573,203 @@ SIGN_GLYPH = ["♈️", "♉️", "♊️", "♋️", "♌️", "♍️", "♎�
 ZODIAC_COLORS = ["red", "green", "#DAA520", "blue"] * 3
 ZODIAC_NUMBERS = {"Aries": "1", "Taurus": "2", "Gemini": "3", "Cancer": "4", "Leo": "5", "Virgo": "6", "Libra": "7", "Scorpio": "8", "Sagittarius": "9", "Capricorn": "10", "Aquarius": "11", "Pisces": "12"}
 
+# ═══════════════════════════════════════════════════════════════════════
+# UNIFIED ASPECTS TABLE
+# Every aspect in one dict.  Two classification axes:
+#   aspect_type : "Major" | "Minor" — functional role in the app
+#                 Major = structural (shapes, patterns, receptions, clusters)
+#                 Minor = filament logic (Sesquisquare, Quincunx, Semisextile)
+#   harmonic    : int — the harmonic number (1,2,3,4,6,8,12,5,7,9,10,11,24)
+# These are orthogonal: Sesquisquare is Minor AND H8; Quincunx is Minor AND H12.
+# Extended harmonic aspects (Quintile, Septile, etc.) get aspect_type="Harmonic"
+# and will be activated via future toggle UI.
+# ═══════════════════════════════════════════════════════════════════════
+_SEPTILE  = 51 + 26/60
+_BISEPT   = 102 + 52/60
+_TRISEPT  = 154 + 17/60
+
 ASPECTS = {
-    "Conjunction": {"angle": 0, "orb": 5, "color": "#888888", "style": "solid", "glyph": "☌", "harmonic": 1, "strengths": "Conjunctions bring planets together, blending their energies into a unified force, often intensifying their effects.", "risks": "planets that don't get along well may be poor roommates; they need to learn to appreciate each other's differences."},
-    "Sextile": {"angle": 60, "orb": 3, "color": "purple", "style": "solid", "glyph": "⚹", "harmonic": 6, "strengths": "Sextiles are harmonious like trines, but you have to engage them with your free will to make them connect; they don't automatically integrate like trines. This means that sextiles are opportunities to make your life better through active initiative.", "risks": "planets may become complacent and not push each other to grow."},
-    "Square": {"angle": 90, "orb": 3, "color": "red", "style": "solid", "glyph": "□", "harmonic": 4, "strengths": "Squares are like the gears that run the machine; you will not get anywhere without them. Squares = work, and work is how we gain traction and momentum.", "risks": "planets may clash, leading to frustration and conflict, especially when involving malefics."},
-    "Trine": {"angle": 120, "orb": 3, "color": "blue", "style": "solid", "glyph": "△", "harmonic": 3, "strengths": "Planets do not get more harmonious than this with each other. Trining planets understand each other perfectly, with no need for translation. The gifts of planets in trine work together as a combined force, which can be a source of strength and rapid or \"automatic\" intelligence in a given area.", "risks": "planets may become too comfortable, leading to laziness, or may lack understanding and patience for others who do not resonate."},
-    "Sesquisquare": {"angle": 135, "orb": 2, "color": "orange", "style": "dotted", "glyph": "⚼", "harmonic": 8, "strengths": "A sesquisquare is often the site of an innate talent, which functions like an overflow channel whenever certain conditions are met. These are those special personal talents which spring up to be used as soon as the need for them arises.", "risks": "planets may create tension and irritability, leading to impulsive actions without considering consequences. May be exploited by others."},
-    "Quincunx": {"angle": 150, "orb": 3, "color": "green", "style": "dotted", "glyph": "⚻", "harmonic": 12, "strengths": "Quincunxes are inherently frustrating, but their frustrating outcomes have the potential to protect us from much more terrible and catastrophic versions of the same, encouraging us to give up on what will never work and try a more creative, resourceful, and effective approach.", "risks": "planets may struggle to attempt direct integration, leading to stress, failures, and health issues if not managed properly. Must re-route through other aspects. Go around."},
-    "Opposition": {"angle": 180, "orb": 3, "color": "red", "style": "solid", "glyph": "☍", "harmonic": 2, "strengths": "A well-integrated opposition understands the full expanse of its dual polarities, allowing the native to transcend the limitations of its dualities. The opposition is the only aspect that touches the Earth on the chart. Without bridging opposites, there is no grounding.", "risks": "planets may create polarization and conflict, leading to a 'us vs them' mentality. Requires balance and compromise."},
-    "Semisextile": {"angle": 30, "orb": 2, "color": "#C51DA1", "style": "dotted", "glyph": "⚺", "harmonic": 12, "strengths": "Spiritual anesthesia for tough integrations. Painless, lighthearted, humorous processing of normally painful topics. A pressure release valve.", "risks": "planets may struggle to find common ground, leading to misunderstandings and missed opportunities for growth. Can disrupt the flow of material reality, inspiring spontenaeity that may not be grounded."},
+    # ── Major aspects ──────────────────────────────────────────────
+    "Conjunction": {
+        "angle": 0, "orb": 5, "aspect_type": "Major", "harmonic": 1,
+        "color": "#888888", "style": "solid", "glyph": "☌",
+        "strengths": "Conjunctions bring planets together, blending their energies into a unified force, often intensifying their effects.",
+        "risks": "planets that don't get along well may be poor roommates; they need to learn to appreciate each other's differences.",
+    },
+    "Sextile": {
+        "angle": 60, "orb": 3, "aspect_type": "Major", "harmonic": 6,
+        "color": "purple", "style": "solid", "glyph": "⚹",
+        "strengths": "Sextiles are harmonious like trines, but you have to engage them with your free will to make them connect; they don't automatically integrate like trines. This means that sextiles are opportunities to make your life better through active initiative.",
+        "risks": "planets may become complacent and not push each other to grow.",
+    },
+    "Square": {
+        "angle": 90, "orb": 3, "aspect_type": "Major", "harmonic": 4,
+        "color": "red", "style": "solid", "glyph": "□",
+        "strengths": "Squares are like the gears that run the machine; you will not get anywhere without them. Squares = work, and work is how we gain traction and momentum.",
+        "risks": "planets may clash, leading to frustration and conflict, especially when involving malefics.",
+    },
+    "Trine": {
+        "angle": 120, "orb": 3, "aspect_type": "Major", "harmonic": 3,
+        "color": "blue", "style": "solid", "glyph": "△",
+        "strengths": "Planets do not get more harmonious than this with each other. Trining planets understand each other perfectly, with no need for translation. The gifts of planets in trine work together as a combined force, which can be a source of strength and rapid or \"automatic\" intelligence in a given area.",
+        "risks": "planets may become too comfortable, leading to laziness, or may lack understanding and patience for others who do not resonate.",
+    },
+    "Opposition": {
+        "angle": 180, "orb": 3, "aspect_type": "Major", "harmonic": 2,
+        "color": "red", "style": "solid", "glyph": "☍",
+        "strengths": "A well-integrated opposition understands the full expanse of its dual polarities, allowing the native to transcend the limitations of its dualities. The opposition is the only aspect that touches the Earth on the chart. Without bridging opposites, there is no grounding.",
+        "risks": "planets may create polarization and conflict, leading to a 'us vs them' mentality. Requires balance and compromise.",
+    },
+    # ── Minor aspects (filaments) ──────────────────────────────────
+    "Sesquisquare": {
+        "angle": 135, "orb": 2, "aspect_type": "Minor", "harmonic": 8,
+        "color": "orange", "style": "dotted", "glyph": "⚼",
+        "strengths": "A sesquisquare is often the site of an innate talent, which functions like an overflow channel whenever certain conditions are met. These are those special personal talents which spring up to be used as soon as the need for them arises.",
+        "risks": "planets may create tension and irritability, leading to impulsive actions without considering consequences. May be exploited by others.",
+    },
+    "Quincunx": {
+        "angle": 150, "orb": 3, "aspect_type": "Minor", "harmonic": 12,
+        "color": "green", "style": "dotted", "glyph": "⚻",
+        "strengths": "Quincunxes are inherently frustrating, but their frustrating outcomes have the potential to protect us from much more terrible and catastrophic versions of the same, encouraging us to give up on what will never work and try a more creative, resourceful, and effective approach.",
+        "risks": "planets may struggle to attempt direct integration, leading to stress, failures, and health issues if not managed properly. Must re-route through other aspects. Go around.",
+    },
+    "Semisextile": {
+        "angle": 30, "orb": 2, "aspect_type": "Minor", "harmonic": 12,
+        "color": "#C51DA1", "style": "dotted", "glyph": "⚺",
+        "strengths": "Spiritual anesthesia for tough integrations. Painless, lighthearted, humorous processing of normally painful topics. A pressure release valve.",
+        "risks": "planets may struggle to find common ground, leading to misunderstandings and missed opportunities for growth. Can disrupt the flow of material reality, inspiring spontenaeity that may not be grounded.",
+    },
+    # ── Harmonic aspects (extended families, toggled by user) ──────
+    # H5 — Quintile family
+    "Quintile": {
+        "angle": 72, "orb": 2, "aspect_type": "Harmonic", "harmonic": 5,
+        "color": "#9B59B6", "style": "dotted", "glyph": "Q",
+        "strengths": "", "risks": "",
+    },
+    "Biquintile": {
+        "angle": 144, "orb": 2, "aspect_type": "Harmonic", "harmonic": 5,
+        "color": "#9B59B6", "style": "dotted", "glyph": "bQ",
+        "strengths": "", "risks": "",
+    },
+    # H7 — Septile family
+    "Septile": {
+        "angle": _SEPTILE, "orb": 2, "aspect_type": "Harmonic", "harmonic": 7,
+        "color": "#1ABC9C", "style": "dotted", "glyph": "S",
+        "strengths": "", "risks": "",
+    },
+    "Biseptile": {
+        "angle": _BISEPT, "orb": 2, "aspect_type": "Harmonic", "harmonic": 7,
+        "color": "#1ABC9C", "style": "dotted", "glyph": "bS",
+        "strengths": "", "risks": "",
+    },
+    "Triseptile": {
+        "angle": _TRISEPT, "orb": 2, "aspect_type": "Harmonic", "harmonic": 7,
+        "color": "#1ABC9C", "style": "dotted", "glyph": "tS",
+        "strengths": "", "risks": "",
+    },
+    # H8 — Semi-square (also claimed by this harmonic; Sesquisquare is Minor above)
+    "Semi-square": {
+        "angle": 45, "orb": 2, "aspect_type": "Harmonic", "harmonic": 8,
+        "color": "#E67E22", "style": "dotted", "glyph": "∠",
+        "strengths": "", "risks": "",
+    },
+    # H9 — Novile family
+    "Novile": {
+        "angle": 40, "orb": 2, "aspect_type": "Harmonic", "harmonic": 9,
+        "color": "#3498DB", "style": "dotted", "glyph": "N",
+        "strengths": "", "risks": "",
+    },
+    "Binovile": {
+        "angle": 80, "orb": 2, "aspect_type": "Harmonic", "harmonic": 9,
+        "color": "#3498DB", "style": "dotted", "glyph": "bN",
+        "strengths": "", "risks": "",
+    },
+    # H10 — Decile family
+    "Decile": {
+        "angle": 36, "orb": 2, "aspect_type": "Harmonic", "harmonic": 10,
+        "color": "#F39C12", "style": "dotted", "glyph": "D",
+        "strengths": "", "risks": "",
+    },
+    "Vigintile": {
+        "angle": 18, "orb": 2, "aspect_type": "Harmonic", "harmonic": 10,
+        "color": "#F39C12", "style": "dotted", "glyph": "Vg",
+        "strengths": "", "risks": "",
+    },
+    # H11 — Undecile family
+    "Undecile": {
+        "angle": 32.7272727, "orb": 2, "aspect_type": "Harmonic", "harmonic": 11,
+        "color": "#8E44AD", "style": "dotted", "glyph": "U",
+        "strengths": "", "risks": "",
+    },
+    "Bi-undecile": {
+        "angle": 65.4545454, "orb": 2, "aspect_type": "Harmonic", "harmonic": 11,
+        "color": "#8E44AD", "style": "dotted", "glyph": "bU",
+        "strengths": "", "risks": "",
+    },
+    "Tri-undecile": {
+        "angle": 98.1818181, "orb": 2, "aspect_type": "Harmonic", "harmonic": 11,
+        "color": "#8E44AD", "style": "dotted", "glyph": "tU",
+        "strengths": "", "risks": "",
+    },
+    "Quad-undecile": {
+        "angle": 130.9090909, "orb": 2, "aspect_type": "Harmonic", "harmonic": 11,
+        "color": "#8E44AD", "style": "dotted", "glyph": "qU",
+        "strengths": "", "risks": "",
+    },
+    # H24 — fine divisions
+    "Vigintiseptile": {
+        "angle": 15, "orb": 2, "aspect_type": "Harmonic", "harmonic": 24,
+        "color": "#95A5A6", "style": "dotted", "glyph": "Vs",
+        "strengths": "", "risks": "",
+    },
+    "Quindecile": {
+        "angle": 24, "orb": 2, "aspect_type": "Harmonic", "harmonic": 24,
+        "color": "#95A5A6", "style": "dotted", "glyph": "Qd",
+        "strengths": "", "risks": "",
+    },
 }
 
 SHAPES = {
-    "Grand Cross": {"glyph": "☒", "meaning": "placeholder", "configuration": "node_1 square node_2 and node_4 and opposite node_3, node_2 opposite node_4, and node_3 square node_2 and node_4"},
+    "Grand Cross": {
+        "glyph": "☒",
+        "meaning": (
+            "A taut, resonant drum head — four-way tension from the squares pulls "
+            "all elements into balance, creating a spinning vortex of propulsive "
+            "energy. The intersecting oppositions ground and balance polarities "
+            "across the entire structure. The native may experience life as "
+            "intensely fast-paced and 'clicking into place' at dizzying speed. "
+            "Imparts a structural resonance that spans the entire self, allowing "
+            "the native to intuit patterns at the degrees occupied."
+        ),
+        "configuration": "node_1 square node_2 and node_4 and opposite node_3, node_2 opposite node_4, and node_3 square node_2 and node_4",
+    },
     "Grand Trine": {"glyph": "△", "meaning": "placeholder", "configuration": "node_1 trine node_2, node_2 trine node_3, and node_3 trine node_1"},
     "Pentagram": {"glyph": "⬠", "meaning": "placeholder", "configuration": "node_1 quintile node_2, node_2 quintile node_3, node_3 quintile node_4, node_4 quintile node_5, and node_5 quintile node_1"},
-    "Merkabah": {"glyph": "🟌", "meaning": "placeholder", "configuration": "node_1, node_2, and node_3 form a Grand Trine; node_4, node_5, and node_6 form a second Grand Trine; node_1, node_2, node_3, node_4, node_5, and node_6 form a daisy-chain of sextiles, with node_4 opposite node_2, node_5 opposite node_3, and node_6 opposite node_1"},
-    "Mystic Rectangle": {"glyph": "⃢", "meaning": "placeholder", "configuration": "node_1 opposite node_3, node_2 opposite node_4, node_1 trine node_2 and sextile node_4, and node_3 trine node_4 and sextile node_2"},
+    "Merkabah": {
+        "glyph": "🟌",
+        "meaning": (
+            "The ultimate resonant structure — a super drum head. Two interlocking "
+            "Grand Trines connected by three intersecting oppositions and a sextile "
+            "daisy-chain. A drum head of extraordinary scope, vibrating with "
+            "structural resonance across all six harmonic points. Every opposition "
+            "is connected to every other through the harmonic chain, generating "
+            "extraordinary propulsive spin. The most structurally complete resonant "
+            "membrane possible."
+        ),
+        "configuration": "node_1, node_2, and node_3 form a Grand Trine; node_4, node_5, and node_6 form a second Grand Trine; node_1, node_2, node_3, node_4, node_5, and node_6 form a daisy-chain of sextiles, with node_4 opposite node_2, node_5 opposite node_3, and node_6 opposite node_1",
+    },
+    "Mystic Rectangle": {
+        "glyph": "⃢",
+        "meaning": (
+            "A harmonious resonant membrane — the trines and sextiles stretch a "
+            "receptive surface between the grounding oppositions, symmetrical about "
+            "the origin. Picks up and harmonizes resonant frequencies like an "
+            "antenna with foil stretched across it. Often found in the charts of "
+            "highly intuitive or sensual artists and musicians, imparting a "
+            "heightened sixth sense for pattern and resonance."
+        ),
+        "configuration": "node_1 opposite node_3, node_2 opposite node_4, node_1 trine node_2 and sextile node_4, and node_3 trine node_4 and sextile node_2",
+    },
     "Cradle": {"glyph": "🛌🏽", "meaning": "placeholder", "configuration": "node_1, node_2, node_3, and node_4 form a string of sextiles, with node_1 opposite node_4, node_2 trine node_4, and node_1 trine node_3"},
     "Envelope": {"glyph": "💌", "meaning": "placeholder", "configuration": "all five nodes are in a continuous string of sextiles, with node_1 opposite node_4, and node_2 opposite node_5"},
     "T-Square": {"glyph": "𝗧", "meaning": "placeholder", "configuration": "apex square both base_1 and base_2, and base_1 opposite base_2"},
@@ -10664,37 +10854,3 @@ OBJECT_HOUSE_COMBO = {
 	},
 }
 
-# ------------------------------------------------------------------
-# Compatibility / migration shim
-# ------------------------------------------------------------------
-# After the refactor we now build a ``StaticLookup`` instance in
-# ``models_v2`` containing dataclasses and copies of the old lookup
-# tables.  For a while older code will still do ``from lookup_v2 import
-# X``; this block ensures that those imports return the same object
-# that lives inside ``static_db`` so that switching to a database-backed
-# lookup is seamless.
-
-try:
-    from models_v2 import static_db
-except ImportError:
-    static_db = None  # type: ignore
-
-# override uppercase globals with whatever static_db currently holds (if any)
-if static_db is not None:
-    for _nm in list(globals().keys()):
-        if _nm.isupper() and hasattr(static_db, _nm):
-            globals()[_nm] = getattr(static_db, _nm)
-
-
-def __getattr__(name):
-    if static_db is not None and hasattr(static_db, name):
-        return getattr(static_db, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name}")
-
-
-def __dir__():
-    base = list(globals().keys())
-    extras = []
-    if static_db is not None:
-        extras = [n for n in dir(static_db) if n.isupper()]
-    return sorted(set(base + extras))
