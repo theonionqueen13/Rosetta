@@ -55,7 +55,7 @@ def get_chart_inputs_from_session(suffix: str = "") -> Dict[str, Any]:
 	
 	return data
 
-resolved_dark_mode=st.session_state.get("dark_mode", False)
+resolved_dark_mode = False  # NiceGUI: dark mode is passed explicitly at render time
 
 def _positions_from_chart(chart):
 	if chart is None:
@@ -1073,7 +1073,7 @@ def run_chart(suffix: str = "") -> bool:
 		globals()['chart_state'] = {}
 
 	# Pass chart_state to build_aspect_edges
-	edges_major, edges_minor = build_aspect_edges(
+	edges_major, edges_minor, _edges_harmonic = build_aspect_edges(
 		chart,
 		compass_rose=include_compass_rose,
 	)
@@ -1252,7 +1252,7 @@ def run_transit_chart() -> bool:
 		return False
 
 	# --- Minimal post-processing for Chart 2 ---
-	edges_major, edges_minor = build_aspect_edges(chart, compass_rose=False)
+	edges_major, edges_minor, _ = build_aspect_edges(chart, compass_rose=False)
 	annotate_chart(chart, edges_major)
 
 	# --- Build Chart 2 circuit data and store all on the chart object ---

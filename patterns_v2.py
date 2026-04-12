@@ -79,7 +79,7 @@ def prepare_pattern_inputs(df, edges_major: Sequence[tuple] | None = None):
     """Return (pos, patterns, major_edges_all) ready for shape detection."""
 
     if edges_major is None:
-        edges_major, _ = build_aspect_edges(df)
+        edges_major, _, _ = build_aspect_edges(df)
     pos = positions_from_dataframe(df)
     formatted_edges = edges_from_major_list(edges_major)
     patterns = connected_components_from_edges(list(pos.keys()), formatted_edges)

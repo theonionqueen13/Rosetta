@@ -69,6 +69,7 @@ class ChartResult:
     plot_data: Dict[str, Any] = field(default_factory=dict)
     edges_major: List[Any] = field(default_factory=list)
     edges_minor: List[Any] = field(default_factory=list)
+    edges_harmonic: List[Any] = field(default_factory=list)
     patterns: List[List[str]] = field(default_factory=list)
     shapes: List[Dict[str, Any]] = field(default_factory=list)
     singleton_map: Dict[str, Any] = field(default_factory=dict)
@@ -180,9 +181,10 @@ def compute_chart(inputs: ChartInputs) -> ChartResult:
 
     # --- Post-processing: aspect edges ---
     try:
-        edges_major, edges_minor = build_aspect_edges(chart, compass_rose=False)
+        edges_major, edges_minor, edges_harmonic = build_aspect_edges(chart, compass_rose=False)
         result.edges_major = [tuple(e) for e in edges_major]
         result.edges_minor = [tuple(e) for e in edges_minor]
+        result.edges_harmonic = [tuple(e) for e in edges_harmonic]
     except Exception as exc:
         result.error = f"Aspect edge computation failed: {exc}"
         return result
@@ -242,6 +244,7 @@ def compute_chart(inputs: ChartInputs) -> ChartResult:
         chart.aspect_df = aspect_df
         chart.edges_major = result.edges_major
         chart.edges_minor = result.edges_minor
+        chart.edges_harmonic = result.edges_harmonic
         chart.aspect_groups = patterns
         chart.shapes = shapes
         chart.filaments = filaments
@@ -332,9 +335,10 @@ def compute_transit_chart(
 
     # Aspect edges
     try:
-        edges_major, edges_minor = build_aspect_edges(chart, compass_rose=False)
+        edges_major, edges_minor, edges_harmonic = build_aspect_edges(chart, compass_rose=False)
         result.edges_major = [tuple(e) for e in edges_major]
         result.edges_minor = [tuple(e) for e in edges_minor]
+        result.edges_harmonic = [tuple(e) for e in edges_harmonic]
     except Exception:
         pass
 
@@ -356,6 +360,7 @@ def compute_transit_chart(
         chart.aspect_df = aspect_df
         chart.edges_major = result.edges_major
         chart.edges_minor = result.edges_minor
+        chart.edges_harmonic = result.edges_harmonic
         chart.aspect_groups = patterns2
         chart.shapes = shapes2
         chart.positions = pos_chart2
@@ -484,6 +489,8 @@ class RenderToggles:
     singleton_toggles: Dict[str, bool] = field(default_factory=dict)
     # Standard-mode additional aspect body toggles (all default OFF)
     aspect_toggles: Dict[str, bool] = field(default_factory=dict)
+    # Harmonic aspect toggles keyed by aspect name (all default OFF)
+    harmonic_toggles: Dict[str, bool] = field(default_factory=dict)
     # Display
     label_style: str = "glyph"             # "glyph" or "text"
     dark_mode: bool = False
@@ -581,10 +588,22 @@ def render_chart_image(
             if e[0] in aspect_bodies and e[1] in aspect_bodies
         ]
 
+        # Filter harmonic edges: both endpoints must be aspect-enabled
+        # AND the aspect type must be toggled on by the user
+        enabled_harmonics = {
+            asp_name for asp_name, on in toggles.harmonic_toggles.items() if on
+        }
+        filtered_harmonic = [
+            e for e in chart_result.edges_harmonic
+            if e[0] in aspect_bodies and e[1] in aspect_bodies
+            and (isinstance(e[2], dict) and e[2].get("aspect") in enabled_harmonics)
+        ]
+
         rr = _render_chart_standard(
             chart=chart,
             edges_major=filtered_major,
             edges_minor=filtered_minor,
+            edges_harmonic=filtered_harmonic,
             house_system=house_system,
             dark_mode=toggles.dark_mode,
             label_style=toggles.label_style,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 import re, math
 import numpy as np
-import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import data_helpers as _dh
@@ -22,9 +21,8 @@ GLYPHS = static_db.GLYPHS
 from profiles_v2 import glyph_for
 from patterns_v2 import detect_shapes
 from house_selector_v2 import _selected_house_system
-from src.ui_state_helpers import (
-	reset_chart_state, resolve_visible_objects,
-)
+from src.chart_utils import resolve_visible_objects
+from src.nicegui_state import reset_chart_toggles
 from src.drawing_primitives import (
 	deg_to_rad, _draw_gradient_line, draw_center_earth, 
 	_draw_header_on_figure, _draw_header_on_figure_right, _draw_moon_phase_on_axes, _light_variant_for,
@@ -118,11 +116,7 @@ def shape_color_for(shape_id: Any) -> str:
 	"""Return a stable solid colour for the given shape identifier."""
 
 	palette: Sequence[str] = SUBSHAPE_COLORS or ("teal",)
-	# Try Streamlit session state first (for backwards compat), fall back to module cache
-	try:
-		color_map = st.session_state.setdefault("_shape_color_map_v2", {})
-	except Exception:
-		color_map = _shape_color_cache
+	color_map = _shape_color_cache
 	if shape_id not in color_map:
 		idx = len(color_map) % len(palette)
 		color_map[shape_id] = palette[idx]
@@ -675,11 +669,8 @@ class RenderResult:
 	shapes: List[Dict[str, Any]] = None
 	singleton_map: Dict[str, Any] = None
 	plot_data: Dict[str, Any] = None
-	out_text: str = ""
-
-	# ⬇️ ADDED FIELDS FOR FLEXIBILITY (Bi-Wheel and Text Output) ⬇️
-	# Text output from the rendering process (e.g., from shape summary)
 	out_text: Optional[str] = None
+	drawn_harmonic_edges: list[tuple[str, str, str]] = None
 
 	# Bi-Wheel specific data (for the outer chart)
 	outer_positions: Optional[Dict[str, float]] = None
@@ -691,6 +682,7 @@ def render_chart(
 	visible_toggle_state: Any = None,
 	edges_major: Sequence[Any] | None = None,
 	edges_minor: Sequence[Any] | None = None,
+	edges_harmonic: Sequence[Any] | None = None,
 	house_system: str = "placidus",
 	dark_mode: bool = False,
 	label_style: str = "glyph",
@@ -715,11 +707,6 @@ def render_chart(
 	visible_names = resolve_visible_objects(visible_toggle_state, chart=chart)
 	positions = _chart_positions(chart, visible_names)
 	visible_canon = _expand_visible_canon(visible_names)
-
-	try:
-		st.session_state["resolved_visible_objects"] = visible_names
-	except Exception:
-		pass
 
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	if dark_mode:
@@ -775,6 +762,17 @@ def render_chart(
 		drawn_keys=edge_keys,
 	)
 
+	# Draw harmonic aspect lines (independent pass; dotted, uses aspect colors)
+	harmonic_edges_drawn = draw_minor_edges(
+		ax,
+		positions,
+		edges_harmonic or [],
+		asc_deg,
+		visible_canon=visible_canon,
+		linewidth_minor=1.0,
+		drawn_keys=edge_keys,
+	)
+
 	if compass_on:
 		compass_positions = _chart_compass_positions(chart, visible_names)
 		draw_compass_rose(
@@ -816,6 +814,7 @@ def render_chart(
 		visible_objects=visible_names or [],
 		drawn_major_edges=major_edges_drawn,
 		drawn_minor_edges=minor_edges_drawn,
+		drawn_harmonic_edges=harmonic_edges_drawn,
 		patterns=patterns,
 		shapes=shapes,
 		singleton_map=singleton_map,
@@ -2072,5 +2071,5 @@ __all__ = [
 	"extract_positions",
 	"resolve_visible_objects",
 	"_selected_house_system",
-	"reset_chart_state",
+	"reset_chart_toggles",
 ]

@@ -28,6 +28,7 @@ class ToggleStateSnapshot:
     chart_mode: str = "Circuits"                                    # "Standard Chart" or "Circuits"
     circuit_submode: str = "Combined Circuits"                      # "Combined Circuits", "Connected Circuits", or "single"
     aspect_toggles: Dict[str, bool] = field(default_factory=dict)  # Additional aspect body toggles
+    harmonic_toggles: Dict[str, bool] = field(default_factory=dict) # Harmonic aspect type toggles
     synastry_aspects_inter: bool = True                             # Inter-chart aspects toggle
     synastry_aspects_chart1: bool = False                           # Chart 1 internal aspects
     synastry_aspects_chart2: bool = False                           # Chart 2 internal aspects
@@ -49,6 +50,7 @@ def _get_state() -> Dict[str, Any]:
             "chart_mode": "Circuits",
             "circuit_submode": "Combined Circuits",
             "aspect_toggles": {},
+            "harmonic_toggles": {},
             "synastry_aspects_inter": True,
             "synastry_aspects_chart1": False,
             "synastry_aspects_chart2": False,
@@ -73,6 +75,7 @@ def get_snapshot() -> ToggleStateSnapshot:
         chart_mode=s.get("chart_mode", "Circuits"),
         circuit_submode=s.get("circuit_submode", "Combined Circuits"),
         aspect_toggles=dict(s.get("aspect_toggles", {})),
+        harmonic_toggles=dict(s.get("harmonic_toggles", {})),
         synastry_aspects_inter=s.get("synastry_aspects_inter", True),
         synastry_aspects_chart1=s.get("synastry_aspects_chart1", False),
         synastry_aspects_chart2=s.get("synastry_aspects_chart2", False),

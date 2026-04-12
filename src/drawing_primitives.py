@@ -8,7 +8,6 @@ GROUP_COLORS = static_db.GROUP_COLORS
 GROUP_COLORS_LIGHT = static_db.GROUP_COLORS_LIGHT
 SUBSHAPE_COLORS = static_db.SUBSHAPE_COLORS
 SUBSHAPE_COLORS_LIGHT = static_db.SUBSHAPE_COLORS_LIGHT
-from src.ui_state_helpers import _get_profile_lat_lon
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.collections import LineCollection
 from matplotlib.colors import to_rgba, to_hex
@@ -422,11 +421,31 @@ def _earth_emoji_for_region(lat: float | None, lon: float | None) -> str:
 
 
 
+def _get_profile_lat_lon_nicegui() -> tuple[float | None, float | None]:
+	"""Read current lat/lon from NiceGUI per-user storage, if available."""
+	def _f(x):
+		try:
+			return float(x)
+		except Exception:
+			return None
+
+	try:
+		from nicegui import app as _ng_app
+		state = _ng_app.storage.user.get("rosetta_state", {})
+		lat = _f(state.get("current_lat"))
+		lon = _f(state.get("current_lon"))
+		if lat is not None and lon is not None:
+			return lat, lon
+	except Exception:
+		pass
+	return None, None
+
+
 def draw_center_earth(ax, *, size: float = 0.22, zorder: int = 10_000) -> None:
 	"""
 	Draw a region-appropriate Earth PNG at the chart center.
 	"""
-	lat, lon = _get_profile_lat_lon()
+	lat, lon = _get_profile_lat_lon_nicegui()
 	emoji = _earth_emoji_for_region(lat, lon)
 
 	# Map emoji → filename

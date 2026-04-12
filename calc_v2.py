@@ -554,7 +554,7 @@ def calculate_chart(
 		chart_sect = chart_sect_from_chart(chart) if not unknown_time else "Diurnal"
 	except (ValueError, Exception):
 		chart_sect = "Diurnal"
-	_strength_edges, _ = build_aspect_edges(chart)
+	_strength_edges, _, _ = build_aspect_edges(chart)
 	score_and_attach(chart, sect=chart_sect, house_system="placidus", edges_major=_strength_edges)
 
 	# --- Return values ---
@@ -1004,6 +1004,21 @@ _MAJOR_NAMES = {
 }
 _MINOR_NAMES = set(_ASPECTS_ALL.keys()) - _MAJOR_NAMES
 
+# Harmonic aspects — toggled independently by the user
+_ASPECTS_HARMONIC = {
+    name: {"angle": v["angle"], "orb": v["orb"]}
+    for name, v in static_db.ASPECTS.items()
+    if v.get("aspect_type") == "Harmonic"
+}
+_HARMONIC_NAMES = set(_ASPECTS_HARMONIC.keys())
+
+# Group harmonic aspect names by their harmonic number (for UI headers)
+HARMONIC_BY_NUMBER: dict[int, list[str]] = {}
+for _h_name, _h_spec in static_db.ASPECTS.items():
+    if _h_spec.get("aspect_type") == "Harmonic":
+        _h_num = _h_spec.get("harmonic", 0)
+        HARMONIC_BY_NUMBER.setdefault(_h_num, []).append(_h_name)
+
 def _norm360(x: float) -> float:
 	"""Normalize degrees to [0, 360)."""
 	return x % 360.0
@@ -1117,20 +1132,21 @@ def build_aspect_table(df: pd.DataFrame) -> pd.DataFrame:
 	return pd.DataFrame(data, index=names, columns=names)
 
 
-def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> tuple[list[tuple], list[tuple]]:
+def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> tuple[list[tuple], list[tuple], list[tuple]]:
 	"""
-	Return (edges_major, edges_minor), each as a list of tuples:
+	Return (edges_major, edges_minor, edges_harmonic), each as a list of tuples:
 	  (obj1, obj2, {
 		  "aspect": <name>,
 		  "orb": <float>,                 # absolute orb (deg)
 		  "appsep": "Applying"|"Separating",
-		  "applying": bool,               # NEW: True if applying
-		  "decl_diff": <float|None>,      # NEW: |decl1 - decl2| in deg
+		  "applying": bool,               # True if applying
+		  "decl_diff": <float|None>,      # |decl1 - decl2| in deg
 	  })
 	Pairs are de-duplicated (A,B) only once (A < B by index).
+	Harmonic edges are detected in a separate independent pass.
 	"""
 	if chart is None:
-		return [], []
+		return [], [], []
 	# Backward-compatible: accept a DataFrame if passed accidentally
 	if isinstance(chart, pd.DataFrame):
 		objs  = _extract_object_rows(chart)
@@ -1214,7 +1230,44 @@ def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> 
 					"decl_diff": decl_diff,
 				}
 				edges_major.append((ac, dc, meta))
-	return edges_major, edges_minor
+	# --- Harmonic aspect pass (independent of major/minor) -----------
+	edges_harmonic: list[tuple] = []
+	for i in range(len(names)):
+		for j in range(i + 1, len(names)):
+			a = names[i]; b = names[j]
+			A, B   = lons[a], lons[b]
+			sA, sB = spds[a], spds[b]
+
+			best_delta = None
+			best_name  = None
+			best_target = None
+
+			for name, spec in _ASPECTS_HARMONIC.items():
+				hit, delta = _within_orb(A, B, spec["angle"], spec["orb"])
+				if not hit:
+					continue
+				if best_delta is None or delta < best_delta:
+					best_delta  = delta
+					best_name   = name
+					best_target = spec["angle"]
+
+			if best_name is None:
+				continue
+
+			appsep = _applying_or_separating(A, sA, B, sB, best_target)
+			dA = decls.get(a); dB = decls.get(b)
+			decl_diff = float(f"{abs(float(dA) - float(dB)):.3f}") if dA is not None and dB is not None else None
+
+			meta = {
+				"aspect": best_name,
+				"orb": float(f"{best_delta:.3f}"),
+				"appsep": appsep,
+				"applying": (appsep == "Applying"),
+				"decl_diff": decl_diff,
+			}
+			edges_harmonic.append((a, b, meta))
+
+	return edges_major, edges_minor, edges_harmonic
 
 
 

@@ -52,6 +52,9 @@ _DEFAULTS: Dict[str, Any] = {
     "chart_2_source": None,        # "profile" | "transit" | None
     "chart_ready": False,
 
+    # ── Active tab ─────────────────────────────────────────────────
+    "active_tab": "Circuits",      # persisted across page refreshes
+
     # ── Toggle values ────────────────────────────────────────────────
     "compass": True,
     "chart_mode": "Circuits",      # "Standard Chart" | "Circuits"
@@ -132,3 +135,34 @@ def get_chart_2_object(state: Dict[str, Any]):
         return None
     from models_v2 import AstrologicalChart
     return AstrologicalChart.from_json(raw)
+
+
+def get_profile_lat_lon(state: Dict[str, Any]) -> tuple[float | None, float | None]:
+    """Return (lat, lon) from the NiceGUI state dict, or (None, None) if absent.
+
+    Reads ``state["current_lat"]`` / ``state["current_lon"]`` which are
+    populated by the geocoder after the user clicks Calculate.
+    """
+    def _f(x: Any) -> float | None:
+        try:
+            return float(x)
+        except Exception:
+            return None
+
+    lat = _f(state.get("current_lat"))
+    lon = _f(state.get("current_lon"))
+    if lat is None or lon is None:
+        return None, None
+    return lat, lon
+
+
+def reset_chart_toggles(state: Dict[str, Any]) -> None:
+    """Clear transient toggle state so each new chart loads cleanly.
+
+    NiceGUI stores toggles as structured dicts rather than the flat
+    ``toggle_pattern_*`` / ``shape_*`` keys used by the old Streamlit UI.
+    """
+    state["pattern_toggles"] = {}
+    state["shape_toggles"] = {}
+    state["singleton_toggles"] = {}
+    state.pop("shape_toggles_by_parent", None)

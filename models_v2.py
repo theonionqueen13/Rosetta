@@ -1198,6 +1198,7 @@ class AstrologicalChart:
     aspect_df: Optional[pd.DataFrame] = field(default=None)           # was "last_aspect_df"
     edges_major: list = field(default_factory=list)                    # was "edges_major"
     edges_minor: list = field(default_factory=list)                    # was "edges_minor"
+    edges_harmonic: list = field(default_factory=list)                 # harmonic aspect edges
     aspect_groups: list = field(default_factory=list)                  # was session "patterns" (connected components)
     shapes: List["DetectedShape"] = field(default_factory=list)        # was "shapes"
     filaments: list = field(default_factory=list)                      # was "filaments"
@@ -1345,6 +1346,7 @@ class AstrologicalChart:
             # ── Aspect graphs ────────────────────────────────────────────
             "edges_major": _edge_list(self.edges_major),
             "edges_minor": _edge_list(self.edges_minor),
+            "edges_harmonic": _edge_list(self.edges_harmonic),
             "major_edges_all": _major_edges_all(self.major_edges_all),
             # ── Patterns ─────────────────────────────────────────────────
             "aspect_groups": [list(g) for g in (self.aspect_groups or [])],
@@ -1438,6 +1440,7 @@ class AstrologicalChart:
             aspect_df=_df(d.get("aspect_df")),
             edges_major=_edge_list(d.get("edges_major")),
             edges_minor=_edge_list(d.get("edges_minor")),
+            edges_harmonic=_edge_list(d.get("edges_harmonic")),
             major_edges_all=_major_edges_all(d.get("major_edges_all")),
             aspect_groups=[list(g) for g in (d.get("aspect_groups") or [])],
             shapes=[DetectedShape.from_dict(s) for s in (d.get("shapes") or [])],

@@ -1137,7 +1137,7 @@ body.body--dark {
 
         # Restore Chart 2 selector if synastry was already active (page reload)
         if state.get("synastry_mode", False):
-            _refresh_chart2_profiles()
+            ui.timer(0.5, _refresh_chart2_profiles, once=True)
             synastry_row.set_visibility(True)
 
         # ===============================================================
@@ -1299,7 +1299,18 @@ body.body--dark {
             if _is_admin:
                 tab_admin = ui.tab("Admin", icon="admin_panel_settings")
 
-        with ui.tab_panels(tabs, value=tab_circuits).classes("w-full"):
+        # Persist selected tab so toggle handlers always know the active tab
+        tabs.on_value_change(lambda e: state.update(active_tab=e.value))
+
+        # Restore last-selected tab (falls back to Circuits for new sessions)
+        _tab_lookup = {
+            "Chart Manager": tab_chartmgr, "Standard Chart": tab_standard,
+            "Circuits": tab_circuits, "Rulers": tab_rulers,
+            "Chat": tab_chat, "Specs": tab_specs, "Settings": tab_settings,
+        }
+        _initial_tab = _tab_lookup.get(state.get("active_tab", "Circuits"), tab_circuits)
+
+        with ui.tab_panels(tabs, value=_initial_tab).classes("w-full"):
 
             # ===========================================================
             # CHART MANAGER TAB
@@ -1422,8 +1433,10 @@ body.body--dark {
                 delete_btn.on_click(_on_delete)
                 refresh_btn.on_click(lambda: _refresh_profiles())
 
-                # Populate profile list now that profile_select exists
-                _refresh_profiles()
+                # Populate profile list after the page is fully rendered.
+                # Using a one-shot timer avoids calling into Supabase during
+                # page construction before NiceGUI storage is hydrated.
+                ui.timer(0.5, _refresh_profiles, once=True)
 
                 ui.separator().classes("q-mt-md")
                 ui.label("Donate Your Chart to Science").classes("text-subtitle2 q-mt-sm")
@@ -1519,10 +1532,8 @@ body.body--dark {
                         "🌐 Transits", value=state.get("transit_mode", False)
                     )
 
-                std_chart_container = ui.column().classes("w-full items-center")
-
                 # --- Additional Aspects expansion ---
-                with ui.expansion("Additional Aspects").classes("w-full q-mt-sm"):
+                with ui.expansion("Aspects to Additional Objects").classes("w-full q-mt-sm"):
                     # Select All checkbox
                     std_select_all = ui.checkbox("Select All", value=False)
 
@@ -1554,6 +1565,126 @@ body.body--dark {
 
                     for name, cb in aspect_cbs.items():
                         cb.on_value_change(functools.partial(_on_aspect_toggle, name))
+
+                # --- Additional Minor (Harmonic) Aspects expansion ---
+                from calc_v2 import HARMONIC_BY_NUMBER
+                from models_v2 import static_db as _sd
+
+                _HARMONIC_FAMILY_LABELS = {
+                    5: "H5 — Quintile Family",
+                    7: "H7 — Septile Family",
+                    8: "H8 — Semi-square",
+                    9: "H9 — Novile Family",
+                    10: "H10 — Decile Family",
+                    11: "H11 — Undecile Family",
+                    24: "H24 — Fine Divisions",
+                }
+
+                _BASE_BODIES = {
+                    "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter",
+                    "Saturn", "Uranus", "Neptune", "Pluto",
+                    "Black Moon Lilith (Mean)", "Chiron",
+                }
+
+                harm_exp = ui.expansion("Additional Minor Aspects").classes("w-full q-mt-sm")
+                harm_exp.set_visibility(False)          # hidden until a chart is loaded
+                with harm_exp:
+                    harm_container = ui.column().classes("w-full")
+
+                # Mutable references that _rebuild_harmonic_expander will fill
+                harmonic_cbs: dict[str, ui.checkbox] = {}
+                _harm_select_all_ref: list = []         # single-element list to hold widget
+
+                def _rebuild_harmonic_expander():
+                    """Rebuild harmonic toggle checkboxes based on which
+                    harmonic aspect types are actually present in the current
+                    chart for the currently-enabled bodies."""
+                    nonlocal harmonic_cbs
+                    harmonic_cbs = {}
+                    _harm_select_all_ref.clear()
+
+                    chart_obj = get_chart_object(state)
+                    raw_edges = (getattr(chart_obj, "edges_harmonic", None) or []) if chart_obj else []
+
+                    # Compute enabled body set
+                    aspect_bodies = set(_BASE_BODIES)
+                    for body_name, enabled in state.get("aspect_toggles", {}).items():
+                        if enabled:
+                            aspect_bodies.add(body_name)
+
+                    # Find which harmonic aspect names exist for the enabled bodies
+                    present_aspects: set[str] = set()
+                    for edge in raw_edges:
+                        if edge[0] in aspect_bodies and edge[1] in aspect_bodies:
+                            meta = edge[2] if len(edge) > 2 else {}
+                            asp = meta.get("aspect") if isinstance(meta, dict) else None
+                            if asp:
+                                present_aspects.add(asp)
+
+                    harm_container.clear()
+
+                    if not present_aspects:
+                        harm_exp.set_visibility(False)
+                        return
+
+                    harm_exp.set_visibility(True)
+                    with harm_container:
+                        sel_all = ui.checkbox("Select All", value=False)
+                        _harm_select_all_ref.append(sel_all)
+                        with ui.row().classes("w-full gap-4"):
+                            cols = [ui.column().classes("col") for _ in range(4)]
+
+                        col_index = 0
+                        for h_num in sorted(HARMONIC_BY_NUMBER.keys()):
+                            all_names = HARMONIC_BY_NUMBER[h_num]
+                            visible = [n for n in all_names if n in present_aspects]
+                            if not visible:
+                                continue
+
+                            target_col = cols[col_index % len(cols)]
+                            col_index += 1
+                            with target_col:
+                                family_label = _HARMONIC_FAMILY_LABELS.get(h_num, f"H{h_num}")
+                                h_color = _sd.ASPECTS.get(visible[0], {}).get("color", "grey")
+                                ui.label(family_label).classes("text-weight-bold q-mt-sm").style(
+                                    f"color: {h_color}"
+                                )
+                                with ui.grid(columns=2).classes("w-full gap-2"):
+                                    for asp_name in visible:
+                                        cb = ui.checkbox(
+                                            asp_name,
+                                            value=state.get("harmonic_toggles", {}).get(
+                                                asp_name, False
+                                            ),
+                                        )
+                                        harmonic_cbs[asp_name] = cb
+
+                        # Wire up handlers after all checkboxes exist
+                        def _on_harm_select_all(e):
+                            ht = dict(state.get("harmonic_toggles", {}))
+                            for name, cb in harmonic_cbs.items():
+                                cb.value = e.value
+                                ht[name] = e.value
+                            state["harmonic_toggles"] = ht
+                            _rerender_active_tab()
+
+                        sel_all.on_value_change(_on_harm_select_all)
+
+                        def _on_harmonic_toggle(name, e):
+                            ht = dict(state.get("harmonic_toggles", {}))
+                            ht[name] = e.value
+                            state["harmonic_toggles"] = ht
+                            _rerender_active_tab()
+
+                        for name, cb in harmonic_cbs.items():
+                            cb.on_value_change(
+                                functools.partial(_on_harmonic_toggle, name)
+                            )
+
+                # Build once at page load
+                _rebuild_harmonic_expander()
+
+                std_chart_container = ui.column().classes("w-full items-center")
 
                 # --- Synastry aspect group checkboxes (biwheel only) ---
                 synastry_aspects_exp = ui.expansion(
@@ -3396,6 +3527,7 @@ body.body--dark {
                 shape_toggles=state.get("shape_toggles", {}),
                 singleton_toggles=state.get("singleton_toggles", {}),
                 aspect_toggles=state.get("aspect_toggles", {}),
+                harmonic_toggles=state.get("harmonic_toggles", {}),
                 label_style=state.get("label_style", "glyph"),
                 dark_mode=state.get("dark_mode", False),
                 house_system=(state.get("house_system", "placidus") or "placidus").lower(),
@@ -3521,6 +3653,7 @@ body.body--dark {
             result.major_edges_all = getattr(chart_obj, "major_edges_all", None) or []
             result.edges_major = getattr(chart_obj, "edges_major", None) or []
             result.edges_minor = getattr(chart_obj, "edges_minor", None) or []
+            result.edges_harmonic = getattr(chart_obj, "edges_harmonic", None) or []
 
             try:
                 return render_chart_image(result, toggles)
@@ -3697,8 +3830,19 @@ body.body--dark {
 
                 edges_major = getattr(chart_obj, "edges_major", None) or []
                 edges_minor = getattr(chart_obj, "edges_minor", None) or []
+                edges_harmonic_raw = getattr(chart_obj, "edges_harmonic", None) or []
                 filtered_major = [e for e in edges_major if e[0] in aspect_bodies and e[1] in aspect_bodies]
                 filtered_minor = [e for e in edges_minor if e[0] in aspect_bodies and e[1] in aspect_bodies]
+
+                # Filter harmonic edges by body + enabled harmonic toggle
+                _enabled_h = {n for n, on in state.get("harmonic_toggles", {}).items() if on}
+                filtered_harmonic = [
+                    e for e in edges_harmonic_raw
+                    if e[0] in aspect_bodies and e[1] in aspect_bodies
+                    and (isinstance(e[2], dict) and e[2].get("aspect") in _enabled_h)
+                ]
+                # Merge enabled harmonic edges into minor for the D3 serializer
+                combined_minor = filtered_minor + filtered_harmonic
 
                 try:
                     if is_biwheel:
@@ -3716,7 +3860,7 @@ body.body--dark {
                             house_system=hs, dark_mode=dark, label_style=label,
                             compass_on=compass,
                             edges_major=filtered_major,
-                            edges_minor=filtered_minor,
+                            edges_minor=combined_minor,
                         )
                 except Exception:
                     _log.exception("D3 Standard Chart serialize failed")
@@ -3875,11 +4019,15 @@ body.body--dark {
         def _rerender_active_tab():
             """Re-render chart in the currently active tab with current toggles."""
             _NO_CHART_MSG = "Calculate or load a chart to view it here."
-            active = tabs.value
+            active = state.get("active_tab", tabs.value)
+            # Keep UI in sync with persisted value
+            if tabs.value != active:
+                tabs.value = active
             chart_obj = get_chart_object(state)
             print(f"[D3] _rerender_active_tab: active={active}, chart_obj={'None' if chart_obj is None else 'present'}, interactive_chart={state.get('interactive_chart')}")
             if chart_obj is None:
                 if active == "Standard Chart":
+                    _rebuild_harmonic_expander()
                     std_chart_container.clear()
                     with std_chart_container:
                         ui.label(_NO_CHART_MSG).classes("text-body2 text-grey q-pa-md")
@@ -3910,6 +4058,7 @@ body.body--dark {
             cir_submode_row.set_visibility(is_biwheel and active == "Circuits")
 
             if active == "Standard Chart":
+                _rebuild_harmonic_expander()
                 if state.get("interactive_chart"):
                     d3_data = _serialize_chart_for_d3("Standard Chart")
                     _display_d3_chart_in(std_chart_container, d3_data)
