@@ -96,7 +96,7 @@ _STORAGE_SECRET = os.environ.get("NICEGUI_STORAGE_SECRET", "rosetta-dev-secret-c
 
 @app.get("/health")
 async def _health():
-    return JSONResponse({"status": "ok"})
+    return JSONResponse({"status": "ok", "version": "PHASE_A_TEST_2026"})
 
 
 # ---------------------------------------------------------------------------
@@ -163,15 +163,40 @@ def _try_refresh_session() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Static file mounts — MUST come before @ui.page decorators to avoid route shadowing
+# ---------------------------------------------------------------------------
+app.add_static_files('/pngs', 'pngs')
+app.add_static_files('/d3chart', 'src/components/interactive_chart/frontend')
+
+# ---------------------------------------------------------------------------
 # /login page
 # ---------------------------------------------------------------------------
 
 @ui.page("/login")
-def login_page():
+async def login_page():
     # If already authenticated, go straight to main page
     if _get_user_id() and not _session_is_expired():
         ui.navigate.to("/")
         return
+
+    # --- Handle OAuth callback (?code= query param) ---
+    try:
+        code = await ui.run_javascript(
+            "new URLSearchParams(window.location.search).get('code')",
+            timeout=3.0,
+        )
+    except Exception:
+        code = None
+    if code:
+        try:
+            resp = get_supabase().auth.exchange_code_for_session({"auth_code": code})
+            _store_session_nicegui(resp)
+            # Clear the ?code= param and go to main page
+            await ui.run_javascript("history.replaceState(null, '', '/login')")
+            ui.navigate.to("/")
+            return
+        except Exception as exc:
+            _log.warning("OAuth code exchange failed: %s", exc)
 
     ui.add_head_html("""
 <style>
@@ -264,16 +289,19 @@ body, .q-layout, .q-page-container, .q-page {
                     ui.label("Please sign in to continue.").classes("text-subtitle1 login-tan")
                     ui.separator().classes("login-divider")
 
-                # --- Tabs: Sign In / Create Account ---
+                # --- Tabs: Sign In / Create Account / Magic Link / Google ---
                 with ui.tabs().classes("w-full login-tab") as tabs:
                     tab_signin = ui.tab("Sign In").classes("login-tan")
                     tab_signup = ui.tab("Create Account").classes("login-tan")
+                    tab_magic  = ui.tab("Magic Link").classes("login-tan")
+                    tab_google = ui.tab("Google").classes("login-tan")
 
                 # Shared state for form inputs
                 signin_email = {"value": ""}
                 signin_password = {"value": ""}
                 signup_email = {"value": ""}
                 signup_password = {"value": ""}
+                magic_email = {"value": ""}
 
                 # Status message container
                 status_container = ui.column().classes("w-full")
@@ -332,6 +360,49 @@ body, .q-layout, .q-page-container, .q-page {
                     except Exception as e:
                         _show_error(f"Sign up failed: {e}")
 
+                # --- Magic Link ---
+                async def _do_magic_link():
+                    _clear_status()
+                    email = magic_email["value"].strip()
+                    if not email:
+                        _show_error("Please enter your email.")
+                        return
+                    try:
+                        get_supabase().auth.sign_in_with_otp(
+                            {"email": email, "options": {"should_create_user": True}}
+                        )
+                        _show_success(
+                            f"Magic link sent to {email}. "
+                            "Click the link in the email to sign in."
+                        )
+                    except Exception as e:
+                        _show_error(f"Failed to send magic link: {e}")
+
+                # --- Google OAuth ---
+                async def _do_google_oauth():
+                    _clear_status()
+                    redirect_url = get_secret(
+                        "auth", "redirect_url", default="http://localhost:8080"
+                    )
+                    try:
+                        resp = get_supabase().auth.sign_in_with_oauth(
+                            {
+                                "provider": "google",
+                                "options": {
+                                    "redirect_to": redirect_url,
+                                    "query_params": {
+                                        "access_type": "offline",
+                                        "prompt": "consent",
+                                    },
+                                },
+                            }
+                        )
+                        await ui.run_javascript(
+                            f'window.location.href = "{resp.url}"'
+                        )
+                    except Exception as e:
+                        _show_error(f"Google sign-in unavailable: {e}")
+
                 # --- Tab panels ---
                 with ui.tab_panels(tabs, value=tab_signin).classes("w-full login-tab-panels"):
                     with ui.tab_panel(tab_signin).classes("login-tab-panel"):
@@ -355,6 +426,28 @@ body, .q-layout, .q-page-container, .q-page {
                         )
                         pw_input.on("keydown.enter", _do_sign_up)
                         ui.button("Create Account", on_click=_do_sign_up).classes("w-full q-mt-md rosetta-button")
+
+                    with ui.tab_panel(tab_magic).classes("login-tab-panel"):
+                        ui.label("Passwordless sign-in").classes("text-subtitle2 q-mb-sm login-tan")
+                        ui.label(
+                            "Enter your email and we'll send a one-click sign-in link. "
+                            "No password needed."
+                        ).classes("text-caption login-tan q-mb-sm")
+                        magic_input = ui.input("Email").classes("w-full login-input").on(
+                            "update:model-value", lambda e: magic_email.update(value=e.args)
+                        )
+                        magic_input.on("keydown.enter", _do_magic_link)
+                        ui.button("Send Magic Link", on_click=_do_magic_link).classes("w-full q-mt-md rosetta-button")
+
+                    with ui.tab_panel(tab_google).classes("login-tab-panel"):
+                        ui.label("Sign in with Google").classes("text-subtitle2 q-mb-sm login-tan")
+                        ui.label(
+                            "You'll be taken to Google to sign in, then returned here automatically."
+                        ).classes("text-caption login-tan q-mb-sm")
+                        ui.button(
+                            "Sign in with Google", icon="login",
+                            on_click=_do_google_oauth,
+                        ).classes("w-full q-mt-md rosetta-button")
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +666,11 @@ body.body--dark {
                 profile_select.update()
             except Exception as exc:
                 _log.warning("Failed to refresh profiles: %s", exc)
+                ui.notify(
+                    f"Could not load profiles — {exc}. Try clicking Refresh.",
+                    type="negative",
+                    timeout=8000,
+                )
 
         # ---- Load ----
         async def _on_load():
@@ -683,9 +781,6 @@ body.body--dark {
                 _log.exception("Profile delete failed")
                 _mgr_error(f"Delete failed: {exc}")
 
-        # Populate profile list on page load
-        _refresh_profiles()
-
         # ---- Synastry toggle + Chart 2 selector ----
         ui.separator().classes("q-mt-sm")
         synastry_cb = ui.checkbox(
@@ -706,8 +801,6 @@ body.body--dark {
                 "flat dense size=sm color=negative"
             )
         synastry_row.set_visibility(False)
-
-        # ===============================================================
         # SHARED CONTROLS  (visible when a chart exists)
         # ===============================================================
         shared_row = ui.row().classes("w-full items-center gap-4 q-mt-md")
@@ -853,8 +946,13 @@ body.body--dark {
                 names = sorted(profiles.keys())
                 chart2_profile_sel.options = names
                 chart2_profile_sel.update()
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.warning("Failed to refresh chart 2 profiles: %s", exc)
+                ui.notify(
+                    f"Could not load profiles — {exc}. Try clicking Refresh.",
+                    type="negative",
+                    timeout=8000,
+                )
 
         def _update_transit_label():
             """Show the current transit datetime in the label."""
@@ -1324,6 +1422,7 @@ body.body--dark {
                 delete_btn.on_click(_on_delete)
                 refresh_btn.on_click(lambda: _refresh_profiles())
 
+                # Populate profile list now that profile_select exists
                 _refresh_profiles()
 
                 ui.separator().classes("q-mt-md")
@@ -1549,7 +1648,9 @@ body.body--dark {
                     Returns (circuit_connected_shapes2, edges_inter_chart_cc)
                     or (None, None) if not in biwheel mode.
                     """
-                    from static_data import ASPECTS as _ASP
+                    from models_v2 import static_db as _sdb
+                    _ASP = {k: v for k, v in _sdb.ASPECTS.items()
+                            if v.get("aspect_type") in ("Major", "Minor")}
                     chart_obj = get_chart_object(state)
                     chart_2_obj = get_chart_2_object(state)
                     if chart_obj is None or chart_2_obj is None:
@@ -1607,7 +1708,8 @@ body.body--dark {
                     - Connected biwheel: shows Chart 1 circuits with dynamically
                       revealed Chart 2 connections based on active toggles.
                     """
-                    from static_data import GLYPHS as _GLYPHS
+                    from models_v2 import static_db as _sdb2
+                    _GLYPHS = _sdb2.GLYPHS
 
                     chart_obj = get_chart_object(state)
                     if chart_obj is None:
@@ -2858,8 +2960,8 @@ body.body--dark {
                         if chart_obj is None:
                             ui.label("No chart loaded.").classes("text-body2 text-grey")
                         else:
-                            edges_major = getattr(chart_obj, "edges_major", None) or []
-                            edges_minor = getattr(chart_obj, "edges_minor", None) or []
+                            edges_major = getattr(chart_obj, "drawn_major_edges", None) or []
+                            edges_minor = getattr(chart_obj, "drawn_minor_edges", None) or []
                             if not edges_major and not edges_minor:
                                 ui.label("No aspect data available.").classes(
                                     "text-body2 text-grey"
@@ -2949,6 +3051,19 @@ body.body--dark {
 
                         settings_dark.on_value_change(_on_dark_change)
 
+                        # Interactive Chart (D3)
+                        settings_interactive = ui.switch(
+                            "Interactive Chart",
+                            value=state.get("interactive_chart", False),
+                        )
+
+                        def _on_interactive_change(e):
+                            state["interactive_chart"] = e.value
+                            print(f"[D3] interactive_chart toggled to {e.value}")
+                            _rerender_active_tab()
+
+                        settings_interactive.on_value_change(_on_interactive_change)
+
                     # ---- Right column: chart system settings ----
                     with ui.column().classes("gap-4"):
                         ui.label("House System").classes("text-subtitle1 text-weight-medium")
@@ -2981,6 +3096,50 @@ body.body--dark {
                     state["auto_load_on_startup"] = e.value
 
                 settings_auto_load.on_value_change(_on_auto_load_change)
+
+                # ---- Chart Mode Map ----
+                ui.separator().classes("q-mt-lg")
+                mode_map_exp = ui.expansion(
+                    "Chart Mode Map", icon="account_tree",
+                ).classes("w-full q-mt-sm")
+                with mode_map_exp:
+                    mode_map_html_container = ui.html("").style("width: 100%;")
+
+                def _refresh_mode_map():
+                    """Rebuild the Mode Map Cytoscape HTML from current state."""
+                    from src.mode_map_core import render_mode_map_html
+
+                    chart_obj = get_chart_object(state)
+                    patterns = getattr(chart_obj, "aspect_groups", None) or [] if chart_obj else []
+                    shapes = getattr(chart_obj, "shapes", None) or [] if chart_obj else []
+                    singleton_map = getattr(chart_obj, "singleton_map", None) or {} if chart_obj else {}
+
+                    html = render_mode_map_html(
+                        chart_mode=state.get("chart_mode", "Circuits"),
+                        circuit_submode=state.get("circuit_submode", "Combined"),
+                        has_chart=chart_obj is not None,
+                        synastry_mode=state.get("synastry_mode", False),
+                        transit_mode=state.get("transit_mode", False),
+                        now_mode_active=state.get("now_mode_active", False),
+                        profile_loaded=state.get("profile_loaded", False),
+                        aspect_toggles=state.get("aspect_toggles", {}),
+                        pattern_toggles={int(k): v for k, v in state.get("pattern_toggles", {}).items()},
+                        singleton_toggles=state.get("singleton_toggles", {}),
+                        shape_toggles=state.get("shape_toggles", {}),
+                        synastry_aspects_chart1=state.get("synastry_chart1", False),
+                        synastry_aspects_inter=state.get("synastry_inter", True),
+                        synastry_aspects_chart2=state.get("synastry_chart2", False),
+                        num_patterns=len(patterns),
+                        num_shapes=len(shapes),
+                        num_singletons=len(singleton_map),
+                    )
+                    mode_map_html_container.content = (
+                        f'<iframe srcdoc="{html.replace(chr(34), "&quot;")}" '
+                        f'style="width:100%; height:560px; border:none;"></iframe>'
+                    )
+
+                # Refresh when expansion is opened
+                mode_map_exp.on_value_change(lambda e: _refresh_mode_map() if e.value else None)
 
             # ===========================================================
             # ADMIN TAB  (Step 10)
@@ -3413,6 +3572,290 @@ body.body--dark {
                     f'image-rendering:auto; display:block; margin:0 auto" />'
                 )
 
+        def _serialize_chart_for_d3(mode: str) -> Optional[dict]:
+            """Serialize the current chart to a JSON-safe dict for the D3 renderer.
+
+            mode: "Standard Chart" or "Circuits"
+            Applies the same toggle-based filtering as the PNG renderer.
+            """
+            print(f"[D3] _serialize_chart_for_d3 called with mode={mode}")
+            from src.chart_serializer import (
+                serialize_chart_for_rendering,
+                serialize_biwheel_for_rendering,
+            )
+
+            chart_obj = get_chart_object(state)
+            print(f"[D3] chart_obj is {'None' if chart_obj is None else type(chart_obj).__name__}")
+            if chart_obj is None:
+                return None
+
+            is_biwheel = (
+                (state.get("synastry_mode") or state.get("transit_mode"))
+                and state.get("last_chart_2_json") is not None
+            )
+            chart_2_obj = get_chart_2_object(state) if is_biwheel else None
+            is_biwheel = is_biwheel and chart_2_obj is not None
+
+            hs = (state.get("house_system", "placidus") or "placidus").lower()
+            dark = state.get("dark_mode", False)
+            label = state.get("label_style", "glyph")
+            compass = state.get("compass", True)
+
+            # ------ Circuits mode: filter by circuit/shape/singleton toggles ------
+            if mode == "Circuits":
+                patterns = getattr(chart_obj, "aspect_groups", None) or []
+                shapes = getattr(chart_obj, "shapes", None) or []
+                singleton_map = getattr(chart_obj, "singleton_map", None) or {}
+                filaments = getattr(chart_obj, "filaments", None) or []
+                edges_major = getattr(chart_obj, "edges_major", None) or []
+                edges_minor = getattr(chart_obj, "edges_minor", None) or []
+
+                pattern_toggles = {int(k): v for k, v in state.get("pattern_toggles", {}).items()}
+                shape_toggles = state.get("shape_toggles", {})
+                singleton_toggles = state.get("singleton_toggles", {})
+
+                # Compute visible objects: union of toggled-on circuits' members
+                visible = set()
+                for i, group in enumerate(patterns):
+                    if pattern_toggles.get(i, False):
+                        visible.update(group)
+
+                # Add toggled-on singletons
+                for planet, _grp in singleton_map.items():
+                    if singleton_toggles.get(planet, False):
+                        visible.add(planet)
+
+                # Always show angle points when at least one circuit is visible
+                if visible:
+                    for angle in ("AC", "DC", "MC", "IC"):
+                        visible.add(angle)
+
+                # Filter edges to only show connections between visible objects
+                filtered_major = [e for e in edges_major if e[0] in visible and e[1] in visible] if visible else []
+                filtered_minor = [e for e in edges_minor if e[0] in visible and e[1] in visible] if visible else []
+
+                # Filter shapes: keep only shapes whose parent circuit is toggled on
+                filtered_shapes = []
+                for sh in shapes:
+                    parent = getattr(sh, "parent", None)
+                    if parent is not None and pattern_toggles.get(parent, False):
+                        s_id = getattr(sh, "shape_id", "")
+                        key = str(s_id)
+                        if shape_toggles.get(key, False):
+                            filtered_shapes.append(sh)
+
+                # Filter singletons
+                filtered_singleton_map = {
+                    p: grp for p, grp in singleton_map.items()
+                    if singleton_toggles.get(p, False)
+                }
+
+                # Filter patterns to only include toggled-on groups
+                filtered_patterns = [
+                    group for i, group in enumerate(patterns)
+                    if pattern_toggles.get(i, False)
+                ]
+
+                visible_list = list(visible) if visible else None
+
+                try:
+                    if is_biwheel:
+                        return serialize_biwheel_for_rendering(
+                            chart_obj, chart_2_obj,
+                            house_system=hs, dark_mode=dark, label_style=label,
+                            compass_on_inner=compass,
+                            show_inter=state.get("synastry_inter", True),
+                            show_chart1_aspects=state.get("synastry_chart1", False),
+                            show_chart2_aspects=state.get("synastry_chart2", False),
+                        )
+                    else:
+                        return serialize_chart_for_rendering(
+                            chart_obj,
+                            house_system=hs, dark_mode=dark, label_style=label,
+                            compass_on=compass,
+                            visible_objects=visible_list,
+                            edges_major=filtered_major,
+                            edges_minor=filtered_minor,
+                            shapes=filtered_shapes,
+                            singleton_map=filtered_singleton_map,
+                            patterns=filtered_patterns,
+                        )
+                except Exception:
+                    _log.exception("D3 Circuits serialize failed")
+                    return None
+
+            # ------ Standard Chart mode: filter by additional aspect toggles ------
+            else:
+                _STANDARD_BASE = {
+                    "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+                    "Uranus", "Neptune", "Pluto", "Black Moon Lilith (Mean)", "Chiron",
+                }
+                aspect_bodies = set(_STANDARD_BASE)
+                for body_name, enabled in state.get("aspect_toggles", {}).items():
+                    if enabled:
+                        aspect_bodies.add(body_name)
+
+                edges_major = getattr(chart_obj, "edges_major", None) or []
+                edges_minor = getattr(chart_obj, "edges_minor", None) or []
+                filtered_major = [e for e in edges_major if e[0] in aspect_bodies and e[1] in aspect_bodies]
+                filtered_minor = [e for e in edges_minor if e[0] in aspect_bodies and e[1] in aspect_bodies]
+
+                try:
+                    if is_biwheel:
+                        return serialize_biwheel_for_rendering(
+                            chart_obj, chart_2_obj,
+                            house_system=hs, dark_mode=dark, label_style=label,
+                            compass_on_inner=compass,
+                            show_inter=state.get("synastry_inter", True),
+                            show_chart1_aspects=state.get("synastry_chart1", False),
+                            show_chart2_aspects=state.get("synastry_chart2", False),
+                        )
+                    else:
+                        return serialize_chart_for_rendering(
+                            chart_obj,
+                            house_system=hs, dark_mode=dark, label_style=label,
+                            compass_on=compass,
+                            edges_major=filtered_major,
+                            edges_minor=filtered_minor,
+                        )
+                except Exception:
+                    _log.exception("D3 Standard Chart serialize failed")
+                    return None
+
+        def _display_d3_chart_in(container, chart_data: Optional[dict], *, show_info: bool = True):
+            """Display the interactive D3 chart inside the given container."""
+            print(f"[D3] _display_d3_chart_in called, chart_data is {'None' if chart_data is None else f'dict with {len(chart_data)} keys'}")
+            container.clear()
+            if chart_data is None:
+                with container:
+                    ui.label("No chart computed yet.").classes("text-body2 text-grey q-pa-md")
+                return
+            with container:
+                if show_info:
+                    chart_obj = get_chart_object(state)
+                    chart_2_obj = get_chart_2_object(state)
+                    if chart_obj is not None:
+                        loc_dt = getattr(chart_obj, "display_datetime", None)
+                        name = state.get("name") or form.get("name") or ""
+                        city = state.get("city") or form.get("city") or ""
+                        unknown = getattr(chart_obj, "unknown_time", False)
+                        if loc_dt:
+                            time_str = "Unknown time" if unknown else f"{loc_dt:%I:%M %p}"
+                            info = f"{name} — {loc_dt:%B %d, %Y} {time_str} — {city}"
+                            ui.label(info).classes(
+                                "text-subtitle1 text-weight-medium q-mb-sm"
+                            )
+                    if chart_2_obj is not None and (
+                        state.get("synastry_mode") or state.get("transit_mode")
+                    ):
+                        c2_name = state.get("chart_2_profile_name") or "Transits"
+                        c2_dt = getattr(chart_2_obj, "display_datetime", None)
+                        if c2_dt:
+                            c2_info = f"Chart 2: {c2_name} — {c2_dt:%B %d, %Y %I:%M %p}"
+                        else:
+                            c2_info = f"Chart 2: {c2_name}"
+                        ui.label(c2_info).classes("text-body2 text-grey-7 q-mb-sm")
+
+                # Render the D3 interactive chart directly in the page.
+                # We load D3 + chart_renderer + tooltip as page-level scripts,
+                # create a container div, then call RosettaChart.render() on it.
+                import base64 as _b64
+                json_b64 = _b64.b64encode(json.dumps(chart_data).encode()).decode()
+                chart_div_id = f"rosetta-d3-{id(container)}"
+                is_biwheel = bool(chart_data.get("config", {}).get("is_biwheel"))
+                dark_mode = bool(chart_data.get("config", {}).get("dark_mode"))
+
+                # Load D3 scripts once per page (idempotent check in JS)
+                # Cache-bust with timestamp so browser always gets latest JS
+                _cache_bust = int(time.time())
+                ui.run_javascript(f'''
+                    if (!window._rosettaD3ScriptsLoaded) {{
+                        window._rosettaD3ScriptsLoaded = "loading";
+                        var scripts = ["/d3chart/d3.v7.min.js", "/d3chart/chart_renderer.js?v={_cache_bust}", "/d3chart/tooltip.js?v={_cache_bust}"];
+                        var loaded = 0;
+                        scripts.forEach(function(src) {{
+                            var s = document.createElement("script");
+                            s.src = src;
+                            s.onload = function() {{
+                                loaded++;
+                                console.log("[Rosetta D3] loaded " + src + " (" + loaded + "/" + scripts.length + ")");
+                                if (loaded === scripts.length) {{
+                                    window._rosettaD3ScriptsLoaded = "ready";
+                                    console.log("[Rosetta D3] all scripts ready");
+                                    // Render any pending chart
+                                    if (window._rosettaD3RenderPending) {{
+                                        window._rosettaD3RenderPending();
+                                        window._rosettaD3RenderPending = null;
+                                    }}
+                                }}
+                            }};
+                            s.onerror = function() {{ console.error("[Rosetta D3] FAILED to load " + src); }};
+                            document.head.appendChild(s);
+                        }});
+                    }}
+                ''')
+
+                # Also add the D3 chart stylesheet once
+                ui.run_javascript(f'''
+                    if (!document.getElementById("rosetta-d3-css")) {{
+                        var link = document.createElement("link");
+                        link.id = "rosetta-d3-css";
+                        link.rel = "stylesheet";
+                        link.href = "/d3chart/styles.css?v={_cache_bust}";
+                        document.head.appendChild(link);
+                    }}
+                ''')
+
+                # Create the chart container div
+                ui.html(
+                    f'<div id="{chart_div_id}" '
+                    f'style="width:100%; max-width:720px; height:640px; '
+                    f'display:block; margin:0 auto; overflow:hidden;"></div>'
+                )
+
+                # Render the chart — either immediately if scripts are loaded,
+                # or defer until they finish loading.
+                render_fn = "biwheel" if is_biwheel else "single"
+                ui.run_javascript(f'''
+                    (function() {{
+                        var b64 = "{json_b64}";
+                        var data = JSON.parse(atob(b64));
+                        function doRender() {{
+                            var el = document.getElementById("{chart_div_id}");
+                            if (!el) {{
+                                console.error("[Rosetta D3] container div not found, retrying...");
+                                setTimeout(doRender, 200);
+                                return;
+                            }}
+                            try {{
+                                if ("{render_fn}" === "biwheel") {{
+                                    RosettaChart.renderBiwheel(el, data, 680, 620);
+                                }} else {{
+                                    RosettaChart.render(el, data, 680, 620);
+                                }}
+                                console.log("[Rosetta D3] chart rendered successfully");
+                                // Wire tooltips
+                                try {{
+                                    if (typeof RosettaTooltip !== "undefined") {{
+                                        var svg = el.querySelector("svg");
+                                        if (svg) RosettaTooltip.wire(d3.select(svg), data);
+                                    }}
+                                }} catch(te) {{ console.warn("[Rosetta D3] tooltip wiring:", te); }}
+                            }} catch(e) {{
+                                console.error("[Rosetta D3] render error:", e);
+                                el.innerHTML = '<p style="color:red;padding:1em;">Chart render error: ' + e.message + '</p>';
+                            }}
+                        }}
+                        if (window._rosettaD3ScriptsLoaded === "ready") {{
+                            console.log("[Rosetta D3] scripts already loaded, rendering now");
+                            doRender();
+                        }} else {{
+                            console.log("[Rosetta D3] scripts still loading, deferring render");
+                            window._rosettaD3RenderPending = doRender;
+                        }}
+                    }})();
+                ''')
+
         def _rerender_circuits_chart_only():
             """Re-render only the Circuits chart image without rebuilding toggles.
 
@@ -3422,14 +3865,19 @@ body.body--dark {
             chart_obj = get_chart_object(state)
             if chart_obj is None:
                 return
-            png = _render_chart_png("Circuits")
-            _display_chart_in(cir_chart_container, png)
+            if state.get("interactive_chart"):
+                d3_data = _serialize_chart_for_d3("Circuits")
+                _display_d3_chart_in(cir_chart_container, d3_data)
+            else:
+                png = _render_chart_png("Circuits")
+                _display_chart_in(cir_chart_container, png)
 
         def _rerender_active_tab():
             """Re-render chart in the currently active tab with current toggles."""
             _NO_CHART_MSG = "Calculate or load a chart to view it here."
             active = tabs.value
             chart_obj = get_chart_object(state)
+            print(f"[D3] _rerender_active_tab: active={active}, chart_obj={'None' if chart_obj is None else 'present'}, interactive_chart={state.get('interactive_chart')}")
             if chart_obj is None:
                 if active == "Standard Chart":
                     std_chart_container.clear()
@@ -3462,13 +3910,21 @@ body.body--dark {
             cir_submode_row.set_visibility(is_biwheel and active == "Circuits")
 
             if active == "Standard Chart":
-                png = _render_chart_png("Standard Chart")
-                _display_chart_in(std_chart_container, png)
+                if state.get("interactive_chart"):
+                    d3_data = _serialize_chart_for_d3("Standard Chart")
+                    _display_d3_chart_in(std_chart_container, d3_data)
+                else:
+                    png = _render_chart_png("Standard Chart")
+                    _display_chart_in(std_chart_container, png)
             elif active == "Circuits":
                 # Rebuild circuit toggle checkboxes so they reflect current chart
                 _build_circuit_toggles()
-                png = _render_chart_png("Circuits")
-                _display_chart_in(cir_chart_container, png)
+                if state.get("interactive_chart"):
+                    d3_data = _serialize_chart_for_d3("Circuits")
+                    _display_d3_chart_in(cir_chart_container, d3_data)
+                else:
+                    png = _render_chart_png("Circuits")
+                    _display_chart_in(cir_chart_container, png)
             elif active == "Rulers":
                 _render_rulers_graph()
             elif active == "Specs":
@@ -3970,8 +4426,6 @@ async def _do_logout():
 # ---------------------------------------------------------------------------
 
 if __name__ in {"__main__", "__mp_main__"}:
-    # Serve the pngs/ directory so background images are reachable at /pngs/...
-    app.add_static_files('/pngs', 'pngs')
     port = int(os.environ.get("PORT", 8080))
     ui.run(
         port=port,

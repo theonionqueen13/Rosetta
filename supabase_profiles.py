@@ -75,22 +75,42 @@ def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
     Returns all saved profiles for the given user as a dict:
         { profile_name: payload_dict, ... }
     Returns an empty dict if the user has no profiles yet.
+    Retries once after resetting the transport on connection errors
+    (e.g. after a Supabase project pause/resume).
     """
+    import logging as _logging
+    _plog = _logging.getLogger(__name__)
+
     with _cache_lock:
         if user_id in _profiles_cache:
             return _profiles_cache[user_id]
-    client = get_authed_supabase()
-    response = (
-        client.table(TABLE)
-        .select("profile_name, payload")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    rows = response.data or []
-    result = {row["profile_name"]: row["payload"] for row in rows}
-    with _cache_lock:
-        _profiles_cache[user_id] = result
-    return result
+
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            client = get_authed_supabase()
+            response = (
+                client.table(TABLE)
+                .select("profile_name, payload")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            rows = response.data or []
+            result = {row["profile_name"]: row["payload"] for row in rows}
+            with _cache_lock:
+                _profiles_cache[user_id] = result
+            return result
+        except Exception as exc:
+            last_exc = exc
+            if attempt == 0:
+                # Stale transport from Supabase pause/resume — reset and retry
+                _plog.warning(
+                    "load_user_profiles_db attempt 1 failed (%s), resetting transport and retrying…", exc
+                )
+                from supabase_client import reset_authed_client_state
+                reset_authed_client_state()
+                _clear_profile_caches()
+    raise last_exc  # type: ignore[misc]
 
 
 def load_self_profile_db(user_id: str):

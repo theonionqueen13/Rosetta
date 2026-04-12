@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rosetta Interactive Chart — NiceGUI</title>
+    <script src="d3.v7.min.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+        #debug-panel {
+            font-family: monospace;
+            font-size: 12px;
+            color: #ff6b6b;
+            background: #1a1a2e;
+            padding: 12px;
+            margin: 8px;
+            border-radius: 6px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        #debug-panel.visible {
+            display: block;
+        }
+
+        #debug-panel .dbg-ok {
+            color: #6bff6b;
+        }
+
+        #debug-panel .dbg-warn {
+            color: #ffcc00;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chart-container"></div>
+    <div id="tooltip" class="tooltip hidden"></div>
+    <div id="debug-panel"></div>
+
+    <script>
+        // ── Debug helper ─────────────────────────────────────────────────
+        const _dbg = {
+            el: null,
+            init() { this.el = document.getElementById("debug-panel"); },
+            log(msg, cls) {
+                if (!this.el) this.init();
+                const d = document.createElement("div");
+                d.className = cls || "";
+                d.textContent = msg;
+                this.el.appendChild(d);
+                this.el.classList.add("visible");
+                console.log("[RosettaChart]", msg);
+            },
+            ok(msg) { this.log("✓ " + msg, "dbg-ok"); },
+            warn(msg) { this.log("⚠ " + msg, "dbg-warn"); },
+            err(msg) { this.log("✗ " + msg, ""); },
+            clear() {
+                if (!this.el) this.init();
+                this.el.innerHTML = "";
+                this.el.classList.remove("visible");
+            },
+        };
+
+        // ── Global error catcher ─────────────────────────────────────────
+        window.onerror = function (msg, url, line, col, err) {
+            _dbg.err("JS Error: " + msg + " at " + (url || "?") + ":" + line);
+        };
+    </script>
+
+    <script src="chart_renderer.js"></script>
+    <script src="tooltip.js"></script>
+
+    <script>
+        // ── Preflight checks ─────────────────────────────────────────────
+        (function preflight() {
+            if (typeof d3 === "undefined") {
+                _dbg.err("D3.js failed to load — chart cannot render");
+                return;
+            }
+            if (typeof RosettaChart === "undefined") {
+                _dbg.err("chart_renderer.js failed to load");
+                return;
+            }
+            if (typeof RosettaTooltip === "undefined") {
+                _dbg.warn("tooltip.js failed to load — tooltips disabled");
+            }
+        })();
+
+        // ── NiceGUI-compatible render entry point ────────────────────────
+        // The parent page calls:
+        //   iframe.contentWindow.RosettaRender(chartData)
+        // where chartData is the JSON object from serialize_chart_for_rendering.
+        window.RosettaRender = function (data, width, height) {
+            _dbg.clear();
+            width = width || 600;
+            height = height || 600;
+
+            if (!data) {
+                _dbg.err("RosettaRender called with no data");
+                return;
+            }
+
+            if (typeof d3 === "undefined") {
+                _dbg.err("D3.js is not available");
+                return;
+            }
+
+            // Clear previous chart
+            const container = document.getElementById("chart-container");
+            container.innerHTML = "";
+
+            // Apply theme
+            const darkMode = data.config && data.config.dark_mode;
+            document.body.classList.toggle("dark-mode", !!darkMode);
+
+            try {
+                const isBiwheel = data.config && data.config.is_biwheel;
+                if (isBiwheel) {
+                    RosettaChart.renderBiwheel(container, data, width, height);
+                } else {
+                    RosettaChart.render(container, data, width, height);
+                }
+            } catch (e) {
+                _dbg.err("RosettaChart.render() threw: " + e.message);
+                _dbg.err("Stack: " + (e.stack || "").split("\n").slice(0, 5).join(" | "));
+                return;
+            }
+
+            // Wire tooltips
+            try {
+                if (typeof RosettaTooltip !== "undefined") {
+                    const svgEl = container.querySelector("svg");
+                    if (svgEl) {
+                        RosettaTooltip.wire(d3.select(svgEl), data);
+                    }
+                }
+            } catch (e) {
+                _dbg.warn("Tooltip wiring failed: " + e.message);
+            }
+
+            // Wire click events to post messages to parent (NiceGUI)
+            try {
+                const svgEl = container.querySelector("svg");
+                if (svgEl) {
+                    // Planet click → postMessage to parent
+                    d3.select(svgEl).selectAll("[data-object-name]").on("click", function () {
+                        const name = this.getAttribute("data-object-name");
+                        if (name) {
+                            window.parent.postMessage({
+                                type: "rosetta_event",
+                                event: "click",
+                                element_type: "object",
+                                element: name,
+                            }, "*");
+                        }
+                    });
+                    // House click
+                    d3.select(svgEl).selectAll("[data-house-number]").on("click", function () {
+                        const num = this.getAttribute("data-house-number");
+                        if (num) {
+                            window.parent.postMessage({
+                                type: "rosetta_event",
+                                event: "click",
+                                element_type: "house",
+                                element: num,
+                            }, "*");
+                        }
+                    });
+                    // Aspect click
+                    d3.select(svgEl).selectAll("[data-aspect]").on("click", function () {
+                        const asp = this.getAttribute("data-aspect");
+                        if (asp) {
+                            window.parent.postMessage({
+                                type: "rosetta_event",
+                                event: "click",
+                                element_type: "aspect",
+                                element: asp,
+                            }, "*");
+                        }
+                    });
+                }
+            } catch (e) {
+                _dbg.warn("Click event wiring failed: " + e.message);
+            }
+        };
+
+        // ── Highlight API ────────────────────────────────────────────────
+        // Parent can call:
+        //   iframe.contentWindow.RosettaHighlight({objects: ["Saturn"], clear: false})
+        window.RosettaHighlight = function (highlights) {
+            if (!highlights) return;
+            try {
+                if (typeof RosettaTooltip !== "undefined" && RosettaTooltip.applyHighlights) {
+                    RosettaTooltip.applyHighlights(highlights);
+                }
+            } catch (e) {
+                _dbg.warn("Highlight failed: " + e.message);
+            }
+        };
+
+        // ── Auto-bootstrap from NiceGUI parent ───────────────────────────
+        // The parent page sets window._rosettaD3Pending = {data, width, height}
+        // before the iframe loads.  We pick it up here automatically.
+        (function autoBootstrap() {
+            try {
+                var pending = window.parent && window.parent._rosettaD3Pending;
+                if (pending && pending.data) {
+                    _dbg.ok("Auto-bootstrap: found pending chart data from parent");
+                    window.RosettaRender(pending.data, pending.width || 680, pending.height || 620);
+                    window.parent._rosettaD3Pending = null;
+                } else {
+                    _dbg.ok("No pending data from parent — waiting for RosettaRender call");
+                }
+            } catch (e) {
+                _dbg.warn("Auto-bootstrap failed (cross-origin?): " + e.message);
+            }
+        })();
+    </script>
+</body>
+
+</html>

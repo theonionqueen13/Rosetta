@@ -2532,13 +2532,49 @@ def migrate_lookup_data():
 
     return static
 
-static_db = migrate_lookup_data()
+
+def _init_static_db() -> StaticLookup:
+    """Initialize static_db from PostgreSQL if configured, else from Python files.
+    
+    Priority:
+    1. If PGUSER and PGDATABASE env vars are set → load from PostgreSQL
+    2. Otherwise → fall back to migrate_lookup_data() from static_data.py
+    """
+    import os
+    use_db = bool(os.environ.get('PGUSER') and os.environ.get('PGDATABASE'))
+    
+    if use_db:
+        try:
+            from db_access import load_static_from_db
+            print("[static_db] Loading from PostgreSQL...")
+            db = load_static_from_db()
+            # Copy uppercase constants onto the DB-loaded instance
+            for _name, _val in list(globals().items()):
+                if _name.isupper():
+                    try:
+                        setattr(db, _name, _val)
+                    except Exception:
+                        pass
+            print(f"[static_db] Loaded {len(db.signs)} signs, {len(db.objects)} objects, "
+                  f"{len(db.aspects)} aspects from PostgreSQL")
+            return db
+        except Exception as e:
+            print(f"[static_db] PostgreSQL load failed: {e}")
+            print("[static_db] Falling back to Python files...")
+            return migrate_lookup_data()
+    else:
+        # No DB configured - use Python files
+        return migrate_lookup_data()
+
+
+static_db = _init_static_db()
 
 
 def load_static_lookup():
-    """If a PostgreSQL instance is configured, populate ``static_db``
-    from the database.  This mirrors ``db_access.load_static_from_db`` and
-    mutates the existing global so callers need only import ``static_db``.
+    """Explicitly reload static_db from PostgreSQL.
+    
+    Call this to force a refresh from the database. Mutates the existing
+    global so callers need only import ``static_db``.
     """
     try:
         from db_access import load_static_from_db
@@ -2546,6 +2582,13 @@ def load_static_lookup():
         raise
     # perform the load and update the global object in-place
     new_db = load_static_from_db()
+    # copy uppercase constants
+    for _name, _val in list(globals().items()):
+        if _name.isupper():
+            try:
+                setattr(new_db, _name, _val)
+            except Exception:
+                pass
     # copy attributes over to keep any existing references alive
     static_db.__dict__.update(new_db.__dict__)
     return static_db

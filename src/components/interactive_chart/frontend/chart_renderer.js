@@ -337,7 +337,7 @@ const RosettaChart = (() => {
                 .attr("x", gx).attr("y", gy)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "36px")
+                .attr("font-size", "10px")
                 .attr("font-weight", "bold")
                 .attr("font-family", "\"Segoe UI Symbol\", \"Apple Symbols\", \"Arial Unicode MS\", \"DejaVu Sans\", sans-serif")
                 .attr("fill", sign.glyph_color)
@@ -641,7 +641,7 @@ const RosettaChart = (() => {
         // Chart name (bold, larger)
         svg.append("text")
             .attr("x", x0).attr("y", y)
-            .attr("font-size", "44px")
+            .attr("font-size", "24px")
             .attr("font-weight", "bold")
             .attr("fill", color)
             .attr("class", "chart-header-name")
@@ -652,7 +652,7 @@ const RosettaChart = (() => {
         if (header.date_line) {
             svg.append("text")
                 .attr("x", x0).attr("y", y)
-                .attr("font-size", "30px")
+                .attr("font-size", "16px")
                 .attr("fill", subColor)
                 .attr("class", "chart-header-date")
                 .text(header.date_line);
@@ -663,7 +663,7 @@ const RosettaChart = (() => {
         if (header.time_line) {
             svg.append("text")
                 .attr("x", x0).attr("y", y)
-                .attr("font-size", "30px")
+                .attr("font-size", "16px")
                 .attr("fill", subColor)
                 .attr("class", "chart-header-time")
                 .text(header.time_line);
@@ -674,7 +674,7 @@ const RosettaChart = (() => {
         if (header.city) {
             svg.append("text")
                 .attr("x", x0).attr("y", y)
-                .attr("font-size", "30px")
+                .attr("font-size", "16px")
                 .attr("fill", subColor)
                 .attr("class", "chart-header-city")
                 .text(header.city);
@@ -695,7 +695,7 @@ const RosettaChart = (() => {
             svg.append("text")
                 .attr("x", iconCx - iconR - 8).attr("y", iconCy + 5)
                 .attr("text-anchor", "end")
-                .attr("font-size", "36px")
+                .attr("font-size", "20px")
                 .attr("font-weight", "bold")
                 .attr("fill", color)
                 .attr("class", "chart-moon-label")
@@ -801,7 +801,8 @@ const RosettaChart = (() => {
                 .attr("x", gx).attr("y", gy)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "30px")
+                .attr("font-weight", "bold")
+                .attr("font-size", "20px")
                 .attr("fill", color)
                 .attr("class", "planet-glyph")
                 .attr("data-object", obj.name)
@@ -813,7 +814,7 @@ const RosettaChart = (() => {
                 .attr("x", dx).attr("y", dy)
                 .attr("text-anchor", "middle")
                 .attr("dominant-baseline", "central")
-                .attr("font-size", "24px")
+                .attr("font-size", "14px")
                 .attr("fill", color)
                 .attr("class", "planet-degree")
                 .attr("data-object", obj.name)

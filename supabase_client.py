@@ -200,3 +200,21 @@ def get_authed_supabase() -> Client:
     # Cache the client in-memory (keyed by token)
     _authed_client_cache[token] = client
     return client
+
+
+def reset_authed_client_state() -> None:
+    """Reset the authed client cache and shared transport.
+
+    Call this after a connection error (e.g. Supabase pause/resume) to force
+    a fresh transport and new client on the next request instead of reusing
+    stale dead HTTP connections.
+    """
+    global _shared_authed_transport, _shared_authed_transport_credentials
+    _authed_client_cache.clear()
+    if _shared_authed_transport is not None:
+        try:
+            _shared_authed_transport.close()
+        except Exception:
+            pass
+        _shared_authed_transport = None
+        _shared_authed_transport_credentials = None

@@ -591,7 +591,7 @@ _TRISEPT  = 154 + 17/60
 ASPECTS = {
     # ── Major aspects ──────────────────────────────────────────────
     "Conjunction": {
-        "angle": 0, "orb": 5, "aspect_type": "Major", "harmonic": 1,
+        "angle": 0, "orb": 3, "aspect_type": "Major", "harmonic": 1,
         "color": "#888888", "style": "solid", "glyph": "☌",
         "strengths": "Conjunctions bring planets together, blending their energies into a unified force, often intensifying their effects.",
         "risks": "planets that don't get along well may be poor roommates; they need to learn to appreciate each other's differences.",
