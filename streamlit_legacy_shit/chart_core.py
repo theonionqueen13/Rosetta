@@ -6,19 +6,21 @@ from zoneinfo import ZoneInfo
 from typing import Dict, Any
 from drawing_v2 import render_chart, render_chart_with_shapes, render_biwheel_chart, render_biwheel_chart_with_circuits, render_biwheel_connected_circuits
 from drawing_v2 import RenderResult as result, group_color_for, shape_color_for
-from toggles_v2 import COMPASS_KEY, COMPASS_KEY_2
 from patterns_v2 import prepare_pattern_inputs, detect_shapes, detect_minor_links_from_chart, generate_combo_groups
 from src.geocoding import geocode_city_with_timezone
 from event_lookup_v2 import update_events_html_state
 from models_v2 import static_db
 from src import toggle_state as ts
 
+COMPASS_KEY = "ui_compass_overlay"
+COMPASS_KEY_2 = "ui_compass_overlay_2"  # separate overlay toggle for second chart (biwheel)
 EPHE_MAJOR_OBJECTS = static_db.EPHE_MAJOR_OBJECTS
 ALL_MAJOR_PLACEMENTS = static_db.ALL_MAJOR_PLACEMENTS  # Use this for filtering all major chart placements
 MAJOR_OBJECTS = static_db.MAJOR_OBJECTS  # Backward compat (alias to ALL_MAJOR_PLACEMENTS)
 TOGGLE_ASPECTS = static_db.TOGGLE_ASPECTS
 ASPECTS = static_db.ASPECTS
 PLANETS_PLUS = static_db.PLANETS_PLUS
+
 from house_selector_v2 import _selected_house_system
 from calc_v2 import calculate_chart, chart_sect_from_chart, build_aspect_edges, \
 					annotate_chart, build_dispositor_tables, \

@@ -1,11 +1,8 @@
 import os
 import re
 import base64
-import streamlit as st
-import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from house_selector_v2 import render_house_system_selector
 import matplotlib.patheffects as pe
 from models_v2 import static_db
 from calc_v2 import compute_plot_data_from_chart
@@ -174,152 +171,6 @@ def _draw_dispositor_header(fig, header_info):
         path_effects=effects
     )
 
-def render_dispositor_section(st, chart) -> None:
-    """
-    Renders the Dispositor Graph section in the Streamlit app.
-    This includes the header, house system selector, scope toggle,
-    and the dispositor graph itself with legend.
-    """
-    # Add anchor for jump button
-    st.markdown('<div id="ruler-hierarchies"></div>', unsafe_allow_html=True)
-
-    header_col, toggle_col, house_col = st.columns([2, 2, 1])
-
-    with header_col:
-        st.subheader("Ruler Hierarchies")
-
-    with house_col:
-        render_house_system_selector()
-
-    with toggle_col:
-        # House system selector (always render, but only relevant for "By House")
-        # Dispositor scope toggle
-        st.session_state.setdefault("dispositor_scope", "By Sign")
-        disp_scope = st.radio(
-            "Scope",
-            ["By Sign", "By House"],
-            horizontal=True,
-            key="dispositor_scope",
-            label_visibility="collapsed"
-        )
-
-    plot_data = chart.plot_data
-    
-    # Regenerate plot_data for profile-loaded charts that don't have it
-    if plot_data is None:
-        plot_data = compute_plot_data_from_chart(chart)
-        if plot_data is not None:
-            chart.plot_data = plot_data  # Cache for future use
-    
-    if plot_data is not None:
-        # The rest of your logic now runs directly on the plot_data variable.
-        
-        disp_scope = st.session_state.get("dispositor_scope", "By Sign")
-        
-        # Determine which scope to use
-        if disp_scope == "By Sign":
-            scope_data = plot_data.get("by_sign")
-        else:  # By House
-            house_key_map = {
-                "placidus": "Placidus",
-                "equal": "Equal",
-                "whole": "Whole Sign"
-            }
-            selected_house = st.session_state.get("house_system", "placidus")
-            plot_data_key = house_key_map.get(selected_house, "Placidus")
-            scope_data = plot_data.get(plot_data_key)
-
-        if scope_data and scope_data.get("raw_links"):
-            name, date_line, time_line, city, extra_line = chart.header_lines()
-            header_info = {
-                'name': name,
-                'date_line': date_line,
-                'time_line': time_line,
-                'city': city,
-                'extra_line': extra_line
-            }
-
-            legend_col, graph_col = st.columns([1, 5])
-                
-            with legend_col:
-                # Get the directory of the current file and point to pngs
-                current_dir = os.path.dirname(__file__) 
-                png_dir = os.path.abspath(os.path.join(current_dir, "..", "pngs"))
-
-                # Load and encode images as base64
-                def img_to_b64(filename):
-                    path = os.path.join(png_dir, filename)
-                    if os.path.exists(path):
-                        with open(path, "rb") as f:
-                            return base64.b64encode(f.read()).decode()
-                    return ""
-                
-                # Create legend header
-                st.markdown("""
-                    <div style="background-color: #262730; padding: 15px; border-radius: 8px;">
-                        <strong style="color: white;">Legend</strong>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Updated list including the two new reception icons
-                legend_items = [
-                    ("green.png", "Sovereign"),
-                    ("orange.png", "Dual rulership"),
-                    ("purple.png", "Loop"),
-                    ("purpleorange.png", "Dual + Loop"),
-                    ("blue.png", "Standard"),
-                    ("blue_reception.png", "Has reception (in orb)"),
-                    ("green_reception.png", "Has reception by sign"),
-                    ("conjunction.png", "Conjunction"),
-                    ("sextile.png", "Sextile"),
-                    ("square.png", "Square"),
-                    ("trine.png", "Trine"),
-                    ("opposition.png", "Opposition"),
-                ]
-                
-                # Build the HTML
-                legend_html = '<div style="background-color: #262730; padding: 15px; border-radius: 8px; margin-top: -15px;">'
-                
-                # 1. Move Self-Ruling to the very top
-                legend_html += '<div style="color: white; margin-bottom: 12px; font-size: 0.9em; border-bottom: 1px solid #444; padding-bottom: 12px;">↻ Self-Ruling</div>'
-                
-                # 2. Iterate through the rest of the items
-                for i, (img_file, label) in enumerate(legend_items):
-                    # We adjusted the divider logic: 
-                    # Since Self-Ruling is at the top, we now only need a divider before the aspect icons.
-                    # In your list, the aspects/reception start at index 5 ("blue_reception.png")
-                    margin_top = "margin-top: 12px; border-top: 1px solid #444; padding-top: 12px;" if i == 5 else ""
-                    
-                    b64 = img_to_b64(img_file)
-                    if b64:
-                        legend_html += f'''
-                        <div style="margin-bottom: 8px; {margin_top}">
-                            <img src="data:image/png;base64,{b64}" width="20" style="vertical-align:middle;margin-right:8px"/>
-                            <span style="color: white; font-size: 0.9em;">{label}</span>
-                        </div>'''
-                
-                legend_html += '</div>'
-                
-                st.markdown(legend_html, unsafe_allow_html=True)
-                
-            with graph_col:
-                selected_house = st.session_state.get("house_system", "placidus")
-                disp_fig = plot_dispositor_graph(
-                    scope_data,
-                    chart=chart,
-                    header_info=header_info,
-                    house_system=selected_house,
-                )
-                st.pyplot(disp_fig, use_container_width=True)
-        else:
-            st.info("No dispositor graph to display.")
-    else:
-        st.info("Calculate a chart first.")
-
-
-# Define the base path for your icons
-ICON_BASE_PATH = r"C:\Users\theon\OneDrive\Desktop\Rosetta\Rosetta_v2\pngs"
-
 def get_base_name(node_id):
     """Cleans IDs like 'Saturn_1_0' or 'South_Node_0' into 'Saturn' or 'South_Node'."""
     return re.sub(r'(_\d+)+$', '', node_id)
@@ -368,17 +219,16 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     """Return a matplotlib figure containing the dispositor graph.
 
     ``house_system`` is one of "placidus","equal","whole" and is used both
-    for ordering siblings by house and for the house‑number labels.  If
-    omitted we fall back to the value stored in ``st.session_state``.
+    for ordering siblings by house and for the house-number labels.
+    Defaults to "placidus" if not supplied.
     """
     # --- 0. DATA EXTRACTION ---
     raw_links = plot_data.get("raw_links", [])
     sovereigns = plot_data.get("sovereigns", [])
     self_ruling = plot_data.get("self_ruling", [])
 
-    # determine the house system from argument / session
     if house_system is None:
-        house_system = st.session_state.get("house_system", "placidus")
+        house_system = "placidus"
     house_map = compute_house_map(chart, house_system)
     # debug info
     print(f"[DEBUG] plot_dispositor_graph called; house_system={house_system}, house_map_count={len(house_map)}")
@@ -700,7 +550,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     ax = fig.add_subplot(1, 1, 1)
 
     # determine marker size so that the rendered circles never shrink to an
-    # unreadable size when the figure is later squashed by streamlit.
+    # unreadable size when the figure is downscaled by the container.
     # ``s`` passed to scatter is in points^2; a figure that is much wider than
     # the minimum baseline (15 inches) will typically be downscaled by the
     # container, causing markers to appear smaller.  By enlarging the area

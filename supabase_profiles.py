@@ -24,7 +24,6 @@ from typing import Any, Dict
 from cachetools import TTLCache
 from supabase_client import get_authed_supabase
 
-# TTL caches replace @st.cache_data(ttl=120) — thread-safe, framework-agnostic
 _profiles_cache: TTLCache = TTLCache(maxsize=128, ttl=120)
 _groups_cache: TTLCache = TTLCache(maxsize=128, ttl=120)
 _by_group_cache: TTLCache = TTLCache(maxsize=128, ttl=120)

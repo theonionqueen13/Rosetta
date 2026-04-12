@@ -1,18 +1,22 @@
 # supabase_admin.py
-"""Admin utilities for Supabase-authenticated users."""
-import streamlit as st
-from supabase_client import get_authed_supabase
+"""Admin utilities for Supabase-authenticated users.
+
+Framework-agnostic: reads user identity from NiceGUI ``app.storage.user`` via helpers in
+``supabase_client``.  No direct ``streamlit`` import.
+"""
+from supabase_client import get_authed_supabase, get_current_user_id, get_current_user_email
 
 TABLE = "user_admins"
 
 
 def is_admin(user_id: str = None) -> bool:
-    """Returns True if the current user is in the admin table.
-    
-    If user_id is not provided, uses the session state value.
+    """Return True if *user_id* (or the currently logged-in user) is an admin.
+
+    If *user_id* is not provided, it is resolved from the active framework's
+    session storage via ``get_current_user_id()``.
     """
     if user_id is None:
-        user_id = st.session_state.get("supabase_user_id")
+        user_id = get_current_user_id()
     if not user_id:
         return False
     try:
@@ -24,13 +28,13 @@ def is_admin(user_id: str = None) -> bool:
 
 
 def get_admin_email() -> str | None:
-    """Get the email address of the currently logged-in admin user.
-    
-    Returns the email if the user is an admin, otherwise None.
+    """Return the email of the currently logged-in user if they are an admin.
+
+    Returns ``None`` if there is no active session or the user is not an admin.
     """
-    user_id = st.session_state.get("supabase_user_id")
+    user_id = get_current_user_id()
     if not user_id:
         return None
     if not is_admin(user_id):
         return None
-    return st.session_state.get("supabase_user_email")
+    return get_current_user_email()

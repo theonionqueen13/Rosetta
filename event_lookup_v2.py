@@ -80,20 +80,6 @@ def update_events_html_state(target_dt: datetime, events_path: str = "events.jso
     ALWAYS blanks first, then tries to compute. If anything fails, it stays blank.
     This guarantees no carry-over if the compute step is skipped or errors.
     """
-    # Lazy import — only Streamlit callers use this helper;
-    # NiceGUI callers use build_events_html() directly.
-    import streamlit as st  # noqa: E401
 
-    # 1) Blank first so stale content is wiped even if we crash/return early
-    st.session_state["events_lookup_html"] = ""
+    html = build_events_html(target_dt, events_path, show_no_events=show_no_events)
 
-    # 2) Compute new HTML (errors won't reintroduce old HTML)
-    try:
-        html = build_events_html(target_dt, events_path, show_no_events=show_no_events)
-    except Exception as e:
-        # Optional: record the error if you want to surface it somewhere
-        st.session_state["events_lookup_error"] = str(e)
-        return
-
-    # 3) Store fresh HTML (can still be "", which is correct for 'no matches')
-    st.session_state["events_lookup_html"] = html

@@ -20,7 +20,6 @@ LUMINARIES_AND_PLANETS = static_db.LUMINARIES_AND_PLANETS
 GLYPHS = static_db.GLYPHS
 from profiles_v2 import glyph_for
 from patterns_v2 import detect_shapes
-from house_selector_v2 import _selected_house_system
 from src.chart_utils import resolve_visible_objects
 from src.nicegui_state import reset_chart_toggles
 from src.drawing_primitives import (

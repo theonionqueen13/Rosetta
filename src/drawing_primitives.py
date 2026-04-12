@@ -1,8 +1,67 @@
 import numpy as np
 import os
 import matplotlib.patheffects as pe
-from now_v2 import _moon_phase_label_emoji
 from models_v2 import static_db
+
+
+# ---------------------------------------------------------------------------
+# Moon-phase helpers (inlined from now_v2 to break the Streamlit dependency)
+# ---------------------------------------------------------------------------
+
+_MOON_PNG_DIR = os.path.join(os.path.dirname(__file__), "..", "pngs")
+
+def _phase_label_from_delta(delta_deg: float) -> str:
+    """Map Sun–Moon elongation to phase using 45°-wide bins."""
+    d = delta_deg % 360.0
+    if d < 22.5 or d >= 337.5:
+        return "New Moon"
+    if d < 67.5:
+        return "Waxing Crescent"
+    if d < 112.5:
+        return "First Quarter"
+    if d < 157.5:
+        return "Waxing Gibbous"
+    if d < 202.5:
+        return "Full Moon"
+    if d < 247.5:
+        return "Waning Gibbous"
+    if d < 292.5:
+        return "Last Quarter"
+    return "Waning Crescent"
+
+
+def _moon_phase_label_emoji(
+    sun_lon_deg: float,
+    moon_lon_deg: float,
+    *,
+    emoji_size_px: int | None = None,
+):
+    """
+    Compute moon phase from ecliptic longitudes.
+    Returns (label, img_html) when emoji_size_px is given,
+    or (label, file_path) otherwise.
+    """
+    _FILENAME_MAP = {
+        "New Moon":        "moon_new.png",
+        "Waxing Crescent": "moon_wax_cres.png",
+        "First Quarter":   "moon_first_quart.png",
+        "Waxing Gibbous":  "moon_wax_gib.png",
+        "Full Moon":       "moon_full.png",
+        "Waning Gibbous":  "moon_wan_gib.png",
+        "Last Quarter":    "moon_last_quart.png",
+        "Waning Crescent": "moon_wan_cres.png",
+    }
+    phase = (moon_lon_deg - sun_lon_deg) % 360.0
+    label = _phase_label_from_delta(phase)
+    file_path = os.path.join(_MOON_PNG_DIR, _FILENAME_MAP[label])
+    if emoji_size_px:
+        url_path = file_path.replace("\\", "/")
+        img_html = (
+            f"<img src='file:///{url_path}' "
+            f"width='{int(emoji_size_px)}' style='vertical-align:middle'/>"
+        )
+        return label, img_html
+    return label, file_path
 
 GROUP_COLORS = static_db.GROUP_COLORS
 GROUP_COLORS_LIGHT = static_db.GROUP_COLORS_LIGHT

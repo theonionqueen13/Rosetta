@@ -1,6 +1,6 @@
 # supabase_client.py
 """
-Factory helpers for creating Supabase clients.
+Factory helpers for creating Supabase clients (NiceGUI).
 
 Two modes are supported:
   - get_supabase()       : plain anon-key client; use for auth operations
@@ -31,38 +31,22 @@ don't bleed between the anon and authed paths.
 """
 import httpx
 from supabase import create_client, Client, ClientOptions
-
 from config import get_secret
 
 # ---------------------------------------------------------------------------
-# Framework-agnostic session lookup
+# Session lookup (NiceGUI)
 # ---------------------------------------------------------------------------
 
 def _get_session_dict() -> dict:
-    """Return the Supabase session dict from whichever framework is active.
+    """Return the Supabase session dict from NiceGUI app.storage.user.
 
-    Tries NiceGUI app.storage.user first, then Streamlit st.session_state.
     Returns a dict with access_token/refresh_token keys.
-    Raises RuntimeError if no session is found in either framework.
+    Raises RuntimeError if no session is found.
     """
-    # --- Try NiceGUI first ---
-    try:
-        from nicegui import app as _ng_app
-        _store = _ng_app.storage.user
-        _sess = _store.get("supabase_session")
-        if _sess:
-            return _sess
-    except Exception:
-        pass
-
-    # --- Fall back to Streamlit ---
-    try:
-        import streamlit as _st
-        _sess = _st.session_state.get("supabase_session")
-        if _sess:
-            return _sess
-    except Exception:
-        pass
+    from nicegui import app as _ng_app
+    _sess = _ng_app.storage.user.get("supabase_session")
+    if _sess:
+        return _sess
 
     raise RuntimeError(
         "No Supabase session found. Please log in again."
@@ -118,8 +102,7 @@ def _get_shared_authed_transport(url: str, key: str) -> httpx.Client:
 def _credentials() -> tuple[str, str]:
     """Return (url, anon_key) for Supabase.
 
-    Uses config.get_secret() which checks env vars first, then falls back
-    to st.secrets when running under Streamlit.
+    Uses config.get_secret() which checks env vars first, then .env.
     """
     url = get_secret("supabase", "url")
     key = get_secret("supabase", "key")
@@ -128,8 +111,7 @@ def _credentials() -> tuple[str, str]:
 
     raise KeyError(
         "Supabase credentials not found. "
-        "Set SUPABASE_URL and SUPABASE_KEY environment variables (or in .env), "
-        "or add a [supabase] section with 'url' and 'key' in .streamlit/secrets.toml."
+        "Set SUPABASE_URL and SUPABASE_KEY environment variables (or in .env)."
     )
 
 
@@ -166,8 +148,7 @@ def get_authed_supabase() -> Client:
     Returns a Supabase client with the current user's session injected.
     This makes every DB query run as the logged-in user and activates RLS.
 
-    Session is resolved via _get_session_dict(), which checks NiceGUI
-    storage first, then Streamlit session_state.
+    Session is resolved via _get_session_dict() from NiceGUI app.storage.user.
     The client is cached by access token in a module-level dict (avoids
     JSON serialisation issues with NiceGUI's file-backed storage).
     All postgrest sub-client re-creations reuse a shared httpx.Client so
@@ -200,6 +181,30 @@ def get_authed_supabase() -> Client:
     # Cache the client in-memory (keyed by token)
     _authed_client_cache[token] = client
     return client
+
+
+def get_current_user_id() -> str | None:
+    """Return the logged-in Supabase user ID from NiceGUI app.storage.user.
+
+    Returns ``None`` if no authenticated session is present.
+    """
+    try:
+        from nicegui import app as _ng_app
+        return _ng_app.storage.user.get("supabase_user_id")
+    except Exception:
+        return None
+
+
+def get_current_user_email() -> str | None:
+    """Return the logged-in user's email from NiceGUI app.storage.user.
+
+    Returns ``None`` if no authenticated session is present.
+    """
+    try:
+        from nicegui import app as _ng_app
+        return _ng_app.storage.user.get("supabase_user_email")
+    except Exception:
+        return None
 
 
 def reset_authed_client_state() -> None:
