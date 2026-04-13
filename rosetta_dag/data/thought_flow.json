@@ -1,0 +1,2744 @@
+{
+    "meta": {
+        "version": 1,
+        "generated": "2026-03-17",
+        "description": "MCP chatbot internal thought flowchart — one tab per pipeline domain."
+    },
+    "stage_colors": {
+        "input": "#4A90D9",
+        "comprehension": "#9B59B6",
+        "routing": "#E8873A",
+        "llm_path": "#8A6FC7",
+        "kw_path": "#C97A3A",
+        "extraction": "#1ABC9C",
+        "collection": "#F1C40F",
+        "assembly": "#5CB85C",
+        "synthesis": "#E74C3C",
+        "classification": "#16A085",
+        "shape_detect": "#2E86AB",
+        "geometry": "#A23B72",
+        "enrichment": "#F18F01",
+        "type_routing": "#E8873A",
+        "backend": "#C0392B",
+        "special": "#D35400",
+        "output": "#27AE60",
+        "intent_check": "#8E44AD",
+        "domain": "#2980B9"
+    },
+    "tabs": [
+        {
+            "id": "main_pipeline",
+            "label": "Main Pipeline",
+            "description": "End-to-end pipeline: Question → Comprehension → Routing → Circuit extraction → Fact collection → ReadingPacket → Prose synthesis.",
+            "layout_direction": "TB"
+        },
+        {
+            "id": "comprehension",
+            "label": "Comprehension",
+            "description": "How the chatbot parses a free-text question — LLM structured-output path vs. keyword fallback.",
+            "layout_direction": "TB"
+        },
+        {
+            "id": "intent_routing",
+            "label": "Intent Routing",
+            "description": "TermIntent classification — 14 named intents each with a dedicated reading branch.",
+            "layout_direction": "TB"
+        },
+        {
+            "id": "topic_maps",
+            "label": "Topic Maps",
+            "description": "Keyword → life-area domain routing across 12 WIZARD_TARGET domains with subtopic refinement.",
+            "layout_direction": "TB"
+        },
+        {
+            "id": "switch_points",
+            "label": "Switch Points",
+            "description": "Detecting incomplete Platonic shapes in the circuit graph and computing the resolution degree + keystone guidance.",
+            "layout_direction": "TB"
+        },
+        {
+            "id": "circuit_extract",
+            "label": "Circuit Extraction",
+            "description": "Subgraph extraction from the circuit model based on question_type (single_focus, relationship, multi_node, open_exploration).",
+            "layout_direction": "TB"
+        },
+        {
+            "id": "synthesis",
+            "label": "Prose Synthesis",
+            "description": "Voice mode selection, 21-rule system prompt injection, and multi-backend LLM dispatch.",
+            "layout_direction": "TB"
+        }
+    ],
+    "nodes": [
+
+
+    {
+            "id": "mp_start",
+            "label": "START",
+            "type": "terminal",
+            "stage": "input",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/server.py",
+            "source_line": 46,
+            "description": "JSON-RPC 2.0 stdio request arrives. Dispatcher routes to the relevant MCP tool handler.",
+            "group": null
+        },
+        {
+            "id": "mp_question_in",
+            "label": "User Question (free text)",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/tools.py",
+            "source_line": 33,
+            "description": "The 'question' parameter from the ask_chart tool call. Also carries chart_a (and optionally chart_b for dyadic readings).",
+            "group": null
+        },
+        {
+            "id": "mp_comprehension",
+            "label": "Comprehension Layer\ncomprehend()",
+            "type": "process",
+            "stage": "comprehension",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 933,
+            "description": "Decomposes the question into a QuestionGraph (nodes → astrological factors, edges → relationship types). Two paths: LLM structured-output or keyword fallback.",
+            "group": null
+        },
+        {
+            "id": "mp_clarify_gate",
+            "label": "ClarificationRequest?",
+            "type": "decision",
+            "stage": "comprehension",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 185,
+            "description": "If the comprehension layer returned a ClarificationRequest (question too ambiguous), early-exit with a follow-up prompt to the user instead of attempting a full reading.",
+            "group": null
+        },
+        {
+            "id": "mp_clarify_out",
+            "label": "Return Clarification\nPrompt to User",
+            "type": "terminal",
+            "stage": "output",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 185,
+            "description": "ReadingPacket returned with comprehension_note = 'CLARIFICATION_NEEDED: <follow_up_question>'. No chart data included.",
+            "group": null
+        },
+        {
+            "id": "mp_intent_check",
+            "label": "Special TermIntent\nBranch?",
+            "type": "decision",
+            "stage": "routing",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 210,
+            "description": "Check whether question_intent maps to a named TermIntent constant (e.g. POTENCY_RANKING, SPIRITUAL_PURPOSE). Named intents take a specialised collection path.",
+            "group": null
+        },
+        {
+            "id": "mp_special_branch",
+            "label": "Special Intent Handler\n(e.g. Potency Ranking)",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 210,
+            "description": "Handles 14 named TermIntents with dedicated collection logic. Example: POTENCY_RANKING scores all planets via dignity_calc and returns tier labels only (no raw numbers).",
+            "group": null
+        },
+        {
+            "id": "mp_circuit_query",
+            "label": "Circuit Query\nquery_circuit()",
+            "type": "process",
+            "stage": "extraction",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 1,
+            "description": "Extracts the relevant subgraph from the circuit model based on question_type and focus factors. Returns CircuitReading (relevant shapes, narrative seeds, power summary).",
+            "group": null
+        },
+        {
+            "id": "mp_fact_collect",
+            "label": "Classical Fact Collection\n(placements, aspects, patterns,\ndignities, switch points)",
+            "type": "process",
+            "stage": "collection",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 124,
+            "description": "Gathers PlacementFacts, AspectFacts, PatternFacts, DignityFacts, and SwitchPointFacts for all factors identified in the QuestionGraph. No LLM involved — pure validated data.",
+            "group": null
+        },
+        {
+            "id": "mp_dyadic_gate",
+            "label": "Dyadic + No Chart B?",
+            "type": "decision",
+            "stage": "collection",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [
+                "synastry"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 370,
+            "description": "Soft gate: if subject_config == 'dyadic' but chart_b is None, the chatbot cannot do a full synastry reading. Sets needs_chart_b = True in the ReadingPacket.",
+            "group": null
+        },
+        {
+            "id": "mp_needs_chartb",
+            "label": "needs_chart_b = True\n(partial packet)",
+            "type": "gate",
+            "stage": "output",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [
+                "synastry"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 370,
+            "description": "Partial ReadingPacket flagged with needs_chart_b = True. Prose synthesizer is instructed to tell the user a second chart is required.",
+            "group": null
+        },
+        {
+            "id": "mp_natal_interp",
+            "label": "NatalInterpreter\n(optional prose enrichment)",
+            "type": "process",
+            "stage": "collection",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "in-progress",
+            "source_file": "interp_base_natal.py",
+            "source_line": 1,
+            "description": "Optional interpretation layer that generates structured interpretation text for natal placements before synthesis. Enriches the ReadingPacket with interp_text.",
+            "group": null
+        },
+        {
+            "id": "mp_assemble",
+            "label": "Assemble ReadingPacket",
+            "type": "process",
+            "stage": "assembly",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/reading_packet.py",
+            "source_line": 1,
+            "description": "Collects all facts into a ReadingPacket dataclass. Includes: circuit_reading, placements, aspects, patterns, dignities, switch_points, interp_text, comprehension_result, chart_mode, temporal_dimension.",
+            "group": null
+        },
+        {
+            "id": "mp_synthesize",
+            "label": "Prose Synthesizer\nsynthesize()",
+            "type": "process",
+            "stage": "synthesis",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 1,
+            "description": "Converts the ReadingPacket into natural language prose. Selects voice mode (circuit vs plain), injects 21-rule system prompt, calls the configured LLM backend, returns SynthesisResult.",
+            "group": null
+        },
+        {
+            "id": "mp_end",
+            "label": "SynthesisResult\n(Final Response)",
+            "type": "terminal",
+            "stage": "output",
+            "tabs": [
+                "main_pipeline"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 1,
+            "description": "The final SynthesisResult returned to the MCP client. Contains: prose_text, voice_mode, llm_model, reading_packet reference, synthesis_notes.",
+            "group": null
+        },
+
+
+    {
+            "id": "comp_start",
+            "label": "Question Text\n+ chart_a context",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 933,
+            "description": "Entry point: comprehend(question, chart_a, api_key). chart_a provides the validated factor vocabulary — LLM cannot reference factors not in VALID_FACTORS from this chart.",
+            "group": null
+        },
+        {
+            "id": "comp_api_check",
+            "label": "API Key Present?",
+            "type": "decision",
+            "stage": "input",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 933,
+            "description": "Switches between the LLM structured-output path (full 5W+H) and the keyword fallback path (deterministic pattern matching).",
+            "group": null
+        },
+        {
+            "id": "comp_llm_p1",
+            "label": "Phase 1:\nActive Listening (5W+H)",
+            "type": "process",
+            "stage": "llm_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 390,
+            "description": "LLM extracts full 5W+H (Who/What/When/Where/Why/How) from the question BEFORE touching astrology. Also detects question_form (polar, wh-what, wh-open, why-diagnostic, advisory-how, comparative, ranking, temporal-when, compound).",
+            "group": "llm_path"
+        },
+        {
+            "id": "comp_llm_p2",
+            "label": "Phase 2:\nAstrological Mapping",
+            "type": "process",
+            "stage": "llm_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 450,
+            "description": "LLM selects astrological factors ONLY from VALID_FACTORS (chart-derived vocabulary). Detects temporal dimension, subject config, relationship types. Cannot hallucinate planet names not in the chart's actual placements.",
+            "group": "llm_path"
+        },
+        {
+            "id": "comp_llm_parse",
+            "label": "Parse LLM JSON → schema",
+            "type": "process",
+            "stage": "llm_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 550,
+            "description": "Validates LLM output against the ComprehensionResult JSON schema. Falls back to keyword path if the LLM returns malformed JSON.",
+            "group": "llm_path"
+        },
+        {
+            "id": "comp_sufficient",
+            "label": "Question Sufficient?",
+            "type": "decision",
+            "stage": "llm_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 550,
+            "description": "LLM decides if the question has enough specificity to produce a meaningful reading. Statements with no explicit question set comprehension_confidence = 0.1–0.25 and flag 'no_explicit_question' as ambiguity.",
+            "group": "llm_path"
+        },
+        {
+            "id": "comp_clarify_req",
+            "label": "Build\nClarificationRequest",
+            "type": "output",
+            "stage": "output",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 600,
+            "description": "Returns a ClarificationRequest with a specific follow-up question to the user. The reading engine detects this and returns an early-exit ReadingPacket.",
+            "group": "llm_path"
+        },
+        {
+            "id": "comp_kw_factors",
+            "label": "resolve_factors()\nKeyword Match",
+            "type": "process",
+            "stage": "kw_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 1,
+            "description": "Matches question text against WIZARD_TARGETS and KEYWORDS_LOOKUP. Returns a TopicMatch with domain, subtopic, factors, confidence, and matched_keywords.",
+            "group": "kw_path"
+        },
+        {
+            "id": "comp_kw_temporal",
+            "label": "_detect_temporal()",
+            "type": "process",
+            "stage": "kw_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 265,
+            "description": "Heuristically classifies temporal frame: natal | transit | synastry | solar_return | relocation | cycle | timing_predict.",
+            "group": "kw_path"
+        },
+        {
+            "id": "comp_kw_subject",
+            "label": "_detect_subject()",
+            "type": "process",
+            "stage": "kw_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 274,
+            "description": "Classifies subject: single (one person's chart) | dyadic (two people) | familial (parent/child ancestral).",
+            "group": "kw_path"
+        },
+        {
+            "id": "comp_kw_relation",
+            "label": "_detect_relationship_type()",
+            "type": "process",
+            "stage": "kw_path",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 226,
+            "description": "Classifies graph edge types: connection | tension | support | timing.",
+            "group": "kw_path"
+        },
+        {
+            "id": "comp_type_classifier",
+            "label": "Question Type\nClassifier (node count)",
+            "type": "decision",
+            "stage": "classification",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 350,
+            "description": "Classifies by number of astrological graph nodes: 0 → open_exploration | 1 → single_focus | 2 → relationship | 3+ → multi_node.",
+            "group": null
+        },
+        {
+            "id": "comp_type_open",
+            "label": "open_exploration\n(0 nodes)",
+            "type": "process",
+            "stage": "classification",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 350,
+            "description": "No specific astrological focus detected. Circuit extraction will use top shapes by throughput + SN→NN path + dominant/bottleneck factors.",
+            "group": "type_outputs"
+        },
+        {
+            "id": "comp_type_single",
+            "label": "single_focus\n(1 node)",
+            "type": "process",
+            "stage": "classification",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 350,
+            "description": "Single astrological factor (e.g. 'my Moon'). Circuit extraction finds all shapes containing that factor.",
+            "group": "type_outputs"
+        },
+        {
+            "id": "comp_type_rel",
+            "label": "relationship\n(2 nodes)",
+            "type": "process",
+            "stage": "classification",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 350,
+            "description": "Two astrological factors (e.g. 'Moon and Saturn'). Circuit extraction finds shapes from both clusters plus bridging aspects.",
+            "group": "type_outputs"
+        },
+        {
+            "id": "comp_type_multi",
+            "label": "multi_node\n(3+ nodes)",
+            "type": "process",
+            "stage": "classification",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 350,
+            "description": "Three or more factors. Circuit extraction unions all shapes containing any factor from any node.",
+            "group": "type_outputs"
+        },
+        {
+            "id": "comp_question_graph",
+            "label": "QuestionGraph\n(nodes + edges + metadata)",
+            "type": "process",
+            "stage": "output",
+            "tabs": [
+                "comprehension"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/comprehension.py",
+            "source_line": 933,
+            "description": "Final output: a QuestionGraph with factor nodes, relationship edges, question_type, question_form, temporal_dimension, subject_config, comprehension_confidence, and ambiguities list.",
+            "group": null
+        },
+
+
+    {
+            "id": "ir_input",
+            "label": "QuestionGraph\n(question_intent field)",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "The question_intent field from ComprehensionResult maps to one of 14 TermIntent constants or falls through to the generic pipeline.",
+            "group": null
+        },
+        {
+            "id": "ir_check",
+            "label": "Named TermIntent?",
+            "type": "decision",
+            "stage": "intent_check",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 210,
+            "description": "Checks if question_intent matches a known TermIntent constant. If yes, routes to a specialised handler. If no, continues through the generic pipeline.",
+            "group": null
+        },
+        {
+            "id": "ir_generic",
+            "label": "Generic Pipeline\n(standard path)",
+            "type": "process",
+            "stage": "output",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 124,
+            "description": "No special intent detected. Falls through to the standard circuit-query + fact-collection + synthesis pipeline.",
+            "group": null
+        },
+        {
+            "id": "ir_potency",
+            "label": "POTENCY_RANKING\n→ Score all planets",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 210,
+            "description": "Scores all 10 planets using dignity_calc power index. Returns tier labels (Dominant / Strong / Moderate / Weak) — never raw numeric scores. Bypasses normal circuit extraction.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_relationship",
+            "label": "RELATIONSHIP_READING\n→ Synastry branch",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "synastry"
+            ],
+            "status": "in-progress",
+            "source_file": "src/mcp/reading_engine.py",
+            "source_line": 210,
+            "description": "Partner/synastry reading. Requires chart_b. Extracts inter-chart aspects and combined circuit patterns.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_timing",
+            "label": "TIMING_FORECAST\n→ Transit timing",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "transit",
+                "timing_predict"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Future transit window analysis. Identifies when transiting planets contact natal switch points or key natal factors. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_career",
+            "label": "CAREER_PATH\n→ MC/Saturn guidance",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Career and public life reading. Focuses on MC, Saturn, 10th house, Capricorn. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_cycle",
+            "label": "CYCLE_GUIDANCE\n→ Saturn/Jupiter cycle",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "cycle"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Long-period planetary cycles (Saturn return, Jupiter cycle, Pluto transits). NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_spiritual",
+            "label": "SPIRITUAL_PURPOSE\n→ North Node / soul path",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Soul purpose and spiritual direction. Focuses on North Node, South Node, 12th house, Neptune. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_emotional",
+            "label": "EMOTIONAL_WELLNESS\n→ Moon / inner world",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Emotional patterns, anxiety, grief, inner landscape. Focuses on Moon, Ceres, 4th house, Cancer. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_challenge",
+            "label": "CHALLENGE_TRANSMUTE\n→ Difficult aspects → strengths",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Reframes challenging aspects (squares, oppositions, difficult placements) as latent strengths and growth edges. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_priority",
+            "label": "LIFE_AREA_PRIORITY\n→ What to focus on",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal",
+                "transit"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Identifies the most activated or stressed life area. Combines current transits with natal chart weight. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_family",
+            "label": "FAMILY_DYNAMICS\n→ Parental / ancestral",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Parental and ancestral pattern reading. Focuses on 4th house, Moon, Saturn, IC, Chiron. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_relocation",
+            "label": "RELOCATION\n→ Astrocartography",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "relocation"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Relocation chart considerations — how a different geographic location shifts house cusps and chart emphasis. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_community",
+            "label": "COMMUNITY_BELONGING\n→ 11th house / groups",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Finding community and belonging. Focuses on 11th house, Uranus, Aquarius. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_financial",
+            "label": "FINANCIAL_INSIGHT\n→ 2nd/8th house money",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "Financial patterns and resources. Focuses on 2nd/8th house axis, Venus, Jupiter, Taurus/Scorpio. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+        {
+            "id": "ir_perception",
+            "label": "TRAIT_PERCEPTION\n→ How others see you",
+            "type": "process",
+            "stage": "special",
+            "tabs": [
+                "intent_routing"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "planned",
+            "source_file": "src/mcp/term_registry.py",
+            "source_line": 44,
+            "description": "External perception and reputation. Focuses on Ascendant, 1st house, Sun, Mars. NOT YET BUILT.",
+            "group": "intent_handlers"
+        },
+
+
+    {
+            "id": "tm_input",
+            "label": "Question Text",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 1,
+            "description": "Raw question text passed to resolve_factors(). Can also be called with a domain hint from a prior LLM comprehension step.",
+            "group": null
+        },
+        {
+            "id": "tm_resolve",
+            "label": "resolve_factors()\nKeyword token scan",
+            "type": "process",
+            "stage": "input",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 1,
+            "description": "Tokenises the question and matches against WIZARD_TARGETS keyword arrays. Returns the highest-confidence TopicMatch, or General (confidence 0.15) as fallback.",
+            "group": null
+        },
+        {
+            "id": "tm_match_check",
+            "label": "Keyword matched?",
+            "type": "decision",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "If a domain keyword match is found above the confidence threshold, route to that domain. Otherwise route to General fallback.",
+            "group": null
+        },
+        {
+            "id": "tm_general",
+            "label": "General (fallback)\nconfidence 0.15",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 150,
+            "description": "Fallback domain with confidence 0.15. Used when no specific domain keyword matches. Includes broad factors covering all chart areas.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_identity",
+            "label": "Identity & Self\n(Sun, ASC, NN, 1st)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 1: Identity. Sun, Ascendant, North Node, 1st House. Keywords: identity, self, who am I, personality, appearance.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_emotions",
+            "label": "Emotions & Inner World\n(Moon, Ceres, 4th)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 2: Emotions. Moon, Ceres, 4th House, Cancer. Keywords: feelings, emotions, anxiety, grief, inner world, nurturing.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_relationships",
+            "label": "Relationships & Love\n(Venus, Mars, 7th)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal",
+                "synastry"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 3: Relationships. Venus, Mars, 7th House, Descendant. Keywords: love, relationship, partner, attraction, marriage.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_career",
+            "label": "Career & Public Life\n(MC, Saturn, 10th)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 4: Career. MC, Saturn, 10th House, Capricorn. Keywords: career, work, job, profession, ambition, authority.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_finances",
+            "label": "Finances & Resources\n(Venus, Jupiter, 2nd)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 5: Finance. Venus, Jupiter, 2nd House, Taurus. Keywords: money, finances, resources, wealth, abundance.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_mind",
+            "label": "Learning & Mind\n(Mercury, Jupiter, 3rd/9th)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 6: Mind. Mercury, Jupiter, 3rd/9th House. Keywords: learning, mind, communication, education, travel, beliefs.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_spiritual",
+            "label": "Spirituality & Imagination\n(Neptune, 12th, Pisces)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 7: Spirituality. Neptune, 12th House, Pisces. Keywords: spirituality, dreams, intuition, mysticism, transcendence.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_transformation",
+            "label": "Change & Transformation\n(Pluto, 8th, Scorpio)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal",
+                "transit"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 8: Transformation. Pluto, 8th House, Scorpio. Keywords: change, transformation, death, rebirth, power, loss.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_conflict",
+            "label": "Conflict & Enemies\n(Mars, Eris, 7th shadow)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 9: Conflict. Mars, Eris, 7th House shadow side. Keywords: conflict, enemies, arguments, competition, aggression.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_service",
+            "label": "Devotion & Service\n(Vesta, Chiron, 6th)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 10: Service. Vesta, Chiron, 6th House. Keywords: service, devotion, health, daily routines, healing, purpose.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_community",
+            "label": "Community & Future\n(Uranus, 11th, Aquarius)",
+            "type": "process",
+            "stage": "domain",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 44,
+            "description": "Domain 11: Community. Uranus, 11th House, Aquarius. Keywords: community, friends, groups, future, innovation, belonging.",
+            "group": "domains"
+        },
+        {
+            "id": "tm_topic_match",
+            "label": "TopicMatch\n(domain + subtopic +\nfactors + confidence)",
+            "type": "output",
+            "stage": "output",
+            "tabs": [
+                "topic_maps"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/topic_maps.py",
+            "source_line": 1,
+            "description": "Final output: TopicMatch dataclass with domain, subtopic, factors (list of astrological factor IDs), confidence (0.0–1.0), and matched_keywords.",
+            "group": null
+        },
+
+
+    {
+            "id": "sp_input",
+            "label": "Natal Chart\n(aspect graph)",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 587,
+            "description": "Entry: find_switch_points(chart). Receives the parsed natal chart with all detected aspect patterns.",
+            "group": null
+        },
+        {
+            "id": "sp_shape_scan",
+            "label": "Scan for Incomplete\nResonant Shapes",
+            "type": "process",
+            "stage": "shape_detect",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 56,
+            "description": "Iterates all detected aspect patterns and checks SHAPE_COMPLETIONS map to find T-Squares, Wedges, Envelopes, and Cradles — each of which has a missing completion point.",
+            "group": null
+        },
+        {
+            "id": "sp_shape_check",
+            "label": "Which incomplete shape?",
+            "type": "decision",
+            "stage": "shape_detect",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 56,
+            "description": "Dispatches to the appropriate geometry function based on the detected shape type. Each shape has a unique geometric method for locating the missing degree.",
+            "group": null
+        },
+        {
+            "id": "sp_tsquare",
+            "label": "T-Square\n→ _find_t_square_apex()\nSwitch = 180° from apex",
+            "type": "process",
+            "stage": "geometry",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 302,
+            "description": "Locates the T-Square apex planet. Switch point = 180° from the apex (completing it into a Grand Cross). Completes to: Grand Cross (drum_head membrane).",
+            "group": "geometry_fns"
+        },
+        {
+            "id": "sp_wedge",
+            "label": "Wedge\n→ _find_wedge_non_opp()\nSwitch = 180° from non-opp",
+            "type": "process",
+            "stage": "geometry",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 328,
+            "description": "Finds the planet in the Wedge that does NOT form an opposition. Switch point = 180° from that planet (completing it into a Mystic Rectangle / resonant_membrane).",
+            "group": "geometry_fns"
+        },
+        {
+            "id": "sp_envelope",
+            "label": "Envelope\n→ _find_envelope_missing()\nSwitch = 180° from endpoint",
+            "type": "process",
+            "stage": "geometry",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 347,
+            "description": "Analyses sextile chain endpoints. Switch point = 180° from the endpoint that lacks an opposition (completing it into a Merkabah / drum_head).",
+            "group": "geometry_fns"
+        },
+        {
+            "id": "sp_cradle",
+            "label": "Cradle\n→ _find_cradle_extension()\nAdds 5th sextile link",
+            "type": "process",
+            "stage": "geometry",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 389,
+            "description": "Extends the 4-planet sextile chain by one more step. The switch point is the sextile extension point (completing the Cradle into an Envelope, stepping toward Merkabah).",
+            "group": "geometry_fns"
+        },
+        {
+            "id": "sp_longitude",
+            "label": "Compute Switch Point\n(longitude → sign/degree/DMS)",
+            "type": "process",
+            "stage": "geometry",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 440,
+            "description": "Converts the raw ecliptic longitude to: sign name, degree_in_sign, DMS string, and range_description (orb-spread capture range for activation window).",
+            "group": null
+        },
+        {
+            "id": "sp_sabian",
+            "label": "Sabian Symbol\nat switch-point degree",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 440,
+            "description": "Looks up the Sabian symbol from sabian_symbols.json at the exact switch-point degree. Adds symbolic/archetypal interpretive depth to the structural calculation.",
+            "group": null
+        },
+        {
+            "id": "sp_saturn_element",
+            "label": "Saturn Element Context\n_build_saturn_summary()",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 446,
+            "description": "Checks the element of natal Saturn's sign to determine which type of keystone (real-world structure) will most effectively activate the switch point.",
+            "group": null
+        },
+        {
+            "id": "sp_saturn_dispatch",
+            "label": "Saturn Element?",
+            "type": "decision",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 446,
+            "description": "Routes to element-specific keystone guidance based on Saturn's element in the natal chart.",
+            "group": null
+        },
+        {
+            "id": "sp_fire",
+            "label": "Fire Saturn\n→ active, performative,\nidentity-affirming keystones",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 446,
+            "description": "Fire Saturn (Aries, Leo, Sagittarius): keystones should be active, visible, performance-based, or identity-affirming — theatre, leadership roles, athletic structures.",
+            "group": "saturn_elements"
+        },
+        {
+            "id": "sp_earth",
+            "label": "Earth Saturn\n→ material, sensory,\ndaily practice keystones",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 446,
+            "description": "Earth Saturn (Taurus, Virgo, Capricorn): keystones should be material, physical, sensory, or habitual — gardens, craft disciplines, structured daily routines.",
+            "group": "saturn_elements"
+        },
+        {
+            "id": "sp_air",
+            "label": "Air Saturn\n→ learning, community,\ndialogue keystones",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 446,
+            "description": "Air Saturn (Gemini, Libra, Aquarius): keystones should involve learning, systematic thinking, community structures, or dialogue — book clubs, regular study, group commitments.",
+            "group": "saturn_elements"
+        },
+        {
+            "id": "sp_water",
+            "label": "Water Saturn\n→ reflection, creative\nspace, emotional keystones",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 446,
+            "description": "Water Saturn (Cancer, Scorpio, Pisces): keystones should support emotional processing, creative expression, or sacred solo practice — journaling, therapy structure, regular ceremony.",
+            "group": "saturn_elements"
+        },
+        {
+            "id": "sp_house",
+            "label": "switch_point_house\n(natal house lookup)",
+            "type": "process",
+            "stage": "enrichment",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "switch_points.py",
+            "source_line": 500,
+            "description": "Determines which natal house the switch point degree falls in. This contextualises the life area where the activation would most naturally manifest.",
+            "group": null
+        },
+        {
+            "id": "sp_output",
+            "label": "SwitchPointFact\n(per shape)",
+            "type": "output",
+            "stage": "output",
+            "tabs": [
+                "switch_points"
+            ],
+            "chart_modes": [
+                "natal"
+            ],
+            "status": "done",
+            "source_file": "src/mcp/reading_packet.py",
+            "source_line": 103,
+            "description": "Final output: SwitchPointFact dataclass with longitude, sign, degree_in_sign, dms, range_description, sabian_symbol, saturn_context (keystone guidance), switch_point_house, source_shape, completes_to.",
+            "group": null
+        },
+
+
+    {
+            "id": "ce_input",
+            "label": "QuestionGraph\n+ Circuit Model",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 1,
+            "description": "Entry: query_circuit(question_graph, circuit_model). question_graph provides focus factors; circuit_model is the full planetary aspect graph with throughput/bottleneck weights.",
+            "group": null
+        },
+        {
+            "id": "ce_type_dispatch",
+            "label": "question_type?",
+            "type": "decision",
+            "stage": "type_routing",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 1,
+            "description": "Routes to one of four extraction strategies based on the question_type from ComprehensionResult.",
+            "group": null
+        },
+        {
+            "id": "ce_single",
+            "label": "single_focus\n→ All shapes containing\nthe focus factor",
+            "type": "process",
+            "stage": "extraction",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 100,
+            "description": "Extracts all aspect shapes that contain any focus factor. Returns full shapes — not trimmed — to preserve the complete circuit structure.",
+            "group": "extraction_branches"
+        },
+        {
+            "id": "ce_relationship",
+            "label": "relationship\n→ Shapes from both clusters\n+ bridging aspects",
+            "type": "process",
+            "stage": "extraction",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 200,
+            "description": "For two-factor questions: finds shapes containing factors from either cluster, plus any direct aspects or shared-shape memberships that bridge the two clusters.",
+            "group": "extraction_branches"
+        },
+        {
+            "id": "ce_multi",
+            "label": "multi_node\n→ Union of all shapes\nfor any factor",
+            "type": "process",
+            "stage": "extraction",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 300,
+            "description": "For 3+ factor questions: takes the union of all shapes containing any factor from any QuestionGraph node. May produce a large subgraph — deduplication applied.",
+            "group": "extraction_branches"
+        },
+        {
+            "id": "ce_open",
+            "label": "open_exploration\n→ Top shapes by throughput\n+ SN→NN path + dominant",
+            "type": "process",
+            "stage": "extraction",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 400,
+            "description": "For unfocused questions: selects top N shapes by circuit throughput weight, adds the South Node→North Node path, and identifies the chart's dominant factor and bottleneck.",
+            "group": "extraction_branches"
+        },
+        {
+            "id": "ce_output",
+            "label": "CircuitReading\n(relevant_shapes,\nnarrative_seeds,\npower_summary)",
+            "type": "output",
+            "stage": "output",
+            "tabs": [
+                "circuit_extract"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/circuit_query.py",
+            "source_line": 700,
+            "description": "Final output: CircuitReading with relevant_shapes (deduplicated), focus_nodes, narrative_seeds (starting points for prose), power_summary, sn_nn_relevance.",
+            "group": null
+        },
+
+
+    {
+            "id": "syn_input",
+            "label": "ReadingPacket",
+            "type": "input",
+            "stage": "input",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 1,
+            "description": "Full ReadingPacket: circuit_reading, placements, aspects, patterns, dignities, switch_points, interp_text, comprehension_result, chart_mode, temporal_dimension.",
+            "group": null
+        },
+        {
+            "id": "syn_voice",
+            "label": "Select Voice Mode\n(circuit vs plain)",
+            "type": "process",
+            "stage": "input",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prompt_templates.py",
+            "source_line": 150,
+            "description": "'circuit' voice: energy/flow/friction metaphor language ('power flows through the trine', 'friction load on the square'). 'plain' voice: psychological/life language ('natural talent', 'area of tension').",
+            "group": null
+        },
+        {
+            "id": "syn_rules",
+            "label": "Inject 21-Rule\nSystem Prompt",
+            "type": "process",
+            "stage": "input",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "done",
+            "source_file": "src/mcp/prompt_templates.py",
+            "source_line": 30,
+            "description": "Builds the full system prompt from 21 hard rules covering: data fidelity, hallucination prevention, power index display, querent state adaptation, biwheel context reading, circuit shape deduplication, and more.",
+            "group": null
+        },
+        {
+            "id": "syn_backend_check",
+            "label": "LLM Backend?",
+            "type": "decision",
+            "stage": "backend",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 1,
+            "description": "Checks which LLM backend is configured. Dispatches to the appropriate API client or the structured-text fallback renderer.",
+            "group": null
+        },
+        {
+            "id": "syn_openrouter",
+            "label": "OpenRouter\n(Gemini 2.0 Flash, default)",
+            "type": "process",
+            "stage": "backend",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 50,
+            "description": "Default backend: google/gemini-2.0-flash-001 via OpenRouter API. Fast and cost-effective for structured astrological prose.",
+            "group": "backends"
+        },
+        {
+            "id": "syn_openai",
+            "label": "OpenAI\n(GPT-4o, configurable)",
+            "type": "process",
+            "stage": "backend",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 100,
+            "description": "OpenAI backend for GPT-4o or other OpenAI models. Configured via OPENAI_API_KEY.",
+            "group": "backends"
+        },
+        {
+            "id": "syn_anthropic",
+            "label": "Anthropic\n(Claude, configurable)",
+            "type": "process",
+            "stage": "backend",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 150,
+            "description": "Anthropic backend for Claude models. Configured via ANTHROPIC_API_KEY.",
+            "group": "backends"
+        },
+        {
+            "id": "syn_fallback",
+            "label": "Structured-Text\nFallback (no LLM)",
+            "type": "process",
+            "stage": "backend",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 200,
+            "description": "When no API key is available: renders structured text directly from the ReadingPacket fields without LLM. Produces a deterministic but readable outline of chart facts.",
+            "group": "backends"
+        },
+        {
+            "id": "syn_output",
+            "label": "SynthesisResult\n(prose_text + metadata)",
+            "type": "terminal",
+            "stage": "output",
+            "tabs": [
+                "synthesis"
+            ],
+            "chart_modes": [],
+            "status": "in-progress",
+            "source_file": "src/mcp/prose_synthesizer.py",
+            "source_line": 380,
+            "description": "Final output: SynthesisResult with prose_text, voice_mode, llm_model used, synthesis_notes (any rule violations detected), and raw ReadingPacket reference.",
+            "group": null
+        }
+    ],
+    "edges": [
+
+
+    {
+            "id": "e_mp_1",
+            "source": "mp_start",
+            "target": "mp_question_in",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_2",
+            "source": "mp_question_in",
+            "target": "mp_comprehension",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_3",
+            "source": "mp_comprehension",
+            "target": "mp_clarify_gate",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_4",
+            "source": "mp_clarify_gate",
+            "target": "mp_clarify_out",
+            "label": "yes",
+            "chart_modes": [],
+            "edge_type": "gate"
+        },
+        {
+            "id": "e_mp_5",
+            "source": "mp_clarify_gate",
+            "target": "mp_intent_check",
+            "label": "no",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_6",
+            "source": "mp_intent_check",
+            "target": "mp_special_branch",
+            "label": "TermIntent match",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_7",
+            "source": "mp_intent_check",
+            "target": "mp_circuit_query",
+            "label": "generic",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_8",
+            "source": "mp_special_branch",
+            "target": "mp_assemble",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_9",
+            "source": "mp_circuit_query",
+            "target": "mp_fact_collect",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_10",
+            "source": "mp_fact_collect",
+            "target": "mp_dyadic_gate",
+            "label": "",
+            "chart_modes": [
+                "synastry"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_11",
+            "source": "mp_fact_collect",
+            "target": "mp_natal_interp",
+            "label": "non-dyadic",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_12",
+            "source": "mp_dyadic_gate",
+            "target": "mp_needs_chartb",
+            "label": "chart_b missing",
+            "chart_modes": [
+                "synastry"
+            ],
+            "edge_type": "gate"
+        },
+        {
+            "id": "e_mp_13",
+            "source": "mp_dyadic_gate",
+            "target": "mp_natal_interp",
+            "label": "chart_b present",
+            "chart_modes": [
+                "synastry"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_14",
+            "source": "mp_needs_chartb",
+            "target": "mp_assemble",
+            "label": "",
+            "chart_modes": [
+                "synastry"
+            ],
+            "edge_type": "fallback"
+        },
+        {
+            "id": "e_mp_15",
+            "source": "mp_natal_interp",
+            "target": "mp_assemble",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_16",
+            "source": "mp_assemble",
+            "target": "mp_synthesize",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_mp_17",
+            "source": "mp_synthesize",
+            "target": "mp_end",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+
+
+    {
+            "id": "e_comp_1",
+            "source": "comp_start",
+            "target": "comp_api_check",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_2",
+            "source": "comp_api_check",
+            "target": "comp_llm_p1",
+            "label": "yes",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_3",
+            "source": "comp_api_check",
+            "target": "comp_kw_factors",
+            "label": "no",
+            "chart_modes": [],
+            "edge_type": "fallback"
+        },
+        {
+            "id": "e_comp_4",
+            "source": "comp_llm_p1",
+            "target": "comp_llm_p2",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_5",
+            "source": "comp_llm_p2",
+            "target": "comp_llm_parse",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_6",
+            "source": "comp_llm_parse",
+            "target": "comp_sufficient",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_7",
+            "source": "comp_llm_parse",
+            "target": "comp_kw_factors",
+            "label": "malformed JSON",
+            "chart_modes": [],
+            "edge_type": "fallback"
+        },
+        {
+            "id": "e_comp_8",
+            "source": "comp_sufficient",
+            "target": "comp_clarify_req",
+            "label": "unclear",
+            "chart_modes": [],
+            "edge_type": "gate"
+        },
+        {
+            "id": "e_comp_9",
+            "source": "comp_sufficient",
+            "target": "comp_type_classifier",
+            "label": "sufficient",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_10",
+            "source": "comp_kw_factors",
+            "target": "comp_kw_temporal",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_11",
+            "source": "comp_kw_temporal",
+            "target": "comp_kw_subject",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_12",
+            "source": "comp_kw_subject",
+            "target": "comp_kw_relation",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_13",
+            "source": "comp_kw_relation",
+            "target": "comp_type_classifier",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_14",
+            "source": "comp_type_classifier",
+            "target": "comp_type_open",
+            "label": "0 nodes",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_15",
+            "source": "comp_type_classifier",
+            "target": "comp_type_single",
+            "label": "1 node",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_16",
+            "source": "comp_type_classifier",
+            "target": "comp_type_rel",
+            "label": "2 nodes",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_17",
+            "source": "comp_type_classifier",
+            "target": "comp_type_multi",
+            "label": "3+ nodes",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_18",
+            "source": "comp_type_open",
+            "target": "comp_question_graph",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_19",
+            "source": "comp_type_single",
+            "target": "comp_question_graph",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_20",
+            "source": "comp_type_rel",
+            "target": "comp_question_graph",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_comp_21",
+            "source": "comp_type_multi",
+            "target": "comp_question_graph",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+
+
+    {
+            "id": "e_ir_1",
+            "source": "ir_input",
+            "target": "ir_check",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_2",
+            "source": "ir_check",
+            "target": "ir_generic",
+            "label": "no match",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_3",
+            "source": "ir_check",
+            "target": "ir_potency",
+            "label": "POTENCY_RANKING",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_4",
+            "source": "ir_check",
+            "target": "ir_relationship",
+            "label": "RELATIONSHIP_READING",
+            "chart_modes": [
+                "synastry"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_5",
+            "source": "ir_check",
+            "target": "ir_timing",
+            "label": "TIMING_FORECAST",
+            "chart_modes": [
+                "transit"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_6",
+            "source": "ir_check",
+            "target": "ir_career",
+            "label": "CAREER_PATH",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_7",
+            "source": "ir_check",
+            "target": "ir_cycle",
+            "label": "CYCLE_GUIDANCE",
+            "chart_modes": [
+                "cycle"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_8",
+            "source": "ir_check",
+            "target": "ir_spiritual",
+            "label": "SPIRITUAL_PURPOSE",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_9",
+            "source": "ir_check",
+            "target": "ir_emotional",
+            "label": "EMOTIONAL_WELLNESS",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_10",
+            "source": "ir_check",
+            "target": "ir_challenge",
+            "label": "CHALLENGE_TRANSMUTE",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_11",
+            "source": "ir_check",
+            "target": "ir_priority",
+            "label": "LIFE_AREA_PRIORITY",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_12",
+            "source": "ir_check",
+            "target": "ir_family",
+            "label": "FAMILY_DYNAMICS",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_13",
+            "source": "ir_check",
+            "target": "ir_relocation",
+            "label": "RELOCATION",
+            "chart_modes": [
+                "relocation"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_14",
+            "source": "ir_check",
+            "target": "ir_community",
+            "label": "COMMUNITY_BELONGING",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_15",
+            "source": "ir_check",
+            "target": "ir_financial",
+            "label": "FINANCIAL_INSIGHT",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ir_16",
+            "source": "ir_check",
+            "target": "ir_perception",
+            "label": "TRAIT_PERCEPTION",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+
+
+    {
+            "id": "e_tm_1",
+            "source": "tm_input",
+            "target": "tm_resolve",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_2",
+            "source": "tm_resolve",
+            "target": "tm_match_check",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_3",
+            "source": "tm_match_check",
+            "target": "tm_general",
+            "label": "no match",
+            "chart_modes": [],
+            "edge_type": "fallback"
+        },
+        {
+            "id": "e_tm_4",
+            "source": "tm_match_check",
+            "target": "tm_identity",
+            "label": "identity keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_5",
+            "source": "tm_match_check",
+            "target": "tm_emotions",
+            "label": "emotion keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_6",
+            "source": "tm_match_check",
+            "target": "tm_relationships",
+            "label": "relationship keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_7",
+            "source": "tm_match_check",
+            "target": "tm_career",
+            "label": "career keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_8",
+            "source": "tm_match_check",
+            "target": "tm_finances",
+            "label": "finance keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_9",
+            "source": "tm_match_check",
+            "target": "tm_mind",
+            "label": "mind/learning keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_10",
+            "source": "tm_match_check",
+            "target": "tm_spiritual",
+            "label": "spiritual keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_11",
+            "source": "tm_match_check",
+            "target": "tm_transformation",
+            "label": "transformation kw",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_12",
+            "source": "tm_match_check",
+            "target": "tm_conflict",
+            "label": "conflict keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_13",
+            "source": "tm_match_check",
+            "target": "tm_service",
+            "label": "service keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_14",
+            "source": "tm_match_check",
+            "target": "tm_community",
+            "label": "community keywords",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_15",
+            "source": "tm_general",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "fallback"
+        },
+        {
+            "id": "e_tm_16",
+            "source": "tm_identity",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_17",
+            "source": "tm_emotions",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_18",
+            "source": "tm_relationships",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_19",
+            "source": "tm_career",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_20",
+            "source": "tm_finances",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_21",
+            "source": "tm_mind",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_22",
+            "source": "tm_spiritual",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_23",
+            "source": "tm_transformation",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_24",
+            "source": "tm_conflict",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_25",
+            "source": "tm_service",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_tm_26",
+            "source": "tm_community",
+            "target": "tm_topic_match",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+
+
+    {
+            "id": "e_sp_1",
+            "source": "sp_input",
+            "target": "sp_shape_scan",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_2",
+            "source": "sp_shape_scan",
+            "target": "sp_shape_check",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_3",
+            "source": "sp_shape_check",
+            "target": "sp_tsquare",
+            "label": "T-Square",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_4",
+            "source": "sp_shape_check",
+            "target": "sp_wedge",
+            "label": "Wedge",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_5",
+            "source": "sp_shape_check",
+            "target": "sp_envelope",
+            "label": "Envelope",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_6",
+            "source": "sp_shape_check",
+            "target": "sp_cradle",
+            "label": "Cradle",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_7",
+            "source": "sp_tsquare",
+            "target": "sp_longitude",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_8",
+            "source": "sp_wedge",
+            "target": "sp_longitude",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_9",
+            "source": "sp_envelope",
+            "target": "sp_longitude",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_10",
+            "source": "sp_cradle",
+            "target": "sp_longitude",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_11",
+            "source": "sp_longitude",
+            "target": "sp_sabian",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_12",
+            "source": "sp_longitude",
+            "target": "sp_saturn_element",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_13",
+            "source": "sp_longitude",
+            "target": "sp_house",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_14",
+            "source": "sp_saturn_element",
+            "target": "sp_saturn_dispatch",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_15",
+            "source": "sp_saturn_dispatch",
+            "target": "sp_fire",
+            "label": "Fire",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_16",
+            "source": "sp_saturn_dispatch",
+            "target": "sp_earth",
+            "label": "Earth",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_17",
+            "source": "sp_saturn_dispatch",
+            "target": "sp_air",
+            "label": "Air",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_18",
+            "source": "sp_saturn_dispatch",
+            "target": "sp_water",
+            "label": "Water",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_19",
+            "source": "sp_fire",
+            "target": "sp_output",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_20",
+            "source": "sp_earth",
+            "target": "sp_output",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_21",
+            "source": "sp_air",
+            "target": "sp_output",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_22",
+            "source": "sp_water",
+            "target": "sp_output",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_23",
+            "source": "sp_sabian",
+            "target": "sp_output",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_sp_24",
+            "source": "sp_house",
+            "target": "sp_output",
+            "label": "",
+            "chart_modes": [
+                "natal"
+            ],
+            "edge_type": "normal"
+        },
+
+
+    {
+            "id": "e_ce_1",
+            "source": "ce_input",
+            "target": "ce_type_dispatch",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_2",
+            "source": "ce_type_dispatch",
+            "target": "ce_single",
+            "label": "single_focus",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_3",
+            "source": "ce_type_dispatch",
+            "target": "ce_relationship",
+            "label": "relationship",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_4",
+            "source": "ce_type_dispatch",
+            "target": "ce_multi",
+            "label": "multi_node",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_5",
+            "source": "ce_type_dispatch",
+            "target": "ce_open",
+            "label": "open_exploration",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_6",
+            "source": "ce_single",
+            "target": "ce_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_7",
+            "source": "ce_relationship",
+            "target": "ce_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_8",
+            "source": "ce_multi",
+            "target": "ce_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_ce_9",
+            "source": "ce_open",
+            "target": "ce_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+
+
+    {
+            "id": "e_syn_1",
+            "source": "syn_input",
+            "target": "syn_voice",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_2",
+            "source": "syn_voice",
+            "target": "syn_rules",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_3",
+            "source": "syn_rules",
+            "target": "syn_backend_check",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_4",
+            "source": "syn_backend_check",
+            "target": "syn_openrouter",
+            "label": "OpenRouter",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_5",
+            "source": "syn_backend_check",
+            "target": "syn_openai",
+            "label": "OpenAI",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_6",
+            "source": "syn_backend_check",
+            "target": "syn_anthropic",
+            "label": "Anthropic",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_7",
+            "source": "syn_backend_check",
+            "target": "syn_fallback",
+            "label": "no key",
+            "chart_modes": [],
+            "edge_type": "fallback"
+        },
+        {
+            "id": "e_syn_8",
+            "source": "syn_openrouter",
+            "target": "syn_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_9",
+            "source": "syn_openai",
+            "target": "syn_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_10",
+            "source": "syn_anthropic",
+            "target": "syn_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "normal"
+        },
+        {
+            "id": "e_syn_11",
+            "source": "syn_fallback",
+            "target": "syn_output",
+            "label": "",
+            "chart_modes": [],
+            "edge_type": "fallback"
+        }
+    ]
+}

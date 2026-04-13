@@ -43,7 +43,7 @@ if _PROJECT_ROOT not in sys.path:
 from src.mcp.comprehension import QuestionGraph
 
 if TYPE_CHECKING:
-    from models_v2 import AstrologicalChart, CircuitSimulation, CircuitNode, ShapeCircuit, CircuitEdge
+    from src.core.models_v2 import AstrologicalChart, CircuitSimulation, CircuitNode, ShapeCircuit, CircuitEdge
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -305,7 +305,7 @@ def _generate_narrative_seeds(
     resonant_membrane) get additional structural-resonance seeds with
     element-span tagging.
     """
-    from models_v2 import static_db
+    from src.core.models_v2 import static_db
     ASPECT_CONDUCTANCE = static_db.ASPECT_CONDUCTANCE
     from src.mcp.reading_packet import (
         _qualify_resonance,

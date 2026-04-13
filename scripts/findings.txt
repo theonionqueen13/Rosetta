@@ -1,0 +1,1082 @@
+
+Rosetta Question Analysis Summary
+  Log      : question_analysis_log.jsonl  (30 unique questions)
+  LLM data : 30 questions  |  deterministic-only: 0
+
+========================================================================
+  1. INTENTS IDENTIFIED
+========================================================================
+
+  30 NEW  +  0 EXISTING
+
+  NEW INTENTS (need engine branches):
+
+    [ 1x]  assess_relationship_potential
+           Q#: 1
+           The engine should evaluate the long-term compatibility and
+           potential of a relationship, considering both harmonious and
+           challenging aspects.
+
+    [ 1x]  analyze_relationship_patterns
+           Q#: 2
+           Analyze the natal chart for indicators of recurring
+           relationship patterns, especially those involving
+           emotionally unavailable partners.
+
+    [ 1x]  assess_relationship_conflict_duration
+           Q#: 3
+           The engine should compare synastry and transit aspects to
+           determine if a relationship conflict is likely to be long-
+           term or short-term.
+
+    [ 1x]  relationship_timing_prediction
+           Q#: 4
+           The engine should identify potential periods for new
+           relationships or significant shifts in relationship status,
+           based on transits, solar returns, and other predictive
+           techniques.
+
+    [ 1x]  describe_love_languages
+           Q#: 5
+           Return a description of the user's love languages based on
+           their Venus and Mars placements.
+
+    [ 1x]  communication_strategies_synastry
+           Q#: 6
+           Provide tailored advice on improving communication between
+           two people, based on the synastry of their Mercury signs and
+           the context of stress.
+
+    [ 1x]  career_path_by_midheaven_saturn
+           Q#: 7
+           Provide career suggestions based on the user's Midheaven and
+           Saturn placements, considering their aspects and sign
+           placements.
+
+    [ 1x]  assess_business_timing
+           Q#: 8
+           The engine should assess the current transits and identify a
+           future transit that would be more favorable for starting a
+           business.
+
+    [ 1x]  career_path_preference
+           Q#: 9
+           Determine whether the current astrological influences favor
+           a stable or growth-oriented career path, based on the user's
+           natal chart and current transits.
+
+    [ 1x]  identify_untapped_potential
+           Q#: 10
+           Identify natal placements and aspects that suggest hidden or
+           underutilized talents and strengths related to career.
+
+    [ 1x]  career_cycle_assessment
+           Q#: 11
+           Analyze current transits and long-term cycles to determine
+           if the user is in a period of stagnation or preparing for a
+           major career change.
+
+    [ 1x]  ideal_work_environment
+           Q#: 12
+           Return a description of the ideal work environment based on
+           natal chart factors.
+
+    [ 1x]  saturn_return_guidance
+           Q#: 13
+           Provide specific advice and coping strategies for navigating
+           a Saturn return, focusing on the challenges and
+           opportunities it presents.
+
+    [ 1x]  identify_life_lesson
+           Q#: 14
+           Identify the primary spiritual lesson based on natal chart
+           factors.
+
+    [ 1x]  identify_challenging_transits
+           Q#: 15
+           Identify and describe transits that are likely to cause
+           difficulties or obstacles during a specified time period.
+
+    [ 1x]  natal_anxiety_management
+           Q#: 16
+           Provide guidance on managing anxiety based on natal chart
+           factors.
+
+    [ 1x]  predict_life_phase_transition
+           Q#: 17
+           The engine should identify and predict when a significant
+           shift or turning point in the querent's life will occur.
+
+    [ 1x]  challenging_aspects_and_transmutation
+           Q#: 18
+           Identify the most challenging aspects in a natal chart and
+           provide guidance on how to transform them into strengths.
+
+    [ 1x]  prioritize_life_area
+           Q#: 19
+           Identify the life area (domain) that requires the most
+           immediate attention based on transit or progression aspects.
+
+    [ 1x]  natal_family_dynamics
+           Q#: 20
+           Analyze natal chart factors influencing family
+           relationships, especially parent-child dynamics, and suggest
+           compassionate approaches.
+
+    [ 1x]  relocation_considerations
+           Q#: 21
+           The engine should provide a summary of key factors to
+           consider in a relocation chart, highlighting potential
+           challenges or opportunities.
+
+    [ 1x]  diagnose_social_exhaustion
+           Q#: 22
+           The engine should identify natal chart factors that
+           contribute to feeling drained after social interactions.
+
+    [ 1x]  natal_community_placement
+           Q#: 23
+           Identify the chart factors (planets, houses, signs) that
+           relate to community and belonging, and explain how to
+           interpret them in the context of finding one's community.
+
+    [ 1x]  financial_volatility_check
+           Q#: 24
+           Analyze the natal chart for indicators of financial
+           instability or volatility.
+
+    [ 1x]  financial_blocks_and_wealth_potential
+           Q#: 25
+           Analyze the birth chart for indicators of financial
+           strengths, weaknesses, and subconscious blocks related to
+           wealth, and provide advice on overcoming these blocks.
+
+    [ 1x]  assess_major_purchase_timing
+           Q#: 26
+           The engine should analyze current transits and their aspects
+           to the natal chart to determine if it is a favorable time
+           for a major purchase.
+
+    [ 1x]  identify_planets_influencing_perception
+           Q#: 27
+           Identify the planets in the natal chart that contribute to a
+           specific perception or impression that the native makes on
+           others.
+
+    [ 1x]  planetary_cycle_identification
+           Q#: 28
+           Identify if recurring life patterns are linked to a specific
+           planetary cycle.
+
+    [ 1x]  north_node_interpretation
+           Q#: 29
+           Provide an interpretation of the North Node in the natal
+           chart, and assess the user's current alignment with its
+           energy.
+
+    [ 1x]  prioritize_chart_focus
+           Q#: 30
+           Identify the most impactful area or planet in the natal
+           chart to focus on for personal growth over a specified time
+           period.
+
+========================================================================
+  2. TERM GAPS  (vocabulary missing from registry)
+========================================================================
+
+  22 unique terms missing:
+
+  [ 1x]  canonical : emotionally unavailable
+        Q#        : 2
+        aliases   : emotionally unavailable, emotionally distant, avoidant attachment
+        intent    : analyze_relationship_patterns
+        domain    : Relationships & Love
+        desc      : Describes a person who avoids emotional intimacy and commitment in relationships.
+
+  [ 1x]  canonical : attract
+        Q#        : 2
+        aliases   : attract, draw in
+        intent    : analyze_relationship_patterns
+        domain    : Relationships & Love
+        desc      : To cause someone to be drawn to or interested in someone or something.
+
+  [ 1x]  canonical : love language
+        Q#        : 5
+        aliases   : love languages
+        intent    : describe_love_languages
+        domain    : Relationships & Love
+        desc      : A way of expressing and experiencing love.
+
+  [ 1x]  canonical : Venus placement
+        Q#        : 5
+        aliases   : Venus placements
+        factors   : Venus
+        intent    : describe_love_languages
+        domain    : Relationships & Love
+        desc      : The sign and house position of Venus in a birth chart.
+
+  [ 1x]  canonical : Mars placement
+        Q#        : 5
+        aliases   : Mars placements
+        factors   : Mars
+        intent    : describe_love_languages
+        domain    : Relationships & Love
+        desc      : The sign and house position of Mars in a birth chart.
+
+  [ 1x]  canonical : hidden professional strengths
+        Q#        : 10
+        aliases   : hidden professional strengths, untapped professional strengths, underutilized professional strengths
+        intent    : identify_untapped_potential
+        domain    : Career & Public Life
+        desc      : Natal placements and aspects indicating skills and talents not currently being fully used 
+
+  [ 1x]  canonical : spiritual lesson
+        Q#        : 14
+        aliases   : spiritual lesson, life lesson
+        intent    : identify_life_lesson
+        domain    : Spirituality & Imagination
+        desc      : A key theme or challenge for spiritual growth in this lifetime.
+
+  [ 1x]  canonical : anxiety
+        Q#        : 16
+        aliases   : anxiety, worries, unease, apprehension
+        intent    : natal_anxiety_management
+        domain    : Emotions & Inner World
+        desc      : A state of worry, nervousness, or unease, typically about an imminent event or something w
+
+  [ 1x]  canonical : planetary influences
+        Q#        : 16
+        aliases   : planetary influences, planetary effects, astrological influences, astrological effects
+        intent    : natal_anxiety_management
+        domain    : Emotions & Inner World
+        desc      : The impact of planets and other celestial bodies on a person's life and experiences.
+
+  [ 1x]  canonical : waiting room phase
+        Q#        : 17
+        aliases   : waiting room phase of life, waiting room period, phase of waiting
+        intent    : predict_life_phase_transition
+        domain    : Change & Transformation
+        desc      : A period of stagnation or lack of progress in life.
+
+  [ 1x]  canonical : energy shift
+        Q#        : 17
+        aliases   : shift in energy, energy change, change in energy
+        intent    : predict_life_phase_transition
+        domain    : Change & Transformation
+        desc      : A change in circumstances or momentum.
+
+  [ 1x]  canonical : challenging aspect
+        Q#        : 18
+        aliases   : difficult aspect, affliction
+        intent    : challenging_aspects_and_transmutation
+        domain    : Identity & Self
+        desc      : An aspect in a birth chart that presents obstacles or difficulties.
+
+  [ 1x]  canonical : transmute
+        Q#        : 18
+        aliases   : transform, turn into, convert to
+        intent    : challenging_aspects_and_transmutation
+        domain    : Change & Transformation
+        desc      : To change or alter in form, appearance, or nature, especially to a higher form.
+
+  [ 1x]  canonical : social exhaustion
+        Q#        : 22
+        aliases   : exhausted after social gatherings, drained after socializing
+        intent    : diagnose_social_exhaustion
+        domain    : Emotions & Inner World
+        desc      : Feeling depleted or fatigued after social interactions, even enjoyable ones.
+
+  [ 1x]  canonical : my people
+        Q#        : 23
+        aliases   : my people, my community
+        intent    : natal_community_placement
+        domain    : Community & Future
+        desc      : A group of people with whom one feels a strong sense of belonging and connection.
+
+  [ 1x]  canonical : financial volatility
+        Q#        : 24
+        aliases   : financial instability, unexpected expenses, unstable finances
+        intent    : financial_volatility_check
+        domain    : Finances & Resources
+        desc      : Tendency towards unpredictable or fluctuating financial circumstances.
+
+  [ 1x]  canonical : subconscious blocks
+        Q#        : 25
+        aliases   : subconscious blocks, mental blocks, limiting beliefs
+        intent    : financial_blocks_and_wealth_potential
+        domain    : Finances & Resources
+        desc      : Mental or emotional barriers that hinder financial success.
+
+  [ 1x]  canonical : relationship with money
+        Q#        : 25
+        aliases   : relationship with money, attitude toward money, money mindset
+        intent    : financial_blocks_and_wealth_potential
+        domain    : Finances & Resources
+        desc      : An individual's overall attitude, beliefs, and behaviors related to money.
+
+  [ 1x]  canonical : building wealth
+        Q#        : 25
+        aliases   : building wealth, accumulating wealth, creating wealth
+        intent    : financial_blocks_and_wealth_potential
+        domain    : Finances & Resources
+        desc      : The process of increasing one's financial assets and net worth.
+
+  [ 1x]  canonical : intense
+        Q#        : 27
+        aliases   : intense, intensity
+        intent    : identify_planets_influencing_perception
+        domain    : Identity & Self
+        desc      : A quality of being deeply felt or strongly expressed.
+
+  [ 1x]  canonical : mysterious
+        Q#        : 27
+        aliases   : mysterious, mystery
+        intent    : identify_planets_influencing_perception
+        domain    : Identity & Self
+        desc      : A quality of being difficult to understand or explain.
+
+  [ 1x]  canonical : North Node
+        Q#        : 29
+        aliases   : north node, north node of the moon, true node
+        factors   : North Node
+        intent    : north_node_interpretation
+        domain    : Spirituality & Imagination
+        desc      : The point in the sky where the Moon's orbit crosses the ecliptic from south to north, repr
+
+
+========================================================================
+  3. DOMAIN ROUTING ACCURACY  (keyword vs. LLM)
+========================================================================
+
+  Agreement: 7/30 (23%)
+
+  MISMATCHES  (where keyword matching got the wrong domain):
+
+  Q 2  "Why do I keep attracting the same type of person who is..."
+       keyword -> General
+       LLM     -> Relationships & Love  <<< correct
+
+  Q 3  "I'm at a crossroads with my spouse. Does our synastry s..."
+       keyword -> Conflict & Enemies
+       LLM     -> Relationships & Love  <<< correct
+
+  Q 8  "Is this the right time for me to take a risk and start ..."
+       keyword -> Devotion & Purposeful Service
+       LLM     -> Career & Public Life  <<< correct
+
+  Q 9  "I'm choosing between two job offers—one is safe, one is..."
+       keyword -> Identity & Self
+       LLM     -> Career & Public Life  <<< correct
+
+  Q10  "What are my hidden professional strengths that I'm curr..."
+       keyword -> Finances & Resources
+       LLM     -> Career & Public Life  <<< correct
+
+  Q11  "I feel like I'm hitting a ceiling in my field. Is this ..."
+       keyword -> General
+       LLM     -> Career & Public Life  <<< correct
+
+  Q12  "What kind of work environment makes me feel the most pr..."
+       keyword -> Finances & Resources
+       LLM     -> Career & Public Life  <<< correct
+
+  Q13  "I feel like my life is falling apart, but I've heard th..."
+       keyword -> Career & Public Life
+       LLM     -> Change & Transformation  <<< correct
+
+  Q14  "What is the primary spiritual lesson I am meant to lear..."
+       keyword -> Finances & Resources
+       LLM     -> Spirituality & Imagination  <<< correct
+
+  Q15  "I have a big decision to make this month. Are there any..."
+       keyword -> Devotion & Purposeful Service
+       LLM     -> Change & Transformation  <<< correct
+
+  Q16  "How can I better manage my anxiety? Are there specific ..."
+       keyword -> General
+       LLM     -> Emotions & Inner World  <<< correct
+
+  Q17  "I feel like I'm in a 'waiting room' phase of life. When..."
+       keyword -> Career & Public Life
+       LLM     -> Change & Transformation  <<< correct
+
+  Q18  "What are the most challenging aspects in my birth chart..."
+       keyword -> Finances & Resources
+       LLM     -> Identity & Self  <<< correct
+
+  Q19  "Is there a specific area of my life that needs my immed..."
+       keyword -> Emotions & Inner World
+       LLM     -> Change & Transformation  <<< correct
+
+  Q20  "My relationship with my parent has always been strained..."
+       keyword -> General
+       LLM     -> Relationships & Love  <<< correct
+
+  Q21  "I'm thinking about moving to a new city. Is there anyth..."
+       keyword -> Devotion & Purposeful Service
+       LLM     -> Change & Transformation  <<< correct
+
+  Q22  "Why do I feel so exhausted after social gatherings, eve..."
+       keyword -> Community & Future
+       LLM     -> Emotions & Inner World  <<< correct
+
+  Q24  "I've been having a lot of unexpected expenses lately. D..."
+       keyword -> Identity & Self
+       LLM     -> Finances & Resources  <<< correct
+
+  Q26  "Is now a good time to make a major purchase, like a hou..."
+       keyword -> Devotion & Purposeful Service
+       LLM     -> Finances & Resources  <<< correct
+
+  Q27  "People often describe me as 'intense' or 'mysterious.' ..."
+       keyword -> General
+       LLM     -> Identity & Self  <<< correct
+
+  Q28  "I've been seeing recurring patterns in my life recently..."
+       keyword -> Devotion & Purposeful Service
+       LLM     -> Change & Transformation  <<< correct
+
+  Q29  "What is the significance of my North Node? Am I moving ..."
+       keyword -> Finances & Resources
+       LLM     -> Spirituality & Imagination  <<< correct
+
+  Q30  "If I only focus on one thing in my chart for the next y..."
+       keyword -> Career & Public Life
+       LLM     -> Identity & Self  <<< correct
+
+========================================================================
+  4. DIMENSION DISTRIBUTIONS
+========================================================================
+
+  -- Question Form ----------------------------------------------------
+  [########            ] 12 (40%)  polar
+  [####                ]  6 (20%)  wh-what
+  [###                 ]  5 (17%)  compound
+  [#                   ]  2 (7%)  why-diagnostic
+  [#                   ]  2 (7%)  advisory-how
+  [#                   ]  2 (7%)  wh-open
+  [#                   ]  1 (3%)  temporal-when
+
+  -- Temporal Dimension ----------------------------------------------
+  [###########         ] 16 (53%)  natal
+  [#####               ]  8 (27%)  transit
+  [###                 ]  5 (17%)  timing_prediction
+  [###                 ]  5 (17%)  cycle
+  [##                  ]  3 (10%)  synastry
+  [#                   ]  1 (3%)  solar_return
+  [#                   ]  1 (3%)  relocation
+
+  -- Subject Config --------------------------------------------------
+  [#################   ] 26 (87%)  single
+  [##                  ]  3 (10%)  dyadic
+  [#                   ]  1 (3%)  familial
+
+  -- Primary Domain --------------------------------------------------
+  [#####               ]  7 (23%)  Relationships & Love
+  [####                ]  6 (20%)  Career & Public Life
+  [####                ]  6 (20%)  Change & Transformation
+  [##                  ]  3 (10%)  Identity & Self
+  [##                  ]  3 (10%)  Finances & Resources
+  [#                   ]  2 (7%)  Spirituality & Imagination
+  [#                   ]  2 (7%)  Emotions & Inner World
+  [#                   ]  1 (3%)  Community & Future
+
+========================================================================
+  5. ANSWER ARCHITECTURE  (grouped by intent)
+========================================================================
+
+  assess_relationship_potential  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 1: "Does my current partner and I have long-term potential, or a"
+          Requires synastry bi-wheel data.  Assess aspects between key
+          planets (Sun, Moon, Venus, Mars, Jupiter, Saturn) and angles.
+          Evaluate composite chart for overall relationship themes and
+          potential. ReadingPacket needs placements, aspects, and house
+          overlays.
+      [!] Current system:
+          The current system would likely route this to
+          Relationships & Love due to the presence of 'partner'. The
+          'learning' keyword might also trigger Learning & Mind as a
+          secondary domain, which is correct. However, it lacks a
+          specific intent to assess relationship potential, so a new
+          intent is needed.
+
+
+  analyze_relationship_patterns  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 2: "Why do I keep attracting the same type of person who is emot"
+          Natal chart analysis focusing on Venus, Mars, Moon, and
+          relevant house rulers (5th, 7th, 8th, 12th).  Examine aspects,
+          dignities, and placements that suggest difficulty with
+          emotional intimacy or a tendency to repeat relationship
+          patterns. ReadingPacket needs placements, aspects, dignities.
+      [!] Current system:
+          The current system would likely misroute this to 'General'
+          due to lack of relationship-specific keywords. The term
+          'emotionally unavailable' is not in the registry. The
+          system needs to recognize this as a relationship question
+          and analyze the chart for relevant patterns.
+
+
+  assess_relationship_conflict_duration  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 3: "I'm at a crossroads with my spouse. Does our synastry show t"
+          Requires synastry chart and transit chart for the
+          relationship.  Compare challenging synastry aspects to current
+          transits.  Report on the presence of long-term challenging
+          synastry aspects vs. short-term challenging transit aspects.
+          ReadingPacket needs synastry aspects and transit aspects.
+      [!] Current system:
+          The current system would likely route this to 'Conflict &
+          Enemies' due to the keyword 'conflict'. It would not be
+          able to distinguish between the synastry and transit
+          influences on the conflict's duration. The system
+          correctly identifies the dyadic subject configuration.
+
+
+  relationship_timing_prediction  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 4: "I've been single for a long time. Is there anything in my ch"
+          Requires natal chart and transit data for the current year.
+          The response should focus on transits to natal planets and
+          angles, solar return aspects, and any significant planetary
+          cycles that indicate relationship changes. Relevant
+          ReadingPacket facts include placements, aspects, and
+          timing_prediction.
+      [!] Current system:
+          The current system would likely route this to
+          Relationships & Love due to the presence of 'partnership'.
+          However, it would miss the temporal aspect and the
+          specific request for a 'major shift' or prediction. The
+          system would not be able to provide a targeted timing
+          prediction without a new intent.
+
+
+  describe_love_languages  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 5: "What are the core 'love languages' suggested by my Venus and"
+          Requires natal chart data. The response should describe the
+          user's love languages based on interpretations of Venus and
+          Mars placements. ReadingPacket should provide placements and
+          aspects for Venus and Mars.
+      [!] Current system:
+          The current system would correctly identify the domain as
+          'Relationships & Love' due to the keyword 'love'. However,
+          it would miss the specific intent of identifying love
+          languages based on Venus and Mars. The term 'love
+          languages' and the concepts of 'Venus placement' and 'Mars
+          placement' are missing from the term registry.
+
+
+  communication_strategies_synastry  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 6: "How can I better communicate with my partner during times of"
+          Requires natal chart data for both individuals. Focus on
+          Mercury placements and aspects between the two charts.
+          Response should offer specific communication strategies based
+          on the sign and house placements of Mercury, and any relevant
+          aspects. ReadingPacket needs placements, aspects, synastry
+          grid.
+      [!] Current system:
+          The current system would likely route this to
+          Relationships & Love due to the presence of 'partner'. It
+          would also correctly identify the synastry temporal
+          dimension. However, it would miss the nuance of
+          communication styles and the specific focus on Mercury
+          signs. The lack of a specific intent for synastry-based
+          communication advice would lead to a generic response.
+
+
+  career_path_by_midheaven_saturn  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 7: "I feel unfulfilled in my current job. What career paths are "
+          Natal chart data is required. The response should provide a
+          list of career paths that align with the Midheaven sign,
+          aspects to the Midheaven, Saturn sign, and aspects to Saturn.
+          ReadingPacket should include placements, aspects, and
+          dignities.
+      [!] Current system:
+          The current system would correctly identify the domain as
+          Career & Public Life. However, it would not understand the
+          specific request to align career paths with Midheaven and
+          Saturn placements, requiring a new intent. The system
+          would also miss that this is a single-person question, not
+          a dyadic one.
+
+
+  assess_business_timing  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 8: "Is this the right time for me to take a risk and start my ow"
+          Requires transit data and natal data. The response should
+          identify current challenging transits and suggest a future
+          time when transits are more favorable for business ventures.
+          ReadingPacket should provide transit placements, aspects to
+          natal chart, and dignity/debility information.
+      [!] Current system:
+          The current system might misinterpret the question as
+          being about general purpose or devotion due to keywords
+          like 'right time'. It would not understand the specific
+          request for timing a business start based on transits.
+
+
+  career_path_preference  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q 9: "I'm choosing between two job offers—one is safe, one is exci"
+          Requires natal chart and current transits. Analyze transit
+          placements and aspects to natal planets related to career
+          (e.g., Sun, Moon, MC ruler, planets in the 10th house).  The
+          response should indicate which type of career path (stable vs.
+          growth) is more supported by the current astrological climate,
+          citing specific transit aspects and placements. ReadingPacket
+          needs placements, aspects, houses.
+      [!] Current system:
+          The current system would likely route this to 'Identity &
+          Self' due to the keyword 'job'. It would miss the
+          comparative aspect and the need to evaluate the chart for
+          a preference between stability and growth. The term
+          registry is adequate.
+
+
+  identify_untapped_potential  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q10: "What are my hidden professional strengths that I'm currently"
+          Natal chart data is needed. Relevant ReadingPacket facts
+          include placements, aspects, dignities, and potentially house
+          rulers. The response should identify specific placements or
+          aspects that suggest these hidden strengths, and explain how
+          they might be better utilized.
+      [!] Current system:
+          The current system would likely misroute this to Finances
+          & Resources due to the word 'underutilizing'. It would not
+          recognize the concept of 'hidden strengths' or 'untapped
+          potential' in a career context. A new intent and term are
+          needed to handle this type of question.
+
+
+  career_cycle_assessment  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q11: "I feel like I'm hitting a ceiling in my field. Is this a per"
+          Requires transit data and cycle analysis. The response should
+          compare current transits and long-term cycles to natal
+          placements, focusing on aspects to career-related houses and
+          planets (10th, 6th, MC, Sun, Saturn, etc.). ReadingPacket
+          should provide transit placements, aspects, and cycle
+          information.
+      [!] Current system:
+          The current system would likely misclassify this as a
+          general question due to the lack of specific astrological
+          terms. It would fail to recognize the career-related
+          context and the need for transit and cycle analysis. The
+          system would not understand the concepts of 'stagnation'
+          or 'major pivot' in a career context.
+
+
+  ideal_work_environment  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q12: "What kind of work environment makes me feel the most product"
+          Natal chart data is needed. Relevant ReadingPacket facts
+          include house placements, planetary aspects, and dignities.
+          The response should describe the ideal work environment based
+          on these factors, focusing on elements that promote
+          productivity and security.
+      [!] Current system:
+          The current system would likely route this to Finances &
+          Resources due to the keyword 'work'. It would miss the
+          nuance of the question, which is about the ideal work
+          environment and its impact on productivity and security.
+          The term registry lacks a specific term for 'ideal work
+          environment'. The system would not understand the
+          emotional component (feeling secure).
+
+
+  saturn_return_guidance  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q13: "I feel like my life is falling apart, but I've heard this is"
+          Requires natal chart data and transit data for Saturn. The
+          response should include information about the typical
+          challenges and opportunities of a Saturn return, personalized
+          based on the user's natal Saturn placement and aspects.
+          Relevant ReadingPacket facts: placements, aspects, transits.
+      [!] Current system:
+          The current system might misroute this to Career due to
+          'life' and 'navigate'. It would not recognize the need for
+          Saturn Return specific guidance. The term 'Saturn Return'
+          is known, but the need for specific advice is not
+          captured.
+
+
+  identify_life_lesson  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q14: "What is the primary spiritual lesson I am meant to learn in "
+          Natal chart data is needed. Look for placements, aspects, and
+          house positions that suggest spiritual themes. The response
+          should identify the lesson and explain how the chart supports
+          it. Relevant ReadingPacket facts: placements, aspects, houses,
+          dignities.
+      [!] Current system:
+          The current system would likely misroute this to Finances
+          & Resources due to the keyword 'learn'. It would
+          completely miss the spiritual aspect. The term 'spiritual
+          lesson' is not in the registry.
+
+
+  identify_challenging_transits  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q15: "I have a big decision to make this month. Are there any chal"
+          Requires transit data for the specified month, analyzed
+          against the natal chart. Focus on hard aspects (conjunction,
+          square, opposition) from transiting planets to natal planets.
+          ReadingPacket should provide transit placements and aspects.
+          Response should list the transits and briefly describe their
+          potential impact.
+      [!] Current system:
+          The current system would likely misroute this to 'Devotion
+          & Purposeful Service' due to the presence of 'decision'.
+          It would not recognize the temporal context of 'this
+          month' or the request for challenging transits. The system
+          needs a new intent to specifically identify and describe
+          challenging transits.
+
+
+  natal_anxiety_management  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q16: "How can I better manage my anxiety? Are there specific plane"
+          The response should identify relevant natal placements (e.g.,
+          Moon, Mercury, Saturn, Uranus, Neptune) and aspects that
+          contribute to anxiety, and suggest coping mechanisms based on
+          these factors. Requires natal chart data and ReadingPacket
+          placements, aspects, and dignities.
+      [!] Current system:
+          The current system would likely route this to 'General'
+          due to the lack of specific astrological keywords related
+          to anxiety. It would miss the core concern about emotional
+          well-being and potential astrological factors contributing
+          to it. The term 'planetary influences' is too general and
+          needs a more specific intent.
+
+
+  predict_life_phase_transition  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q17: "I feel like I'm in a 'waiting room' phase of life. When does"
+          Requires transit data and progressions to identify key
+          planetary alignments or aspects that trigger significant life
+          changes. The response should provide specific dates or
+          timeframes when the 'energy shift' is likely to occur, along
+          with a description of the nature of the shift. ReadingPacket
+          needs placements, aspects, and transit hits.
+      [!] Current system:
+          The current system would likely misroute this to Career
+          due to 'life' and 'shift'. It would miss the core concept
+          of a stagnant period transitioning to a more active one.
+          The term registry lacks 'waiting room phase' and 'energy
+          shift', leading to a failure to understand the user's
+          specific concern.
+
+
+  challenging_aspects_and_transmutation  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q18: "What are the most challenging aspects in my birth chart, and"
+          Requires natal chart data. Identify aspects with high stress
+          scores or involving malefic planets. Response should list the
+          challenging aspects and provide interpretive text on how to
+          leverage the energies for personal growth. ReadingPacket facts
+          needed: aspects, placements, dignities, power_nodes.
+      [!] Current system:
+          The current system would likely misroute this to Finances
+          due to the word 'strengths'. It would not understand the
+          request for 'challenging aspects' or the concept of
+          'transmuting' them. The question requires a new intent to
+          identify and interpret challenging aspects and provide
+          guidance on transforming them.
+
+
+  prioritize_life_area  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q19: "Is there a specific area of my life that needs my immediate "
+          Requires transit data for the next six months. Identify
+          transits to natal planets or angles that are particularly
+          challenging or significant. The response should highlight the
+          domain associated with the affected natal placement and
+          explain why it needs immediate attention. Requires a bi-wheel
+          chart.
+      [!] Current system:
+          The current system would likely misinterpret the temporal
+          context as natal due to the lack of explicit transit
+          keywords. It might also struggle to identify the need for
+          prioritization across life areas, potentially focusing on
+          general emotional well-being instead.
+
+
+  natal_family_dynamics  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q20: "My relationship with my parent has always been strained. Doe"
+          Natal chart data is needed, focusing on placements and aspects
+          related to the 4th house, Moon, Saturn, and any planets
+          aspecting them. The response should identify potential
+          challenges and suggest compassionate approaches based on the
+          chart.
+      [!] Current system:
+          The current system might misclassify this as a general
+          relationship question. It would likely miss the specific
+          focus on parental relationships and the desire for
+          compassionate approaches. The familial subject config is
+          an improvement.
+
+
+  relocation_considerations  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q21: "I'm thinking about moving to a new city. Is there anything a"
+          Requires relocation chart data. The response should summarize
+          key placements, aspects, and house positions in the relocation
+          chart, focusing on factors that might impact the querent's
+          life in the new location. ReadingPacket facts needed:
+          placements, aspects, houses.
+      [!] Current system:
+          The current system would likely misclassify this under
+          'Devotion & Purposeful Service' due to the keyword
+          'thinking about'. It would not recognize the specific need
+          for relocation chart analysis. The question form is
+          actually polar, not wh-open.
+
+
+  diagnose_social_exhaustion  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q22: "Why do I feel so exhausted after social gatherings, even whe"
+          The response should identify potentially afflicted placements,
+          challenging aspects, or sensitive points in the natal chart
+          that relate to social interaction. Relevant ReadingPacket
+          facts include placements, aspects, dignities, and potentially
+          house rulerships (3rd, 7th, 11th houses). Natal chart data
+          only.
+      [!] Current system:
+          The current system might misinterpret this as a question
+          about community or future plans due to the keyword 'social
+          gatherings'. It would completely miss the emotional and
+          energetic component of the question. The term 'social
+          exhaustion' is not in the registry, so it would not
+          trigger a specific intent.
+
+
+  natal_community_placement  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q23: "I'm struggling to find 'my people.' Where should I look to f"
+          Natal chart data is needed. Relevant ReadingPacket facts
+          include placements (especially of planets in the 11th house or
+          signs associated with groups), aspects (connections to planets
+          associated with relationships or communication), and
+          potentially house rulers. The response should identify key
+          placements and explain how they relate to finding community.
+      [!] Current system:
+          The current system would likely route this to 'Community &
+          Future' due to the keyword 'community'. However, it would
+          not understand the nuance of 'my people' and the desire
+          for specific guidance on where to look in the chart. The
+          term gap highlights the need to add 'my people' as a
+          synonym for community in this context. The intent needs to
+          be more specific than just general community; it needs to
+          focus on identifying placements that indicate where to
+          find one's community.
+
+
+  financial_volatility_check  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q24: "I've been having a lot of unexpected expenses lately. Does m"
+          Natal chart data is needed, focusing on placements and aspects
+          related to the 2nd house (resources) and potentially the 8th
+          house (shared resources, debt). Relevant ReadingPacket facts
+          include house placements, aspects to planets in the 2nd and
+          8th houses, and any challenging aspects involving planets
+          associated with finances (e.g., Jupiter, Venus, Saturn).
+      [!] Current system:
+          The current system would likely misroute this question to
+          'Identity & Self' due to the lack of financial keywords.
+          Adding 'financial volatility' to the term registry with
+          the correct domain and intent will improve routing. The
+          system needs to recognize 'unexpected expenses' as a
+          signifier of financial instability.
+
+
+  financial_blocks_and_wealth_potential  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q25: "What is my relationship with money, and how can I overcome m"
+          Natal chart analysis is required, focusing on planets and
+          houses related to finances (2nd, 8th, 10th). Relevant
+          ReadingPacket facts include placements, aspects (especially
+          challenging ones), and dignities. The response should identify
+          potential blocks and offer tailored advice based on the chart.
+      [!] Current system:
+          The current system would correctly identify the primary
+          domain as 'Finances & Resources' due to the keyword
+          'money'. However, it would miss the nuance of
+          'subconscious blocks' and the advisory aspect of
+          overcoming them. The system would not recognize the need
+          to analyze the chart for psychological factors influencing
+          financial behavior. It would also not understand the
+          request for advice.
+
+
+  assess_major_purchase_timing  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q26: "Is now a good time to make a major purchase, like a house or"
+          Requires transit data and natal chart. The response should
+          assess current transit aspects to the natal chart, focusing on
+          planets associated with finances (Jupiter, Venus) and real
+          estate (Saturn, Moon). ReadingPacket should provide transit
+          placements and aspects to natal placements.
+      [!] Current system:
+          The current system would likely misclassify this question
+          under 'Devotion & Purposeful Service' due to the lack of
+          financial keywords and the absence of a 'major purchase'
+          term. It would fail to recognize the temporal context as
+          'transit' and the relevant domain as 'Finances &
+          Resources'.
+
+
+  identify_planets_influencing_perception  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q27: "People often describe me as 'intense' or 'mysterious.' Which"
+          The response should identify planets and their placements
+          (sign, house) that contribute to the perception of being
+          'intense' or 'mysterious'. Natal chart data is required,
+          focusing on placements, aspects (especially to personal
+          planets), and potentially dignities/debilities. Relevant
+          ReadingPacket facts: placements, aspects, dignities,
+          power_nodes.
+      [!] Current system:
+          The current system would likely misroute this to 'General'
+          due to lack of specific keywords. It would not understand
+          the nuances of 'intense' or 'mysterious' as qualities
+          related to self-perception and how others see the native.
+          The term registry needs entries for 'intense' and
+          'mysterious' to improve routing and understanding.
+
+
+  planetary_cycle_identification  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q28: "I've been seeing recurring patterns in my life recently. Are"
+          Requires transit data and natal data. Identify prominent
+          planetary cycles and correlate them with significant life
+          events or periods. The response should indicate whether any
+          cycles align with the user's observed patterns, and if so,
+          provide details about the cycle and its potential influence.
+      [!] Current system:
+          The current system would likely misroute this to 'Devotion
+          & Purposeful Service' due to the keyword 'patterns'. It
+          would not recognize the need to analyze planetary cycles
+          in relation to life patterns. The term registry is
+          sufficient.
+
+
+  north_node_interpretation  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q29: "What is the significance of my North Node? Am I moving towar"
+          Requires natal chart data. The response should include the
+          sign and house placement of the North Node, aspects to it, and
+          an interpretation of how to align with its energy.
+          ReadingPacket placements and aspects are needed.
+      [!] Current system:
+          The current system would likely misroute this question to
+          Finances & Resources due to the lack of a 'North Node'
+          term in the registry. It would fail to recognize the
+          spiritual and self-discovery aspects of the question. The
+          compound nature of the question would also be missed.
+
+
+  prioritize_chart_focus  (1 question)
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    Q30: "If I only focus on one thing in my chart for the next year t"
+          Requires natal chart data. Identify the most influential
+          placements, aspects, or houses based on dignities,
+          power_nodes, and circuit_flows. Response should highlight the
+          key area and provide a rationale based on chart factors.
+      [!] Current system:
+          The current system might misinterpret 'focus' as related
+          to career. It would not understand the temporal aspect of
+          'next year' or the goal of 'improve my quality of life'.
+          The question requires a more holistic assessment of the
+          chart to identify the most impactful area for personal
+          growth.
+
+
+========================================================================
+  6. PRIORITY ACTION LIST
+========================================================================
+
+  ENGINE BRANCHES  (implement these intents in reading_engine.py)
+   1. assess_relationship_potential [needs chart_b]  (1x)
+   2. analyze_relationship_patterns  (1x)
+   3. assess_relationship_conflict_duration [needs chart_b]  (1x)
+   4. relationship_timing_prediction  (1x)
+   5. describe_love_languages  (1x)
+   6. communication_strategies_synastry [needs chart_b]  (1x)
+   7. career_path_by_midheaven_saturn  (1x)
+   8. assess_business_timing  (1x)
+   9. career_path_preference  (1x)
+  10. identify_untapped_potential  (1x)
+  11. career_cycle_assessment  (1x)
+  12. ideal_work_environment  (1x)
+  13. saturn_return_guidance  (1x)
+  14. identify_life_lesson  (1x)
+  15. identify_challenging_transits  (1x)
+  16. natal_anxiety_management  (1x)
+  17. predict_life_phase_transition  (1x)
+  18. challenging_aspects_and_transmutation  (1x)
+  19. prioritize_life_area  (1x)
+  20. natal_family_dynamics  (1x)
+  21. relocation_considerations  (1x)
+  22. diagnose_social_exhaustion  (1x)
+  23. natal_community_placement  (1x)
+  24. financial_volatility_check  (1x)
+  25. financial_blocks_and_wealth_potential  (1x)
+  26. assess_major_purchase_timing  (1x)
+  27. identify_planets_influencing_perception  (1x)
+  28. planetary_cycle_identification  (1x)
+  29. north_node_interpretation  (1x)
+  30. prioritize_chart_focus  (1x)
+
+  TERM REGISTRY  (add to term_registry.py + astrological_terms table)
+   1. "emotionally unavailable"  (1x)
+   2. "attract"  (1x)
+   3. "love language"  (1x)
+   4. "venus placement"  (1x)
+   5. "mars placement"  (1x)
+   6. "hidden professional strengths"  (1x)
+   7. "spiritual lesson"  (1x)
+   8. "anxiety"  (1x)
+   9. "planetary influences"  (1x)
+  10. "waiting room phase"  (1x)
+  11. "energy shift"  (1x)
+  12. "challenging aspect"  (1x)
+  13. "transmute"  (1x)
+  14. "social exhaustion"  (1x)
+  15. "my people"  (1x)
+  16. "financial volatility"  (1x)
+  17. "subconscious blocks"  (1x)
+  18. "relationship with money"  (1x)
+  19. "building wealth"  (1x)
+  20. "intense"  (1x)
+  21. "mysterious"  (1x)
+  22. "north node"  (1x)
+
+  KEYWORD ROUTING FIXES  (subtopic/keyword additions in topic_maps.py)
+   1. keyword matched "General"  but should be "Relationships & Love"
+   2. keyword matched "Conflict & Enemies"  but should be "Relationships & Love"
+   3. keyword matched "Devotion & Purposeful Service"  but should be "Career & Public Life"
+   4. keyword matched "Identity & Self"  but should be "Career & Public Life"
+   5. keyword matched "Finances & Resources"  but should be "Career & Public Life"
+   6. keyword matched "General"  but should be "Career & Public Life"
+   7. keyword matched "Career & Public Life"  but should be "Change & Transformation"
+   8. keyword matched "Finances & Resources"  but should be "Spirituality & Imagination"
+   9. keyword matched "Devotion & Purposeful Service"  but should be "Change & Transformation"
+  10. keyword matched "General"  but should be "Emotions & Inner World"
+  11. keyword matched "Finances & Resources"  but should be "Identity & Self"
+  12. keyword matched "Emotions & Inner World"  but should be "Change & Transformation"
+  13. keyword matched "Community & Future"  but should be "Emotions & Inner World"
+  14. keyword matched "Identity & Self"  but should be "Finances & Resources"
+  15. keyword matched "Devotion & Purposeful Service"  but should be "Finances & Resources"
+  16. keyword matched "General"  but should be "Identity & Self"
+  17. keyword matched "Career & Public Life"  but should be "Identity & Self"
+
+  BIWHEEL SUPPORT  (3 questions require chart_b / synastry loading)
+      reading_engine.py needs a subject_config=dyadic branch that
+      requests chart_b before building the reading packet.

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rosetta Thought Flow — Interactive Flowchart</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Cytoscape.js core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <!-- Dagre layout for hierarchical DAG -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+    <style>
+        /* Thought-flow-specific overrides */
+        .tab-chip {
+            display: inline-block;
+            margin: 2px 4px 2px 0;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text);
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .tab-chip:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .tab-chip.active {
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .mode-chip {
+            display: inline-block;
+            margin: 2px 4px 2px 0;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .mode-chip:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .mode-chip.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .status-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .status-swatch {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .status-swatch .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        #node-detail-panel {
+            padding: 12px;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-y: auto;
+        }
+
+        #node-detail-panel h4 {
+            margin: 0 0 6px 0;
+            font-size: 14px;
+        }
+
+        #node-detail-panel .meta-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        #node-detail-panel .meta-label {
+            color: var(--text-muted);
+            min-width: 55px;
+        }
+
+        #node-detail-panel a {
+            color: var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- ========== Header ========== -->
+        <div id="header">
+            <h1>
+                <span class="logo">✦</span>
+                Rosetta Thought Flow
+                <span style="font-weight:400;color:var(--text-muted);font-size:12px;">MCP Brain Map</span>
+            </h1>
+            <div id="header-controls">
+                <a class="btn btn-sm" href="index.html" title="Back to Code DAG">← Code DAG</a>
+                <button class="btn btn-sm" id="btn-refresh" title="Reload data (R)">⟳ Refresh</button>
+                <button class="btn btn-sm btn-primary" id="btn-save-layout" title="Save current node positions">💾 Save
+                    Layout</button>
+                <button class="btn btn-sm" id="btn-reset-layout" title="Clear saved layout and revert to auto dagre">↺
+                    Reset Layout</button>
+                <button class="btn btn-sm" id="btn-toggle-theme" title="Toggle light/dark theme">◐ Theme</button>
+                <button class="btn btn-sm" id="btn-toggle-sidebar" title="Toggle sidebar">☰</button>
+            </div>
+        </div>
+
+        <!-- ========== Breadcrumb trail ========== -->
+        <div id="breadcrumb-bar">
+            <span style="color:var(--text-muted);margin-right:8px;">Trail:</span>
+            <span id="breadcrumbs"></span>
+            <button class="btn btn-sm" id="btn-copy-trail" style="margin-left:auto;" title="Copy trail as text">📋 Copy
+                Trail</button>
+        </div>
+
+        <!-- ========== Main layout ========== -->
+        <div id="main-container">
+            <!-- Left sidebar -->
+            <div id="left-sidebar">
+                <!-- Search -->
+                <div class="sidebar-section">
+                    <input type="text" id="search-box" placeholder="Search nodes…" autocomplete="off">
+                </div>
+
+                <!-- Flow Tabs -->
+                <div class="sidebar-section">
+                    <h3>Flow Tabs</h3>
+                    <div id="tab-container"></div>
+                </div>
+
+                <!-- Chart Mode Filter -->
+                <div class="sidebar-section">
+                    <h3>Chart Mode Filter</h3>
+                    <div id="mode-container"></div>
+                </div>
+
+                <!-- Status Legend -->
+                <div class="sidebar-section">
+                    <h3>Status</h3>
+                    <div class="status-legend">
+                        <span class="status-swatch"><span class="dot" style="background:#3fb950;"></span>done</span>
+                        <span class="status-swatch"><span class="dot"
+                                style="background:#d29922;"></span>in-progress</span>
+                        <span class="status-swatch"><span class="dot"
+                                style="background:#565e6b;"></span>not-built</span>
+                        <span class="status-swatch"><span class="dot" style="background:#f85149;"></span>blocked</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas -->
+            <div id="cy-container">
+                <div id="cy"></div>
+            </div>
+
+            <!-- Right detail panel (reuses sidebar styling) -->
+            <div id="right-sidebar" style="min-width:240px;max-width:320px;">
+                <div id="node-detail-panel">
+                    <p style="color:var(--text-muted);">Click a node to view details and source link.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/persistence.js"></script>
+    <script src="js/flow-renderer.js"></script>
+    <script src="js/flow-app.js"></script>
+</body>
+
+</html>

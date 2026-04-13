@@ -73,7 +73,7 @@ def extract_wizard_targets():
 def extract_shape_completions():
     """Pull SHAPE_COMPLETIONS keys from switch_points.py."""
     try:
-        from switch_points import SHAPE_COMPLETIONS
+        from src.core.switch_points import SHAPE_COMPLETIONS
         nodes = []
         for shape_name, info in SHAPE_COMPLETIONS.items():
             completes_to = info.get("completes_to", "?") if isinstance(info, dict) else str(info)

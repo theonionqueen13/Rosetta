@@ -135,7 +135,7 @@ def load_chart_from_profile(
     This is the bridge from stored profile JSON → live chart object,
     reusing the existing calc_v2.calculate_chart() pipeline.
     """
-    from calc_v2 import calculate_chart
+    from src.core.calc_v2 import calculate_chart
 
     year = int(profile_data.get("year", 2000))
     month_name = profile_data.get("month_name", "January")

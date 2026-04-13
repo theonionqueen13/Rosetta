@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from dignity_calc import PlanetaryState
+    from src.core.dignity_calc import PlanetaryState
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -491,7 +491,7 @@ def load_terms(db_conn=None) -> List[Term]:
         opens its own connection via ``db_access.get_terms()``.
     """
     try:
-        from db_access import get_terms as _db_get_terms  # lazy import
+        from src.db.db_access import get_terms as _db_get_terms  # lazy import
         rows = _db_get_terms()
         if rows:
             result: List[Term] = []

@@ -584,7 +584,7 @@ def _write_terms_to_registry(confirmed: list[dict[str, Any]]) -> None:
         return
 
     try:
-        from db_access import get_connection  # type: ignore
+        from src.db.db_access import get_connection  # type: ignore
         conn = get_connection()
         cur  = conn.cursor()
         sql  = """

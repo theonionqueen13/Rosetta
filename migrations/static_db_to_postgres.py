@@ -21,7 +21,7 @@ import os
 import psycopg2
 from psycopg2.extras import execute_values, register_default_jsonb
 
-from models_v2 import static_db
+from src.core.models_v2 import static_db
 
 # register jsonb adapter just in case we want to store some fields as json
 register_default_jsonb()

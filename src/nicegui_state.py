@@ -124,7 +124,7 @@ def get_chart_object(state: Dict[str, Any]):
     raw = state.get("last_chart_json")
     if raw is None or not isinstance(raw, dict):
         return None
-    from models_v2 import AstrologicalChart
+    from src.core.models_v2 import AstrologicalChart
     return AstrologicalChart.from_json(raw)
 
 
@@ -133,7 +133,7 @@ def get_chart_2_object(state: Dict[str, Any]):
     raw = state.get("last_chart_2_json")
     if raw is None or not isinstance(raw, dict):
         return None
-    from models_v2 import AstrologicalChart
+    from src.core.models_v2 import AstrologicalChart
     return AstrologicalChart.from_json(raw)
 
 

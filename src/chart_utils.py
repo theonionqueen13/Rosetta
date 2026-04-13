@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Collection, Mapping
 
-import patterns_v2 as _patterns_mod
+import src.core.patterns_v2 as _patterns_mod
 
 
 def _resolve_visible_from_patterns(toggle_state: Any, chart=None) -> set[str] | None:

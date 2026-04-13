@@ -48,7 +48,7 @@ from src.mcp.reading_packet import (
 )
 
 if TYPE_CHECKING:
-    from models_v2 import AstrologicalChart, ChartObject, StaticLookup
+    from src.core.models_v2 import AstrologicalChart, ChartObject, StaticLookup
 
 # Lazy imports of heavy modules — only pulled in when actually needed.
 _static_db: Any = None
@@ -57,7 +57,7 @@ _static_db: Any = None
 def _get_static_db() -> Any:
     global _static_db
     if _static_db is None:
-        from models_v2 import static_db
+        from src.core.models_v2 import static_db
         _static_db = static_db
     return _static_db
 
@@ -231,7 +231,7 @@ def build_reading(
         _ps = getattr(chart, "planetary_states", None)
         if not _ps:
             try:
-                from dignity_calc import score_and_attach
+                from src.core.dignity_calc import score_and_attach
                 score_and_attach(chart)
                 _ps = getattr(chart, "planetary_states", None)
             except Exception:
@@ -335,7 +335,7 @@ def build_reading(
     _planet_stats_list: List[Dict[str, Any]] = []
     _planet_profiles_list: List[Dict[str, Any]] = []
     try:
-        from planet_profiles import PlanetStats, PlanetProfile, PlanetStatsReader
+        from src.core.planet_profiles import PlanetStats, PlanetProfile, PlanetStatsReader
         for _robj in relevant_objects:
             try:
                 _ps = PlanetStats.from_chart_object(_robj, house_system=house_system)
@@ -698,7 +698,7 @@ def _build_switch_points(
     them to SwitchPointFact instances for the ReadingPacket.
     """
     try:
-        from switch_points import find_switch_points
+        from src.core.switch_points import find_switch_points
     except ImportError:
         return []
 
@@ -909,8 +909,8 @@ def _run_interp(
     Returns combined text (may be empty if interp module unavailable).
     """
     try:
-        from interp_base_natal import NatalInterpreter
-        from drawing_v2 import RenderResult
+        from src.rendering.interp_base_natal import NatalInterpreter
+        from src.rendering.drawing_v2 import RenderResult
 
         # Build a minimal RenderResult so the interpreter has what it needs.
         positions = chart.positions or {}

@@ -33,7 +33,7 @@ from fastapi.responses import JSONResponse
 from nicegui import app, run, ui
 
 from config import get_secret
-from supabase_client import get_supabase
+from src.db.supabase_client import get_supabase
 from src.nicegui_state import ensure_state, get_chart_object, get_chart_2_object
 
 _log = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ def _try_refresh_session() -> bool:
 # Static file mounts — MUST come before @ui.page decorators to avoid route shadowing
 # ---------------------------------------------------------------------------
 app.add_static_files('/pngs', 'pngs')
-app.add_static_files('/d3chart', 'src/components/interactive_chart/frontend')
+app.add_static_files('/d3chart', 'src/interactive_chart')
 
 # ---------------------------------------------------------------------------
 # /login page
@@ -566,8 +566,8 @@ body.body--dark {
         unknown_time = getattr(chart_obj, "unknown_time", False)
 
         try:
-            from profiles_v2 import format_object_profile_html, ordered_objects
-            from planet_profiles import (
+            from src.rendering.profiles_v2 import format_object_profile_html, ordered_objects
+            from src.core.planet_profiles import (
                 format_planet_profile_html,
                 format_full_planet_profile_html,
             )
@@ -659,7 +659,7 @@ body.body--dark {
             if not uid:
                 return
             try:
-                from supabase_profiles import load_user_profiles_db
+                from src.db.supabase_profiles import load_user_profiles_db
                 profiles = load_user_profiles_db(uid)
                 names = sorted(profiles.keys())
                 profile_select.options = names
@@ -681,7 +681,7 @@ body.body--dark {
                 _mgr_error("Select a profile to load.")
                 return
             try:
-                from supabase_profiles import load_user_profiles_db
+                from src.db.supabase_profiles import load_user_profiles_db
                 profiles = load_user_profiles_db(uid)
                 prof_data = profiles.get(selected)
                 if prof_data is None:
@@ -689,7 +689,7 @@ body.body--dark {
                     return
 
                 # Apply profile to NiceGUI state
-                from src.profile_helpers import apply_profile
+                from src.db.profile_helpers import apply_profile
                 state = ensure_state()
                 apply_profile(selected, prof_data, state)
 
@@ -743,7 +743,7 @@ body.body--dark {
 
             try:
                 from src.mcp.comprehension_models import PersonProfile as _PP
-                from supabase_profiles import save_user_profile_db
+                from src.db.supabase_profiles import save_user_profile_db
 
                 rel = "self" if is_my_chart_cb.value else "other"
                 pp = _PP(
@@ -771,7 +771,7 @@ body.body--dark {
                 _mgr_error("Select a profile to delete.")
                 return
             try:
-                from supabase_profiles import delete_user_profile_db
+                from src.db.supabase_profiles import delete_user_profile_db
                 delete_user_profile_db(uid, selected)
                 _refresh_profiles()
                 profile_select.value = None
@@ -941,7 +941,7 @@ body.body--dark {
             if not uid:
                 return
             try:
-                from supabase_profiles import load_user_profiles_db
+                from src.db.supabase_profiles import load_user_profiles_db
                 profiles = load_user_profiles_db(uid)
                 names = sorted(profiles.keys())
                 chart2_profile_sel.options = names
@@ -1064,8 +1064,8 @@ body.body--dark {
             if not uid or not selected:
                 return
             try:
-                from supabase_profiles import load_user_profiles_db
-                from src.profile_helpers import apply_profile
+                from src.db.supabase_profiles import load_user_profiles_db
+                from src.db.profile_helpers import apply_profile
                 profiles = load_user_profiles_db(uid)
                 prof_data = profiles.get(selected)
                 if prof_data is None:
@@ -1227,7 +1227,7 @@ body.body--dark {
                         ui.label("Where to look in your chart:").classes(
                             "text-subtitle2 q-mb-xs"
                         )
-                        from models_v2 import static_db as _sdb
+                        from src.core.models_v2 import static_db as _sdb
                         _GLYPHS = getattr(_sdb, "GLYPHS", {})
                         _OBJ_MEANINGS = getattr(
                             _sdb, "OBJECT_MEANINGS_SHORT", {}
@@ -1283,7 +1283,7 @@ body.body--dark {
         # Check admin status (pass user_id to avoid st.session_state)
         _is_admin = False
         try:
-            from supabase_admin import is_admin as _check_admin
+            from src.db.supabase_admin import is_admin as _check_admin
             _is_admin = _check_admin(user_id)
         except Exception:
             pass
@@ -1493,7 +1493,7 @@ body.body--dark {
                                 "tz_name": state.get("current_tz_name"),
                             }
                             try:
-                                from src.data_stubs import community_save
+                                from src.db.data_stubs import community_save
                                 uid = _get_user_id() or "anon"
                                 community_save(label, payload, submitted_by=uid)
                                 donate_status.text = (
@@ -1567,8 +1567,8 @@ body.body--dark {
                         cb.on_value_change(functools.partial(_on_aspect_toggle, name))
 
                 # --- Additional Minor (Harmonic) Aspects expansion ---
-                from calc_v2 import HARMONIC_BY_NUMBER
-                from models_v2 import static_db as _sd
+                from src.core.calc_v2 import HARMONIC_BY_NUMBER
+                from src.core.models_v2 import static_db as _sd
 
                 _HARMONIC_FAMILY_LABELS = {
                     5: "H5 — Quintile Family",
@@ -1779,7 +1779,7 @@ body.body--dark {
                     Returns (circuit_connected_shapes2, edges_inter_chart_cc)
                     or (None, None) if not in biwheel mode.
                     """
-                    from models_v2 import static_db as _sdb
+                    from src.core.models_v2 import static_db as _sdb
                     _ASP = {k: v for k, v in _sdb.ASPECTS.items()
                             if v.get("aspect_type") in ("Major", "Minor")}
                     chart_obj = get_chart_object(state)
@@ -1839,7 +1839,7 @@ body.body--dark {
                     - Connected biwheel: shows Chart 1 circuits with dynamically
                       revealed Chart 2 connections based on active toggles.
                     """
-                    from models_v2 import static_db as _sdb2
+                    from src.core.models_v2 import static_db as _sdb2
                     _GLYPHS = _sdb2.GLYPHS
 
                     chart_obj = get_chart_object(state)
@@ -2268,7 +2268,7 @@ body.body--dark {
                     plot_data = getattr(chart_obj, "plot_data", None)
                     if plot_data is None:
                         try:
-                            from calc_v2 import compute_plot_data_from_chart
+                            from src.core.calc_v2 import compute_plot_data_from_chart
                             plot_data = compute_plot_data_from_chart(chart_obj)
                             chart_obj.plot_data = plot_data
                         except Exception:
@@ -2323,7 +2323,7 @@ body.body--dark {
                         header_info = None
 
                     try:
-                        from src.dispositor_graph import plot_dispositor_graph
+                        from src.rendering.dispositor_graph import plot_dispositor_graph
 
                         fig = plot_dispositor_graph(
                             scope_data,
@@ -3099,7 +3099,7 @@ body.body--dark {
                                 )
                             else:
                                 try:
-                                    from calc_v2 import build_clustered_aspect_edges
+                                    from src.core.calc_v2 import build_clustered_aspect_edges
                                     clustered = build_clustered_aspect_edges(
                                         chart_obj, edges_major,
                                     )
@@ -3200,7 +3200,7 @@ body.body--dark {
                         ui.label("House System").classes("text-subtitle1 text-weight-medium")
 
                         settings_house = ui.select(
-                            ["placidus", "equal", "whole"],
+                            ["placidus", "equal", "whole sign"],
                             value=state.get("house_system", "placidus"),
                         ).classes("w-40")
 
@@ -3557,7 +3557,7 @@ body.body--dark {
                             import matplotlib
                             matplotlib.use("Agg")
                             import matplotlib.pyplot as plt
-                            from drawing_v2 import render_biwheel_connected_circuits
+                            from src.rendering.drawing_v2 import render_biwheel_connected_circuits
 
                             pos_1 = getattr(chart_obj, "positions", None) or {}
                             pos_2 = getattr(chart_2_obj, "positions", None) or {}
@@ -3712,7 +3712,7 @@ body.body--dark {
             Applies the same toggle-based filtering as the PNG renderer.
             """
             print(f"[D3] _serialize_chart_for_d3 called with mode={mode}")
-            from src.chart_serializer import (
+            from src.rendering.chart_serializer import (
                 serialize_chart_for_rendering,
                 serialize_biwheel_for_rendering,
             )
@@ -4098,7 +4098,7 @@ body.body--dark {
                 if utc_dt is None:
                     events_container.content = ""
                     return
-                from event_lookup_v2 import build_events_html
+                from src.core.event_lookup_v2 import build_events_html
                 html = build_events_html(utc_dt)
                 events_container.content = html
             except Exception:
@@ -4158,7 +4158,7 @@ body.body--dark {
 
             try:
                 # --- Geocode ---
-                from src.geocoding import geocode_city_with_timezone
+                from src.core.geocoding import geocode_city_with_timezone
                 lat, lon, tz_name, formatted = geocode_city_with_timezone(city)
                 if lat is None or lon is None or tz_name is None:
                     status_label.text = f"Could not geocode '{city}'. Please try a more specific city name."
@@ -4316,7 +4316,7 @@ body.body--dark {
             _self_loaded = False
             if _uid:
                 try:
-                    from supabase_profiles import load_user_profiles_db
+                    from src.db.supabase_profiles import load_user_profiles_db
                     _profiles = load_user_profiles_db(_uid)
                     for _pname, _pdata in (_profiles or {}).items():
                         # Skip legacy __-prefixed sentinel profiles (e.g. "__self__")
@@ -4324,7 +4324,7 @@ body.body--dark {
                         if _pname.startswith("__"):
                             continue
                         if (_pdata or {}).get("relationship_to_querent") == "self":
-                            from src.profile_helpers import apply_profile
+                            from src.db.profile_helpers import apply_profile
                             apply_profile(_pname, _pdata, state)
                             _chart_tmp = state.pop("last_chart", None)
                             if _chart_tmp is not None and hasattr(_chart_tmp, "to_json"):

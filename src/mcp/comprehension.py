@@ -61,7 +61,7 @@ from src.mcp.comprehension_models import (
 )
 
 if TYPE_CHECKING:
-    from models_v2 import AstrologicalChart
+    from src.core.models_v2 import AstrologicalChart
 
 
 # ═══════════════════════════════════════════════════════════════════════

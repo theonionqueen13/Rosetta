@@ -753,7 +753,7 @@ def _get_switch_points(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]
         return {"error": "Requested chart is not loaded."}
 
     try:
-        from switch_points import find_switch_points
+        from src.core.switch_points import find_switch_points
     except ImportError:
         return {"error": "switch_points module not found"}
 

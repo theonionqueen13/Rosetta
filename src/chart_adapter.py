@@ -104,7 +104,7 @@ def compute_chart(inputs: ChartInputs) -> ChartResult:
       - patterns_v2.prepare_pattern_inputs / detect_shapes / detect_minor_links_from_chart
       - circuit_sim.simulate_and_attach()
     """
-    from calc_v2 import (
+    from src.core.calc_v2 import (
         calculate_chart,
         build_aspect_edges,
         annotate_chart,
@@ -112,13 +112,13 @@ def compute_chart(inputs: ChartInputs) -> ChartResult:
         build_conjunction_clusters,
         build_dispositor_tables,
     )
-    from patterns_v2 import (
+    from src.core.patterns_v2 import (
         prepare_pattern_inputs,
         detect_shapes,
         detect_minor_links_from_chart,
         generate_combo_groups,
     )
-    from circuit_sim import simulate_and_attach
+    from src.core.circuit_sim import simulate_and_attach
 
     result = ChartResult()
 
@@ -286,12 +286,12 @@ def compute_transit_chart(
 
     This is a lighter version of compute_chart() intended for Chart-2 usage.
     """
-    from calc_v2 import (
+    from src.core.calc_v2 import (
         calculate_chart,
         build_aspect_edges,
         annotate_chart,
     )
-    from patterns_v2 import (
+    from src.core.patterns_v2 import (
         prepare_pattern_inputs,
         detect_shapes,
     )
@@ -391,10 +391,10 @@ def compute_combined_circuits(chart_1, chart_2):
         pos_combined, patterns_combined, shapes_combined,
         singleton_map_combined, combined_edges
     """
-    from models_v2 import static_db
+    from src.core.models_v2 import static_db
     ASPECTS = {k: v for k, v in static_db.ASPECTS.items()
                if v.get("aspect_type") in ("Major", "Minor")}
-    from patterns_v2 import connected_components_from_edges, detect_shapes
+    from src.core.patterns_v2 import connected_components_from_edges, detect_shapes
 
     pos_1 = {obj.object_name.name: obj.longitude
              for obj in chart_1.objects if obj.object_name}
@@ -450,7 +450,7 @@ def compute_inter_chart_aspects(chart_1, chart_2):
 
     Returns list of (planet1, planet2, aspect_name) tuples.
     """
-    from models_v2 import static_db
+    from src.core.models_v2 import static_db
     ASPECTS = {k: v for k, v in static_db.ASPECTS.items()
                if v.get("aspect_type") in ("Major", "Minor")}
 
@@ -522,8 +522,8 @@ def render_chart_image(
     matplotlib.use("Agg")  # non-interactive backend
     import matplotlib.pyplot as plt
 
-    from drawing_v2 import render_chart as _render_chart_standard
-    from drawing_v2 import render_chart_with_shapes as _render_chart_circuits
+    from src.rendering.drawing_v2 import render_chart as _render_chart_standard
+    from src.rendering.drawing_v2 import render_chart_with_shapes as _render_chart_circuits
 
     if toggles is None:
         toggles = RenderToggles()
@@ -647,7 +647,7 @@ def render_biwheel_image(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from drawing_v2 import (
+    from src.rendering.drawing_v2 import (
         render_biwheel_chart as _render_biwheel_standard,
         render_biwheel_chart_with_circuits as _render_biwheel_combined,
     )

@@ -173,7 +173,7 @@ class PersonProfile:
         chart_raw = d.get("chart")
         if isinstance(chart_raw, dict) and "objects" in chart_raw:
             try:
-                from models_v2 import AstrologicalChart as _AC
+                from src.core.models_v2 import AstrologicalChart as _AC
                 astro_chart = _AC.from_json(chart_raw)
             except Exception:
                 pass  # leave as None if deserialisation fails
