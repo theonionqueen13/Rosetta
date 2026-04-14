@@ -2,7 +2,7 @@
  * RosettaTooltip — Hover tooltips and click events for the interactive chart.
  *
  * Shows rich metadata panels for planets, aspects, and houses on hover.
- * Sends click events back to Streamlit via Streamlit.setComponentValue().
+ * Click events are dispatched as CustomEvents on the SVG element.
  */
 const RosettaTooltip = (() => {
     let _data = null; // chart data reference
@@ -306,12 +306,10 @@ const RosettaTooltip = (() => {
         }).on("mousemove", function (evt) { _move(evt); })
             .on("mouseleave", _hide).on("click", function () {
                 const name = this.getAttribute("data-object");
-                Streamlit.setComponentValue({
-                    type: "click",
-                    element_type: "object",
-                    element: name,
-                    data: _objectMap[name] || {},
-                });
+                svg.node().dispatchEvent(new CustomEvent("rosetta-click", {
+                    bubbles: true,
+                    detail: { type: "click", element_type: "object", element: name, data: _objectMap[name] || {} },
+                }));
             });
 
         // --- Aspect hover/click ---
@@ -340,12 +338,10 @@ const RosettaTooltip = (() => {
                 const a = this.getAttribute("data-obj-a");
                 const b = this.getAttribute("data-obj-b");
                 const asp = this.getAttribute("data-aspect");
-                Streamlit.setComponentValue({
-                    type: "click",
-                    element_type: "aspect",
-                    element: `${a}-${b}-${asp}`,
-                    data: { obj_a: a, obj_b: b, aspect: asp },
-                });
+                svg.node().dispatchEvent(new CustomEvent("rosetta-click", {
+                    bubbles: true,
+                    detail: { type: "click", element_type: "aspect", element: `${a}-${b}-${asp}`, data: { obj_a: a, obj_b: b, aspect: asp } },
+                }));
             });
 
         // --- House hover/click ---
@@ -356,12 +352,10 @@ const RosettaTooltip = (() => {
         }).on("mousemove", function (evt) { _move(evt); })
             .on("mouseleave", _hide).on("click", function () {
                 const h = this.getAttribute("data-house");
-                Streamlit.setComponentValue({
-                    type: "click",
-                    element_type: "house",
-                    element: h,
-                    data: _houseMap[h] || {},
-                });
+                svg.node().dispatchEvent(new CustomEvent("rosetta-click", {
+                    bubbles: true,
+                    detail: { type: "click", element_type: "house", element: h, data: _houseMap[h] || {} },
+                }));
             });
 
         // --- Zodiac sign hover ---

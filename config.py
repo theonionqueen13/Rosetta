@@ -62,20 +62,4 @@ def get_secret(section: str, key: str, default: Optional[str] = None) -> Optiona
         if value:
             return value
 
-    # 3. Streamlit fallback (import lazily so NiceGUI never pulls it in)
-    try:
-        import streamlit as st  # noqa: F811
-        sec = st.secrets.get(section)
-        if sec is not None:
-            val = sec.get(key) if hasattr(sec, "get") else None
-            if val:
-                return val
-        # Also try top-level key (legacy flat layout in secrets.toml)
-        val = st.secrets.get(env_name)
-        if val:
-            return val
-    except Exception:
-        # Streamlit not installed, not running, or secrets not configured
-        pass
-
     return default

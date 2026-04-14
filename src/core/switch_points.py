@@ -213,6 +213,7 @@ class SwitchPoint:
     description: str = ""           # shape completion narrative
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize the switch point to a nested dict suitable for JSON output."""
         d: Dict[str, Any] = {
             "source_shape": self.source_shape_type,
             "source_members": self.source_members,

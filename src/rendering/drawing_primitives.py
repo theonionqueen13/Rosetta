@@ -1,3 +1,10 @@
+"""
+Low-level drawing primitives for chart-wheel rendering.
+
+Geometry helpers (polar ↔ Cartesian, glyph collision avoidance),
+colour-palette lookups, moon-phase resolution, and reusable Matplotlib
+path-effect builders used by :mod:`drawing_v2`.
+"""
 import numpy as np
 import os
 import matplotlib.patheffects as pe
@@ -106,14 +113,17 @@ def _draw_gradient_line(
 	so that we can keep a smooth color gradient AND a visible pattern.
 	"""
 	def _vec(th):
+		"""Convert polar angle to (x, y) on the ring."""
 		return np.cos(th) * radius, np.sin(th) * radius
 
 	def _interp_xy(t):
+		"""Linearly interpolate between the chord endpoints at parameter *t*."""
 		x = (1.0 - t) * x1 + t * x2
 		y = (1.0 - t) * y1 + t * y2
 		return x, y
 
 	def _xy_to_polar(x, y):
+		"""Convert (x, y) back to (theta, radius)."""
 		return np.arctan2(y, x), np.hypot(x, y)
 
 	# endpoints in Cartesian on the unit ring
@@ -483,6 +493,7 @@ def _earth_emoji_for_region(lat: float | None, lon: float | None) -> str:
 def _get_profile_lat_lon_nicegui() -> tuple[float | None, float | None]:
 	"""Read current lat/lon from NiceGUI per-user storage, if available."""
 	def _f(x):
+		"""Try to convert *x* to float, returning None on failure."""
 		try:
 			return float(x)
 		except Exception:

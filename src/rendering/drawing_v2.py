@@ -1,3 +1,12 @@
+"""
+Matplotlib chart-wheel renderer.
+
+Produces publication-quality natal, transit, and synastry chart images
+as PNG bytes.  Handles zodiac rings, house cusps, object glyphs,
+aspect lines, shape overlays, singleton dots, and compass-mode layout.
+The public entry points are :func:`render_chart` and
+:func:`render_chart_with_shapes`.
+"""
 from __future__ import annotations
 import re, math
 import numpy as np
@@ -39,11 +48,13 @@ from src.core.data_helpers import (
 from src.core.models_v2 import AstrologicalChart
 
 def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
+	"""Map object names to their ChartObject instances."""
 	if chart is None:
 		return {}
 	return {obj.object_name.name: obj for obj in chart.objects if obj.object_name}
 
 def _chart_positions(chart: AstrologicalChart, visible_names: Collection[str] | None = None) -> dict[str, float]:
+	"""Return a name→longitude dict for visible chart objects."""
 	if chart is None:
 		return {}
 	visible_canon = _expand_visible_canon(visible_names)
@@ -64,6 +75,7 @@ def _chart_compass_positions(
 	chart: AstrologicalChart,
 	visible_names: Collection[str] | None = None,
 ) -> dict[str, float]:
+	"""Return compass-label→longitude positions for AC/DC/MC/IC/nodes."""
 	if chart is None:
 		return {}
 	visible_canon = _expand_visible_canon(visible_names)
@@ -85,6 +97,7 @@ def _chart_compass_positions(
 	return out
 
 def _get_ascendant_degree(chart: AstrologicalChart) -> float:
+	"""Extract the Ascendant longitude from *chart*, defaulting to 0."""
 	obj_map = _object_map(chart)
 	for name in ("AC", "Ascendant", "Asc", "Ac"):
 		obj = obj_map.get(name)
@@ -98,9 +111,11 @@ def _get_ascendant_degree(chart: AstrologicalChart) -> float:
 
 # Backward-compatible wrappers (legacy dataframe usage)
 def extract_positions(df: pd.DataFrame, visible_names: Collection[str] | None = None) -> dict[str, float]:
+	"""Legacy wrapper: extract positions from a DataFrame."""
 	return _dh.extract_positions(df, visible_names)
 
 def get_ascendant_degree(df: pd.DataFrame) -> float:
+	"""Legacy wrapper: get ascendant degree from a DataFrame."""
 	return _dh.get_ascendant_degree(df)
 def get_shapes(pos, patterns, major_edges_all, *, chart: AstrologicalChart = None):
 	"""Return shapes. Uses chart.shapes if available, otherwise computes."""
@@ -146,6 +161,7 @@ def draw_house_cusps(
 	draw_lines: bool = True,
 	draw_labels: bool = True,
 ) -> list[float]:
+	"""Draw house cusp lines and labels on the polar axes."""
 	system_map = {
 		"placidus": "Placidus",
 		"equal": "Equal",
@@ -335,6 +351,7 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, chart: Astrolog
 
 	# Helper to check retrograde status
 	def is_retrograde(obj_name):
+		"""Return whether *obj_name* is retrograde in the current chart."""
 		if chart is None:
 			return False
 		try:
@@ -427,6 +444,7 @@ def draw_aspect_lines(
 	drawn_keys: set[tuple[frozenset[str], str]] | None = None,
 	radius: float = 1.0,
 ):    
+	"""Draw major aspect lines as gradient chords on the polar chart."""
 	drawn = []
 	if not edges:
 		return drawn
@@ -488,6 +506,7 @@ def draw_minor_edges(
 	drawn_keys: set[tuple[frozenset[str], str]] | None = None,
 	radius: float = 1.0,
 ):
+	"""Draw minor aspect edges as dotted gradient chords."""
 	drawn: list[tuple[str, str, str]] = []
 	if not edges:
 		return drawn
@@ -535,6 +554,7 @@ def draw_singleton_dots(
 	asc_deg: float,
 	line_width: float = 2.0,
 ) -> None:
+	"""Mark singleton objects with red dots on the chart wheel."""
 	shape_edge_set = {frozenset(edge) for edge in (shape_edges or [])}
 	for obj in singletons:
 		if obj not in pos:
@@ -563,6 +583,7 @@ def draw_compass_rose(
 		colors = {"nodal": "purple", "acdc": "#4E83AF", "mcic": "#4E83AF"}
 
 	def _get_deg(label: str) -> float | None:
+		"""Resolve the ecliptic degree for a compass *label*."""
 		deg = _degree_for_label(pos, label)
 		if deg is not None:
 			return deg
@@ -840,6 +861,7 @@ def render_chart_with_shapes(
 	dpi=144,
 	compass_on: bool = True,
 ):
+	"""Render the full chart wheel with active pattern/shape overlays."""
 	plt.close('all')  # Kill any background figures before starting
 	fig, ax = plt.subplots(figsize=figsize, dpi=dpi, subplot_kw={"projection": "polar"})
 	unknown_time_chart = chart.unknown_time
@@ -902,6 +924,7 @@ def render_chart_with_shapes(
 	edge_keys: set[tuple[frozenset[str], str]] = set()
 
 	def _add_edge(a, aspect, b):
+		"""Record a drawn aspect for context assembly, skipping conjunctions."""
 		asp = (aspect or "").replace("_approx", "").strip()
 		if not asp or asp.lower() == "conjunction":
 			return
@@ -2019,6 +2042,7 @@ def draw_planet_labels_biwheel(
 
 	# Retrograde checker
 	def is_retrograde(obj_name):
+		"""Return whether *obj_name* is retrograde in the current chart."""
 		if chart is None:
 			return False
 		try:

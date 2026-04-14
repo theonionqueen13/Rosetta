@@ -1,3 +1,13 @@
+"""
+Swiss Ephemeris chart calculation engine.
+
+Provides :func:`calculate_chart` (the main entry point) plus helpers for
+aspect detection, house-cusp computation, dignities, receptions, Sabian
+symbols, and fixed-star conjunctions.  All heavy astronomical work is
+delegated to *pyswisseph*; this module turns the raw positions into the
+:class:`~src.core.models_v2.AstrologicalChart` dataclass consumed by the
+rest of the application.
+"""
 import re
 from functools import lru_cache
 import swisseph as swe
@@ -23,9 +33,11 @@ from .dignity_calc import score_and_attach
 OOB_LIMIT = 23.44  # degrees declination
 
 def is_out_of_bounds(declination: float) -> bool:
+	"""Return True if the declination exceeds the ecliptic obliquity limit (±23.44°)."""
 	return abs(declination) > OOB_LIMIT
 
 def deg_to_sign(lon):
+	"""Convert ecliptic longitude to ``(sign_name, DMS_string, sabian_index)``."""
 	sign_index = int(lon // 30)
 	degree = lon % 30
 	sign = SIGNS[sign_index]
@@ -47,6 +59,7 @@ def _sign_from_degree(deg: float) -> str:
 	return SIGNS[_sign_index(deg)]
 
 def _calc_vertex(jd, lat, lon):
+	"""Return the Vertex longitude (and zero lat/dist/speed) via Placidus houses."""
 	cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
 	if cusps is None or ascmc is None:      
 		raise ValueError("Swiss Ephemeris could not calculate Placidus houses")
@@ -54,6 +67,7 @@ def _calc_vertex(jd, lat, lon):
 	return ascmc[3], 0.0, 0.0, 0.0  # lon, lat, dist, speed
 
 def _calc_pof(jd, lat, lon):
+	"""Calculate the Part of Fortune longitude using the day/night formula."""
 	# Asc & Desc from Swiss Ephemeris
 	cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P')
 	asc = ascmc[0] % 360.0
@@ -108,6 +122,7 @@ def calculate_house_cusps(jd, lat, lon, asc_val, house_system=None):
 		"equal house": "equal",
 	}
 	def _one_system_rows(sys: str) -> list[dict]:
+		"""Compute the 12 house-cusp rows for a single house system."""
 		rows = []
 		sys_lc = sys.lower()
 
@@ -514,6 +529,7 @@ def calculate_chart(
 
 	# --- Generate all paths from every object down to final dispositors ---
 	def build_paths(node, path, visited):
+		"""Recursively trace dispositor chains from *node* to final dispositors."""
 		if node in visited:
 			return []
 		visited.add(node)
@@ -725,6 +741,7 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 	"""
 
 	def _ensure_list(x):
+		"""Coerce *x* to a list; returns [] for None, wraps scalars."""
 		if x is None:
 			return []
 		if isinstance(x, (list, tuple, set)):
@@ -732,6 +749,7 @@ def analyze_dispositors(pos: dict, cusps: list[float] = None) -> dict:
 		return [x]
 
 	def _build_scope(cusps_scope=None):
+		"""Build a dispositor graph for one scope (sign- or house-based) and return raw links."""
 		edges = []
 		mode = "HOUSE-BASED" if cusps_scope else "SIGN-BASED"
 		for obj, deg in pos.items():
@@ -886,6 +904,7 @@ def build_dispositor_tables(chart: AstrologicalChart) -> tuple[list[dict], list[
 	}
 
 	def _cusps(sys_key: str) -> list[float]:
+		"""Extract the 12 cusp longitudes for *sys_key* from the chart's house_cusps list."""
 		vals = [
 			float(c.absolute_degree) % 360.0
 			for c in chart.house_cusps
@@ -1045,7 +1064,7 @@ def _within_orb(a: float, b: float, target: float, orb: float) -> tuple[bool, fl
 	return (delta <= orb, delta)
 
 def _fmt_orb(delta: float) -> str:
-	# Keep one decimal by default; adjust if you prefer integer rounding
+	"""Format an orb delta as a string like ``'2.3°'``."""
 	return f"{delta:.1f}°"
 
 def _applying_or_separating(
@@ -1339,6 +1358,7 @@ def annotate_reception(df: pd.DataFrame, edges_major: list[tuple]) -> pd.DataFra
 	# Aspect display mapping for wording tweaks
 	_DISPLAY = {"Conjunction": "Conjunct", "Opposition": "Opposite"}
 	def _disp(aspect_name: str) -> str:
+		"""Map aspect names to display verbs (e.g. 'Conjunction' → 'Conjunct')."""
 		return _DISPLAY.get(aspect_name, aspect_name)
 
 	# Build lookup from supplied edges_major
@@ -1514,6 +1534,7 @@ def build_conjunction_clusters(chart: AstrologicalChart, edges_major: list[tuple
 	return clusters, cluster_map, cluster_sets
 
 def oxford_join(lst):
+    """Join a list of strings with commas and Oxford-comma 'and'."""
     lst = list(lst)
     if len(lst) == 1:
         return lst[0]

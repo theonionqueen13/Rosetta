@@ -61,6 +61,7 @@ class CircuitPath:
     connection_quality: str = ""   # "direct_shape", "bridged"
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this circuit path to a JSON-safe dictionary."""
         d: Dict[str, Any] = {
             "from": self.from_concept,
             "to": self.to_concept,
@@ -93,6 +94,7 @@ class CircuitReading:
     narrative_seeds: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this circuit reading to a JSON-safe dictionary."""
         d: Dict[str, Any] = {}
         if self.relevant_shapes:
             d["shapes"] = [_shape_to_dict(s) for s in self.relevant_shapes]
@@ -317,6 +319,7 @@ def _generate_narrative_seeds(
 
     # ── Qualitative power-level helper (node-local) ──────────────
     def _power_tier(idx: float) -> str:
+        """Classify a power index into a human-readable tier label."""
         if idx >= 7.0:
             return "dominant force"
         if idx >= 5.0:

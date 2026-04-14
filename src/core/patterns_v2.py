@@ -1,4 +1,11 @@
-# patterns_v2.py — refactored to source data from calc_v2/profiles_v2
+"""
+patterns_v2 — Aspect-pattern detection engine.
+
+Identifies geometric patterns (T-squares, grand trines, grand crosses,
+yods, kites, mystic rectangles, stellia, etc.) from a chart's aspect
+edges.  Also handles suppression, minor-link singletons, connected-
+component grouping, and parent-shape assignment.
+"""
 from __future__ import annotations
 
 from itertools import combinations, permutations
@@ -97,6 +104,7 @@ def aspect_match(pos, p1, p2, target_aspect):
     return abs(angle - data["angle"]) <= data["orb"]
 
 def connected_components_from_edges(nodes, edges):
+    """Partition nodes into connected components using the supplied aspect edges (DFS)."""
     nodes = list(nodes)
     adj = {n: set() for n in nodes}
     for (u, v), _asp in edges:
@@ -239,6 +247,7 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
         return abs(angle - target) <= (base_orb + bonus)
 
     def add_once(sh_type, node_list, candidate_edges, suppresses=None, approx_bonus=2.0):
+        """Register a shape if not already seen; validates edges and delegates to _add_shape."""
         nonlocal sid
         key = (sh_type, tuple(sorted(node_list)))
         if key in seen:
@@ -559,6 +568,7 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
 # Detect shapes (public API)
 # -------------------------------
 def detect_shapes(pos, patterns, major_edges_all):
+    """Detect geometric aspect patterns across all connected components."""
     shapes = []
     sid = 0
     used_members = set()
@@ -584,9 +594,11 @@ def detect_shapes(pos, patterns, major_edges_all):
     rep_pos, rep_map, rep_anchor = _cluster_conjunctions_for_detection(pos, pos.keys())
 
     def collapse_members(members):
+        """Map each member to its conjunction-cluster representative."""
         return [rep_anchor.get(m, m) for m in members]
 
     def aspect_match(p1, p2, target_aspect):
+        """Check if two planets form the given aspect within orb (uses outer *pos*)."""
         angle = abs(pos[p1] - pos[p2]) % 360
         if angle > 180:
             angle = 360 - angle
@@ -594,6 +606,7 @@ def detect_shapes(pos, patterns, major_edges_all):
         return abs(angle - data["angle"]) <= data["orb"]
 
     def assign_parent_for_special(members, fallback=0):
+        """Find the connected-component index that best contains *members*."""
         for idx, mems in enumerate(patterns):
             if all(m in mems for m in members):
                 return idx
@@ -604,6 +617,7 @@ def detect_shapes(pos, patterns, major_edges_all):
         return fallback
 
     def add_special(sh_type, members, edges, suppresses=None):
+        """Register a special-pass shape (Yod, Lightning Bolt, etc.) with dedup."""
         nonlocal sid, seen
         collapsed = tuple(sorted(set(collapse_members(members))))
         key = (sh_type, collapsed)
@@ -829,6 +843,7 @@ def detect_shapes(pos, patterns, major_edges_all):
                 envelope_order[(shape_type, members)] = (env_id, slot)
 
     def sort_key(shape):
+        """Produce a sort tuple grouping Envelope children and pushing Remainders last."""
         remainder_flag = shape.get("remainder", False)
         key = (shape["type"], frozenset(shape["members"]))
         if key in envelope_order:
@@ -849,6 +864,7 @@ def detect_shapes_from_dataframe(df, edges_major: Sequence[tuple] | None = None)
 # Suppression
 # -------------------------------
 def apply_suppression(shapes):
+    """Remove shapes subsumed by higher-priority parent shapes."""
     suppressed = set()
 
     # Define priority: higher number = stronger
@@ -902,6 +918,7 @@ def apply_suppression(shapes):
 # Minors (unchanged)
 # -------------------------------
 def detect_minor_links_with_singletons(pos, patterns):
+    """Find minor-aspect connections (Quincunx, Sesquisquare, Semisextile) including singletons."""
     minor_aspects = ["Quincunx", "Sesquisquare", "Semisextile"]
     connections = []
     pattern_map = {}
@@ -954,6 +971,7 @@ def detect_minor_links_from_chart(chart, edges_major: Sequence[tuple] | None = N
     return detect_minor_links_with_singletons(pos, patterns)
 
 def generate_combo_groups(filaments):
+    """Group pattern indices connected by minor-aspect filaments into combo clusters."""
     G = nx.Graph()
     for _, _, _, pat1, pat2 in filaments:
         if pat1 != pat2:
@@ -961,6 +979,7 @@ def generate_combo_groups(filaments):
     return [sorted(list(g)) for g in nx.connected_components(G) if len(g) > 1]
 
 def internal_minor_edges_for_pattern(pos, members):
+    """Return all minor-aspect edges between *members* within a single pattern."""
     minors = []
     mems = [m for m in members if m in pos]
     for i in range(len(mems)):
@@ -982,6 +1001,7 @@ def internal_minor_edges_for_pattern(pos, members):
 
 def _add_shape(shapes, sh_type, parent_idx, sid, node_list, edge_specs,
                rep_map=None, rep_anchor=None, suppresses=None):
+    """Construct a shape dict with cluster-expanded members and append it to *shapes*."""
     # Expand members to include all planets in each cluster
     expanded_members = []
     for n in node_list:

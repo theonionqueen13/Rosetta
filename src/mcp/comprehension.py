@@ -140,6 +140,7 @@ class QuestionGraph:
     contradictions: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise the question graph to a JSON-safe dictionary."""
         d: Dict[str, Any] = {
             "question_type": self.question_type,
             "nodes": [{"label": n.label, "factors": n.factors, "source": n.source} for n in self.nodes],
@@ -345,17 +346,31 @@ def _split_concepts(question: str, topic: TopicMatch) -> List[Tuple[str, List[st
 # ═══════════════════════════════════════════════════════════════════════
 
 def _comprehend_keyword(question: str) -> QuestionGraph:
-    """Decompose a question using topic_maps keyword matching only.
-
-    Concept nodes are intentionally empty — will be re-implemented in a
-    future step.  Only domain/subtopic/confidence from topic_maps are used.
-    """
+    """Decompose a question using topic_maps keyword matching only."""
     topic = resolve_factors(question)
+    clusters = _split_concepts(question, topic)
+    is_multi = bool(_MULTI_CONCEPT_RE.search(question)) and len(clusters) > 1
+    question_type = "relationship" if is_multi else "single_focus"
 
-    return QuestionGraph(
-        nodes=[],            # gutted — will be re-implemented
-        edges=[],            # gutted — will be re-implemented
-        question_type="single_focus",
+    # Flatten all factors from all concept clusters (deduped, order-preserving)
+    seen: set = set()
+    all_factors: List[str] = []
+    for _, factors in clusters:
+        for f in (factors or []):
+            if f not in seen:
+                seen.add(f)
+                all_factors.append(f)
+
+    # Build concept nodes from clusters so relationship questions have >= 2 nodes
+    nodes = [
+        QuestionNode(label=label, factors=factors, source="keyword")
+        for label, factors in clusters
+    ]
+
+    graph = QuestionGraph(
+        nodes=nodes,
+        edges=[],
+        question_type=question_type,
         domain=topic.domain,
         subtopic=topic.subtopic,
         confidence=topic.confidence,
@@ -364,6 +379,8 @@ def _comprehend_keyword(question: str) -> QuestionGraph:
         temporal_dimension=_detect_temporal(question),
         subject_config=_detect_subject(question),
     )
+    graph.all_factors = all_factors
+    return graph
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1053,7 +1070,7 @@ def _anchor_to_chart(graph: QuestionGraph, chart: "AstrologicalChart") -> None:
     for name, h_num in obj_to_house.items():
         house_occupants.setdefault(h_num, []).append(name)
 
-    all_factors: Set[str] = set()
+    all_factors: Set[str] = set(graph.all_factors)  # preserve pre-set factors (e.g. keyword path)
     for node in graph.nodes:
         validated: List[str] = []
         for f in node.factors:

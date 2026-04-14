@@ -182,6 +182,7 @@ class NatalInterpreter:
         object_name: Optional[str] = None,
         lookup: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """Initialise the interpreter from a completed render result."""
         self.result = result
         self.mode = mode
         self.object_name = object_name
@@ -204,13 +205,7 @@ class NatalInterpreter:
         if result.plot_data and "chart" in result.plot_data:
             self.chart = result.plot_data["chart"]
         
-        # Fallback to session state if chart not in RenderResult
-        if self.chart is None:
-            try:
-                import streamlit as st  # type: ignore
-                self.chart = st.session_state.get("last_chart")
-            except Exception:
-                pass
+        # No additional fallback — chart must come from RenderResult
         
         # Build ordered list of ChartObject instances filtered to visible objects.
         # Use ordered_objects() so AC/DC pinning and cluster ordering match the sidebar.
@@ -228,15 +223,7 @@ class NatalInterpreter:
         if result.plot_data:
             raw_df = result.plot_data.get("ordered_df")
 
-        # fallback to Streamlit session state if available (UI callers only)
-        if raw_df is None or (isinstance(raw_df, pd.DataFrame) and raw_df.empty):
-            try:
-                import streamlit as st  # type: ignore
-                last_chart = st.session_state.get("last_chart")
-                if last_chart is not None and last_chart.df_positions is not None:
-                    raw_df = last_chart.df_positions
-            except Exception:
-                pass
+        # raw_df must come from result.plot_data — no external fallback
 
         if raw_df is not None and not raw_df.empty:
             self.ordered_df = ordered_object_rows(
@@ -583,6 +570,7 @@ class NatalInterpreter:
         parent: dict[str, str] = {}
 
         def _find(x: str) -> str:
+            """Union-find: return the root representative of *x*."""
             while parent.get(x, x) != x:
                 parent[x] = parent.get(parent.get(x, x), parent.get(x, x))
                 x = parent.get(x, x)

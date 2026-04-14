@@ -1,4 +1,11 @@
-# profiles_v2.py
+"""
+profiles_v2 — Profile-text rendering, clustering, and Sabian-symbol lookup.
+
+Formats per-object interpretive text (sign, house, dignities, receptions,
+fixed-star conjunctions) as HTML.  Groups related objects using union-find
+clustering and provides the catalogue lookups for Sabian symbols and the
+fixed-star database.
+"""
 
 from __future__ import annotations
 from functools import lru_cache
@@ -112,6 +119,7 @@ def sabian_for(sign: str, lon_abs: float) -> str:
 # ---------- Fixed stars ----------
 
 def _norm360(x: float) -> float:
+    """Normalise an angle to [0, 360)."""
     return x % 360.0
 
 def _sep_deg(a: float, b: float) -> float:
@@ -173,6 +181,7 @@ _PROJECT_ROOT = HERE.parent.parent  # src/rendering -> src -> project root
 DEFAULT_STAR_CATALOG = _PROJECT_ROOT / "fixed_stars.xlsx"   # <— use the local Excel file
 
 def load_fixed_star_catalog(path: str | Path = DEFAULT_STAR_CATALOG) -> pd.DataFrame:
+    """Load and validate the fixed-star Excel catalog from *path*."""
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(f"Fixed star catalog not found at: {p}")
@@ -266,12 +275,14 @@ _CANON_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _strip_parenthetical(name: str | None) -> str:
+    """Remove a trailing parenthetical from *name*."""
     if not name:
         return ""
     return re.sub(r"\s*\(.*?\)\s*$", "", str(name)).strip()
 
 
 def _canon(value: str | None) -> str:
+    """Return a lowercase, punctuation-stripped canonical key."""
     if not value:
         return ""
     return _CANON_RE.sub("", str(value).lower())
@@ -292,11 +303,13 @@ for src, dst in (ALIASES_MEANINGS or {}).items():
 
 
 def _canon_variants(name: str | None) -> set[str]:
+    """Return the set of all canonical aliases for *name*."""
     text = "" if name is None else str(name)
     variants: set[str] = set()
     stack: list[str] = []
 
     def _push(candidate: str | None) -> None:
+        """Enqueue *candidate* if its canonical form is new."""
         if not candidate:
             return
         canon_val = _canon(candidate)
@@ -368,6 +381,7 @@ def _format_axis_for_display(obj_name: str) -> str:
 
 
 def _build_rank_map(order_list: List[str]) -> dict[str, int]:
+    """Build a canonical-name → rank index from an ordered list."""
     ranks: dict[str, int] = {}
     for idx, name in enumerate(order_list):
         for variant in _canon_variants(name) | {_canon(name)}:
@@ -381,6 +395,7 @@ _FALLBACK_RANKS = _build_rank_map(_FALLBACK_OBJECT_ORDER)
 
 
 def _get_rank(name: str, ranks: dict[str, int]) -> int | None:
+    """Look up the rank of *name* via its canonical variants."""
     for variant in _canon_variants(name):
         if variant in ranks:
             return ranks[variant]
@@ -388,6 +403,7 @@ def _get_rank(name: str, ranks: dict[str, int]) -> int | None:
 
 
 def _sort_key(name: str, ranks: dict[str, int]) -> tuple[float, str, str]:
+    """Return a ``(rank, canon, lower)`` sort key for *name*."""
     rank = _get_rank(name, ranks)
     canon = _canon(name)
     return (
@@ -398,10 +414,12 @@ def _sort_key(name: str, ranks: dict[str, int]) -> tuple[float, str, str]:
 
 
 def _sort_members(members: List[str], ranks: dict[str, int]) -> List[str]:
+    """Sort *members* by their rank in *ranks*."""
     return sorted(members, key=lambda member: _sort_key(member, ranks))
 
 
 def _min_rank(names: List[str], ranks: dict[str, int]) -> float:
+    """Return the minimum rank across *names*, or ``inf`` if none found."""
     values = [_get_rank(name, ranks) for name in names]
     filtered = [v for v in values if v is not None]
     return float(min(filtered)) if filtered else float("inf")
@@ -417,6 +435,7 @@ def _extract_aspect(meta: Any) -> str | None:
 
 
 def _build_clusters(edges_major: List[tuple], visible_canons: set[str]) -> List[set[str]]:
+    """Group visible objects into conjunction-connected clusters."""
     adjacency: dict[str, set[str]] = defaultdict(set)
     for edge in edges_major or []:
         try:
@@ -457,6 +476,7 @@ def _build_units(
     canon_to_pos: dict[str, int],
     clusters: List[set[str]],
 ) -> tuple[dict[str, dict], dict[str, str], List[str]]:
+    """Create ordering units from conjunction clusters and singletons."""
     units: dict[str, dict] = {}
     canon_to_unit: dict[str, str] = {}
 
@@ -497,6 +517,7 @@ def _units_with_aspects(
     canon_to_unit: dict[str, str],
     edges_major: List[tuple],
 ) -> List[str]:
+    """Return unit IDs connected to *primary_id* by major aspects, sorted by priority."""
     priorities: dict[str, int] = {}
     for edge in edges_major or []:
         try:
@@ -538,6 +559,7 @@ def _determine_visible_order(
     objs_df: pd.DataFrame,
     edges_major: List[tuple],
 ) -> List[str]:
+    """Compute the display ordering of object rows based on conjunctions and rank."""
     canon_to_name: dict[str, str] = {}
     canon_to_pos: dict[str, int] = {}
     names_in_order: List[tuple[str, int]] = []
@@ -652,12 +674,14 @@ def ordered_objects(
     parent: dict[str, str] = {}
 
     def _find(x: str) -> str:
+        """Union-find: return the root representative of *x*."""
         while parent.get(x, x) != x:
             parent[x] = parent.get(parent.get(x, x), parent.get(x, x))
             x = parent.get(x, x)
         return x
 
     def _union(a: str, b: str) -> None:
+        """Union-find: merge the sets containing *a* and *b*."""
         ra, rb = _find(a), _find(b)
         if ra != rb:
             parent[rb] = ra
@@ -689,6 +713,7 @@ def ordered_objects(
 
     # ── Sort all names by natural rank (AC/DC pinned, then _FALLBACK_RANKS) ─
     def _natural_sort_key(name: str) -> tuple:
+        """Sort key pinning AC/DC first, then by fallback rank."""
         c = name_to_canon[name]
         if c in _AC_CANONS:
             return (0, 0, name)
@@ -744,6 +769,7 @@ def _determine_visible_order_from_names(
     names_in_order: List[tuple[str, int]],
     edges_major: List[tuple],
 ) -> List[str]:
+    """Compute display ordering from a pre-built name/position list."""
     canon_to_name: dict[str, str] = {}
     canon_to_pos: dict[str, int] = {}
 
@@ -861,6 +887,7 @@ def ordered_object_rows(
     uf_parent: dict[str, str] = {}
 
     def _uf_find(x: str) -> str:
+        """Union-find: return the root representative of *x*."""
         while uf_parent.get(x, x) != x:
             uf_parent[x] = uf_parent.get(uf_parent.get(x, x), uf_parent.get(x, x))
             x = uf_parent.get(x, x)
@@ -890,6 +917,7 @@ def ordered_object_rows(
     }
 
     def _row_sort_key(name: str) -> tuple:
+        """Sort key pinning AC/DC rows first, then by fallback rank."""
         c = name_to_canon_row.get(name, "")
         if c in _AC_CANONS:
             return (0, 0, name)
@@ -985,6 +1013,7 @@ def _transform_reception_cell(cell: str | None) -> str:
     return "Reception: Has reception via " + ", ".join(out) if out else ""
 
 def _format_reception_links(items: List[ReceptionLink]) -> str:
+    """Format a list of reception links as a comma-separated verb string."""
     if not items:
         return ""
     parts = []
@@ -1004,6 +1033,7 @@ def _format_reception_links(items: List[ReceptionLink]) -> str:
     return ", ".join(parts)
 
 def _paren_rx_dignity(is_rx: bool, dignity: str | None) -> str:
+    """Build a parenthesised annotation like ``(Rx, Exalted)``."""
     parts = []
     if is_rx:
         parts.append("Rx")

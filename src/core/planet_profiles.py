@@ -117,6 +117,7 @@ _CANON_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _canon(value: str) -> str:
+    """Normalise a string to a lowercase alphanumeric key for deduplication."""
     if not value:
         return ""
     return _CANON_RE.sub("", str(value).lower())
@@ -538,6 +539,7 @@ class PlanetStatsReader:
     """Format a PlanetStats as HTML (sidebar) or plain text (MCP / tooltip)."""
 
     def __init__(self, stats: PlanetStats) -> None:
+        """Initialize the reader with a PlanetStats instance."""
         self.s = stats
 
     def format_html(self, include_house_data: bool = True) -> str:
@@ -937,6 +939,7 @@ class PlanetProfileReader:
     """Format a PlanetProfile as plain text in default or focus mode."""
 
     def __init__(self, profile: PlanetProfile) -> None:
+        """Initialize the reader with a PlanetProfile instance."""
         self.p = profile
 
     def format_text(self, mode: str = "default") -> str:
@@ -1194,6 +1197,7 @@ class AspectProfile:
         }
 
         def node_label(name: str) -> str:
+            """Return a display label, collapsing conjunction clusters into '[A + B]'."""
             if cluster_map:
                 name_c = _canon(name)
                 for root, members in cluster_map.items():
@@ -1228,6 +1232,7 @@ class AspectProfile:
         )
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialize the aspect profile to a dict for JSON / MCP transport."""
         d: Dict[str, Any] = {
             "a": self.obj_a_display,
             "b": self.obj_b_display,
@@ -1248,6 +1253,7 @@ class AspectProfileReader:
     """Format an AspectProfile as plain text."""
 
     def __init__(self, profile: AspectProfile) -> None:
+        """Initialize the reader with an AspectProfile instance."""
         self.p = profile
 
     def format_text(self) -> str:

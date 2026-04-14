@@ -101,6 +101,7 @@ def _ensure_json_serializable(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
+    """Coerce *v* to a rounded float, returning *default* on failure or NaN."""
     if v is None:
         return default
     try:
@@ -113,12 +114,14 @@ def _safe_float(v: Any, default: float = 0.0) -> float:
 
 
 def _safe_str(v: Any) -> str:
+    """Coerce *v* to a string, returning empty string for None."""
     if v is None:
         return ""
     return str(v)
 
 
 def _house_number(house_obj: Any) -> Optional[int]:
+    """Extract a numeric house number from a house object or int."""
     if house_obj is None:
         return None
     if hasattr(house_obj, "number"):
@@ -487,6 +490,7 @@ def _serialize_shapes(chart: AstrologicalChart) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _get_asc_degree(chart: AstrologicalChart) -> float:
+    """Return the Ascendant longitude from *chart*, or 0."""
     for obj in chart.objects:
         if obj.object_name and obj.object_name.name in ("AC", "Ascendant", "Asc"):
             return _safe_float(obj.longitude)
@@ -563,6 +567,8 @@ def serialize_chart_for_rendering(
         name = obj.object_name.name
         # Always include all objects, but mark is_visible based on visible_objects filter
         is_visible = visible_objects is None or name in visible_objects
+        if not is_visible:
+            continue
         objects_data.append(_serialize_object(obj, house_system, chart, is_visible=is_visible))
 
     # --- Aspects ---

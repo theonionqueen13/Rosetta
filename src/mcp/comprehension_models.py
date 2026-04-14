@@ -99,6 +99,7 @@ class LocationLink:
     connection: str = ""              # e.g. "lives there", "works there", "born there"
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this location link to a dictionary."""
         d: Dict[str, Any] = {"location": self.location_name}
         if self.connection:
             d["connection"] = self.connection
@@ -128,6 +129,7 @@ class PersonProfile:
     # ── Serialisation ─────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this person profile to a dictionary."""
         d: Dict[str, Any] = {}
         if self.name:
             d["name"] = self.name
@@ -211,6 +213,7 @@ class StoryObject:
     related_locations: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this story object to a dictionary."""
         d: Dict[str, Any] = {"name": self.name}
         if self.description:
             d["description"] = self.description
@@ -233,6 +236,7 @@ class Dilemma:
     desired_outcome: Optional[str] = None                # what they hope will happen
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this dilemma to a dictionary."""
         d: Dict[str, Any] = {"description": self.description}
         if self.options:
             d["options"] = self.options
@@ -254,6 +258,7 @@ class AnswerAim:
     specificity: Specificity = Specificity.FOCUSED
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this answer aim to a dictionary."""
         return {
             "aim_type": self.aim_type.value,
             "depth": self.depth.value,
@@ -276,6 +281,7 @@ class Transit:
     description: Optional[str] = None        # free-text note
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this transit to a dictionary."""
         d: Dict[str, Any] = {}
         if self.transiting_body:
             d["transiting_body"] = self.transiting_body
@@ -305,6 +311,7 @@ class Location:
     coordinates: Optional[Tuple[float, float]] = None  # (lat, lon) if determinable
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this location to a dictionary."""
         d: Dict[str, Any] = {"name": self.name}
         if self.location_type:
             d["location_type"] = self.location_type
@@ -333,6 +340,7 @@ class QuerentState:
     demeanor_notes: Optional[str] = None                         # LLM's free-text observation
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this querent state to a dictionary."""
         d: Dict[str, Any] = {
             "emotional_tone": self.emotional_tone.value,
             "certainty_level": self.certainty_level.value,
@@ -359,6 +367,7 @@ class ClarificationRequest:
     partial_graph: Optional[Any] = None       # Optional[QuestionGraph] — partial comprehension so far
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this clarification request to a dictionary."""
         d: Dict[str, Any] = {
             "reason": self.reason,
             "category": self.category.value,
@@ -397,6 +406,7 @@ class ComprehensionResult:
         return self.graph is not None and self.clarification is None
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise the comprehension result to a dictionary."""
         d: Dict[str, Any] = {
             "needs_clarification": self.needs_clarification,
             "is_complete": self.is_complete,

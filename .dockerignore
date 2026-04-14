@@ -1,0 +1,34 @@
+# Ignore files that shouldn't go into the Docker image
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+.streamlit/
+.env
+*.egg-info/
+dist/
+build/
+*.log
+*.tmp
+test_output.txt
+Screenshots/
+Screenshots - Copy/
+Screenshots - Copy (2)/
+rosetta_dag/
+pngs/
+old_drawing.txt
+old_excerpt.txt
+question_analysis_log.jsonl
+OBJECT_COMBOS_MIGRATION.md
+Plan_ Minimal-Risk NiceGUI Migration(1).md
+.dockerignore
+Dockerfile
+railway.toml
+tests/
+scripts/
+docs/
+.pytest_cache/

@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
+from src.core.static_data import STANDARD_BASE_BODIES
+
 import swisseph as swe
 
 
@@ -503,12 +505,6 @@ class RenderToggles:
     dpi: int = 192
 
 
-# Bodies included in Standard Chart mode by default (matches PLANETS_PLUS)
-_STANDARD_BASE_BODIES = {
-    "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
-    "Uranus", "Neptune", "Pluto", "Black Moon Lilith (Mean)", "Chiron",
-}
-
 
 def render_chart_image(
     chart_result: ChartResult,
@@ -573,7 +569,7 @@ def render_chart_image(
         # Standard Chart mode rendering
         # Build the set of "aspect-enabled" bodies:
         # base planets + any Additional Aspects the user toggled ON.
-        aspect_bodies = set(_STANDARD_BASE_BODIES)
+        aspect_bodies = set(STANDARD_BASE_BODIES)
         for body_name, enabled in toggles.aspect_toggles.items():
             if enabled:
                 aspect_bodies.add(body_name)
@@ -705,7 +701,7 @@ def render_biwheel_image(
         inter_aspects = inter_chart_aspects or []
 
         # Build the set of aspect-enabled bodies (same logic as single-chart standard)
-        aspect_bodies = set(_STANDARD_BASE_BODIES)
+        aspect_bodies = set(STANDARD_BASE_BODIES)
         for body_name, enabled in toggles.aspect_toggles.items():
             if enabled:
                 aspect_bodies.add(body_name)

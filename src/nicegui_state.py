@@ -2,9 +2,7 @@
 """
 Lightweight per-user state for the NiceGUI entry point.
 
-Stored in ``app.storage.user`` so it survives page refreshes.  The shape
-mirrors the keys used by test_calc_v2.py / st.session_state where it
-matters (profile load/save), but NiceGUI-specific fields live here too.
+Stored in ``app.storage.user`` so it survives page refreshes.
 
 Usage:
     from src.nicegui_state import ensure_state
@@ -144,6 +142,7 @@ def get_profile_lat_lon(state: Dict[str, Any]) -> tuple[float | None, float | No
     populated by the geocoder after the user clicks Calculate.
     """
     def _f(x: Any) -> float | None:
+        """Try to convert *x* to float, returning None on failure."""
         try:
             return float(x)
         except Exception:

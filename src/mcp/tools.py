@@ -367,6 +367,7 @@ class ToolContext:
         edges_inter_chart: Optional[List] = None,
         agent_memory: Optional[AgentMemory] = None,
     ):
+        """Initialise tool context with chart data and LLM settings."""
         self.chart = chart
         self.house_system = house_system
         self.llm_backend = llm_backend
@@ -421,6 +422,7 @@ def _resolve_chart(ctx: ToolContext, args: Dict[str, Any]) -> Any:
 
 
 def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Handle a natural-language question about the loaded chart."""
     if not ctx.chart:
         return {"error": "No chart loaded. Load a chart first."}
 
@@ -494,6 +496,7 @@ def _ask_chart(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _get_reading_data(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return the full reading-packet data for the loaded chart."""
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
@@ -512,10 +515,12 @@ def _get_reading_data(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _list_topics(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return all available topic domains."""
     return {"domains": list_domains()}
 
 
 def _list_subtopics_handler(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return subtopics for a given domain."""
     domain = args.get("domain", "")
     subs = list_subtopics(domain)
     if not subs:
@@ -524,6 +529,7 @@ def _list_subtopics_handler(args: Dict[str, Any], ctx: ToolContext) -> Dict[str,
 
 
 def _resolve_question(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Map a free-text question to matching astrological factors."""
     question = args.get("question", "")
     match = resolve_factors(question)
     return {
@@ -536,6 +542,7 @@ def _resolve_question(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _get_placement(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return sign, house, and dignity for a named chart object."""
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
@@ -558,6 +565,7 @@ def _get_placement(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _get_house(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return the objects in a specified house."""
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
@@ -578,6 +586,7 @@ def _get_house(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _get_aspects(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return all aspects for a named chart object."""
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
@@ -599,6 +608,7 @@ def _get_aspects(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _get_patterns(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return detected aspect patterns and their members."""
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
@@ -632,6 +642,7 @@ def _get_patterns(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
 
 
 def _get_chart_summary(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return a high-level summary of the entire chart."""
     if not ctx.chart:
         return {"error": "No chart loaded."}
 
@@ -689,6 +700,7 @@ def _get_inter_chart_aspects(args: Dict[str, Any], ctx: ToolContext) -> Dict[str
 
 
 def _get_domain_factors(args: Dict[str, Any], ctx: ToolContext) -> Dict[str, Any]:
+    """Return all astrological factors relevant to a life domain."""
     domain = args.get("domain", "")
     factors = all_factors_for_domain(domain)
     if not factors:

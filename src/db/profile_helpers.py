@@ -2,16 +2,10 @@
 """
 Framework-agnostic profile helpers.
 
-Extracted from test_calc_v2.py so both Streamlit (via st.session_state) and
-NiceGUI (via its own state dict) can load/apply profile data using the same
-logic.
+Load and apply user profile data from any UI framework.
 
 Usage:
-    # Streamlit
-    from src.profile_helpers import apply_profile, birth_data_from_chart
-    apply_profile("Alice", prof_data, st.session_state)
-
-    # NiceGUI
+    from src.db.profile_helpers import apply_profile, birth_data_from_chart
     apply_profile("Alice", prof_data, nicegui_state_dict)
 """
 from __future__ import annotations
@@ -19,11 +13,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Dict, Optional, Tuple
 
-# Month names list (same as src/test_data.MONTH_NAMES)
-MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-]
+from src.core.static_data import MONTH_NAMES
 
 
 def birth_data_from_chart(chart) -> Tuple[
@@ -59,9 +49,8 @@ def apply_profile(
 ) -> bool:
     """Populate form/session keys in *state* from a profile dict.
 
-    Works identically to the former ``_apply_profile_to_session`` in
-    test_calc_v2.py but writes to the supplied *state* dict instead of
-    ``st.session_state``.
+    Works identically to the former ``_apply_profile_to_session`` but writes
+    to the supplied *state* dict.
 
     Returns ``True`` if the profile uses the new PersonProfile format,
     ``False`` for old-format dicts.
@@ -200,3 +189,29 @@ def apply_profile(
             )
         # else: will recalculate when run_chart() is called
         return False  # old-format path
+
+
+# ---------------------------------------------------------------------------
+# Community chart donation (in-memory — no Supabase table yet)
+# ---------------------------------------------------------------------------
+_COMMUNITY_CHARTS: Dict[str, Dict[str, Any]] = {}
+
+
+def community_save(
+    profile_name: str,
+    payload: Dict[str, Any],
+    submitted_by: Optional[str] = None,
+) -> str:
+    """Save a chart to the community store, returning a generated ID.
+
+    Currently backed by an in-memory dict.  When a ``community_charts``
+    Supabase table is created this can be swapped to a real DB write.
+    """
+    new_id = f"comm_{len(_COMMUNITY_CHARTS) + 1}"
+    _COMMUNITY_CHARTS[new_id] = {
+        "id": new_id,
+        "profile_name": profile_name,
+        "payload": payload.copy(),
+        "submitted_by": submitted_by or "anon",
+    }
+    return new_id

@@ -35,10 +35,12 @@ class PrepPhrase:
     object: str = ""
 
     def to_dict(self) -> Dict[str, str]:
+        """Serialise this prepositional phrase to a dictionary."""
         return {"preposition": self.preposition, "object": self.object}
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "PrepPhrase":
+        """Reconstruct a PrepPhrase from a dictionary."""
         return cls(
             preposition=str(d.get("preposition", "")),
             object=str(d.get("object", "")),
@@ -53,10 +55,12 @@ class Modifier:
     type: str = ""          # "adjective" | "adverb" | "determiner" | "possessive" | "quantifier"
 
     def to_dict(self) -> Dict[str, str]:
+        """Serialise this modifier to a dictionary."""
         return {"word": self.word, "modifies": self.modifies, "type": self.type}
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Modifier":
+        """Reconstruct a Modifier from a dictionary."""
         return cls(
             word=str(d.get("word", "")),
             modifies=str(d.get("modifies", "")),
@@ -72,10 +76,12 @@ class Clause:
     role: str = ""          # "subject_modifier" | "object_modifier" | "adverbial" | "complement" | "condition"
 
     def to_dict(self) -> Dict[str, str]:
+        """Serialise this clause to a dictionary."""
         return {"clause_type": self.clause_type, "text": self.text, "role": self.role}
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Clause":
+        """Reconstruct a Clause from a dictionary."""
         return cls(
             clause_type=str(d.get("clause_type", "")),
             text=str(d.get("text", "")),
@@ -105,6 +111,7 @@ class GrammarDiagram:
     confidence: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise the full grammar diagram to a dictionary."""
         return {
             "subject": self.subject,
             "verb": self.verb,
@@ -121,6 +128,7 @@ class GrammarDiagram:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "GrammarDiagram":
+        """Reconstruct a GrammarDiagram from a dictionary."""
         return cls(
             subject=str(d.get("subject", "")),
             verb=str(d.get("verb", "")),

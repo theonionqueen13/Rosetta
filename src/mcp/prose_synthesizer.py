@@ -39,6 +39,7 @@ class SynthesisResult:
     backend: str = ""          # "openai", "anthropic", "openrouter", "fallback"
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this synthesis result to a dictionary."""
         return {
             "text": self.text,
             "model": self.model,
@@ -372,6 +373,7 @@ def synthesize(
         a keystone deep dive, so a follow-up "yes" is handled correctly.
     """
     def _kwargs(**extra):
+        """Build the common keyword arguments for the LLM call."""
         kw: Dict[str, Any] = {
             "packet": packet, "mode": mode,
             "voice": voice,

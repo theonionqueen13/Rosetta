@@ -1,3 +1,10 @@
+"""
+Dispositor / rulership graph layout and rendering.
+
+Builds and draws the dispositor tree (planets linked by sign-rulership)
+using Matplotlib.  Handles cycle detection, root-priority scoring,
+bucketed vertical layout, and sandwich ordering for compact display.
+"""
 import os
 import re
 import base64
@@ -19,6 +26,7 @@ from matplotlib.patches import Rectangle, FancyBboxPatch  # use FancyBboxPatch f
 
 # Helper function to get abbreviated name if available
 def get_display_name(name):
+    """Return the abbreviated display name for a planet, if available."""
     return ABREVIATED_PLANET_NAMES.get(name, name)
 
 
@@ -69,10 +77,12 @@ def order_siblings(names, global_weights, house_map=None):
     if house_map is None:
         # use original algorithm inline
         def _bucketed_order(ns):
+            """Order names by interleaving weight-based buckets."""
             if len(ns) <= 2:
                 return sorted(ns, key=lambda x: global_weights.get(x, 0), reverse=True)
             # compute buckets as before
             def get_bucket_score(name):
+                """Map descendant weight to a 0–5 bucket index."""
                 w = global_weights.get(name, 0)
                 if w >= 10: return 5
                 if w >= 6:  return 4
@@ -234,12 +244,14 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     print(f"[DEBUG] plot_dispositor_graph called; house_system={house_system}, house_map_count={len(house_map)}")
     
     def find_rulership_loops(links):
+        """Detect mutual-reception loops in the rulership link graph."""
         graph = {}
         for parent, child in links:
             if parent != child:
                 graph.setdefault(parent, []).append(child)
         loop_members = set()
         def dfs_find_cycles(node, path, visited_in_path):
+            """DFS visitor that collects cycle members."""
             if node in visited_in_path:
                 idx = path.index(node)
                 cycle = path[idx:]
@@ -269,6 +281,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     roots, accounted_for, all_trees = [], set(), []
 
     def find_root_by_following_parents(start_node):
+        """Walk up parent links from *start_node* to find the tree root."""
         visited, path, current = set(), [], start_node
         while True:
             if current in visited:
@@ -280,6 +293,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
             current = parents[0]
 
     def collect_tree_downward(start_node):
+        """BFS downward from *start_node* collecting all descendants."""
         comp, q = set(), [start_node]
         while q:
             n = q.pop(0)
@@ -288,6 +302,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
         return comp
 
     def collect_connected_component(start_node):
+        """BFS collecting the full undirected connected component."""
         neighbors = {}
         for p, c in raw_links:
             neighbors.setdefault(p, []).append(c); neighbors.setdefault(c, []).append(p)
@@ -300,6 +315,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
 
     potential_roots = set(find_root_by_following_parents(n) for n in all_nodes)
     def root_priority_score(n):
+        """Score a node for root selection: prefer sovereigns, then most children."""
         return (- (1 if n in sovereigns else 0), len(children_by_parent.get(n, [])), n)
 
     # Phase 1 & 2
@@ -327,6 +343,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     H_GAP, V_GAP = 1.2, 5.0
     global_weights = {}
     def calc_weight(name, seen=None):
+        """Recursively count descendants of *name*."""
         if seen is None: seen = set()
         if name in seen: return 0
         seen.add(name); kids = children_by_parent.get(name, [])
@@ -334,11 +351,13 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     for n in all_nodes: global_weights[n] = calc_weight(n)
 
     def get_sandwich_order(names):
+        """Order siblings by interleaving bucketed weight groups."""
         if len(names) <= 2: 
             return sorted(names, key=lambda x: global_weights.get(x, 0), reverse=True)
 
         # 1. Absolute Buckets
         def get_bucket_score(name):
+            """Map descendant weight to a 0–5 bucket index."""
             w = global_weights.get(name, 0)
             if w >= 10: return 5  # XXL
             if w >= 6:  return 4  # XL
@@ -404,6 +423,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
 
         pos, lvl_next_x = {}, {}
         def assign_pos(nid, lvl):
+            """Recursively assign (x, y) positions for each tree node."""
             kids = tree_edges_map.get(nid, [])
             if not kids:
                 x = lvl_next_x.get(lvl, 0.0)
@@ -420,6 +440,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
                 shift = curr_occ - ideal_x
                 ideal_x += shift
                 def shift_recursive(target_id, amt):
+                    """Shift *target_id* and all its descendants by *amt* on x."""
                     pos[target_id][0] += amt
                     l = round(abs(pos[target_id][1]) / V_GAP)
                     lvl_next_x[l] = max(lvl_next_x.get(l, 0.0), pos[target_id][0] + H_GAP)
@@ -568,7 +589,7 @@ def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None)
     # house label text likewise should scale
     house_font_size = base_symbol_font * scale_factor * 1.1
 
-    edges_major = chart.edges_major
+    edges_major = chart.edges_major if chart is not None else []
     png_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pngs")
 
     # collect x extents for each (house, level, parent) combination using merged data

@@ -55,6 +55,7 @@ _static_db: Any = None
 
 
 def _get_static_db() -> Any:
+    """Lazily import and cache the static_db namespace."""
     global _static_db
     if _static_db is None:
         from src.core.models_v2 import static_db

@@ -10854,3 +10854,26 @@ OBJECT_HOUSE_COMBO = {
 	},
 }
 
+
+# ---------------------------------------------------------------------------
+# Shared constants (single-source-of-truth for app.py, profile_helpers, etc.)
+# ---------------------------------------------------------------------------
+
+MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+STANDARD_BASE_BODIES = frozenset({
+    "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+    "Uranus", "Neptune", "Pluto", "Black Moon Lilith (Mean)", "Chiron",
+})
+
+SHAPE_NODE_COUNTS = {
+    "Envelope": 5, "Grand Cross": 4, "Mystic Rectangle": 4,
+    "Cradle": 4, "Kite": 4, "Lightning Bolt": 4,
+    "Grand Trine": 3, "T-Square": 3, "Wedge": 3,
+    "Sextile Wedge": 3, "Yod": 3, "Wide Yod": 3,
+    "Unnamed": 3, "Remainder": 2,
+}
+

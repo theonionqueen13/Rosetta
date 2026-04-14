@@ -94,6 +94,7 @@ class ChartObject:
     def from_dict(cls, row: dict) -> "ChartObject":
         """Create ChartObject from a row dict (e.g. from calc_v2 or DataFrame)."""
         def _float(x, default=0.0):
+            """Safely convert *x* to float, returning *default* for None or NaN."""
             if x is None or (hasattr(x, "__float__") and str(x) == "nan"):
                 return default
             try:
@@ -102,6 +103,7 @@ class ChartObject:
                 return default
 
         def _int_or_none(x):
+            """Safely convert *x* to int, returning None for None or NaN."""
             if x is None or (hasattr(x, "__float__") and str(x) == "nan"):
                 return None
             try:
@@ -110,6 +112,7 @@ class ChartObject:
                 return None
 
         def _str(x, default=""):
+            """Safely convert *x* to a stripped string, returning *default* for None or NaN."""
             if x is None or (hasattr(x, "__float__") and str(x) == "nan"):
                 return default
             return str(x).strip()

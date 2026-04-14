@@ -176,6 +176,7 @@ def load_chart_from_profile(
 # ═══════════════════════════════════════════════════════════════════════
 
 def main():
+    """CLI entry point for the Rosetta MCP server."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Rosetta MCP Astrology Server")

@@ -2,9 +2,6 @@
 """
 Supabase-backed implementations of the user-profile CRUD functions.
 
-These are drop-in replacements for the in-memory stubs in src/data_stubs.py.
-Import these in test_calc_v2.py once the user is authenticated.
-
 Required Supabase table (run the SQL from supabase_setup.sql in the dashboard):
     public.user_profiles (
         id            uuid primary key default gen_random_uuid(),

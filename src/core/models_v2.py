@@ -1,3 +1,13 @@
+"""
+Rich chart data models and the *static_db* lookup namespace.
+
+Defines :class:`AstrologicalChart`, :class:`ChartObject`,
+:class:`AspectRecord`, :class:`DetectedShape`, and companion
+dataclasses that wrap Swiss Ephemeris output into a queryable
+object graph.  Also exposes ``static_db`` — a lazily-loaded namespace
+that holds every shared constant table (signs, aspects, dignities,
+glyphs, colour palettes, etc.).
+"""
 import re
 import datetime
 import json
@@ -414,12 +424,15 @@ class ChartObject:
     def to_dict(self) -> dict:
         """Convert to dictionary for DataFrame compatibility."""
         def _names(items: List[Object]) -> str:
+            """Join object names into a comma-separated string."""
             return ", ".join([obj.name for obj in items if obj is not None])
 
         def _house_num(house: Optional[House]) -> Optional[int]:
+            """Extract the house number, or None if not a House instance."""
             return house.number if isinstance(house, House) else None
 
         def _aspect_verb(aspect_name: str) -> str:
+            """Map aspect names to display verbs (e.g. 'Conjunction' → 'Conjunct')."""
             mapping = {
                 "Conjunction": "Conjunct",
                 "Opposition": "Opposite",
@@ -430,6 +443,7 @@ class ChartObject:
             return mapping.get(aspect_name, aspect_name)
 
         def _format_reception(items: List[ReceptionLink]) -> str:
+            """Format a list of reception links into a human-readable string."""
             if not items:
                 return ""
             parts = []
@@ -476,9 +490,11 @@ class ChartObject:
 
     @classmethod
     def from_dict(cls, row: Dict[str, Any], static: Optional["StaticLookup"] = None) -> "ChartObject":
+        """Create a ChartObject from a row dict (e.g. from calc_v2 or DataFrame)."""
         static = static or static_db
 
         def _float(val: Any, default: float = 0.0) -> float:
+            """Safely convert *val* to float, returning *default* for None or NaN."""
             if val is None or (hasattr(val, "__float__") and str(val) == "nan"):
                 return default
             try:
@@ -487,6 +503,7 @@ class ChartObject:
                 return default
 
         def _int_or_none(val: Any) -> Optional[int]:
+            """Safely convert *val* to int, returning None for None or NaN."""
             if val is None or (hasattr(val, "__float__") and str(val) == "nan"):
                 return None
             try:
@@ -495,11 +512,13 @@ class ChartObject:
                 return None
 
         def _str(val: Any) -> str:
+            """Safely convert *val* to a stripped string, returning '' for None or NaN."""
             if val is None or (hasattr(val, "__float__") and str(val) == "nan"):
                 return ""
             return str(val).strip()
 
         def _obj_list(text: Any) -> List[Object]:
+            """Parse a comma-separated string into a list of Object instances."""
             raw = _str(text)
             if not raw:
                 return []
@@ -1156,6 +1175,7 @@ class DetectedShape:
     }
 
     def __getitem__(self, key: str) -> Any:
+        """Dict-style access: map legacy dict keys to dataclass attributes."""
         attr = self._KEY_MAP.get(key, key)
         try:
             return getattr(self, attr)
@@ -1163,6 +1183,7 @@ class DetectedShape:
             raise KeyError(key)
 
     def get(self, key: str, default: Any = None) -> Any:
+        """Dict-style ``.get()`` with a default, delegating to ``__getitem__``."""
         try:
             return self[key]
         except KeyError:
@@ -1226,6 +1247,7 @@ class AstrologicalChart:
     group_id: Optional[str] = field(default=None)           # UUID of user_profile_groups row
 
     def __getattr__(self, name: str):
+        """Gracefully return None for fields missing on cached / older instances."""
         # Gracefully return None for fields that don't exist on cached instances
         # (e.g. after schema additions between hot-reloads / session resumes).
         return None
@@ -1389,6 +1411,7 @@ class AstrologicalChart:
         ]
 
         def _parse_dt(s):
+            """Parse an ISO datetime string, returning None on failure."""
             if not s:
                 return None
             try:
@@ -1397,6 +1420,7 @@ class AstrologicalChart:
                 return None
 
         def _df(records):
+            """Build a DataFrame from a list of record dicts, or None."""
             if not records:
                 return None
             try:
@@ -1405,6 +1429,7 @@ class AstrologicalChart:
                 return None
 
         def _edge_list(raw):
+            """Reconstruct ``(a, b, meta)`` edge tuples from serialized lists."""
             out = []
             for row in (raw or []):
                 try:
@@ -1414,6 +1439,7 @@ class AstrologicalChart:
             return out
 
         def _major_edges_all(raw):
+            """Reconstruct ``((a, b), aspect)`` tuples from serialized lists."""
             out = []
             for row in (raw or []):
                 try:
@@ -1458,27 +1484,32 @@ class AstrologicalChart:
         return chart
 
     def get_object(self, name: str) -> Optional[ChartObject]:
+        """Return the ChartObject with the given name, or None."""
         for obj in self.objects:
             if obj.object_name.name == name: # Access the .name of the Object
                 return obj
         return None
 
     def get_planets(self) -> List[ChartObject]:
+        """Return chart objects whose type is Planet or Luminary."""
         return [
             obj for obj in self.objects
             if obj.object_name and obj.object_name.object_type in ("Planet", "Luminary")
         ]
 
     def get_angles(self) -> list[ChartObject]:
+        """Return the four angle objects (Ascendant, MC, Descendant, IC)."""
         angle_names = ["Ascendant", "MC", "Descendant", "IC"]
         # MUST check .name or it will fail
         return [obj for obj in self.objects if obj.object_name.name in angle_names]
 
     def get_asteroids(self) -> list[ChartObject]:
+        """Return chart objects classified as asteroids."""
         asteroid_names = ["Chiron", "Ceres", "Pallas", "Juno", "Vesta", "Pholus", "Eris", "Eros", "Psyche"]
         return [obj for obj in self.objects if obj.object_name.name in asteroid_names]
 
     def get_retrograde_objects(self) -> List[ChartObject]:
+        """Return all chart objects currently in retrograde motion."""
         # Simplified since retrograde is now a boolean
         return [obj for obj in self.objects if obj.retrograde]
 
@@ -1705,6 +1736,8 @@ class AstrologicalChart:
         self.chart_signs = self._build_chart_signs(static)
         self.chart_houses = self._build_chart_houses(static, house_system)
         self._populate_rules_houses(static, house_system)
+
+    @classmethod
     def from_dataframe(
         cls,
         df: pd.DataFrame,
@@ -1714,6 +1747,7 @@ class AstrologicalChart:
         longitude: float = 0.0,
         static: Optional["StaticLookup"] = None,
     ) -> "AstrologicalChart":
+        """Construct an AstrologicalChart from a legacy pandas DataFrame."""
         if df is None or df.empty:
             return cls(
                 objects=[],
@@ -1871,6 +1905,7 @@ class ObjectHouse:
     keywords: List[str] = field(default_factory=list)
 
 def migrate_lookup_data():
+    """Populate a StaticLookup with all sign, object, aspect, and Sabian data from the static tables."""
     static = StaticLookup()
 
     # --- 1. THE TRIADS (Using ELEMENT, MODE, POLARITY imports) ---
@@ -1939,6 +1974,7 @@ def migrate_lookup_data():
 
         # Safely resolve objects from the previously created static maps (fallback to any available one)
         def resolve_or_first(mapping, key, fallback_name=None):
+            """Look up *key* in *mapping*; fall back to *fallback_name*, then first value."""
             if key and key in mapping:
                 return mapping[key]
             if fallback_name and fallback_name in mapping:
@@ -2051,6 +2087,7 @@ def migrate_lookup_data():
         # Determine keywords for the object from either lookup dict.
         kw_list: List[str] = []
         def _extract_keywords(val):
+            """Extract a keywords list from a dict entry, or return []."""
             if isinstance(val, dict):
                 kw = val.get('keywords', [])
                 return kw
@@ -2257,6 +2294,7 @@ def migrate_lookup_data():
     _sabian_data = _load_sabian_symbols_json()
     for key, value in _sabian_data.items():
         def _extract_fields(symbol_entry):
+            """Extract (text, short, long, keywords) from a Sabian symbol entry."""
             # symbol_entry may be a simple string or a dict with extra metadata
             if isinstance(symbol_entry, dict):
                 # allow either spaced or underscored key names

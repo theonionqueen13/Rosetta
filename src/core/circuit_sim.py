@@ -206,6 +206,7 @@ def _conductance_for(aspect_type: str) -> float:
 
 
 def _is_quincunx(aspect_type: str) -> bool:
+    """Return True if the aspect type is a quincunx (inconjunct)."""
     return "quincunx" in aspect_type.lower() or "inconjunct" in aspect_type.lower()
 
 

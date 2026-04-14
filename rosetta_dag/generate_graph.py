@@ -32,7 +32,7 @@ SCAN_DIRS = [
 
 # Files/dirs to skip
 SKIP_FILES = {"__init__.py", "setup.py", "conftest.py"}
-SKIP_DIRS  = {"__pycache__", ".venv", "venv", "ephe", "swisseph-2.10.03",
+SKIP_DIRS  = {"__pycache__", ".venv", "venv", "ephe",
               "rosetta_dag", "New folder", "pngs", "sabian_data", "node_modules"}
 
 # Layer classification heuristics — checked in order, first match wins
@@ -52,14 +52,15 @@ LAYER_RULES = [
     (lambda m, imps: "lookup_v2" in m or "models_v2" in m or
                      "chart_models" in m or "data_helpers" in m or
                      "data_stubs" in m,                                 "data"),
-    (lambda m, imps: any(x in imps for x in ["streamlit"]) and
-                     ("chart_core" in m or "state_manager" in m or
-                      "ui_state_helpers" in m or "ui_utils" in m),      "orchestration"),
+    (lambda m, imps: "nicegui_state" in m,                              "data"),
+    (lambda m, imps: m == "app",                                        "orchestration"),
     (lambda m, imps: "mcp" in m,                                         "mcp"),
-    (lambda m, imps: any(x in imps for x in ["streamlit"]),             "ui"),
+    (lambda m, imps: m.startswith("src/ui/"),                            "ui"),
     (lambda m, imps: "geocoding" in m,                                  "orchestration"),
     (lambda m, imps: "interp" in m,                                     "calc"),
     (lambda m, imps: "event_lookup" in m,                               "calc"),
+    # Generic nicegui-import fallback — must be last so name-based rules win
+    (lambda m, imps: any(x in imps for x in ["nicegui"]),               "ui"),
 ]
 
 LAYER_COLORS = {
@@ -79,7 +80,7 @@ LAYER_DESCRIPTIONS = {
     "data":          "Core data layer — models, lookup tables, helpers",
     "calc":          "Calculation engine — chart computation, patterns, profiles",
     "rendering":     "Rendering — Matplotlib chart drawing",
-    "ui":            "UI components — Streamlit sidebar widgets, forms",
+    "ui":            "UI components — NiceGUI pages and components",
     "orchestration": "Orchestration — wires calc → render → display",
     "db":            "Database & migration scripts",
     "test":          "Test files",
@@ -93,7 +94,7 @@ LAYER_DESCRIPTIONS = {
 # AST helpers
 # ---------------------------------------------------------------------------
 def _resolve_module_id(filepath: Path) -> str:
-    """Return a clean module ID like 'calc_v2' or 'src/chart_core'."""
+    """Return a clean module ID like 'calc_v2' or 'src/ui/layout'."""
     rel = filepath.relative_to(WORKSPACE)
     parts = rel.with_suffix("").parts
     # top-level → just filename;  src/x → 'src/x'

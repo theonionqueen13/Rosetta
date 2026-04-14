@@ -1,4 +1,10 @@
-# event_lookup_v2.py
+"""
+event_lookup_v2 — Ingress, station, eclipse, and lunation event search.
+
+Loads a JSONL event catalogue and provides :func:`find_nearby_events` to
+locate astrological events within configurable time windows around a
+given date, plus :func:`build_events_html` for display-ready output.
+"""
 
 import functools
 import json
@@ -7,6 +13,7 @@ from datetime import datetime
 
 @functools.lru_cache(maxsize=1)
 def load_events(path="events.jsonl"):
+    """Load and cache the JSONL event catalogue from *path*."""
     with open(path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
@@ -14,9 +21,11 @@ WINDOWS = {"eclipse": 7, "ingress": 3, "lunation": 1, "station": 2, "perigee": 2
 EXCLUDED = {"opposition"}
 
 def _parse_ts(ts: str) -> datetime:
+    """Parse an ISO-8601 timestamp string (with optional 'Z' suffix) into a datetime."""
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 def _is_exact_time(ev: dict) -> bool:
+    """Return True if the event has a real time (not a midnight placeholder)."""
     meta = ev.get("meta", {})
     if "time_listed" in meta:
         return bool(meta["time_listed"])
@@ -24,6 +33,7 @@ def _is_exact_time(ev: dict) -> bool:
     return not ts.endswith("T00:00:00Z")
 
 def _format_delta(delta_seconds: float, exact: bool) -> str:
+    """Format a time delta as a human-readable relative string."""
     if exact:
         sign = "after" if delta_seconds > 0 else ("before" if delta_seconds < 0 else "at")
         sec = abs(int(delta_seconds))
@@ -42,6 +52,7 @@ def _format_delta(delta_seconds: float, exact: bool) -> str:
     return f"{days} day{'s' if days != 1 else ''} {sign} chart"
 
 def find_nearby_events(target_dt: datetime, events):
+    """Return events within type-specific day windows of *target_dt*, sorted by proximity."""
     results = []
     if not target_dt:
         return results
@@ -61,6 +72,7 @@ def find_nearby_events(target_dt: datetime, events):
     return results
 
 def build_events_html(target_dt: datetime, events_path: str = "events.jsonl", show_no_events: bool = False) -> str:
+    """Render nearby astrological events as HTML paragraphs for display."""
     if not target_dt:
         return ""
     events = load_events(events_path)

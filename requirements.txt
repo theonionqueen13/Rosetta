@@ -1,27 +1,38 @@
-streamlit
-pandas
-matplotlib
-numpy
-geopy
-timezonefinder
-networkx
-pyswisseph
-openpyxl
-watchdog
-bcrypt
-streamlit_authenticator
-streamlit>=1.33
-supabase
-python-dateutil
-psycopg2-binary
-email-validator
-pytz
-plotly>=5.0.0
-google-generativeai
-opencage
-requests
-beautifulsoup4
-selenium
-lxml
-nicegui
-python-dotenv
+# ── Core ──────────────────────────────────────────────
+nicegui==3.9.0
+python-dotenv==1.2.2
+
+# ── Data / Science ───────────────────────────────────
+pandas==2.3.3
+numpy==2.3.5
+matplotlib==3.10.8
+plotly==6.5.0
+networkx==3.6.1
+openpyxl==3.1.5
+
+# ── Astrology ────────────────────────────────────────
+pyswisseph==2.10.3.2
+
+# ── Geo / Time ───────────────────────────────────────
+geopy==2.4.1
+timezonefinder==8.1.0
+opencage==3.2.0
+pytz==2025.2
+python-dateutil==2.9.0.post0
+
+# ── Database ─────────────────────────────────────────
+supabase==2.27.0
+psycopg2-binary==2.9.11
+
+# ── AI ───────────────────────────────────────────────
+google-generativeai==0.8.6
+
+# ── HTTP / Scraping / Validation ─────────────────────
+requests==2.32.5
+beautifulsoup4==4.13.3
+email-validator==2.3.0
+
+# ── Testing ──────────────────────────────────────────
+pytest==9.0.2
+pytest-asyncio==0.25.3
+pytest-cov==6.0.0

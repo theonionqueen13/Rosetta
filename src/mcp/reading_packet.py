@@ -44,6 +44,7 @@ class PlacementFact:
     house_combo_text: str = "" # ObjectHouse combo interpretation
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this placement fact to a dictionary."""
         d: Dict[str, Any] = {
             "obj": self.object_name,
             "sign": self.sign,
@@ -79,6 +80,7 @@ class AspectFact:
     aspect_polarity: str = ""  # "Harmonious" / "Tense" / ""
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this aspect fact to a dictionary."""
         d: Dict[str, Any] = {
             "pair": f"{self.object1} {self.aspect_glyph} {self.object2}",
             "aspect": self.aspect_name,
@@ -101,6 +103,7 @@ class PatternFact:
     meaning: str = ""          # pre-baked interpretation from patterns_v2
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this pattern fact to a dictionary."""
         d: Dict[str, Any] = {
             "type": self.pattern_type,
             "members": self.members,
@@ -132,6 +135,7 @@ class SwitchPointFact:
     description: str = ""          # shape completion narrative
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this switch-point fact to a dictionary."""
         d: Dict[str, Any] = {
             "source_shape": self.source_shape,
             "source_members": self.source_members,
@@ -167,6 +171,7 @@ class DispositorFact:
     is_final_dispositor: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this dispositor fact to a dictionary."""
         d: Dict[str, Any] = {
             "obj": self.object_name,
             "ruler": self.ruled_by,
@@ -186,6 +191,7 @@ class DignityFact:
     sign: str
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this dignity fact to a dictionary."""
         return {
             "obj": self.object_name,
             "status": self.dignity_type,
@@ -202,6 +208,7 @@ class SectFact:
     malefic_of_sect: str       # "Saturn" or "Mars"
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this sect fact to a dictionary."""
         return {
             "sect": self.sect,
             "light": self.sect_light,
@@ -220,6 +227,7 @@ class HouseOverview:
     meaning: str = ""          # from House.short_meaning
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this house overview to a dictionary."""
         d: Dict[str, Any] = {
             "house": self.house_number,
             "cusp_sign": self.sign_on_cusp,
@@ -241,6 +249,7 @@ class SabianFact:
     keynote: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this Sabian fact to a dictionary."""
         d: Dict[str, Any] = {
             "obj": self.object_name,
             "sabian": self.symbol_text,
@@ -327,6 +336,7 @@ class CircuitFlowFact:
     modality_span: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this circuit-flow fact to a dictionary."""
         d: Dict[str, Any] = {
             "shape": self.shape_type,
             "members": self.members,
@@ -366,6 +376,7 @@ class PowerNodeFact:
     tier_label: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this power-node fact to a dictionary."""
         d: Dict[str, Any] = {"planet": self.planet_name}
         if self.tier_label:
             # Potency-ranking mode: expose only relative tier, no raw scores
@@ -399,6 +410,7 @@ class CircuitPathFact:
     connection_quality: str = ""   # "direct_shape", "bridged"
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this circuit-path fact to a dictionary."""
         d: Dict[str, Any] = {
             "from": self.from_concept,
             "to": self.to_concept,

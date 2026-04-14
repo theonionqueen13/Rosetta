@@ -1,5 +1,5 @@
 # Secrets - NEVER commit these
-.streamlit/secrets.toml
+.streamlit/
 secrets.toml
 
 # Python
@@ -48,6 +48,16 @@ Thumbs.db
 *.log
 *.tmp
 test_output.txt
+app_err.txt
+app_out.txt
+question_analysis_log.jsonl
+scripts/findings.txt
 
-# Streamlit cache
-.streamlit/cache/
+# Testing artifacts
+tests/*.png
+.pytest_cache/
+htmlcov/
+.coverage
+
+#Scripts
+scripts/

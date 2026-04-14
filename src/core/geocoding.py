@@ -1,4 +1,10 @@
-# src/geocoding.py
+"""
+Geocoding — place name → latitude / longitude / timezone resolution.
+
+Wraps the OpenCage geocoding API and *timezonefinder* to convert a
+human-readable place string into the ``(lat, lon, tz_str)`` tuple
+required by the chart calculation engine.
+"""
 
 import logging
 from typing import Optional, Tuple
@@ -20,6 +26,7 @@ _tzfinder: Optional[TimezoneFinder] = None
 
 
 def _get_geolocator() -> Optional[OpenCageGeocode]:
+    """Return the module-level OpenCageGeocode singleton, creating it on first call."""
     global _geolocator
     if _geolocator is None and _OPENCAGE_KEY:
         _geolocator = OpenCageGeocode(_OPENCAGE_KEY)
@@ -27,6 +34,7 @@ def _get_geolocator() -> Optional[OpenCageGeocode]:
 
 
 def _get_tzfinder() -> TimezoneFinder:
+    """Return the module-level TimezoneFinder singleton, creating it on first call."""
     global _tzfinder
     if _tzfinder is None:
         _tzfinder = TimezoneFinder(in_memory=True)

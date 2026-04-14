@@ -33,6 +33,7 @@ class TopicMatch:
     matched_keywords: List[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
+        """Return True when no factors were matched."""
         return not self.factors
 
 

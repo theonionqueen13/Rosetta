@@ -34,10 +34,12 @@ from typing import Any, Dict, List, Optional
 # ─────────────────────────────────────────────────────────────────────
 
 def _now_iso() -> str:
+    """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(timezone.utc).isoformat()
 
 
 def _uid() -> str:
+    """Generate a random UUID4 string."""
     return str(uuid.uuid4())
 
 
@@ -64,12 +66,14 @@ class ToDo:
     source: str = "pipeline"  # "pipeline" | "user"
 
     def complete(self) -> None:
+        """Mark this to-do as done and record the completion timestamp."""
         self.done = True
         self.completed_at = _now_iso()
 
     # ── serialisation ──────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this to-do to a JSON-safe dictionary."""
         return {
             "id": self.id,
             "description": self.description,
@@ -82,6 +86,7 @@ class ToDo:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ToDo":
+        """Reconstruct a ToDo from a dictionary."""
         return cls(
             id=d.get("id", _uid()),
             description=d.get("description", ""),
@@ -119,6 +124,7 @@ class UserQuestion:
     circuit_refs: List[str] = field(default_factory=list)      # circuit/flow names
 
     def mark_answered(self, answer_summary: str) -> None:
+        """Record the answer summary and mark this question as answered."""
         self.answered = True
         self.answer = answer_summary
         self.answered_at = _now_iso()
@@ -126,6 +132,7 @@ class UserQuestion:
     # ── serialisation ──────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this user question to a JSON-safe dictionary."""
         return {
             "id": self.id,
             "text": self.text,
@@ -141,6 +148,7 @@ class UserQuestion:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "UserQuestion":
+        """Reconstruct a UserQuestion from a dictionary."""
         return cls(
             id=d.get("id", _uid()),
             text=d.get("text", ""),
@@ -177,6 +185,7 @@ class BotQuestion:
     prerequisite_for: List[str] = field(default_factory=list)  # ToDo ids
 
     def mark_answered(self, user_reply: str) -> None:
+        """Record the user's reply and mark this bot question as answered."""
         self.answered = True
         self.answer = user_reply
         self.answered_at = _now_iso()
@@ -185,6 +194,7 @@ class BotQuestion:
     # ── serialisation ──────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise this bot question to a JSON-safe dictionary."""
         return {
             "id": self.id,
             "text": self.text,
@@ -198,6 +208,7 @@ class BotQuestion:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "BotQuestion":
+        """Reconstruct a BotQuestion from a dictionary."""
         return cls(
             id=d.get("id", _uid()),
             text=d.get("text", ""),
@@ -307,6 +318,7 @@ class AgentMemory:
         return False
 
     def unanswered_user_questions(self) -> List[UserQuestion]:
+        """Return all user questions that have not yet been answered."""
         return [uq for uq in self.user_questions if not uq.answered]
 
     # ── BotQuestion CRUD ───────────────────────────────────────────
@@ -438,6 +450,7 @@ class AgentMemory:
     # ── Serialisation ──────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        """Serialise the full agent memory to a JSON-safe dictionary."""
         return {
             "todos": [t.to_dict() for t in self.todos],
             "user_questions": [uq.to_dict() for uq in self.user_questions],
@@ -446,6 +459,7 @@ class AgentMemory:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "AgentMemory":
+        """Reconstruct an AgentMemory from a dictionary."""
         return cls(
             todos=[ToDo.from_dict(t) for t in d.get("todos", [])],
             user_questions=[UserQuestion.from_dict(uq) for uq in d.get("user_questions", [])],
@@ -455,9 +469,11 @@ class AgentMemory:
     # ── Convenience ───────────────────────────────────────────────
 
     def is_empty(self) -> bool:
+        """Return True if no todos, user questions, or bot questions exist."""
         return not (self.todos or self.user_questions or self.bot_questions)
 
     def stats(self) -> Dict[str, int]:
+        """Return summary counts of memory items by category."""
         return {
             "todos_open": len(self.open_todos()),
             "todos_done": len([t for t in self.todos if t.done]),
