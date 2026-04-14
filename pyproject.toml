@@ -1,0 +1,32 @@
+[project]
+name = "rosetta"
+version = "2.0.0"
+description = "Astrological chart calculation & interpretation engine"
+requires-python = ">=3.11"
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -v"
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests that take >5 s (e.g. full chart calculation)",
+    "integration: tests requiring real Swiss Ephemeris data",
+    "db: tests requiring a database connection",
+]
+
+# ── coverage ──────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/interactive_chart/*",
+    "src/mcp/server.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 0          # bump to 70 once Phase 5 tests land
+
+[tool.coverage.html]
+directory = "htmlcov"
