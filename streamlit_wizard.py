@@ -35,7 +35,7 @@ def load_wizard_topics(file_path: Path) -> List[Dict[str, Any]]:
         if line.startswith("##"):
             header = line.lstrip("#").strip()
             if header.startswith("**") and header.endswith("**"):
-                header = header.strip("*")
+                header = header.strip("*").strip()
             if header.lower().startswith("for each"):
                 continue
             current_section = {"header": header, "items": []}
@@ -195,8 +195,8 @@ def get_topic_key(symbol_id: str, topic: str) -> str:
     return f"topic__{symbol_id}__{topic}"
 
 
-def get_subtopic_key(symbol_id: str, subtopic: str) -> str:
-    return f"subtopic__{symbol_id}__{subtopic}"
+def get_subtopic_key(symbol_id: str, section: str, subtopic: str) -> str:
+    return f"subtopic__{symbol_id}__{section}__{subtopic}"
 
 
 def initialize_state(symbol_keys: List[Tuple[str, int]]) -> None:
@@ -301,7 +301,7 @@ def main() -> None:
             checkbox_col.checkbox("", key=topic_key)
 
             for item in section["items"]:
-                subtopic_key = get_subtopic_key(symbol_id, item)
+                subtopic_key = get_subtopic_key(symbol_id, section["header"], item)
                 default_subtopic = item in saved_subtopics
                 if subtopic_key not in st.session_state:
                     st.session_state[subtopic_key] = default_subtopic
@@ -319,7 +319,7 @@ def main() -> None:
                 item
                 for section in WIZARD_TOPICS
                 for item in section["items"]
-                if st.session_state[get_subtopic_key(symbol_id, item)]
+                if st.session_state[get_subtopic_key(symbol_id, section["header"], item)]
             ]
 
             st.session_state.saved_symbols[symbol_id] = {

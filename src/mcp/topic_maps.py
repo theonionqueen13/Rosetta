@@ -79,7 +79,29 @@ WIZARD_TARGETS: dict = {
             "Career / Public image": ["Sun", "MC", "10th House", "Capricorn"],
             "Moments of conviction": ["Saturn", "Black Moon Lilith", "Scorpio"]
           }
-        }
+        },
+        {
+          "label": "Self-worth & personal value",
+          "targets": ["Venus", "Sun", "Ceres", "2nd House", "Taurus", "Leo"]
+        },
+      ]
+    },
+    {
+      "name": "Contracts & Commitments",
+      "description": "Things and people you commit to, and the energy you put into them",
+      "subtopics": [
+        {
+          "label": "Long-term commitment & loyalty",
+          "targets": ["Saturn", "Juno", "7th House", "Descendant", "Capricorn", "Libra"]
+        },
+        {
+          "label": "Soul contracts & karmic commitments",
+          "targets": ["Saturn", "Juno", "Nessus", "North Node", "South Node", "7th House", "Descendant", "Libra", "Scorpio"]
+        },
+        {
+          "label": "Completion & severance of contracts",
+          "targets": ["Saturn", "Pluto", "Eris", "Black Moon Lilith", "12th House", "8th House", "Scorpio", "Capricorn"]
+        },
       ]
     },
     {
@@ -114,7 +136,19 @@ WIZARD_TARGETS: dict = {
         {
           "label": "Reconnecting to your private self",
           "targets": ["Neptune", "Vesta", "Psyche", "12th House", "Pisces"]
-        }
+        },
+        {
+          "label": "Future dreams & hopes",
+          "targets": ["Neptune", "Jupiter", "North Node", "Part of Fortune", "11th House", "Aquarius", "Sagittarius"]
+        },
+        {
+          "label": "Substance use and/or abuse",
+          "targets": ["Neptune", "Pluto", "Eris", "12th House", "8th House", "Pisces", "Scorpio"]
+        },
+        {
+          "label": "Shadow work & deep healing",
+          "targets": ["Pluto", "Chiron", "8th House", "Scorpio", "Pisces"]
+        },
       ]
     },
     {
@@ -135,7 +169,7 @@ WIZARD_TARGETS: dict = {
         },
         {
           "label": "Long-term commitment & loyalty",
-          "targets": ["Saturn", "Venus", "Juno", "7th House", "Descendant", "Capricorn", "Libra"]
+          "targets": ["Saturn", "Juno", "7th House", "Descendant", "Capricorn", "Libra"]
         },
         {
           "label": "Navigating conflict in relationships",
@@ -196,10 +230,6 @@ WIZARD_TARGETS: dict = {
         {
           "label": "Managing money & resources",
           "targets": ["Saturn", "Mercury", "Vesta", "2nd House", "8th House", "Capricorn", "Taurus"]
-        },
-        {
-          "label": "Self-worth & personal value",
-          "targets": ["Venus", "Sun", "Ceres", "2nd House", "Taurus", "Leo"]
         },
         {
           "label": "Shared finances & debts",
@@ -283,6 +313,14 @@ WIZARD_TARGETS: dict = {
           "targets": ["Moon", "Neptune", "Psyche", "12th House", "Pisces"]
         },
         {
+          "label": "Psychic discernment",
+          "targets": ["Moon", "Neptune", "Saturn", "Pallas", "12th House", "Pisces", "Virgo"]
+        },
+        {
+          "label": "Illusions and delusions",
+          "targets": ["Neptune", "Pluto", "Eris", "12th House", "8th House", "Pisces", "Scorpio"]
+        },
+        {
           "label": "Connecting with soul purpose",
           "targets": ["North Node", "Jupiter", "MC", "Part of Fortune", "9th House", "Sagittarius", "Capricorn"]
         },
@@ -358,6 +396,24 @@ WIZARD_TARGETS: dict = {
           "label": "Critical thinking & discernment",
           "targets": ["Mercury", "Saturn", "Pallas", "Virgo", "Aquarius"]
         }
+      ]
+    },
+    {
+      "name": "Energy, Balance, & Integration",
+      "description": "Energy work and harmonizing different parts of yourself",
+      "subtopics": [    
+        {
+          "label": "Balancing polarities",
+          "targets": ["Nodal Axis", "AC/DC Axis", "MC/IC Axis"]
+        },
+        {
+          "label": "Grounding & energy management",
+          "targets": ["South Node", "IC", "Saturn", "4th House", "Cancer"]
+        },
+        {
+          "label": "",
+          "targets": []
+        },
       ]
     },
     {
