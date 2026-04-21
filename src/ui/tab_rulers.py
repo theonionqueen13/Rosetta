@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from src.nicegui_state import get_chart_object
+from src.nicegui_state import get_chart_object, get_house_system
 
 _log = logging.getLogger(__name__)
 
@@ -105,8 +105,8 @@ def build(
                 from src.core.calc_v2 import compute_plot_data_from_chart
                 plot_data = compute_plot_data_from_chart(chart_obj)
                 chart_obj.plot_data = plot_data
-            except Exception:
-                pass
+            except (ImportError, AttributeError, TypeError, ValueError, KeyError) as exc:
+                _log.warning("Failed to compute plot data: %s", exc)
 
         if plot_data is None:
             rulers_chart_container.clear()
@@ -115,7 +115,7 @@ def build(
             return
 
         scope = rulers_scope_radio.value or "By Sign"
-        house_sys = (state.get("house_system", "placidus") or "placidus").lower()
+        house_sys = get_house_system(state)
 
         if scope == "By Sign":
             scope_data = plot_data.get("by_sign")
@@ -141,7 +141,8 @@ def build(
                 "name": name, "date_line": date_line,
                 "time_line": time_line, "city": city, "extra_line": extra_line,
             }
-        except Exception:
+        except (AttributeError, TypeError, ValueError) as exc:
+            _log.warning("Could not extract chart header lines: %s", exc)
             header_info = None
 
         try:
@@ -174,7 +175,7 @@ def build(
                     f'style="width:100%; max-width:1000px; '
                     f'image-rendering:auto; display:block; margin:0 auto" />'
                 )
-        except Exception as exc:
+        except (ImportError, ValueError, TypeError, AttributeError, RuntimeError, OSError) as exc:
             _log.exception("Dispositor graph render failed")
             rulers_chart_container.clear()
             with rulers_chart_container:

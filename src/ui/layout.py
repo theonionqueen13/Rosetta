@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from nicegui import ui
-from src.nicegui_state import get_chart_object
+from src.nicegui_state import get_chart_object, get_house_system
 
 _log = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def build(state: dict, *, email: str, do_logout) -> dict:
 
         mode = profile_mode_radio.value or "Stats"
         state["profile_view_mode"] = mode
-        house_sys = state.get("house_system", "placidus").title()
+        house_sys = get_house_system(state).title()
         unknown_time = getattr(chart_obj, "unknown_time", False)
 
         try:
@@ -91,7 +91,7 @@ def build(state: dict, *, email: str, do_logout) -> dict:
                         include_house_data=not unknown_time,
                     )
                 planet_name = (
-                    row.object_name.name
+                    row.object_name
                     if hasattr(row, "object_name") and row.object_name
                     else "unknown"
                 )
@@ -102,7 +102,7 @@ def build(state: dict, *, email: str, do_logout) -> dict:
             drawer_content.clear()
             with drawer_content:
                 ui.html(html)
-        except Exception as exc:
+        except (ImportError, AttributeError, TypeError, ValueError, KeyError) as exc:
             _log.exception("Planet profiles render failed")
             drawer_content.clear()
             with drawer_content:

@@ -8,6 +8,7 @@ The public entry points are :func:`render_chart` and
 :func:`render_chart_with_shapes`.
 """
 from __future__ import annotations
+import logging
 import re, math
 import numpy as np
 import pandas as pd
@@ -16,6 +17,8 @@ from src.core import data_helpers as _dh
 from dataclasses import dataclass
 from typing import Any, Collection, Iterable, Mapping, Sequence, List, Dict, Optional
 from src.core.models_v2 import static_db
+
+_log = logging.getLogger(__name__)
 
 # migrate legacy constants to module namespace for backwards compatibility
 SYNASTRY_COLORS_1 = static_db.SYNASTRY_COLORS_1
@@ -30,9 +33,8 @@ GLYPHS = static_db.GLYPHS
 from .profiles_v2 import glyph_for
 from src.core.patterns_v2 import detect_shapes
 from src.chart_utils import resolve_visible_objects
-from src.nicegui_state import reset_chart_toggles
 from .drawing_primitives import (
-	deg_to_rad, _draw_gradient_line, draw_center_earth, 
+	deg_to_rad, _draw_gradient_line, draw_center_earth, draw_selection_circles,
 	_draw_header_on_figure, _draw_header_on_figure_right, _draw_moon_phase_on_axes, _light_variant_for,
 	_lighten_color,
 )
@@ -51,7 +53,7 @@ def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
 	"""Map object names to their ChartObject instances."""
 	if chart is None:
 		return {}
-	return {obj.object_name.name: obj for obj in chart.objects if obj.object_name}
+	return {(obj.object_name if isinstance(obj.object_name, str) else obj.object_name): obj for obj in chart.objects if obj.object_name}
 
 def _chart_positions(chart: AstrologicalChart, visible_names: Collection[str] | None = None) -> dict[str, float]:
 	"""Return a name→longitude dict for visible chart objects."""
@@ -62,12 +64,13 @@ def _chart_positions(chart: AstrologicalChart, visible_names: Collection[str] | 
 	for obj in chart.objects:
 		if not obj.object_name:
 			continue
-		name = obj.object_name.name
+		name = obj.object_name if isinstance(obj.object_name, str) else obj.object_name
 		if visible_canon is not None and _canonical_name(name) not in visible_canon:
 			continue
 		try:
 			positions[name] = float(obj.longitude)
-		except Exception:
+		except (ValueError, TypeError, AttributeError) as exc:
+			_log.warning("Chart position extraction failed for %s: %s", name, exc)
 			continue
 	return positions
 
@@ -91,8 +94,8 @@ def _chart_compass_positions(
 				continue
 			try:
 				out[label] = float(target.longitude)
-			except Exception:
-				pass
+			except (ValueError, TypeError, AttributeError) as exc:
+				_log.warning("Compass position extraction failed for %s: %s", label, exc)
 			break
 	return out
 
@@ -105,7 +108,8 @@ def _get_ascendant_degree(chart: AstrologicalChart) -> float:
 			continue
 		try:
 			return float(obj.longitude)
-		except Exception:
+		except (ValueError, TypeError, AttributeError) as exc:
+			_log.warning("Ascendant degree extraction failed for %s: %s", name, exc)
 			return 0.0
 	return 0.0
 
@@ -145,7 +149,8 @@ def group_color_for(idx: int) -> str:
 		return "teal"
 	try:
 		return GROUP_COLORS[idx % len(GROUP_COLORS)]
-	except Exception:
+	except (IndexError, TypeError, KeyError) as exc:
+		_log.warning("Color lookup failed for index %s: %s", idx, exc)
 		return "teal"
 
 
@@ -359,10 +364,11 @@ def draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, chart: Astrolog
 			for obj in chart.objects:
 				if not obj.object_name:
 					continue
-				if _canonical_name(obj.object_name.name) == target:
+				if _canonical_name(obj.object_name if isinstance(obj.object_name, str) else obj.object_name) == target:
 					return bool(obj.retrograde)
 			return False
-		except Exception:
+		except (ValueError, TypeError, AttributeError) as exc:
+			_log.warning("Retrograde check failed for %s: %s", obj_name, exc)
 			return False
 
 	for cluster, base_degree in zip(clusters, cluster_degrees):
@@ -724,6 +730,7 @@ def render_chart(
 	patterns: List[List[str]] = None,
 	shapes: List[Dict[str, Any]] = None,
 	singleton_map: Dict[str, Any] = None,
+	selected_planets: List[str] = None,
 ):
 	# Set safe defaults immediately inside the function
 	patterns = patterns or []
@@ -758,8 +765,8 @@ def render_chart(
 		name, date_line, time_line, city, extra_line = chart.header_lines()
 		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
 		_draw_moon_phase_on_axes(ax, chart, dark_mode, icon_frac=0.10)
-	except Exception:
-		pass
+	except (ValueError, TypeError, AttributeError) as exc:
+		_log.warning("Header rendering failed: %s", exc)
 
 	cusps: list[float] = []
 	if not unknown_time_chart:
@@ -770,6 +777,10 @@ def render_chart(
 		draw_zodiac_signs(ax, asc_deg, dark_mode)
 
 	draw_planet_labels(ax, positions, asc_deg, label_style=label_style, dark_mode=dark_mode, chart=chart)
+
+	# Draw selection highlight circles behind aspect lines (zorder 1 & 3)
+	if selected_planets:
+		draw_selection_circles(ax, selected_planets, positions, asc_deg)
 
 	edge_keys: set[tuple[frozenset[str], str]] = set()
 
@@ -860,6 +871,7 @@ def render_chart_with_shapes(
 	figsize=(5.0, 5.0),
 	dpi=144,
 	compass_on: bool = True,
+	selected_planets: List[str] = None,
 ):
 	"""Render the full chart wheel with active pattern/shape overlays."""
 	plt.close('all')  # Kill any background figures before starting
@@ -887,8 +899,8 @@ def render_chart_with_shapes(
 		name, date_line, time_line, city, extra_line = chart.header_lines()
 		_draw_header_on_figure(fig, name, date_line, time_line, city, extra_line, dark_mode)
 		_draw_moon_phase_on_axes(ax, chart, dark_mode, icon_frac=0.10)
-	except Exception:
-		pass
+	except (ValueError, TypeError, AttributeError) as exc:
+		_log.warning("Header rendering failed: %s", exc)
 
 	# Base wheel
 	cusps: list[float] = []
@@ -897,6 +909,10 @@ def render_chart_with_shapes(
 	draw_degree_markers(ax, asc_deg, dark_mode)
 	draw_zodiac_signs(ax, asc_deg, dark_mode)
 	draw_planet_labels(ax, pos, asc_deg, label_style, dark_mode, chart=chart)
+
+	# Draw selection highlight circles behind aspect lines (zorder 1 & 3)
+	if selected_planets:
+		draw_selection_circles(ax, selected_planets, pos, asc_deg)
 
 	active_parents = set(i for i, show in enumerate(toggles) if show)
 	active_shape_ids = [
@@ -1065,8 +1081,8 @@ def render_chart_with_shapes(
 			context=context,
 		)
 		out_text = ask_gemini_brain(genai, task, context)  # type: ignore
-	except Exception:
-		pass
+	except (NameError, ValueError, TypeError, RuntimeError) as exc:
+		_log.warning("AI context/brain call failed: %s", exc)
 	# Return the standardized result
 	return RenderResult(
 		fig=fig,
@@ -2050,10 +2066,11 @@ def draw_planet_labels_biwheel(
 			for obj in chart.objects:
 				if not obj.object_name:
 					continue
-				if _canonical_name(obj.object_name.name) == target:
+				if _canonical_name(obj.object_name if isinstance(obj.object_name, str) else obj.object_name) == target:
 					return bool(obj.retrograde)
 			return False
-		except Exception:
+		except (ValueError, TypeError, AttributeError) as exc:
+			_log.warning("Retrograde check failed for %s: %s", obj_name, exc)
 			return False
 
 	for cluster, base_degree in zip(clusters, cluster_degrees):
@@ -2103,5 +2120,4 @@ __all__ = [
 	"get_ascendant_degree",
 	"extract_positions",
 	"resolve_visible_objects",
-	"reset_chart_toggles",
 ]

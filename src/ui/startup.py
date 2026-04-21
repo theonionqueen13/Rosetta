@@ -72,8 +72,8 @@ def run_startup(
         refresh_drawer()
         try:
             chat_no_chart_notice.set_visibility(False)
-        except Exception:
-            pass
+        except (AttributeError, NameError):
+            _log.warning("chat_no_chart_notice not available to hide")
 
     def _show_empty():
         """Put empty-state messages in every tab's chart area."""
@@ -89,8 +89,8 @@ def run_startup(
         refresh_specs_tab()
         try:
             chat_no_chart_notice.set_visibility(True)
-        except Exception:
-            pass
+        except (AttributeError, NameError):
+            _log.warning("chat_no_chart_notice not available to show")
 
     def _clear_chart_state():
         """Wipe all cached chart data from persistent state."""
@@ -154,6 +154,45 @@ def run_startup(
                         if _chart_fix is not None:
                             _chart_fix.display_name = _real_name
                             state["last_chart_json"] = _chart_fix.to_json()
+                        else:
+                            # Chart JSON missing (old DB format or cookie cleared) —
+                            # recompute from the birth data apply_profile wrote to state.
+                            try:
+                                from src.chart_adapter import compute_chart, ChartInputs
+                                _MONTH_NAMES = [
+                                    "January","February","March","April","May","June",
+                                    "July","August","September","October","November","December"
+                                ]
+                                _m_name = state.get("month_name", "January")
+                                _month_num = (_MONTH_NAMES.index(_m_name) + 1
+                                              if _m_name in _MONTH_NAMES else 1)
+                                _unknown_time = bool(state.get("profile_unknown_time", False))
+                                _h24 = int(state.get("hour_val", 12)) if not _unknown_time else 12
+                                _mn  = int(state.get("minute_val", 0)) if not _unknown_time else 0
+                                _inputs = ChartInputs(
+                                    name=_real_name,
+                                    year=int(state.get("year", 2000)),
+                                    month=_month_num,
+                                    day=int(state.get("day", 1)),
+                                    hour_24=_h24,
+                                    minute=_mn,
+                                    city=state.get("city", ""),
+                                    lat=float(state.get("current_lat") or 0.0),
+                                    lon=float(state.get("current_lon") or 0.0),
+                                    tz_name=state.get("current_tz_name") or "UTC",
+                                    unknown_time=_unknown_time,
+                                    house_system="placidus",
+                                    gender=state.get("birth_gender"),
+                                )
+                                _recalc = compute_chart(_inputs)
+                                if _recalc.chart is not None and not _recalc.error:
+                                    state["last_chart_json"] = _recalc.chart.to_json()
+                                    state["chart_ready"] = True
+                                    _log.info("Startup: recomputed self chart for %s", _real_name)
+                                else:
+                                    _log.warning("Startup recompute failed: %s", _recalc.error)
+                            except Exception as _rc_exc:
+                                _log.warning("Startup chart recompute error: %s", _rc_exc)
 
                         form["name"] = _real_name
                         form["city"] = state.get("city", "")
@@ -170,6 +209,6 @@ def run_startup(
                             _self_loaded = True
                         break
             except Exception as _exc:
-                _log.warning("Startup auto-load of self chart failed: %s", _exc)
+                _log.warning("Startup auto-load of self chart failed: %s", _exc, exc_info=True)
         if not _self_loaded:
             _show_empty()

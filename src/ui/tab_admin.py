@@ -34,7 +34,7 @@ def build(state: dict, _form: dict) -> dict[str, Any]:
                 .execute()
             )
             return result.data or []
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError) as exc:
             _log.warning("Failed to fetch admin reports: %s", exc)
             return []
 
@@ -45,8 +45,8 @@ def build(state: dict, _form: dict) -> dict[str, Any]:
             client.table("user_feedback").update(
                 {"admin_viewed": True}
             ).eq("id", report_id).execute()
-        except Exception:
-            pass
+        except (RuntimeError, ValueError, KeyError) as exc:
+            _log.warning("Failed to mark report %s as viewed: %s", report_id, exc)
         _load_admin_reports()
 
     def _render_admin_report(report: dict, index: int):
@@ -105,21 +105,24 @@ def build(state: dict, _form: dict) -> dict[str, Any]:
                                 role = msg.get("role", "?")
                                 content = msg.get("content", "")
                                 ui.label(f"{role}: {content[:500]}").classes("text-body2")
-                        except Exception:
+                        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                            _log.warning("Chat history JSON parse failed: %s", exc)
                             ui.label(attachments["chat_history"][:2000]).classes("text-body2")
 
                     if "chart_image" in attachments:
                         ui.label("Chart Image:").classes("text-caption text-weight-medium q-mt-xs")
                         try:
                             ui.image(f"data:image/png;base64,{attachments['chart_image']}").classes("w-64")
-                        except Exception as exc:
+                        except (ValueError, RuntimeError) as exc:
+                            _log.warning("Chart image decode failed: %s", exc)
                             ui.label(f"Could not decode: {exc}").classes("text-negative")
 
                     if "screenshot" in attachments:
                         ui.label("Screenshot:").classes("text-caption text-weight-medium q-mt-xs")
                         try:
                             ui.image(f"data:image/png;base64,{attachments['screenshot']}").classes("w-64")
-                        except Exception as exc:
+                        except (ValueError, RuntimeError) as exc:
+                            _log.warning("Screenshot decode failed: %s", exc)
                             ui.label(f"Could not decode: {exc}").classes("text-negative")
 
                     if "error_messages" in attachments:

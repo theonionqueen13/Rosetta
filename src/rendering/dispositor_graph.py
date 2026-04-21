@@ -5,6 +5,7 @@ Builds and draws the dispositor tree (planets linked by sign-rulership)
 using Matplotlib.  Handles cycle detection, root-priority scoring,
 bucketed vertical layout, and sandwich ordering for compact display.
 """
+import logging
 import os
 import re
 import base64
@@ -13,6 +14,8 @@ from matplotlib import gridspec
 import matplotlib.patheffects as pe
 from src.core.models_v2 import static_db
 from src.core.calc_v2 import compute_plot_data_from_chart
+
+_log = logging.getLogger(__name__)
 
 ABREVIATED_PLANET_NAMES = static_db.ABREVIATED_PLANET_NAMES
 _RECEPTION_ASPECTS = static_db._RECEPTION_ASPECTS
@@ -46,7 +49,7 @@ def compute_house_map(chart, house_system: str) -> dict:
     for obj in chart.objects:
         if not obj.object_name:
             continue
-        name = obj.object_name.name
+        name = obj.object_name
         if sys_lc == "placidus":
             hobj = getattr(obj, "placidus_house", None)
         elif sys_lc == "equal":
@@ -198,10 +201,10 @@ def get_sign_aspect_name(p1_name, p2_name, chart):
         for obj in chart.objects:
             if not obj.object_name:
                 continue
-            if obj.object_name.name == search_p1:
-                s1 = obj.sign.name if obj.sign else None
-            if obj.object_name.name == search_p2:
-                s2 = obj.sign.name if obj.sign else None
+            if obj.object_name == search_p1:
+                s1 = obj.sign if obj.sign else None
+            if obj.object_name == search_p2:
+                s2 = obj.sign if obj.sign else None
 
         if not s1 or not s2:
             return None
@@ -220,9 +223,8 @@ def get_sign_aspect_name(p1_name, p2_name, chart):
         # Simple sign-distance to aspect name
         aspect_map = {0: "Conjunction", 2: "Sextile", 3: "Square", 4: "Trine", 6: "Opposition"}
         return aspect_map.get(diff)
-    except Exception as e:
-        # Debugging: if it still fails, this will show why in the terminal
-        print(f"Error in sign aspect calc: {e}")
+    except (KeyError, ValueError, TypeError) as exc:
+        _log.warning("Sign-aspect calculation failed: %s", exc)
         return None
 
 def plot_dispositor_graph(plot_data, chart, header_info=None, house_system=None):

@@ -16,8 +16,11 @@ Required Supabase table (run the SQL from supabase_setup.sql in the dashboard):
 Row-Level Security ensures every user can only read/write their own rows.
 """
 from __future__ import annotations
+import logging
 import threading
 from typing import Any, Dict
+
+_log = logging.getLogger(__name__)
 from cachetools import TTLCache
 from .supabase_client import get_authed_supabase
 
@@ -74,8 +77,8 @@ def load_user_profiles_db(user_id: str) -> Dict[str, Any]:
     Retries once after resetting the transport on connection errors
     (e.g. after a Supabase project pause/resume).
     """
-    import logging as _logging
-    _plog = _logging.getLogger(__name__)
+    import logging as _logging  # noqa: F811 – kept for back-compat
+    _plog = _log  # use module-level logger
 
     with _cache_lock:
         if user_id in _profiles_cache:

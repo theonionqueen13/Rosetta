@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from src.core.static_data import MONTH_NAMES
+from src.core.constants import MONTH_NAMES
 from src.nicegui_state import ensure_state, get_chart_object
 from src.ui.auth import get_user_id
 
@@ -105,7 +105,8 @@ def build(
             yr = int(form.get("year", 2000))
             try:
                 max_day = calendar.monthrange(yr, month_idx)[1]
-            except Exception:
+            except (ValueError, OverflowError) as exc:
+                _log.warning("monthrange failed for year=%s month=%s: %s", yr, month_idx, exc)
                 max_day = 31
             day_select.options = list(range(1, max_day + 1))
             day_select.update()
@@ -191,7 +192,7 @@ def build(
             names = sorted(profiles.keys())
             profile_select.options = names
             profile_select.update()
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError) as exc:
             _log.warning("Failed to refresh profiles: %s", exc)
             ui.notify(
                 f"Could not load profiles — {exc}. Try clicking Refresh.",
@@ -240,7 +241,7 @@ def build(
             is_my_chart_cb.value = _state.get("is_my_chart", False)
             _mgr_success(f"Loaded profile '{selected}'.")
             birth_exp.open()
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError) as exc:
             _log.exception("Profile load failed")
             _mgr_error(f"Load failed: {exc}")
 
@@ -279,7 +280,7 @@ def build(
             _refresh_profiles()
             profile_select.value = prof_name
             _mgr_success(f"Saved profile '{prof_name}'.")
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError, TypeError) as exc:
             _log.exception("Profile save failed")
             _mgr_error(f"Save failed: {exc}")
 
@@ -298,7 +299,7 @@ def build(
             profile_select.value = None
             save_name_input.value = ""
             _mgr_success(f"Deleted profile '{selected}'.")
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError) as exc:
             _log.exception("Profile delete failed")
             _mgr_error(f"Delete failed: {exc}")
 
@@ -372,7 +373,8 @@ def build(
                     donate_status.text = f'Thank you! Donated as "{label}".'
                     donate_status.classes(replace="text-body2 text-positive")
                     donate_status.set_visibility(True)
-                except Exception as exc:
+                except (RuntimeError, ValueError, KeyError) as exc:
+                    _log.warning("Chart donation failed: %s", exc)
                     donate_status.text = f"Error: {exc}"
                     donate_status.classes(replace="text-body2 text-negative")
                     donate_status.set_visibility(True)

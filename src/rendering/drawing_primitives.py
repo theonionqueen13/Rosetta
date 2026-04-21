@@ -5,10 +5,13 @@ Geometry helpers (polar ↔ Cartesian, glyph collision avoidance),
 colour-palette lookups, moon-phase resolution, and reusable Matplotlib
 path-effect builders used by :mod:`drawing_v2`.
 """
+import logging
 import numpy as np
 import os
 import matplotlib.patheffects as pe
 from src.core.models_v2 import static_db
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +403,7 @@ def _draw_moon_phase_on_axes(ax, chart, dark_mode: bool, icon_frac: float = 0.10
 		for obj in chart.objects:
 			if not obj.object_name:
 				continue
-			name = obj.object_name.name.lower()
+			name = obj.object_name.lower()
 			if name == "sun":
 				sun_lon = float(obj.longitude) % 360.0
 			elif name == "moon":
@@ -428,8 +431,8 @@ def _draw_moon_phase_on_axes(ax, chart, dark_mode: bool, icon_frac: float = 0.10
 		try:
 			img = mpimg.imread(icon_path)
 			icon_ax.imshow(img)
-		except Exception:
-			pass
+		except (FileNotFoundError, OSError, ValueError) as exc:
+			_log.warning("Failed to read/display moon-phase icon %s: %s", icon_path, exc)
 
 		# --- LABEL just to the left of the icon (still inside axes) ---
 		color  = "white" if dark_mode else "black"
@@ -443,8 +446,9 @@ def _draw_moon_phase_on_axes(ax, chart, dark_mode: bool, icon_frac: float = 0.10
 			fontsize=10, color=color, path_effects=effects, zorder=10,
 		)
 
-	except Exception:
-		# decorative only; fail silently
+	except (AttributeError, TypeError, ValueError, OSError) as exc:
+		# decorative only; log and skip
+		_log.warning("Moon-phase overlay skipped: %s", exc)
 		return
 
 
@@ -464,7 +468,8 @@ def _earth_emoji_for_region(lat: float | None, lon: float | None) -> str:
 	# Normalize longitude to [-180, 180]
 	try:
 		lon = ((lon + 180.0) % 360.0) - 180.0
-	except Exception:
+	except (TypeError, ValueError) as exc:
+		_log.warning("Could not normalise longitude %r: %s", lon, exc)
 		return "🌎"
 
 	# Coarse, readable bands by longitude:
@@ -496,7 +501,8 @@ def _get_profile_lat_lon_nicegui() -> tuple[float | None, float | None]:
 		"""Try to convert *x* to float, returning None on failure."""
 		try:
 			return float(x)
-		except Exception:
+		except (TypeError, ValueError) as exc:
+			_log.warning("Cannot convert %r to float: %s", x, exc)
 			return None
 
 	try:
@@ -506,9 +512,64 @@ def _get_profile_lat_lon_nicegui() -> tuple[float | None, float | None]:
 		lon = _f(state.get("current_lon"))
 		if lat is not None and lon is not None:
 			return lat, lon
-	except Exception:
-		pass
+	except (ImportError, AttributeError, KeyError, RuntimeError) as exc:
+		_log.warning("NiceGUI lat/lon lookup failed: %s", exc)
 	return None, None
+
+
+def draw_selection_circles(
+	ax,
+	selected_names: list[str],
+	positions: dict[str, float],
+	asc_deg: float,
+	*,
+	inner_color: str = "#32CD32",    # lime green
+	outline_color: str = "#000080",  # navy
+	dot_radius: float = 1.0,         # degree-circle radius (zorder behind aspects)
+	label_radius: float = 1.35,      # planet-label radius
+	dot_markersize: float = 18,      # ~3× the singleton dot (markersize=6)
+	label_markersize: float = 22,    # larger halo behind the glyph label
+) -> None:
+	"""Draw lime-green selection highlight circles for *selected_names*.
+
+	Two concentric markers per selected planet:
+	  1. A filled circle at the degree ring (r=1.0), drawn at very low zorder
+	     so it sits behind all aspect lines.
+	  2. A larger filled circle at the label ring (r=1.35), also behind labels.
+	Both are outlined in navy blue.
+	"""
+	if not selected_names or not positions:
+		return
+
+	for name in selected_names:
+		lon = positions.get(name)
+		if lon is None:
+			continue
+		theta = deg_to_rad(lon, asc_deg)
+
+		# --- Degree-circle marker (zorder=0, behind everything) ---
+		ax.plot(
+			theta, dot_radius,
+			marker="o",
+			markersize=dot_markersize,
+			color=inner_color,
+			markeredgecolor=outline_color,
+			markeredgewidth=1.5,
+			zorder=0,
+			linestyle="none",
+		)
+
+		# --- Label-ring halo (zorder=0, behind planet labels and degree labels) ---
+		ax.plot(
+			theta, label_radius,
+			marker="o",
+			markersize=label_markersize,
+			color=inner_color,
+			markeredgecolor=outline_color,
+			markeredgewidth=1.5,
+			zorder=0,
+			linestyle="none",
+		)
 
 
 def draw_center_earth(ax, *, size: float = 0.22, zorder: int = 10_000) -> None:

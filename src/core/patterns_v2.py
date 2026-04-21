@@ -8,6 +8,7 @@ component grouping, and parent-shape assignment.
 """
 from __future__ import annotations
 
+import logging
 from itertools import combinations, permutations
 from typing import Sequence
 
@@ -16,6 +17,8 @@ import networkx as nx
 import src.rendering.profiles_v2 as _profiles_mod
 from . import calc_v2 as _calc_mod
 from .models_v2 import DetectedShape
+
+_log = logging.getLogger(__name__)
 
 
 # Mirror the ASPECTS dict structure expected by the legacy pattern logic.
@@ -35,7 +38,8 @@ def glyph_for(name: str) -> str:
 
     try:
         return _profiles_mod.glyph_for(name)
-    except Exception:
+    except (KeyError, AttributeError) as exc:
+        _log.warning("Glyph lookup failed for %r: %s", name, exc)
         return ""
 
 def _object_rows(df):
@@ -57,7 +61,8 @@ def positions_from_dataframe(df) -> dict[str, float]:
         try:
             if name is not None and lon is not None:
                 pos[str(name)] = float(lon) % 360.0
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            _log.warning("Bad longitude for %r: %s", name, exc)
             continue
     return pos
 
@@ -282,23 +287,6 @@ def _detect_shapes_for_members(pos, members, parent_idx, sid_start, major_edges_
     # SHAPE DETECTION LOGIC
     # (unchanged from your version; uses has_edge/add_once)
     # -----------------------
-    def aspect_ok(a, b, aspect, slack=0.75):
-        """Return True if the aspect exists or is very close within slack degrees."""
-        if has_edge(a, b, aspect):
-            return True
-
-        da = rep_pos.get(a, pos.get(a))
-        db = rep_pos.get(b, pos.get(b))
-        if da is None or db is None:
-            return False
-
-        angle = abs((da - db) % 360)
-        if angle > 180:
-            angle = 360 - angle
-
-        data = ASPECTS[aspect]
-        return abs(angle - data["angle"]) <= (data["orb"] + slack)
-
     def aspect_ok(a, b, aspect, slack=0.75):
         """Return True if the aspect exists or is very close within slack degrees."""
         if has_edge(a, b, aspect):

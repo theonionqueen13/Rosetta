@@ -197,6 +197,12 @@ class TestTryRefreshSession:
         mock_sb.auth.refresh_session.side_effect = RuntimeError("network error")
         assert try_refresh_session() is False
 
+    def test_refresh_auth_api_error_returns_false(self, _patch_app, storage, mock_sb):
+        from src.ui.auth import try_refresh_session
+        storage["supabase_session"] = {"refresh_token": "rt-1"}
+        mock_sb.auth.refresh_session.side_effect = Exception("Invalid Refresh Token: Already Used")
+        assert try_refresh_session() is False
+
     def test_refresh_returns_none_session(self, _patch_app, storage, mock_sb):
         from src.ui.auth import try_refresh_session
         storage["supabase_session"] = {"refresh_token": "rt-1"}

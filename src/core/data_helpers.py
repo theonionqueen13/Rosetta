@@ -5,10 +5,13 @@ Pure-logic helpers that convert raw chart objects and aspect edges into
 structured DataFrames, extract ecliptic positions for rendering, and
 provide canonical name normalization used throughout the codebase.
 """
+import logging
 import re
 import pandas as pd
 from typing import Any, Collection, Iterable, Mapping, Sequence, List, Dict
 from .models_v2 import static_db
+
+_log = logging.getLogger(__name__)
 
 ASPECTS = static_db.ASPECTS
 LUMINARIES_AND_PLANETS = static_db.LUMINARIES_AND_PLANETS
@@ -76,7 +79,8 @@ def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | Non
 	if value is not None:
 		try:
 			return float(value) % 360.0
-		except Exception:
+		except (ValueError, TypeError) as exc:
+			_log.warning("Non-numeric degree for %r: %s", name, exc)
 			return None
 	canon = _canonical_name(name)
 	aliases = _ALIAS_LOOKUP.get(canon, {canon})
@@ -85,7 +89,8 @@ def _degree_for_label(pos: Mapping[str, float] | None, name: str) -> float | Non
 			continue
 		try:
 			deg = float(val) % 360.0
-		except Exception:
+		except (ValueError, TypeError) as exc:
+			_log.warning("Non-numeric alias degree for %r: %s", key, exc)
 			continue
 		if _canonical_name(key) in aliases:
 			return deg
@@ -130,7 +135,8 @@ def get_ascendant_degree(df: pd.DataFrame) -> float:
 		return 0.0
 	try:
 		return float(row.get("Longitude", 0.0))
-	except Exception:
+	except (ValueError, TypeError) as exc:
+		_log.warning("Bad Ascendant longitude, defaulting to 0.0: %s", exc)
 		return 0.0
 	
 def extract_positions(df: pd.DataFrame, visible_names: Collection[str] | None = None) -> dict[str, float]:

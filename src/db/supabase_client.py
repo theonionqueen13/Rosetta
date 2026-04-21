@@ -1,4 +1,9 @@
 # supabase_client.py
+import collections
+import logging
+
+_log = logging.getLogger(__name__)
+
 """
 Factory helpers for creating Supabase clients (NiceGUI).
 
@@ -55,7 +60,8 @@ def _get_session_dict() -> dict:
 
 # In-memory client cache keyed by access_token (avoids JSON serialisation
 # issues with NiceGUI's file-backed storage).
-_authed_client_cache: dict[str, Client] = {}  # {access_token: Client}
+_AUTHED_CACHE_MAX = 32
+_authed_client_cache: collections.OrderedDict[str, Client] = collections.OrderedDict()  # {access_token: Client}
 
 # ---------------------------------------------------------------------------
 # Shared httpx transports (one per credential set, created lazily)
@@ -78,8 +84,8 @@ def _get_shared_transport(url: str, key: str) -> httpx.Client:
         if _shared_transport is not None:
             try:
                 _shared_transport.close()
-            except Exception:
-                pass
+            except (OSError, RuntimeError) as exc:
+                _log.debug("Ignoring error closing shared transport: %s", exc)
         _shared_transport = httpx.Client(http2=True)
         _shared_transport_credentials = (url, key)
     return _shared_transport
@@ -92,8 +98,8 @@ def _get_shared_authed_transport(url: str, key: str) -> httpx.Client:
         if _shared_authed_transport is not None:
             try:
                 _shared_authed_transport.close()
-            except Exception:
-                pass
+            except (OSError, RuntimeError) as exc:
+                _log.debug("Ignoring error closing shared authed transport: %s", exc)
         _shared_authed_transport = httpx.Client(http2=True)
         _shared_authed_transport_credentials = (url, key)
     return _shared_authed_transport
@@ -134,8 +140,8 @@ def get_supabase() -> Client:
         try:
             if hasattr(_anon_client, "auth") and hasattr(_anon_client.auth, "_client"):
                 _anon_client.auth._client.close()
-        except Exception:
-            pass
+        except (OSError, RuntimeError, AttributeError) as exc:
+            _log.debug("Ignoring error closing anon client auth session: %s", exc)
 
     transport = _get_shared_transport(url, key)
     _anon_client = create_client(url, key, options=ClientOptions(httpx_client=transport))
@@ -174,12 +180,15 @@ def get_authed_supabase() -> Client:
             session["refresh_token"],
         )
     except Exception as exc:
+        _log.warning("Failed to restore Supabase session: %s", exc)
         raise RuntimeError(
             f"Could not restore Supabase session (token may be expired). "
             f"Please log in again. Detail: {exc}"
         ) from exc
-    # Cache the client in-memory (keyed by token)
+    # Cache the client in-memory (keyed by token) with LRU eviction
     _authed_client_cache[token] = client
+    while len(_authed_client_cache) > _AUTHED_CACHE_MAX:
+        _authed_client_cache.popitem(last=False)
     return client
 
 
@@ -191,7 +200,8 @@ def get_current_user_id() -> str | None:
     try:
         from nicegui import app as _ng_app
         return _ng_app.storage.user.get("supabase_user_id")
-    except Exception:
+    except (KeyError, RuntimeError, AttributeError) as exc:
+        _log.warning("Could not retrieve user ID from storage: %s", exc)
         return None
 
 
@@ -203,7 +213,8 @@ def get_current_user_email() -> str | None:
     try:
         from nicegui import app as _ng_app
         return _ng_app.storage.user.get("supabase_user_email")
-    except Exception:
+    except (KeyError, RuntimeError, AttributeError) as exc:
+        _log.warning("Could not retrieve user email from storage: %s", exc)
         return None
 
 
@@ -219,7 +230,7 @@ def reset_authed_client_state() -> None:
     if _shared_authed_transport is not None:
         try:
             _shared_authed_transport.close()
-        except Exception:
-            pass
+        except (OSError, RuntimeError) as exc:
+            _log.debug("Ignoring error closing authed transport during reset: %s", exc)
         _shared_authed_transport = None
         _shared_authed_transport_credentials = None

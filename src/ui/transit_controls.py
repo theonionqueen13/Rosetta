@@ -9,8 +9,8 @@ import pytz
 from dateutil.relativedelta import relativedelta
 from nicegui import ui
 
-from src.core.static_data import MONTH_NAMES
-from src.nicegui_state import get_chart_object
+from src.core.constants import MONTH_NAMES
+from src.nicegui_state import get_chart_object, get_house_system
 
 _log = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def build(
             ["Placidus", "Whole Sign", "Equal", "Koch",
              "Campanus", "Regiomontanus", "Porphyry"],
             label="House System",
-            value=(state.get("house_system", "placidus") or "placidus").title(),
+            value=get_house_system(state).title(),
         ).classes("w-48")
 
         # --- "Now" quick-city button ---
@@ -111,7 +111,8 @@ def build(
 
             try:
                 tz = pytz.timezone(tz_name)
-            except Exception:
+            except pytz.exceptions.UnknownTimeZoneError:
+                _log.warning("Unknown timezone requested: %s", tz_name)
                 ui.notify(f"Unknown timezone: {tz_name}", type="negative")
                 return
 
@@ -138,9 +139,7 @@ def build(
                 city=city_val,
                 lat=lat, lon=lon, tz_name=tz_name,
                 unknown_time=False,
-                house_system=(
-                    state.get("house_system", "placidus") or "placidus"
-                ).lower(),
+                house_system=get_house_system(state),
                 gender=form.get("gender"),
             )
             try:
@@ -162,7 +161,8 @@ def build(
                     f"Chart set to now: {now:%B %d, %Y %I:%M %p}",
                     type="positive",
                 )
-            except Exception as exc:
+            except (ValueError, RuntimeError, TypeError) as exc:
+                _log.warning("Now-button chart calculation failed: %s", exc)
                 ui.notify(f"Chart calculation failed: {exc}", type="negative")
 
         now_btn.on_click(_on_now_click)
@@ -210,7 +210,7 @@ def build(
             names = sorted(profiles.keys())
             chart2_profile_sel.options = names
             chart2_profile_sel.update()
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError) as exc:
             _log.warning("Failed to refresh chart 2 profiles: %s", exc)
             ui.notify(
                 f"Could not load profiles — {exc}. Try clicking Refresh.",
@@ -227,7 +227,8 @@ def build(
                 from zoneinfo import ZoneInfo
                 local = utc.replace(tzinfo=_dt.timezone.utc).astimezone(ZoneInfo(tz_name))
                 transit_dt_label.text = f"Chart date: {local:%b %d, %Y  %H:%M} {tz_name}"
-            except Exception:
+            except (ValueError, KeyError, TypeError) as exc:
+                _log.warning("Transit label datetime parse failed: %s", exc)
                 transit_dt_label.text = f"Transit: {iso[:16]}"
         else:
             transit_dt_label.text = ""
@@ -239,7 +240,7 @@ def build(
         lon = state.get("current_lon")
         tz_name = state.get("current_tz_name", "UTC")
         city = state.get("city", "")
-        house_sys = (state.get("house_system", "placidus") or "placidus").lower()
+        house_sys = get_house_system(state)
 
         if lat is None or lon is None:
             return
@@ -353,9 +354,9 @@ def build(
                         sc.update()
                     if cc:
                         cc.update()
-                except Exception:
-                    pass
-        except Exception:
+                except RuntimeError as exc:
+                    _log.warning("Chart 2 container update failed: %s", exc)
+        except (RuntimeError, ValueError, KeyError):
             _log.exception("Chart 2 load failed")
 
     chart2_load_btn.on_click(_on_load_chart2)
@@ -379,8 +380,8 @@ def build(
                 sc.update()
             if cc:
                 cc.update()
-        except Exception:
-            pass
+        except RuntimeError as exc:
+            _log.warning("Clear-chart2 container update failed: %s", exc)
 
     chart2_clear_btn.on_click(_on_clear_chart2)
 
@@ -399,8 +400,8 @@ def build(
                         sc.update()
                     if cc:
                         cc.update()
-                except Exception:
-                    pass
+                except RuntimeError as exc:
+                    _log.warning("Synastry toggle container update failed: %s", exc)
         else:
             synastry_row.set_visibility(False)
             _on_clear_chart2()

@@ -13,8 +13,8 @@ from typing import Any, Optional
 
 from nicegui import ui
 
-from src.core.static_data import STANDARD_BASE_BODIES
-from src.nicegui_state import get_chart_object, get_chart_2_object
+from src.core.constants import STANDARD_BASE_BODIES
+from src.nicegui_state import get_chart_object, get_chart_2_object, get_house_system
 
 _log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def render_chart_png(mode: str, state: dict) -> Optional[bytes]:
 
     # Build toggles from state
     toggles = RenderToggles(
-        compass_inner=state.get("compass", True),
+        compass_inner=False if mode == "Focus" else state.get("compass", True),
         chart_mode=mode,
         pattern_toggles={int(k): v for k, v in state.get("pattern_toggles", {}).items()},
         shape_toggles=state.get("shape_toggles", {}),
@@ -56,10 +56,11 @@ def render_chart_png(mode: str, state: dict) -> Optional[bytes]:
         harmonic_toggles=state.get("harmonic_toggles", {}),
         label_style=state.get("label_style", "glyph"),
         dark_mode=state.get("dark_mode", False),
-        house_system=(state.get("house_system", "placidus") or "placidus").lower(),
+        house_system=get_house_system(state),
         synastry_inter=state.get("synastry_inter", True),
         synastry_chart1=state.get("synastry_chart1", False),
         synastry_chart2=state.get("synastry_chart2", False),
+        selected_planets=list(state.get("selected_planets", [])),
     )
 
     if is_biwheel:
@@ -157,7 +158,7 @@ def render_chart_png(mode: str, state: dict) -> Optional[bytes]:
                     combined_data=None,
                     inter_chart_aspects=inter_aspects,
                 )
-        except Exception:
+        except (ValueError, TypeError, RuntimeError, AttributeError):
             _log.exception("Biwheel render failed")
             return None
 
@@ -173,9 +174,99 @@ def render_chart_png(mode: str, state: dict) -> Optional[bytes]:
     result.edges_minor = getattr(chart_obj, "edges_minor", None) or []
     result.edges_harmonic = getattr(chart_obj, "edges_harmonic", None) or []
 
+    # Focus mode: use Standard Chart rendering with edge filtering + highlights
+    if mode == "Focus":
+        toggles.chart_mode = "Standard Chart"
+        focus_planets = [p for p in state.get("focus_planets", []) if p]
+        toggles.selected_planets = focus_planets
+        if focus_planets:
+            fp_set = set(focus_planets)
+            edges_to_show_major = []
+            edges_to_show_minor = []
+            edges_to_show_harmonic = []
+            
+            # Start with focus planet edges (baseline)
+            edges_to_show_major = [
+                e for e in result.edges_major if e[0] in fp_set or e[1] in fp_set
+            ]
+            edges_to_show_minor = [
+                e for e in result.edges_minor if e[0] in fp_set or e[1] in fp_set
+            ]
+            edges_to_show_harmonic = [
+                e for e in result.edges_harmonic if e[0] in fp_set or e[1] in fp_set
+            ]
+            
+            # Show Parent Shape: include all edges within shapes that contain focus planets
+            if state.get("focus_show_parent_shape", False):
+                # Find all shapes containing any focus planet
+                shape_members_to_include = set()
+                for shape in result.shapes:
+                    if isinstance(shape, dict):
+                        members = shape.get("members", [])
+                    else:
+                        members = getattr(shape, "members", [])
+                    # If shape has any focus planet, include all its members
+                    if any(m in fp_set for m in members):
+                        shape_members_to_include.update(members)
+                
+                # Add all edges between shape members
+                if shape_members_to_include:
+                    shape_set = shape_members_to_include
+                    edges_to_show_major.extend([
+                        e for e in result.edges_major
+                        if e[0] in shape_set and e[1] in shape_set and e not in edges_to_show_major
+                    ])
+                    edges_to_show_minor.extend([
+                        e for e in result.edges_minor
+                        if e[0] in shape_set and e[1] in shape_set and e not in edges_to_show_minor
+                    ])
+                    edges_to_show_harmonic.extend([
+                        e for e in result.edges_harmonic
+                        if e[0] in shape_set and e[1] in shape_set and e not in edges_to_show_harmonic
+                    ])
+            
+            # Show Full Circuit: include all edges within circuits that contain focus planets
+            if state.get("focus_show_full_circuit", False):
+                # Find all circuits containing any focus planet
+                circuit_members_to_include = set()
+                for idx, circuit in enumerate(result.patterns):
+                    # circuit is a set or list of planet names
+                    if isinstance(circuit, set):
+                        circuit_list = list(circuit)
+                    else:
+                        circuit_list = circuit
+                    # If circuit has any focus planet, include all its members
+                    if any(m in fp_set for m in circuit_list):
+                        circuit_members_to_include.update(circuit_list)
+                
+                # Add all edges between circuit members
+                if circuit_members_to_include:
+                    circuit_set = circuit_members_to_include
+                    edges_to_show_major.extend([
+                        e for e in result.edges_major
+                        if e[0] in circuit_set and e[1] in circuit_set and e not in edges_to_show_major
+                    ])
+                    edges_to_show_minor.extend([
+                        e for e in result.edges_minor
+                        if e[0] in circuit_set and e[1] in circuit_set and e not in edges_to_show_minor
+                    ])
+                    edges_to_show_harmonic.extend([
+                        e for e in result.edges_harmonic
+                        if e[0] in circuit_set and e[1] in circuit_set and e not in edges_to_show_harmonic
+                    ])
+            
+            result.edges_major = edges_to_show_major
+            result.edges_minor = edges_to_show_minor
+            result.edges_harmonic = edges_to_show_harmonic
+        else:
+            # No focus planet: show labels only, no aspects
+            result.edges_major = []
+            result.edges_minor = []
+            result.edges_harmonic = []
+
     try:
         return render_chart_image(result, toggles)
-    except Exception:
+    except (ValueError, TypeError, RuntimeError, AttributeError):
         _log.exception("Chart render failed")
         return None
 
@@ -201,7 +292,7 @@ def serialize_chart_for_d3(mode: str, state: dict) -> Optional[dict]:
     chart_2_obj = get_chart_2_object(state) if is_biwheel else None
     is_biwheel = is_biwheel and chart_2_obj is not None
 
-    hs = (state.get("house_system", "placidus") or "placidus").lower()
+    hs = get_house_system(state)
     dark = state.get("dark_mode", False)
     label = state.get("label_style", "glyph")
     compass = state.get("compass", True)
@@ -276,8 +367,9 @@ def serialize_chart_for_d3(mode: str, state: dict) -> Optional[dict]:
                     shapes=filtered_shapes,
                     singleton_map=filtered_singleton_map,
                     patterns=filtered_patterns,
+                    selected_planets=list(state.get("selected_planets", [])),
                 )
-        except Exception:
+        except (ValueError, TypeError, RuntimeError, AttributeError):
             _log.exception("D3 Circuits serialize failed")
             return None
 
@@ -302,6 +394,74 @@ def serialize_chart_for_d3(mode: str, state: dict) -> Optional[dict]:
         ]
         combined_minor = filtered_minor + filtered_harmonic
 
+        # For Focus mode: further filter edges to focus planets and set selected_planets
+        if mode == "Focus":
+            focus_planets = [p for p in state.get("focus_planets", []) if p]
+            if focus_planets:
+                fp_set = set(focus_planets)
+                edges_to_show_major = [e for e in filtered_major if e[0] in fp_set or e[1] in fp_set]
+                edges_to_show_minor = [e for e in combined_minor if e[0] in fp_set or e[1] in fp_set]
+                
+                # Show Parent Shape: include all edges within shapes that contain focus planets
+                if state.get("focus_show_parent_shape", False):
+                    shapes = getattr(chart_obj, "shapes", None) or []
+                    shape_members_to_include = set()
+                    for shape in shapes:
+                        if isinstance(shape, dict):
+                            members = shape.get("members", [])
+                        else:
+                            members = getattr(shape, "members", [])
+                        # If shape has any focus planet, include all its members
+                        if any(m in fp_set for m in members):
+                            shape_members_to_include.update(members)
+                    
+                    # Add all edges between shape members
+                    if shape_members_to_include:
+                        shape_set = shape_members_to_include
+                        edges_to_show_major.extend([
+                            e for e in filtered_major
+                            if e[0] in shape_set and e[1] in shape_set and e not in edges_to_show_major
+                        ])
+                        edges_to_show_minor.extend([
+                            e for e in combined_minor
+                            if e[0] in shape_set and e[1] in shape_set and e not in edges_to_show_minor
+                        ])
+                
+                # Show Full Circuit: include all edges within circuits that contain focus planets
+                if state.get("focus_show_full_circuit", False):
+                    patterns = getattr(chart_obj, "aspect_groups", None) or []
+                    circuit_members_to_include = set()
+                    for circuit in patterns:
+                        # circuit is a set or list of planet names
+                        if isinstance(circuit, set):
+                            circuit_list = list(circuit)
+                        else:
+                            circuit_list = circuit
+                        # If circuit has any focus planet, include all its members
+                        if any(m in fp_set for m in circuit_list):
+                            circuit_members_to_include.update(circuit_list)
+                    
+                    # Add all edges between circuit members
+                    if circuit_members_to_include:
+                        circuit_set = circuit_members_to_include
+                        edges_to_show_major.extend([
+                            e for e in filtered_major
+                            if e[0] in circuit_set and e[1] in circuit_set and e not in edges_to_show_major
+                        ])
+                        edges_to_show_minor.extend([
+                            e for e in combined_minor
+                            if e[0] in circuit_set and e[1] in circuit_set and e not in edges_to_show_minor
+                        ])
+                
+                filtered_major = edges_to_show_major
+                combined_minor = edges_to_show_minor
+            else:
+                filtered_major = []
+                combined_minor = []
+            sel_planets = focus_planets
+        else:
+            sel_planets = list(state.get("selected_planets", []))
+
         try:
             if is_biwheel:
                 return serialize_biwheel_for_rendering(
@@ -319,8 +479,9 @@ def serialize_chart_for_d3(mode: str, state: dict) -> Optional[dict]:
                     compass_on=compass,
                     edges_major=filtered_major,
                     edges_minor=combined_minor,
+                    selected_planets=sel_planets,
                 )
-        except Exception:
+        except (ValueError, TypeError, RuntimeError, AttributeError):
             _log.exception("D3 Standard Chart serialize failed")
             return None
 
@@ -517,6 +678,9 @@ def rerender_active_tab(
     render_rulers_graph,
     refresh_specs_tab,
     refresh_drawer,
+    # Focus tab — optional so existing callers don't break
+    focus_chart_container: Any = None,
+    refresh_focus_tab=None,
 ) -> None:
     """Re-render chart in the currently active tab with current toggles."""
     _NO_CHART_MSG = "Calculate or load a chart to view it here."
@@ -540,10 +704,13 @@ def rerender_active_tab(
             render_rulers_graph()
         elif active == "Specs":
             refresh_specs_tab()
+        elif active == "Focus":
+            if refresh_focus_tab:
+                refresh_focus_tab()
         try:
             chat_no_chart_notice.set_visibility(True)
-        except Exception:
-            pass
+        except (RuntimeError, AttributeError) as exc:
+            _log.warning("Could not show no-chart notice: %s", exc)
         return
 
     # Update events panel
@@ -577,12 +744,15 @@ def rerender_active_tab(
         render_rulers_graph()
     elif active == "Specs":
         refresh_specs_tab()
+    elif active == "Focus":
+        if refresh_focus_tab:
+            refresh_focus_tab()
 
     refresh_drawer()
     try:
         chat_no_chart_notice.set_visibility(False)
-    except Exception:
-        pass
+    except (RuntimeError, AttributeError) as exc:
+        _log.warning("Could not hide no-chart notice: %s", exc)
 
 
 def refresh_events(state: dict, events_container: Any) -> None:
@@ -599,5 +769,6 @@ def refresh_events(state: dict, events_container: Any) -> None:
         from src.core.event_lookup_v2 import build_events_html
         html = build_events_html(utc_dt)
         events_container.content = html
-    except Exception:
+    except (ValueError, RuntimeError, ImportError) as exc:
+        _log.warning("Event lookup failed: %s", exc)
         events_container.content = ""

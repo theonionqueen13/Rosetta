@@ -38,11 +38,14 @@ Public API
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+
+_log = logging.getLogger(__name__)
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _PROJECT_ROOT not in sys.path:
@@ -208,7 +211,7 @@ def _build_vocabulary(chart: "AstrologicalChart") -> List[str]:
     """Build the full allowed-factor vocabulary from a live chart."""
     vocab: List[str] = []
     for cobj in chart.objects:
-        name = cobj.object_name.name if cobj.object_name else ""
+        name = cobj.object_name if cobj.object_name else ""
         if name:
             vocab.append(name)
     vocab.extend(sorted(_SIGN_NAMES))
@@ -904,7 +907,8 @@ def _comprehend_llm(
             max_tokens=1200,
         )
         raw = response.choices[0].message.content or ""
-    except Exception:
+    except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
+        _log.warning("Comprehension LLM call failed: %s", exc)
         return None
 
     # Strip markdown fences if present
@@ -1057,7 +1061,7 @@ def _anchor_to_chart(graph: QuestionGraph, chart: "AstrologicalChart") -> None:
     chart_names: Set[str] = set()
     obj_to_house: Dict[str, int] = {}
     for cobj in chart.objects:
-        name = cobj.object_name.name if cobj.object_name else ""
+        name = cobj.object_name if cobj.object_name else ""
         if name:
             chart_names.add(name)
             # map to house number for house-factor expansion

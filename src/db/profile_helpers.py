@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Any, Dict, Optional, Tuple
 
-from src.core.static_data import MONTH_NAMES
+from src.core.constants import MONTH_NAMES
 
 
 def birth_data_from_chart(chart) -> Tuple[

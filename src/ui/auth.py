@@ -43,8 +43,8 @@ def clear_session():
     """Wipe auth state and sign out from Supabase."""
     try:
         get_supabase().auth.sign_out()
-    except Exception:
-        pass
+    except (RuntimeError, ValueError, AttributeError) as exc:
+        _log.warning("Supabase sign-out failed (non-critical): %s", exc)
     for key in ("supabase_session", "supabase_user_id", "supabase_user_email"):
         app.storage.user.pop(key, None)
 
@@ -106,7 +106,8 @@ async def login_page():
             "new URLSearchParams(window.location.search).get('code')",
             timeout=3.0,
         )
-    except Exception:
+    except (RuntimeError, TimeoutError) as exc:
+        _log.warning("OAuth code retrieval from URL failed: %s", exc)
         code = None
     if code:
         try:
@@ -115,7 +116,7 @@ async def login_page():
             await ui.run_javascript("history.replaceState(null, '', '/login')")
             ui.navigate.to("/")
             return
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError) as exc:
             _log.warning("OAuth code exchange failed: %s", exc)
 
     ui.add_head_html("""
@@ -253,7 +254,8 @@ body, .q-layout, .q-page-container, .q-page {
                         )
                         store_session_nicegui(resp)
                         ui.navigate.to("/")
-                    except Exception as e:
+                    except (RuntimeError, ValueError, KeyError) as e:
+                        _log.warning("Sign-in failed for user: %s", e)
                         _show_error(f"Sign in failed: {e}")
 
                 async def _do_sign_up():
@@ -277,7 +279,8 @@ body, .q-layout, .q-page-container, .q-page {
                             )
                         else:
                             _show_error("Sign up failed — please try again.")
-                    except Exception as e:
+                    except (RuntimeError, ValueError, KeyError) as e:
+                        _log.warning("Sign-up failed: %s", e)
                         _show_error(f"Sign up failed: {e}")
 
                 async def _do_magic_link():
@@ -295,7 +298,8 @@ body, .q-layout, .q-page-container, .q-page {
                             f"Magic link sent to {email}. "
                             "Click the link in the email to sign in."
                         )
-                    except Exception as e:
+                    except (RuntimeError, ValueError, KeyError) as e:
+                        _log.warning("Magic link send failed: %s", e)
                         _show_error(f"Failed to send magic link: {e}")
 
                 async def _do_google_oauth():
@@ -320,7 +324,8 @@ body, .q-layout, .q-page-container, .q-page {
                         await ui.run_javascript(
                             f'window.location.href = "{resp.url}"'
                         )
-                    except Exception as e:
+                    except (RuntimeError, ValueError, KeyError) as e:
+                        _log.warning("Google OAuth initiation failed: %s", e)
                         _show_error(f"Google sign-in unavailable: {e}")
 
                 with ui.tab_panels(tabs, value=tab_signin).classes("w-full login-tab-panels"):

@@ -19,9 +19,12 @@ Public API
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -243,7 +246,8 @@ def parse_grammar(
             max_tokens=400,
         )
         raw = response.choices[0].message.content or ""
-    except Exception:
+    except (ConnectionError, TimeoutError, ValueError, RuntimeError) as exc:
+        _log.warning("Grammar LLM call failed: %s", exc)
         return _fallback
 
     # Strip markdown fences if the model wraps them
@@ -311,7 +315,8 @@ def parse_grammar(
             raw_parse_tree=str(data.get("raw_parse_tree", "")).strip(),
             confidence=float(data.get("confidence", 0.9)),
         )
-    except Exception:
+    except (KeyError, TypeError, ValueError) as exc:
+        _log.warning("Failed to build GrammarDiagram from parsed JSON: %s", exc)
         return _fallback
 
 

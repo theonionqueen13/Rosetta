@@ -11,12 +11,15 @@ lives in the reading engine and topic maps — the LLM only synthesizes.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.mcp.prompt_templates import build_prompt, estimate_prompt_tokens
 from src.mcp.reading_packet import ReadingPacket
+
+_log = logging.getLogger(__name__)
 
 # TYPE_CHECKING import to avoid circular dependency at runtime
 from typing import TYPE_CHECKING
@@ -404,20 +407,20 @@ def synthesize(
         if os.environ.get("OPENROUTER_API_KEY") or (api_key and backend == "openrouter"):
             try:
                 return _openrouter_synthesize(**_kwargs())
-            except Exception:
-                pass
+            except (RuntimeError, ConnectionError, ValueError) as exc:
+                _log.warning("openrouter backend failed in auto mode: %s", exc)
 
         if os.environ.get("ANTHROPIC_API_KEY"):
             try:
                 return _anthropic_synthesize(**_kwargs())
-            except Exception:
-                pass
+            except (RuntimeError, ConnectionError, ValueError) as exc:
+                _log.warning("anthropic backend failed in auto mode: %s", exc)
 
         if os.environ.get("OPENAI_API_KEY"):
             try:
                 return _openai_synthesize(**_kwargs())
-            except Exception:
-                pass
+            except (RuntimeError, ConnectionError, ValueError) as exc:
+                _log.warning("openai backend failed in auto mode: %s", exc)
 
         return _fallback_synthesize(packet)
 

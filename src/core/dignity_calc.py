@@ -275,7 +275,7 @@ def _build_conjunction_edges(chart: "AstrologicalChart", orb: float = 4.0) -> li
 	used internally so dignity_calc.py stays independent of calc_v2.py.
 	"""
 	lons: Dict[str, float] = {
-		obj.object_name.name: obj.longitude
+		obj.object_name: obj.longitude
 		for obj in chart.objects
 		if obj.object_name and obj.longitude is not None
 	}
@@ -740,7 +740,7 @@ def detect_mutual_receptions(
 	placements = {}
 	for obj in chart_objects:
 		if obj.object_name and obj.sign:
-			placements[obj.object_name.name] = obj.sign.name
+			placements[obj.object_name] = obj.sign
 
 	# Check all pairs
 	planet_names = list(placements.keys())
@@ -806,7 +806,7 @@ def score_chart(
 		if not obj.object_name:
 			continue
 
-		name = obj.object_name.name
+		name = obj.object_name
 
 		# Skip calculated/derived points — they aren't celestial bodies with
 		# meaningful strength.  They still participate in aspects and reception,
@@ -814,7 +814,7 @@ def score_chart(
 		if name in MOTION_EXEMPT:
 			continue
 
-		sign_name = obj.sign.name if obj.sign else ""
+		sign_name = obj.sign if obj.sign else ""
 		degree_in_sign = (obj.longitude % 30) if obj.longitude is not None else 0.0
 
 		# Pick house number based on requested system
@@ -900,7 +900,7 @@ def score_chart(
 
 	# Quick object-name → ChartObject lookup
 	obj_lookup = {
-		o.object_name.name: o
+		o.object_name: o
 		for o in chart.objects
 		if o.object_name
 	}

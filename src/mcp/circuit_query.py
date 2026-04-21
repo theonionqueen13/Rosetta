@@ -191,7 +191,7 @@ def _factors_to_planet_names(
     # non-astrological words ("you", "boyfriend", etc.) as planets.
     _valid_obj_names: Set[str] = set()
     for cobj in chart.objects:
-        obj_name = cobj.object_name.name if cobj.object_name else ""
+        obj_name = cobj.object_name if cobj.object_name else ""
         if obj_name:
             _valid_obj_names.add(obj_name)
 
@@ -207,7 +207,7 @@ def _factors_to_planet_names(
 
     # Expand houses and signs from chart objects
     for cobj in chart.objects:
-        obj_name = cobj.object_name.name if cobj.object_name else ""
+        obj_name = cobj.object_name if cobj.object_name else ""
         if not obj_name:
             continue
         # House match
@@ -215,7 +215,7 @@ def _factors_to_planet_names(
         if h and (getattr(h, "number", 0) in target_houses):
             names.add(obj_name)
         # Sign match
-        sign = cobj.sign.name if cobj.sign else ""
+        sign = cobj.sign if cobj.sign else ""
         if sign in target_signs:
             names.add(obj_name)
 

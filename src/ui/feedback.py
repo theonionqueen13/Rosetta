@@ -172,7 +172,8 @@ def build(state: dict, *, get_user_id, get_supabase) -> None:
                             replace="text-body2 text-negative"
                         )
                         fb_status_label.set_visibility(True)
-                except Exception as exc:
+                except (OSError, ConnectionError, TimeoutError, RuntimeError, AttributeError, ValueError) as exc:
+                    _log.warning("Feedback submission failed: %s", exc)
                     fb_status_label.text = f"Submission failed: {exc}"
                     fb_status_label.classes(
                         replace="text-body2 text-negative"

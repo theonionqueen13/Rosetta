@@ -11,7 +11,7 @@ from src.mcp.chat_pipeline import (
     CHAT_MEMORY, CHAT_DEV_TRACE, CHAT_PERSONS, CHAT_LOCATIONS,
     run_pipeline,
 )
-from src.nicegui_state import get_chart_object, get_chart_2_object
+from src.nicegui_state import get_chart_object, get_chart_2_object, get_house_system
 from src.ui.auth import get_user_id
 
 _log = logging.getLogger(__name__)
@@ -315,7 +315,7 @@ def build(
         chart_b = get_chart_2_object(state) if (
             state.get("synastry_mode") or state.get("transit_mode")
         ) else None
-        hs = state.get("house_system", "placidus")
+        hs = get_house_system(state)
 
         uid = get_user_id() or "anon"
         _api_key = _get_api_key()
@@ -336,7 +336,8 @@ def build(
                 agent_notes=_agent_notes,
                 pending_q=_pending_q,
             )
-        except Exception as exc:
+        except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError, TypeError, KeyError) as exc:
+            _log.warning("Chat pipeline failed: %s", exc)
             response_text = f"Error: {exc}"
             meta = {}
             state_updates = {}

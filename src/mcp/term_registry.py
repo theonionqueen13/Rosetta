@@ -30,9 +30,12 @@ Public API
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.core.dignity_calc import PlanetaryState
@@ -505,8 +508,10 @@ def load_terms(db_conn=None) -> List[Term]:
                     description=r.get("description", ""),
                 ))
             return result
-    except Exception:
-        pass
+    except ImportError:
+        _log.warning("db_access not available; using built-in terms")
+    except (ConnectionError, RuntimeError, KeyError, TypeError) as exc:
+        _log.warning("DB term load failed: %s; using built-in terms", exc)
     return list(_BUILTIN_TERMS)
 
 

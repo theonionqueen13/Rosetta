@@ -6,7 +6,8 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from src.core.static_data import MONTH_NAMES
+from src.core.constants import MONTH_NAMES
+from src.nicegui_state import get_house_system
 
 _log = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ async def on_calculate(
             city=city,
             lat=lat, lon=lon, tz_name=tz_name,
             unknown_time=is_unknown,
-            house_system=(state.get("house_system", "placidus") or "placidus").lower(),
+            house_system=get_house_system(state),
             gender=form.get("gender"),
         )
         result = compute_chart(inputs)
@@ -151,7 +152,7 @@ async def on_calculate(
         # Pre-fill save name so user can quickly save
         save_name_input.value = name
 
-    except Exception as exc:
+    except (ImportError, OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError) as exc:
         _log.exception("Chart calculation failed")
         status_label.text = f"Unexpected error: {exc}"
         status_label.classes(replace="text-body2 text-negative")

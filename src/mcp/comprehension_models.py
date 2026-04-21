@@ -14,9 +14,12 @@ These models are consumed by:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+
+_log = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -177,8 +180,8 @@ class PersonProfile:
             try:
                 from src.core.models_v2 import AstrologicalChart as _AC
                 astro_chart = _AC.from_json(chart_raw)
-            except Exception:
-                pass  # leave as None if deserialisation fails
+            except (ImportError, KeyError, TypeError, ValueError) as exc:
+                _log.warning("AstrologicalChart deserialisation failed: %s", exc)
 
         return cls(
             name=d.get("name"),

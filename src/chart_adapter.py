@@ -398,9 +398,9 @@ def compute_combined_circuits(chart_1, chart_2):
                if v.get("aspect_type") in ("Major", "Minor")}
     from src.core.patterns_v2 import connected_components_from_edges, detect_shapes
 
-    pos_1 = {obj.object_name.name: obj.longitude
+    pos_1 = {obj.object_name: obj.longitude
              for obj in chart_1.objects if obj.object_name}
-    pos_2 = {obj.object_name.name: obj.longitude
+    pos_2 = {obj.object_name: obj.longitude
              for obj in chart_2.objects if obj.object_name}
 
     # Merge positions: Chart 1 names plain, Chart 2 names with "_2" suffix
@@ -456,9 +456,9 @@ def compute_inter_chart_aspects(chart_1, chart_2):
     ASPECTS = {k: v for k, v in static_db.ASPECTS.items()
                if v.get("aspect_type") in ("Major", "Minor")}
 
-    pos_1 = {obj.object_name.name: obj.longitude
+    pos_1 = {obj.object_name: obj.longitude
              for obj in chart_1.objects if obj.object_name}
-    pos_2 = {obj.object_name.name: obj.longitude
+    pos_2 = {obj.object_name: obj.longitude
              for obj in chart_2.objects if obj.object_name}
 
     inter_aspects = []
@@ -503,6 +503,7 @@ class RenderToggles:
     synastry_chart2: bool = False
     figsize: tuple = (8.0, 8.0)
     dpi: int = 192
+    selected_planets: List[str] = field(default_factory=list)
 
 
 
@@ -564,6 +565,7 @@ def render_chart_image(
             figsize=toggles.figsize,
             dpi=toggles.dpi,
             compass_on=toggles.compass_inner,
+            selected_planets=toggles.selected_planets or [],
         )
     else:
         # Standard Chart mode rendering
@@ -609,6 +611,7 @@ def render_chart_image(
             patterns=chart_result.patterns,
             shapes=chart_result.shapes,
             singleton_map=chart_result.singleton_map,
+            selected_planets=toggles.selected_planets or [],
         )
 
     # Convert matplotlib figure → PNG bytes

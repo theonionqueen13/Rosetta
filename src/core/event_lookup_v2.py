@@ -8,13 +8,23 @@ given date, plus :func:`build_events_html` for display-ready output.
 
 import functools
 import json
+import os
 from datetime import datetime
+
+_DEFAULT_EVENTS_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "events.jsonl")
 
 
 @functools.lru_cache(maxsize=1)
-def load_events(path="events.jsonl"):
-    """Load and cache the JSONL event catalogue from *path*."""
-    with open(path, "r", encoding="utf-8") as f:
+def load_events(path=None):
+    """Load and cache the JSONL event catalogue from *path*.
+
+    Returns an empty list if the file does not exist rather than raising
+    FileNotFoundError, so the rest of the application degrades gracefully.
+    """
+    resolved = os.path.abspath(path if path is not None else _DEFAULT_EVENTS_PATH)
+    if not os.path.exists(resolved):
+        return []
+    with open(resolved, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
 WINDOWS = {"eclipse": 7, "ingress": 3, "lunation": 1, "station": 2, "perigee": 2, "apogee": 2}
@@ -71,7 +81,7 @@ def find_nearby_events(target_dt: datetime, events):
     results.sort(key=lambda x: abs(x[3]))
     return results
 
-def build_events_html(target_dt: datetime, events_path: str = "events.jsonl", show_no_events: bool = False) -> str:
+def build_events_html(target_dt: datetime, events_path: str = None, show_no_events: bool = False) -> str:
     """Render nearby astrological events as HTML paragraphs for display."""
     if not target_dt:
         return ""
@@ -87,7 +97,7 @@ def build_events_html(target_dt: datetime, events_path: str = "events.jsonl", sh
         lines.append(f"<p><strong>{ts_str}</strong> – {label}<br><em>({rel_str})</em></p>")
     return "\n".join(lines)
 
-def update_events_html_state(target_dt: datetime, events_path: str = "events.jsonl", show_no_events: bool = False) -> None:
+def update_events_html_state(target_dt: datetime, events_path: str = None, show_no_events: bool = False) -> None:
     """
     ALWAYS blanks first, then tries to compute. If anything fails, it stays blank.
     This guarantees no carry-over if the compute step is skipped or errors.

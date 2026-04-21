@@ -29,6 +29,7 @@ DIGNITIES = static_db.DIGNITIES
 MAJOR_OBJECTS = static_db.MAJOR_OBJECTS
 from .models_v2 import ChartObject, HouseCusp, AstrologicalChart, ReceptionLink, static_db
 from .dignity_calc import score_and_attach
+from .data_helpers import _in_forward_arc, _house_of_degree
 
 OOB_LIMIT = 23.44  # degrees declination
 
@@ -619,7 +620,7 @@ def chart_sect_from_chart(chart: AstrologicalChart) -> str:
 	for obj in chart.objects:
 		if not obj.object_name:
 			continue
-		name = obj.object_name.name
+		name = obj.object_name
 		if name == "Sun":
 			sun = float(obj.longitude) % 360.0
 		elif name in ("AC", "Ascendant"):
@@ -629,29 +630,9 @@ def chart_sect_from_chart(chart: AstrologicalChart) -> str:
 	dc = (ac + 180.0) % 360.0
 	return "Diurnal" if _in_forward_arc(dc, ac, sun) else "Nocturnal"
 
-def _house_of_degree(deg: float, cusps: list[float]) -> int | None:
-	"""
-	Given absolute degree and a 12-cusp list (1..12), return the house number (1..12).
-	Uses forward-arc logic cusp[i] -> cusp[(i+1)%12].
-	"""
-	if not cusps or len(cusps) < 12:
-		return None
-	for i in range(12):
-		start = cusps[i]
-		end   = cusps[(i + 1) % 12]
-		if _in_forward_arc(start, end, deg):
-			return i + 1
-	return 12  # fallback for exact equality/rounding edges
-
 def _compute_cusp_signs(cusps_list):
 	"""Return {house_num: sign_name} for 1..12 using active cusps."""
 	return {i+1: _sign_from_degree(cusps_list[i]) for i in range(min(12, len(cusps_list)))}
-
-def _in_forward_arc(start_deg, end_deg, x_deg):
-	"""True if x lies on the forward arc from start->end (mod 360)."""
-	span = (end_deg - start_deg) % 360.0
-	off  = (x_deg   - start_deg) % 360.0
-	return off < span if span != 0 else off == 0
 
 def lookup_sign_rulers(sign, planetary_rulers):
 	"""
@@ -841,7 +822,7 @@ def compute_plot_data_from_chart(chart: AstrologicalChart) -> dict:
 	pos = {}
 	for obj in chart.objects:
 		if obj.object_name:
-			name = obj.object_name.name
+			name = obj.object_name
 			# Skip non-planetary objects (angles, parts, etc.)
 			if name in MAJOR_OBJECTS or name in ABREVIATED_PLANET_NAMES.values():
 				pos[name] = obj.longitude
@@ -898,7 +879,7 @@ def build_dispositor_tables(chart: AstrologicalChart) -> tuple[list[dict], list[
 	"""
 	# objects → longitude
 	pos = {
-		obj.object_name.name: obj.longitude
+		obj.object_name: obj.longitude
 		for obj in chart.objects
 		if obj.object_name
 	}
@@ -1181,10 +1162,10 @@ def build_aspect_edges(chart: AstrologicalChart, compass_rose: bool = False) -> 
 		spds  = dict(zip(objs["Object"], objs["Speed"]))
 		decls = dict(zip(objs["Object"], objs["Declination"]))
 	else:
-		names = [obj.object_name.name for obj in chart.objects if obj.object_name]
-		lons = {obj.object_name.name: obj.longitude for obj in chart.objects if obj.object_name}
-		spds = {obj.object_name.name: obj.speed for obj in chart.objects if obj.object_name}
-		decls = {obj.object_name.name: obj.declination for obj in chart.objects if obj.object_name}
+		names = [obj.object_name for obj in chart.objects if obj.object_name]
+		lons = {obj.object_name: obj.longitude for obj in chart.objects if obj.object_name}
+		spds = {obj.object_name: obj.speed for obj in chart.objects if obj.object_name}
+		decls = {obj.object_name: obj.declination for obj in chart.objects if obj.object_name}
 
 	edges_major: list[tuple] = []
 	edges_minor: list[tuple] = []
@@ -1424,8 +1405,8 @@ def annotate_chart(chart: AstrologicalChart, edges_major: list[tuple]) -> Astrol
 	if chart is None:
 		return chart
 
-	name_to_obj = {obj.object_name.name: obj for obj in chart.objects if obj.object_name}
-	name_to_sign = {obj.object_name.name: (obj.sign.name if obj.sign else "") for obj in chart.objects if obj.object_name}
+	name_to_obj = {obj.object_name: obj for obj in chart.objects if obj.object_name}
+	name_to_sign = {obj.object_name: (obj.sign if obj.sign else "") for obj in chart.objects if obj.object_name}
 
 	pair_to_aspect = {}
 	for a, b, meta in edges_major or []:
@@ -1436,7 +1417,7 @@ def annotate_chart(chart: AstrologicalChart, edges_major: list[tuple]) -> Astrol
 	for obj in chart.objects:
 		if not obj.object_name:
 			continue
-		obj_name = obj.object_name.name
+		obj_name = obj.object_name
 		sign = name_to_sign.get(obj_name, "")
 		rulers = lookup_sign_rulers(sign, PLANETARY_RULERS) or []
 
@@ -1486,7 +1467,7 @@ def build_conjunction_clusters(chart: AstrologicalChart, edges_major: list[tuple
 		objs = _extract_object_rows(chart)
 		names = list(objs["Object"])
 	else:
-		names = [obj.object_name.name for obj in chart.objects if obj.object_name]
+		names = [obj.object_name for obj in chart.objects if obj.object_name]
 	order_ix = {name: i for i, name in enumerate(names)}
 
 	# Build undirected adjacency from conjunction pairs
@@ -1554,7 +1535,7 @@ def build_clustered_aspect_edges(chart: AstrologicalChart, edges_major: list[tup
 		objs = _extract_object_rows(chart)
 		names = list(objs["Object"])
 	else:
-		names = [obj.object_name.name for obj in chart.objects if obj.object_name]
+		names = [obj.object_name for obj in chart.objects if obj.object_name]
 	# Build reverse: cluster_id → list of members
 	cluster_id_to_members = {}
 	for obj, cid in cluster_map.items():
@@ -1622,3 +1603,191 @@ def build_clustered_aspect_edges(chart: AstrologicalChart, edges_major: list[tup
 		disp_b = oxford_join(set_sorted_names[set_b])
 		result.append((disp_a, disp_b, best[2]))
 	return result
+
+
+def _ensure_list(x):
+	"""Coerce *x* to a list; returns [] for None, wraps scalars."""
+	if x is None:
+		return []
+	if isinstance(x, (list, tuple, set)):
+		return list(x)
+	return [x]
+
+
+def scan_focus_connections(
+	chart,
+	selected_planets: list,
+	edges_major: list = None,
+	edges_minor: list = None,
+	edges_harmonic: list = None,
+	shapes: list = None,
+	dispositors_by_sign: dict = None,
+	dispositors_by_house: dict = None,
+) -> dict:
+	"""Scan for all connections between pairs of focus planets.
+
+	Returns a dict mapping (planet_a, planet_b) -> {
+		'direct_connections': [...],
+		'indirect_connections': [...],
+	}
+	"""
+	if chart is None or not selected_planets or len(selected_planets) < 2:
+		return {}
+
+	# Build lookups for chart objects
+	name_to_obj = {}
+	name_to_sign = {}
+	for obj in chart.objects:
+		if obj.object_name:
+			name = obj.object_name
+			name_to_obj[name] = obj
+			if obj.sign:
+				name_to_sign[name] = obj.sign
+
+	# Build aspect lookup: (a, b) sorted -> (asp_name, orb, meta)
+	aspect_map_all = {}
+	for edges in [edges_major or [], edges_minor or [], edges_harmonic or []]:
+		for edge in edges:
+			a, b, meta = edge
+			key = tuple(sorted((a, b)))
+			if key not in aspect_map_all:
+				aspect_map_all[key] = (meta.get("aspect"), meta.get("orb", 0), meta)
+
+	selected = [p for p in selected_planets if p]
+	result_dict = {}
+
+	for i, p1 in enumerate(selected):
+		for p2 in selected[i + 1:]:
+			pair_key = (p1, p2)
+			direct = []
+			indirect = []
+
+			# --- 1. Aspects ---
+			aspect_key = tuple(sorted((p1, p2)))
+			if aspect_key in aspect_map_all:
+				asp_name, orb, meta = aspect_map_all[aspect_key]
+				direct.append({
+					"type": "aspect",
+					"aspect": asp_name,
+					"orb": round(orb, 2),
+					"applying": meta.get("applying", False),
+					"decl_diff": meta.get("decl_diff"),
+				})
+
+			# --- 2. Sign rulerships ---
+			p1_sign = name_to_sign.get(p1)
+			p2_sign = name_to_sign.get(p2)
+
+			if p1_sign:
+				if p2 in _ensure_list(PLANETARY_RULERS.get(p1_sign, [])):
+					direct.append({"type": "rulership_sign", "ruler": p2, "ruled": p1})
+
+			if p2_sign:
+				if p1 in _ensure_list(PLANETARY_RULERS.get(p2_sign, [])):
+					direct.append({"type": "rulership_sign", "ruler": p1, "ruled": p2})
+
+			# --- 3. House rulerships (all 3 systems) ---
+			for (obj_name, ruled_name) in [(p1, p2), (p2, p1)]:
+				obj = name_to_obj.get(ruled_name)
+				if obj is None:
+					continue
+
+				systems_found = set()
+
+				# placidus_house / equal_house / whole_sign_house are plain ints
+				ph_num = obj.placidus_house  # int or None
+				eh_num = obj.equal_house
+				wh_num = obj.whole_sign_house
+
+				if ph_num is not None and getattr(chart, "house_cusps", None):
+					for cusp in chart.house_cusps:
+						if (cusp.house_system.strip().lower() == "placidus"
+								and cusp.cusp_number == ph_num):
+							cusp_sign = _sign_from_degree(cusp.absolute_degree)
+							if obj_name in _ensure_list(PLANETARY_RULERS.get(cusp_sign, [])):
+								systems_found.add("placidus")
+							break
+
+				if eh_num is not None and getattr(chart, "house_cusps", None):
+					for cusp in chart.house_cusps:
+						if (cusp.house_system.strip().lower() == "equal"
+								and cusp.cusp_number == eh_num):
+							cusp_sign = _sign_from_degree(cusp.absolute_degree)
+							if obj_name in _ensure_list(PLANETARY_RULERS.get(cusp_sign, [])):
+								systems_found.add("equal")
+							break
+
+				if wh_num is not None and getattr(chart, "house_cusps", None):
+					for cusp in chart.house_cusps:
+						hs = cusp.house_system.strip().lower()
+						if hs in ("whole", "whole sign") and cusp.cusp_number == wh_num:
+							cusp_sign = _sign_from_degree(cusp.absolute_degree)
+							if obj_name in _ensure_list(PLANETARY_RULERS.get(cusp_sign, [])):
+								systems_found.add("whole")
+							break
+
+				if systems_found:
+					direct.append({
+						"type": "rulership_house",
+						"ruler": obj_name,
+						"ruled": ruled_name,
+						"systems": sorted(systems_found),
+					})
+
+			# --- 4. Receptions ---
+			obj_p1 = name_to_obj.get(p1)
+			obj_p2 = name_to_obj.get(p2)
+			if obj_p1 and obj_p2:
+				a_receives_b = False
+				b_receives_a = False
+
+				if getattr(obj_p1, "reception", None):
+					for recv in obj_p1.reception:
+						if getattr(recv, "other", None) and recv.other.name == p2:
+							a_receives_b = True
+							break
+
+				if getattr(obj_p2, "reception", None):
+					for recv in obj_p2.reception:
+						if getattr(recv, "other", None) and recv.other.name == p1:
+							b_receives_a = True
+							break
+
+				if a_receives_b or b_receives_a:
+					direct.append({
+						"type": "reception",
+						"a_receives_b": a_receives_b,
+						"b_receives_a": b_receives_a,
+						"mutual": a_receives_b and b_receives_a,
+					})
+
+			# --- 5. Shared shapes / circuits (indirect) ---
+			if shapes:
+				for shape in shapes:
+					members = shape.get("members", [])
+					if p1 in members and p2 in members:
+						shape_type = shape.get("type", "Unknown")
+						chain_desc = " — ".join(members[:3])
+						if len(members) > 3:
+							chain_desc += f" ... ({len(members)} objects)"
+						indirect.append({
+							"type": "circuit",
+							"shape_name": shape_type,
+							"description": f"Both part of {shape_type}: {chain_desc}",
+							"all_members": members,
+						})
+
+			# --- 6. Dispositor chain (indirect) ---
+			if dispositors_by_sign:
+				raw_links = dispositors_by_sign.get("raw_links", [])
+				if (p1, p2) in raw_links:
+					indirect.append({"type": "rulership_chain", "chain": f"{p1} \u2192 {p2}", "direct": True})
+				if (p2, p1) in raw_links:
+					indirect.append({"type": "rulership_chain", "chain": f"{p2} \u2192 {p1}", "direct": True})
+
+			result_dict[pair_key] = {
+				"direct_connections": direct,
+				"indirect_connections": indirect,
+			}
+
+	return result_dict

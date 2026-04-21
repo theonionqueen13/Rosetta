@@ -34,12 +34,15 @@ Public API
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from .models_v2 import AstrologicalChart, ChartObject, DetectedShape
+
+_log = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -149,7 +152,8 @@ def _get_sabians() -> dict:
     try:
         from .models_v2 import _load_sabian_symbols_json
         _sabian_cache = _load_sabian_symbols_json()
-    except Exception:
+    except (ImportError, KeyError, TypeError, FileNotFoundError) as exc:
+        _log.warning("Failed to load Sabian symbols: %s", exc)
         _sabian_cache = {}
     return _sabian_cache
 
@@ -254,7 +258,7 @@ def _get_positions(chart: "AstrologicalChart") -> Dict[str, float]:
         return dict(chart.positions)
     pos: Dict[str, float] = {}
     for cobj in chart.objects:
-        name = cobj.object_name.name if cobj.object_name else ""
+        name = cobj.object_name if cobj.object_name else ""
         if name:
             pos[name] = cobj.longitude
     return pos
@@ -494,7 +498,7 @@ def _saturn_context(chart: "AstrologicalChart") -> Dict[str, Any]:
     if not saturn:
         return {}
 
-    sign = saturn.sign.name if saturn.sign else ""
+    sign = saturn.sign if saturn.sign else ""
     house = 0
     # Try placidus first, then whole sign
     if saturn.placidus_house and hasattr(saturn.placidus_house, "number"):

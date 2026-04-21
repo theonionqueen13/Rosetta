@@ -1,4 +1,8 @@
 # supabase_admin.py
+import logging
+
+_log = logging.getLogger(__name__)
+
 """Admin utilities for Supabase-authenticated users.
 
 Framework-agnostic: reads user identity from NiceGUI ``app.storage.user`` via helpers in
@@ -23,7 +27,8 @@ def is_admin(user_id: str = None) -> bool:
         client = get_authed_supabase()
         resp = client.table(TABLE).select("user_id").eq("user_id", user_id).execute()
         return bool(resp.data and len(resp.data) > 0)
-    except Exception:
+    except Exception as exc:
+        _log.warning("is_admin check failed for user %s: %s", user_id, exc)
         return False
 
 

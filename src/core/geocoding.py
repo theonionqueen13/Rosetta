@@ -65,8 +65,8 @@ def geocode_city_with_timezone(
 
     try:
         results = geolocator.geocode(city_query, no_annotations='1', limit=1)
-    except Exception as e:
-        _log.error(f"Geocoding API failed: {e}")
+    except (ConnectionError, TimeoutError, ValueError, RuntimeError) as e:
+        _log.error("Geocoding API failed: %s", e)
         return lat, lon, tz_name, formatted_address
 
     if results:

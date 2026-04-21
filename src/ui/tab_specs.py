@@ -55,7 +55,9 @@ def build(state: dict, _form: dict) -> dict[str, Any]:
                         columns=cols, rows=rows, row_key="Object",
                         pagination={"rowsPerPage": 50},
                     ).classes("w-full").props("dense flat")
-                except Exception as exc:
+                except (AttributeError, TypeError, ValueError, KeyError) as exc:
+                    import traceback
+                    _log.warning("Objects table render failed: %s", exc, exc_info=True)
                     ui.label(f"Error: {exc}").classes("text-negative")
 
         # ---- Conjunctions table ----
@@ -157,7 +159,8 @@ def build(state: dict, _form: dict) -> dict[str, Any]:
                             ).classes("w-full").props("dense flat")
                         else:
                             ui.label("No clustered aspects.").classes("text-body2 text-grey")
-                    except Exception as exc:
+                    except (ImportError, AttributeError, TypeError, ValueError, KeyError) as exc:
+                        _log.warning("Aspects list render failed: %s", exc)
                         ui.label(f"Error building aspects list: {exc}").classes("text-negative")
 
     return {"refresh_specs_tab": _refresh_specs_tab}

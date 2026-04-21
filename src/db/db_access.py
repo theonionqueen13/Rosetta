@@ -7,17 +7,14 @@ instead of reading from Python files.
 The one-time seeding of the database is done by ``static_db_to_postgres.py``.
 """
 
+import logging
 import os
 from typing import Optional, Dict
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from src.core.models_v2 import (
-    StaticLookup, Sign, House, Object, Aspect, Axis,
-    CompassAxis, Shape, SabianSymbol, Element, Modality, Polarity,
-    ObjectSign, ObjectHouse
-)
+_log = logging.getLogger(__name__)
 
 CONN_PARAMS = {
     'host': os.environ.get('PGHOST', 'localhost'),
@@ -37,12 +34,19 @@ def is_db_configured() -> bool:
     return bool(CONN_PARAMS.get('user') and CONN_PARAMS.get('dbname'))
 
 
-def load_static_from_db() -> StaticLookup:
+def load_static_from_db():
     """Fetches ALL lookup tables from the database and returns a StaticLookup.
 
     The returned object has the same structure as ``models_v2.static_db``.
     This is the PRIMARY data source for the app at runtime.
     """
+    # Import here to avoid circular dependency during app startup
+    from src.core.static_models import (
+        StaticLookup, Sign, House, Object, Aspect, Axis,
+        CompassAxis, Shape, SabianSymbol, Element, Modality, Polarity,
+        ObjectSign, ObjectHouse
+    )
+    
     static = StaticLookup()
     conn = _connect()
     try:
@@ -270,13 +274,17 @@ def load_static_from_db() -> StaticLookup:
 
 
 _terms_cache: Optional[list] = None
+_terms_cache_time: float = 0.0
+_TERMS_TTL: float = 3600.0  # re-check DB after 1 hour
 
 
 def get_terms(intent: Optional[str] = None) -> list:
     """Fetch rows from the astrological_terms table.
 
-    Results are cached in memory for the lifetime of the process so the DB
-    is queried at most once per intake.
+    Results are cached in memory with a TTL so the DB is queried at most
+    once per ``_TERMS_TTL`` seconds.  Transient DB errors leave the cache
+    empty and allow retry on the next call; permanent schema errors (e.g.
+    missing table) set the cache to ``[]`` to avoid retry storms.
 
     Parameters
     ----------
@@ -289,8 +297,16 @@ def get_terms(intent: Optional[str] = None) -> list:
         Each dict has keys: canonical, aliases, factors, intent, domain,
         description.
     """
-    global _terms_cache
-    if _terms_cache is None:
+    import time
+
+    global _terms_cache, _terms_cache_time
+
+    now = time.monotonic()
+    if _terms_cache is not None and (now - _terms_cache_time) < _TERMS_TTL:
+        # Cache is fresh — use it
+        pass
+    else:
+        # Cache is missing or stale — reload
         try:
             conn = _connect()
             try:
@@ -300,10 +316,26 @@ def get_terms(intent: Optional[str] = None) -> list:
                         "description FROM astrological_terms ORDER BY id"
                     )
                     _terms_cache = [dict(r) for r in cur.fetchall()]
+                    _terms_cache_time = now
             finally:
                 conn.close()
-        except Exception:
-            _terms_cache = []  # Don't retry — fall back to built-ins
+        except psycopg2.ProgrammingError:
+            # Permanent: table/column doesn't exist — don't retry
+            _log.error("astrological_terms table missing or schema error; "
+                       "falling back to built-in terms", exc_info=True)
+            _terms_cache = []
+            _terms_cache_time = now
+        except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+            # Transient: connection refused, timeout, etc. — allow retry
+            _log.warning("Transient DB error loading terms (will retry): %s", exc)
+            if _terms_cache is None:
+                _terms_cache = []       # return empty for now
+                _terms_cache_time = 0.0  # force retry on next call
+        except Exception as exc:
+            _log.exception("Unexpected error loading astrological_terms")
+            if _terms_cache is None:
+                _terms_cache = []
+                _terms_cache_time = 0.0  # allow retry
 
     if intent is not None:
         return [r for r in _terms_cache if r.get("intent") == intent]

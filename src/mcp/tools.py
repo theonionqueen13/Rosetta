@@ -9,7 +9,10 @@ and wired into the MCP server in server.py.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 from src.mcp.agent_memory import AgentMemory
 from src.mcp.topic_maps import (
@@ -407,7 +410,8 @@ def execute_tool(
         return {"error": f"Unknown tool: {tool_name}"}
     try:
         return handler(arguments, ctx)
-    except Exception as e:
+    except (ValueError, TypeError, KeyError, RuntimeError, AttributeError) as e:
+        _log.exception("Tool '%s' raised %s", tool_name, type(e).__name__)
         return {"error": str(e)}
 
 

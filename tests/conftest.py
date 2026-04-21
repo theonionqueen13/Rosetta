@@ -1,9 +1,51 @@
 """Shared pytest fixtures for the Rosetta test suite."""
 import os
+import sys
+import types as _types
 from unittest.mock import MagicMock, patch
 
 import pytest
 import swisseph as swe
+
+
+# ---------------------------------------------------------------------------
+# DB stub — installed before any src.core imports occur.
+#
+# If PostgreSQL credentials are not configured (typical in a local dev
+# environment without Supabase), we pre-install a fake src.db.db_access
+# module whose load_static_from_db() returns an empty StaticLookup.
+# The _init_static_db() setattr loop still copies all UPPERCASE constants
+# from src.core.constants onto the instance, so GLYPHS, SIGNS, ASPECTS etc.
+# are correctly available via static_db.  DB-populated dicts (signs, objects,
+# aspects, sabian_symbols, …) will be empty — tests that actually exercise
+# those fields will fail, which is expected without a live database.
+# ---------------------------------------------------------------------------
+def pytest_configure(config):
+    """Install a no-op DB stub when PostgreSQL credentials are absent."""
+    if os.environ.get("PGUSER") and os.environ.get("PGDATABASE"):
+        return  # Real DB configured — let normal initialisation run
+
+    # Provide dummy values so _init_static_db() passes the env-var check
+    os.environ.setdefault("PGUSER", "_pytest_no_db_")
+    os.environ.setdefault("PGDATABASE", "_pytest_no_db_")
+
+    # Pre-install a fake src.db.db_access in sys.modules so that when
+    # static_models.py imports it and calls load_static_from_db(), the
+    # stub is invoked rather than a real psycopg2 connection attempt.
+    _fake_db_access = _types.ModuleType("src.db.db_access")
+    _fake_db_access.__spec__ = None
+    _fake_db_access.CONN_PARAMS = {}
+    _fake_db_access.is_db_configured = lambda: False
+
+    def _stub_load_static_from_db():
+        """Return an empty StaticLookup for test environments without a DB."""
+        # static_models is partially constructed at this point (all dataclasses
+        # are defined, but static_db has not yet been assigned).
+        from src.core.static_models import StaticLookup  # noqa: PLC0415
+        return StaticLookup()
+
+    _fake_db_access.load_static_from_db = _stub_load_static_from_db
+    sys.modules.setdefault("src.db.db_access", _fake_db_access)
 
 
 # ---------------------------------------------------------------------------

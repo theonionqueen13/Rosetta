@@ -656,7 +656,7 @@ def ordered_objects(
             elif c in _DC_CANONS:
                 visible_canon.update(_DC_CANONS)
         if visible_canon:
-            objects = [obj for obj in objects if _canon(obj.object_name.name) in visible_canon]
+            objects = [obj for obj in objects if _canon(obj.object_name) in visible_canon]
 
     if not objects:
         return []
@@ -664,7 +664,7 @@ def ordered_objects(
     # name -> list of ChartObject
     name_to_objs: dict[str, List[ChartObject]] = {}
     for obj in objects:
-        name_to_objs.setdefault(obj.object_name.name, []).append(obj)
+        name_to_objs.setdefault(obj.object_name, []).append(obj)
 
     all_names = list(name_to_objs.keys())
     name_to_canon = {name: _canon(name) for name in all_names}

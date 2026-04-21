@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from src.core.static_data import STANDARD_BASE_BODIES
+from src.core.constants import STANDARD_BASE_BODIES
 from src.nicegui_state import get_chart_object
 
 _log = logging.getLogger(__name__)

@@ -40,6 +40,7 @@ Public API
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import deque
 from dataclasses import dataclass, field
@@ -53,6 +54,8 @@ from .models_v2 import (
     CircuitSimulation,
     ShapeCircuit,
 )
+
+_log = logging.getLogger(__name__)
 ASPECT_CONDUCTANCE = static_db.ASPECT_CONDUCTANCE
 
 # ---------------------------------------------------------------------------
@@ -668,9 +671,7 @@ def simulate_and_attach(chart: AstrologicalChart) -> None:
     """
     try:
         result = simulate_circuit(chart)
-    except Exception as exc:  # noqa: BLE001
-        # Never crash the main pipeline — store None silently.
-        import traceback
-        traceback.print_exc()
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        _log.exception("Circuit simulation failed: %s", exc)
         result = None
     chart.circuit_simulation = result

@@ -27,10 +27,13 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 import re
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 from src.core.models_v2 import static_db, ObjectSign, ObjectHouse
 from src.core.planet_profiles import (
@@ -47,19 +50,6 @@ from .profiles_v2 import (
     glyph_for,
 )
 from .drawing_v2 import RenderResult
-
-
-def _selected_house_system() -> str:
-    """Return the active house system from NiceGUI per-user storage.
-
-    Falls back to ``"placidus"`` when called outside a NiceGUI request
-    context (e.g. unit tests, MCP server, CLI scripts).
-    """
-    try:
-        from nicegui import app as _ngapp
-        return (_ngapp.storage.user.get("house_system") or "placidus").lower()
-    except Exception:
-        return "placidus"
 
 
 # --- axis display formatting -----------------------------------------------
@@ -181,12 +171,14 @@ class NatalInterpreter:
         mode: str = "default",
         object_name: Optional[str] = None,
         lookup: Optional[Dict[str, Any]] = None,
+        house_system: str = "placidus",
     ) -> None:
         """Initialise the interpreter from a completed render result."""
         self.result = result
         self.mode = mode
         self.object_name = object_name
         self.lookup = lookup or self._default_lookup()
+        self.house_system = house_system
         self.missing: List[str] = []
 
         # visible_objects list from result
@@ -408,7 +400,7 @@ class NatalInterpreter:
                     if not objs_in_sign:
                         objs_in_sign = [
                             self._get_object_name(o) for o in self.chart_objects
-                            if hasattr(o, "sign") and (o.sign.name if hasattr(o.sign, "name") else str(o.sign)) == sign_name
+                            if hasattr(o, "sign") and (o.sign if hasattr(o.sign, "name") else str(o.sign)) == sign_name
                         ]
                     
                     if objs_in_sign:
@@ -470,7 +462,7 @@ class NatalInterpreter:
         # Ruled by (by house system)
         if has_ruled_by_house:
             # Determine which house system to use
-            house_system = _selected_house_system()
+            house_system = self.house_system
             if house_system == "placidus":
                 house_rulers = chart_obj.house_ruler_placidus
             elif house_system == "whole":
@@ -500,11 +492,11 @@ class NatalInterpreter:
         callers.
         """
         obj_name = self._get_object_name(chart_obj)
-        sign_name = chart_obj.sign.name if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
+        sign_name = chart_obj.sign if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
 
         profile = PlanetProfile.from_chart_object(
             chart_obj,
-            house_system=_selected_house_system(),
+            house_system=self.house_system,
             lookup=self.lookup,
             chart_objects=self.chart_objects,
             chart=self.chart,
@@ -537,11 +529,11 @@ class NatalInterpreter:
             return f"Object '{self.object_name}' not found in chart."
 
         obj_name = self._get_object_name(chart_obj)
-        sign_name = chart_obj.sign.name if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
+        sign_name = chart_obj.sign if hasattr(chart_obj.sign, "name") else str(chart_obj.sign)
 
         profile = PlanetProfile.from_chart_object(
             chart_obj,
-            house_system=_selected_house_system(),
+            house_system=self.house_system,
             lookup=self.lookup,
             chart_objects=self.chart_objects,
             chart=self.chart,
@@ -560,7 +552,7 @@ class NatalInterpreter:
         Members are listed in the same order they appear in self.chart_objects.
         """
         obj_names = [
-            (obj.object_name.name if hasattr(obj.object_name, "name") else str(obj.object_name))
+            (obj.object_name if hasattr(obj.object_name, "name") else str(obj.object_name))
             for obj in self.chart_objects
         ]
         canon_of = {name: _canon(name) for name in obj_names}
@@ -686,7 +678,7 @@ class NatalInterpreter:
 
         for chart_obj in self.chart_objects:
             obj_name = (
-                chart_obj.object_name.name
+                chart_obj.object_name
                 if hasattr(chart_obj.object_name, "name")
                 else str(chart_obj.object_name)
             )

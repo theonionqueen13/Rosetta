@@ -194,7 +194,8 @@ def run_pipeline(
             "step5_synthesis": {},
         }
 
-    except Exception as exc:
+    except (ValueError, TypeError, KeyError, RuntimeError, AttributeError) as exc:
+        _log.exception("Failed to build reading")
         return (
             f"Failed to build reading: {exc}",
             meta,
@@ -248,7 +249,8 @@ def run_pipeline(
         CHAT_DEV_TRACE[uid] = _dev
         return result.text, meta, state_updates
 
-    except Exception as exc:
+    except (RuntimeError, ConnectionError, ValueError, TimeoutError) as exc:
+        _log.exception("OpenRouter synthesis call failed")
         meta.update(backend="fallback", model="none", llm_error=str(exc))
         CHAT_DEV_TRACE[uid] = _dev
         return (

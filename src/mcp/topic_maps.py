@@ -246,6 +246,31 @@ WIZARD_TARGETS: dict = {
       ]
     },
     {
+      "name": "Humor and Silliness",
+      "description": "Comedy, satire, laughter, and whatever's funny",
+      "subtopics": [
+        {
+          "label": "Quick wit and originality",
+          "targets": ["Mercury", "Uranus", "Zephyr", "Thalia", "5th House", "9th House", "Sagittarius", "Gemini"]
+        },
+        {"label": "Silly, goofy shennanigans",
+         "targets": ["Uranus", "Thalia", "Psyche", "5th House", "11th House", "Aquarius", "Leo", "Gemini"]
+        },
+        {
+          "label": "Finding humor in dark or difficult situations",
+          "targets": ["Pluto", "Saturn", "Eris", "8th House", "12th House", "Scorpio", "Pisces"]
+        },
+        {
+          "label": "Using humor to connect with others",
+          "targets": ["Venus", "Mercury", "Pallas", "3rd House", "7th House", "Libra"]
+        },
+        {
+          "label": "Laughing at yourself and life's absurdity",
+          "targets": ["Neptune", "Uranus", "Eris", "Psyche", "12th House", "Aquarius", "Pisces"]
+        }
+      ]
+    },
+    {
       "name": "Spirituality & Imagination",
       "description": "Dreams, mysticism, intuition, and higher meaning",
       "subtopics": [
@@ -1068,3 +1093,81 @@ def _fuzzy_overlap(text: str, label: str) -> float:
     if not label_words:
         return 0.0
     return len(label_words & text_words) / len(label_words)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Fixed-star topic lookups
+# ═══════════════════════════════════════════════════════════════════════
+
+import json as _json
+import pathlib as _pathlib
+from typing import Any as _Any
+
+_STAR_DATA_CACHE: Optional[Dict[str, _Any]] = None
+
+_STAR_JSON_PATH = (
+    _pathlib.Path(__file__).resolve().parent.parent / "core" / "fixed_star_meanings.json"
+)
+
+
+def _load_star_data() -> Dict[str, _Any]:
+    """Load (and cache) fixed_star_meanings.json."""
+    global _STAR_DATA_CACHE
+    if _STAR_DATA_CACHE is None:
+        try:
+            _STAR_DATA_CACHE = _json.loads(
+                _STAR_JSON_PATH.read_text(encoding="utf-8")
+            )
+        except Exception:
+            _STAR_DATA_CACHE = {}
+    return _STAR_DATA_CACHE
+
+
+def get_stars_for_subtopic(label: str) -> List[Dict[str, _Any]]:
+    """Return star entries whose ``wizard_topics`` list contains *label*.
+
+    Each entry in the returned list is a dict with at minimum:
+    ``name``, ``short_meaning``, ``planetary_nature``, ``wizard_topics``.
+    """
+    data = _load_star_data()
+    results = []
+    for name, entry in data.items():
+        if label in (entry.get("wizard_topics") or []):
+            results.append(
+                {
+                    "name": name,
+                    "short_meaning": entry.get("short_meaning") or "",
+                    "planetary_nature": entry.get("planetary_nature") or "",
+                    "wizard_topics": entry.get("wizard_topics") or [],
+                }
+            )
+    return results
+
+
+def get_stars_for_domain(domain_name: str) -> List[Dict[str, _Any]]:
+    """Return all stars tagged to *any* subtopic within *domain_name*.
+
+    Preserves insertion order; de-duplicates by star name.
+    """
+    # Collect all subtopic labels for this domain
+    sub_labels: List[str] = list_subtopics(domain_name)
+    if not sub_labels:
+        return []
+    seen: set = set()
+    results: List[Dict[str, _Any]] = []
+    for label in sub_labels:
+        for star in get_stars_for_subtopic(label):
+            if star["name"] not in seen:
+                seen.add(star["name"])
+                results.append(star)
+    return results
+
+
+def invalidate_star_cache() -> None:
+    """Clear the star data cache so the next call reloads from disk.
+
+    Call this after running tag_stars_wizard_topics.py or otherwise
+    updating fixed_star_meanings.json at runtime.
+    """
+    global _STAR_DATA_CACHE
+    _STAR_DATA_CACHE = None

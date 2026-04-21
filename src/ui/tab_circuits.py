@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from src.core.static_data import SHAPE_NODE_COUNTS
+from src.core.constants import SHAPE_NODE_COUNTS
 from src.nicegui_state import get_chart_object, get_chart_2_object
 
 _log = logging.getLogger(__name__)

@@ -239,7 +239,8 @@ const RosettaChart = (() => {
         // Apply initial centering transform
         svg.call(zoom.transform, d3.zoomIdentity.translate(cx, cy));
 
-        // Layer groups (z-ordering)
+        // Layer groups (z-ordering from back to front)
+        const layerSelection = g.append("g").attr("class", "layer-selection"); // always behind everything
         const layerZodiac = g.append("g").attr("class", "layer-zodiac");
         const layerHouses = g.append("g").attr("class", "layer-houses");
         const layerDegrees = g.append("g").attr("class", "layer-degrees");
@@ -260,6 +261,12 @@ const RosettaChart = (() => {
         // === Draw degree markers ===
         if (degreeMarkers) {
             drawDegreeMarkers(layerDegrees, ascDeg, rScale, darkMode);
+        }
+
+        // === Draw selection highlight circles (behind aspect lines) ===
+        const selectedPlanets = (config.selected_planets || []);
+        if (selectedPlanets.length) {
+            drawSelectedPlanetMarkers(layerSelection, data.objects || [], selectedPlanets, ascDeg, rScale);
         }
 
         // === Draw aspect lines ===
@@ -869,6 +876,63 @@ const RosettaChart = (() => {
     }
 
     // -----------------------------------------------------------------------
+    // Selected-planet highlight circles
+    // Lime-green fill (#32CD32), navy outline (#000080), drawn behind aspects.
+    // Two rings per selected planet:
+    //   1. Degree-circle marker (R_DEGREE_CIRCLE = 1.0)
+    //   2. Label-ring halo (R_PLANET_GLYPH = 1.35)
+    // -----------------------------------------------------------------------
+    function drawSelectedPlanetMarkers(layer, objects, selectedNames, ascDeg, rScale) {
+        const SEL_SET = new Set(selectedNames);
+        const INNER_COLOR = "#32CD32";  // lime green
+        const OUTLINE_COLOR = "#000080"; // navy
+
+        // Geometry constants matching drawing_v2.py
+        const R_DEGREE = 1.0;
+        const R_LABEL = 1.35;
+
+        // Marker sizes — fixed px values (~3× singleton dot r=5)
+        const DOT_R = 15;   // px — degree-circle marker
+        const HALO_R = 19;  // px — label-ring halo
+
+        objects.forEach((obj) => {
+            if (!SEL_SET.has(obj.name)) return;
+            const lon = parseFloat(obj.longitude);
+            if (isNaN(lon)) return;
+
+            // --- degree-circle marker ---
+            const theta_dot = degToRad(lon, ascDeg);
+            const x_dot = rScale(R_DEGREE) * Math.cos(theta_dot);
+            const y_dot = rScale(R_DEGREE) * Math.sin(theta_dot);
+            layer.append("circle")
+                .attr("class", "selection-dot")
+                .attr("data-object", obj.name)
+                .attr("cx", x_dot)
+                .attr("cy", y_dot)
+                .attr("r", DOT_R)
+                .attr("fill", INNER_COLOR)
+                .attr("stroke", OUTLINE_COLOR)
+                .attr("stroke-width", 1.5)
+                .attr("opacity", 0.88);
+
+            // --- label-ring halo ---
+            const theta_lbl = degToRad(lon, ascDeg);
+            const x_lbl = rScale(R_LABEL) * Math.cos(theta_lbl);
+            const y_lbl = rScale(R_LABEL) * Math.sin(theta_lbl);
+            layer.append("circle")
+                .attr("class", "selection-halo")
+                .attr("data-object", obj.name)
+                .attr("cx", x_lbl)
+                .attr("cy", y_lbl)
+                .attr("r", HALO_R)
+                .attr("fill", INNER_COLOR)
+                .attr("stroke", OUTLINE_COLOR)
+                .attr("stroke-width", 1.5)
+                .attr("opacity", 0.88);
+        });
+    }
+
+    // -----------------------------------------------------------------------
     // Highlight system
     // -----------------------------------------------------------------------
     function applyHighlights(svg, highlights) {
@@ -990,7 +1054,8 @@ const RosettaChart = (() => {
 
         svg.call(zoom.transform, d3.zoomIdentity.translate(cx, cy));
 
-        // Layer groups
+        // Layer groups (z-ordering from back to front)
+        const layerSelectionBi = g.append("g").attr("class", "layer-selection"); // always behind everything
         const layerZodiac = g.append("g").attr("class", "layer-zodiac");
         const layerDegrees = g.append("g").attr("class", "layer-degrees");
         const layerHousesInner = g.append("g").attr("class", "layer-houses-inner");
@@ -1037,6 +1102,14 @@ const RosettaChart = (() => {
                 BIWHEEL.OUTER_CUSP_R,
                 true
             );
+        }
+
+        // === Draw chart 1 internal aspects (if enabled) ===
+        // === Draw selection highlights (behind all aspect lines) ===
+        const selectedPlanetsBi = (config.selected_planets || []);
+        if (selectedPlanetsBi.length) {
+            const allBiObjects = [...(data.objects_inner || []), ...(data.objects_outer || [])];
+            drawSelectedPlanetMarkers(layerSelectionBi, allBiObjects, selectedPlanetsBi, ascDeg, rScale);
         }
 
         // === Draw chart 1 internal aspects (if enabled) ===

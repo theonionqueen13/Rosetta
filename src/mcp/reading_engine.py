@@ -12,6 +12,7 @@ Pipeline:
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
 import os
@@ -24,6 +25,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+_log = logging.getLogger(__name__)
 
 from src.mcp.topic_maps import resolve_factors, TopicMatch
 from src.mcp.comprehension import comprehend, QuestionGraph
@@ -235,8 +238,10 @@ def build_reading(
                 from src.core.dignity_calc import score_and_attach
                 score_and_attach(chart)
                 _ps = getattr(chart, "planetary_states", None)
-            except Exception:
-                pass
+            except ImportError:
+                _log.warning("dignity_calc not available; skipping potency scoring")
+            except (ValueError, TypeError, AttributeError) as exc:
+                _log.warning("score_and_attach failed: %s", exc)
         if _ps:
             _tier_map = assign_potency_tiers(_ps)
             _sorted_ps = sorted(
@@ -285,8 +290,8 @@ def build_reading(
     relevant_names: Set[str] = set()
 
     for cobj in chart.objects:
-        name = cobj.object_name.name if cobj.object_name else ""
-        sign = cobj.sign.name if cobj.sign else ""
+        name = cobj.object_name if cobj.object_name else ""
+        sign = cobj.sign if cobj.sign else ""
         house_num = _house_number(cobj, house_system)
 
         hit = False
@@ -306,7 +311,7 @@ def build_reading(
         pname = node.planet_name
         if pname not in relevant_names:
             for cobj in chart.objects:
-                n = cobj.object_name.name if cobj.object_name else ""
+                n = cobj.object_name if cobj.object_name else ""
                 if n == pname:
                     relevant_objects.append(cobj)
                     relevant_names.add(n)
@@ -341,8 +346,8 @@ def build_reading(
             try:
                 _ps = PlanetStats.from_chart_object(_robj, house_system=house_system)
                 _planet_stats_list.append(_ps.to_dict())
-            except Exception:
-                pass
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                _log.warning("PlanetStats.from_chart_object failed for %s: %s", _robj, exc)
             try:
                 _pp = PlanetProfile.from_chart_object(
                     _robj,
@@ -352,8 +357,8 @@ def build_reading(
                     chart=chart,
                 )
                 _planet_profiles_list.append(_pp.to_dict())
-            except Exception:
-                pass
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                _log.warning("PlanetProfile.from_chart_object failed for %s: %s", _robj, exc)
     except ImportError:
         pass
 
@@ -384,7 +389,7 @@ def build_reading(
         chart_b_city = b_hdr[3] if len(b_hdr) > 3 else ""
         # Build full parity classical facts for chart_b
         _b_all_names: Set[str] = {
-            cobj.object_name.name
+            cobj.object_name
             for cobj in chart_b.objects
             if cobj.object_name
         }
@@ -557,8 +562,8 @@ def _build_placements(
     out: List[PlacementFact] = []
 
     for cobj in objects:
-        name = cobj.object_name.name if cobj.object_name else ""
-        sign = cobj.sign.name if cobj.sign else ""
+        name = cobj.object_name if cobj.object_name else ""
+        sign = cobj.sign if cobj.sign else ""
         house_num = _house_number(cobj, house_system)
 
         # Sign combo text
@@ -612,10 +617,10 @@ def _build_full_placements(
     """
     out: List[PlacementFact] = []
     for cobj in chart.objects:
-        name = cobj.object_name.name if cobj.object_name else ""
+        name = cobj.object_name if cobj.object_name else ""
         if not name:
             continue
-        sign = cobj.sign.name if cobj.sign else ""
+        sign = cobj.sign if cobj.sign else ""
         house_num = _house_number(cobj, house_system)
         dignity_str = ""
         if cobj.dignity:
@@ -652,8 +657,8 @@ def _build_aspects(
     for edge in edges:
         # Handle ChartAspect dataclass
         if hasattr(edge, "object1"):
-            o1 = edge.object1.object_name.name if edge.object1 and edge.object1.object_name else ""
-            o2 = edge.object2.object_name.name if edge.object2 and edge.object2.object_name else ""
+            o1 = edge.object1.object_name if edge.object1 and edge.object1.object_name else ""
+            o2 = edge.object2.object_name if edge.object2 and edge.object2.object_name else ""
             if o1 not in relevant_names and o2 not in relevant_names:
                 continue
             asp = edge.aspect_type
@@ -772,9 +777,9 @@ def _build_dignities(objects: List["ChartObject"]) -> List[DignityFact]:
             dtype = cobj.dignity if isinstance(cobj.dignity, str) else cobj.dignity.name
             if dtype and dtype.lower() not in ("", "none"):
                 out.append(DignityFact(
-                    object_name=cobj.object_name.name if cobj.object_name else "",
+                    object_name=cobj.object_name if cobj.object_name else "",
                     dignity_type=dtype,
-                    sign=cobj.sign.name if cobj.sign else "",
+                    sign=cobj.sign if cobj.sign else "",
                 ))
     return out
 
@@ -839,7 +844,7 @@ def _build_house_overviews(
         occupants: List[str] = []
         for cobj in chart.objects:
             if _house_number(cobj, house_system) == h_num:
-                occupants.append(cobj.object_name.name if cobj.object_name else "")
+                occupants.append(cobj.object_name if cobj.object_name else "")
 
         # House meaning from static lookup
         meaning = ""
@@ -863,7 +868,7 @@ def _build_sabians(objects: List["ChartObject"]) -> List[SabianFact]:
     for cobj in objects:
         sab = cobj.sabian_symbol
         if sab:
-            name = cobj.object_name.name if cobj.object_name else ""
+            name = cobj.object_name if cobj.object_name else ""
             text = getattr(sab, "symbol", "") or getattr(sab, "text", "")
             keynote = getattr(sab, "keynote", "")
             out.append(SabianFact(
@@ -947,15 +952,18 @@ def _run_interp(
                     rr,
                     mode="focus",
                     object_name=obj_name,
+                    house_system="placidus",
                 )
                 text = interp.generate()
                 if text:
                     parts.append(text.strip())
-            except Exception:
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                _log.warning("NatalInterpreter failed for %s: %s", obj_name, exc)
                 continue
 
         return "\n\n".join(parts)
-    except Exception:
+    except (ImportError, RuntimeError) as exc:
+        _log.warning("_run_interp setup failed: %s", exc)
         return ""
 
 

@@ -10,8 +10,11 @@ and the JavaScript renderer.
 """
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Dict, List, Optional, Sequence
+
+_log = logging.getLogger(__name__)
 
 from src.core.models_v2 import (
     AstrologicalChart,
@@ -135,7 +138,7 @@ def _house_number(house_obj: Any) -> Optional[int]:
 def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
     """Name → ChartObject for quick lookup."""
     return {
-        obj.object_name.name: obj
+        obj.object_name: obj
         for obj in chart.objects
         if obj.object_name
     }
@@ -147,9 +150,9 @@ def _object_map(chart: AstrologicalChart) -> dict[str, Any]:
 
 def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart, is_visible: bool = True) -> dict:
     """Convert a models_v2.ChartObject to a JSON-safe dict."""
-    name = obj.object_name.name if obj.object_name else ""
+    name = obj.object_name if obj.object_name else ""
     glyph = GLYPHS.get(name, obj.glyph or "")
-    sign_name = obj.sign.name if obj.sign else ""
+    sign_name = obj.sign if obj.sign else ""
     
     # House number for the active house system
     house_num = None
@@ -168,7 +171,7 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart, is_
     min_in_sign = int((obj.longitude % 1) * 60) if obj.longitude is not None else 0
 
     # Planetary state (from dignity_calc)
-    ps: Optional[PlanetaryState] = obj.planetary_state
+    ps: Optional[PlanetaryState] = getattr(obj, "planetary_state", None)
     state_data = {}
     if ps:
         ed = ps.essential_dignity
@@ -225,9 +228,10 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart, is_
     try:
         stats = PlanetStats.from_chart_object(obj, house_system=house_system)
         planet_stats_html = PlanetStatsReader(stats).format_html(
-            include_house_data=not unknown_time
+            include_house_data=not getattr(chart, "unknown_time", False)
         )
-    except Exception:
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        _log.warning("PlanetStats generation failed for %s: %s", getattr(obj, 'object_name', '?'), exc)
         planet_stats_html = ""
 
     # Object meanings
@@ -246,8 +250,11 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart, is_
 
     # Fixed star conjunctions
     fixed_star_conj = []
-    if obj.fixed_stars:
-        fixed_star_conj = [f"{star.name}" for star in obj.fixed_stars if hasattr(star, "name")]
+    _fixed_stars = getattr(obj, "fixed_stars", None)
+    if _fixed_stars:
+        fixed_star_conj = [f"{star.name}" for star in _fixed_stars if hasattr(star, "name")]
+    elif obj.fixed_star_conj:
+        fixed_star_conj = [s.strip() for s in obj.fixed_star_conj.split(",") if s.strip()]
 
     return {
         "name": name,
@@ -259,7 +266,7 @@ def _serialize_object(obj: Any, house_system: str, chart: AstrologicalChart, is_
         "minute_in_sign": min_in_sign,
         "dms": _safe_str(obj.dms),
         "retrograde": bool(obj.retrograde),
-        "station": _safe_str(obj.station) if obj.station else None,
+        "station": _safe_str(getattr(obj, "station", None)) if getattr(obj, "station", None) else None,
         "speed": _safe_float(obj.speed),
         "latitude": _safe_float(obj.latitude),
         "declination": _safe_float(obj.declination),
@@ -382,7 +389,7 @@ def _serialize_houses(chart: AstrologicalChart, house_system: str) -> list[dict]
     if len(houses) != 12:
         asc_deg = 0.0
         for obj in chart.objects:
-            if obj.object_name and obj.object_name.name in ("AC", "Ascendant"):
+            if obj.object_name and obj.object_name in ("AC", "Ascendant"):
                 asc_deg = _safe_float(obj.longitude)
                 break
         houses = []
@@ -492,7 +499,7 @@ def _serialize_shapes(chart: AstrologicalChart) -> list[dict]:
 def _get_asc_degree(chart: AstrologicalChart) -> float:
     """Return the Ascendant longitude from *chart*, or 0."""
     for obj in chart.objects:
-        if obj.object_name and obj.object_name.name in ("AC", "Ascendant", "Asc"):
+        if obj.object_name and obj.object_name in ("AC", "Ascendant", "Asc"):
             return _safe_float(obj.longitude)
     return 0.0
 
@@ -516,6 +523,7 @@ def serialize_chart_for_rendering(
     singleton_map: Optional[dict] = None,
     patterns: Optional[list] = None,
     highlights: Optional[dict] = None,
+    selected_planets: Optional[List[str]] = None,
 ) -> dict:
     """
     Convert a fully-computed AstrologicalChart into a flat JSON-safe
@@ -564,7 +572,7 @@ def serialize_chart_for_rendering(
     for obj in chart.objects:
         if not obj.object_name:
             continue
-        name = obj.object_name.name
+        name = obj.object_name
         # Always include all objects, but mark is_visible based on visible_objects filter
         is_visible = visible_objects is None or name in visible_objects
         if not is_visible:
@@ -637,6 +645,7 @@ def serialize_chart_for_rendering(
         "compass_on": compass_on,
         "degree_markers": degree_markers,
         "house_system": house_system,
+        "selected_planets": list(selected_planets) if selected_planets else [],
     }
 
     # --- Header lines (chart name, date, time, city) ---
@@ -650,8 +659,8 @@ def serialize_chart_for_rendering(
             "city": city_val or "",
             "extra_line": extra_line or "",
         }
-    except Exception:
-        pass
+    except (ValueError, TypeError, AttributeError) as exc:
+        _log.warning("Failed to unpack chart header_lines: %s", exc)
 
     # --- Moon phase ---
     moon_data = {}
@@ -661,7 +670,7 @@ def serialize_chart_for_rendering(
         for obj in chart.objects:
             if not obj.object_name:
                 continue
-            oname = obj.object_name.name.lower()
+            oname = obj.object_name.lower()
             if oname == "sun":
                 sun_lon = float(obj.longitude) % 360.0
             elif oname == "moon":
@@ -688,8 +697,8 @@ def serialize_chart_for_rendering(
             else:
                 label = "New Moon"
             moon_data = {"label": label, "phase_delta": round(phase_delta, 2)}
-    except Exception:
-        pass
+    except (TypeError, ValueError, AttributeError) as exc:
+        _log.warning("Moon-phase calculation failed: %s", exc)
 
     # --- Color palettes (for JS to use directly) ---
     colors = {
@@ -812,7 +821,7 @@ def serialize_biwheel_for_rendering(
         # toggle is active (visible_objects_outer contains _2-suffixed names).
         _outer_visible = True
         if visible_objects_outer is not None:
-            _name_2 = f"{obj.object_name.name}_2" if hasattr(obj.object_name, 'name') else f"{obj.object_name}_2"
+            _name_2 = f"{obj.object_name}_2" if hasattr(obj.object_name, 'name') else f"{obj.object_name}_2"
             _outer_visible = _name_2 in visible_objects_outer
         serialized = _serialize_object(obj, house_system, chart_2, is_visible=_outer_visible)
         serialized["chart"] = "outer"
@@ -888,8 +897,8 @@ def serialize_biwheel_for_rendering(
             "city": city1 or "",
             "extra_line": extra1 or "",
         }
-    except Exception:
-        pass
+    except (ValueError, TypeError, AttributeError) as exc:
+        _log.warning("Failed to unpack inner-chart header_lines: %s", exc)
     try:
         name2, date2, time2, city2, extra2 = chart_2.header_lines()
         header_outer = {
@@ -899,8 +908,8 @@ def serialize_biwheel_for_rendering(
             "city": city2 or "",
             "extra_line": extra2 or "",
         }
-    except Exception:
-        pass
+    except (ValueError, TypeError, AttributeError) as exc:
+        _log.warning("Failed to unpack outer-chart header_lines: %s", exc)
 
     # --- Color palettes ---
     colors = {

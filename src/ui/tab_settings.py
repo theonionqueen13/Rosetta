@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from src.nicegui_state import get_chart_object
+from src.nicegui_state import get_chart_object, get_house_system
 
 _log = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def build(
 
             settings_house = ui.select(
                 ["placidus", "equal", "whole sign"],
-                value=state.get("house_system", "placidus"),
+                value=get_house_system(state),
             ).classes("w-40")
 
             def _on_house_change(e):

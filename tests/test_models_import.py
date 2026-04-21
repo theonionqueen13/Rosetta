@@ -1,12 +1,23 @@
+import os
+import pytest
 from src.core.models_v2 import static_db
 from src.core.static_data import ZODIAC_NUMBERS, SIGN_ANATOMY, SIGN_MEANINGS
 
+# Marker used by all tests that query DB-populated rows (signs, objects, …)
+_requires_db = pytest.mark.skipif(
+    not (os.environ.get("PGUSER") and os.environ.get("PGDATABASE"))
+    or os.environ.get("PGUSER") == "_pytest_no_db_",
+    reason="no live PostgreSQL database configured",
+)
 
+
+@_requires_db
 def test_signs_present():
     assert len(static_db.signs) == 12
     assert 'Aries' in static_db.signs
 
 
+@_requires_db
 def test_sign_fields():
     aries = static_db.signs['Aries']
     assert getattr(aries, 'glyph', None) is not None
@@ -28,6 +39,7 @@ def test_sign_fields():
     assert aries.sign_instructions == (s_info.get('instructions', '') if isinstance(s_info, dict) else '')
 
 
+@_requires_db
 def test_house_schematic():
     from src.core.static_data import HOUSE_INTERP
     # Ensure house 1 exists and its schematic mirrors HOUSE_INTERP[1]
@@ -57,6 +69,7 @@ def test_house_schematic():
     assert static_db.houses[1].long_meaning == LONG_HOUSE_MEANINGS.get(1, '')
 
 
+@_requires_db
 def test_objects_have_meanings_and_keywords():
     assert 'Sun' in static_db.objects
     sun = static_db.objects['Sun']
@@ -67,6 +80,7 @@ def test_objects_have_meanings_and_keywords():
     assert isinstance(sun.keywords, list)
 
 
+@_requires_db
 def test_house_schematic():
     from src.core.static_data import HOUSE_INTERP
     # Ensure house 1 exists and its schematic mirrors HOUSE_INTERP[1]
@@ -79,6 +93,7 @@ def test_house_schematic():
         assert static_db.houses[1].schematic == expected
 
 
+@_requires_db
 def test_element_long_meaning_and_remedy():
     # Elements should expose long_meaning and remedy fields populated from lookup_v2.ELEMENT
     assert 'Fire' in static_db.elements
@@ -92,6 +107,7 @@ def test_element_long_meaning_and_remedy():
     assert fire.element_instructions == ELEMENT['Fire'].get('instructions', '')
 
 
+@_requires_db
 def test_aspect_short_and_sentence_meanings():
     from src.core.static_data import SHORT_ASPECT_MEANINGS, SENTENCE_ASPECT_MEANINGS
     # Pick a known aspect like 'Trine'
@@ -106,6 +122,7 @@ def test_aspect_short_and_sentence_meanings():
         assert tri.sentence_meaning == SENTENCE_ASPECT_MEANINGS['Trine']
 
 
+@_requires_db
 def test_object_narrative_role_and_interp():
     from src.core.static_data import CATEGORY_MAP, CATEGORY_INSTRUCTIONS
     # Sun belongs to 'Character Profiles' in CATEGORY_MAP
@@ -119,7 +136,7 @@ def test_object_narrative_role_and_interp():
         assert sun.narrative_interp == CATEGORY_INSTRUCTIONS.get(expected_cat, '')
 
 
-def test_static_db_exposes_legacy_constants():
+def test_static_db_exposes_legacy_constants():  # no DB needed — only checks UPPERCASE attrs
     """Several lists and maps that used to live in lookup_v2 should now be
     accessible directly on the ``static_db`` object and reflect the same
     values as static_data (raw dicts) and static_db (dataclass instances)."""
@@ -135,6 +152,7 @@ def test_static_db_exposes_legacy_constants():
         assert getattr(static_db, attr) == getattr(static_data, attr)
 
 
+@_requires_db
 def test_compass_axes_populated():
     # COMPASS_AXIS_INTERP should populate static_db.compass_axes
     from src.core.static_data import COMPASS_AXIS_INTERP
@@ -145,6 +163,7 @@ def test_compass_axes_populated():
         assert isinstance(ca.definition, str)
 
 
+@_requires_db
 def test_sign_and_house_axes_populated():
     # Both SIGN_AXIS_INTERP and HOUSE_AXIS_INTERP should fill static_db.axes
     from src.core.static_data import SIGN_AXIS_INTERP, HOUSE_AXIS_INTERP
@@ -160,6 +179,7 @@ def test_sign_and_house_axes_populated():
         assert isinstance(ax.short_meaning, str)
 
 
+@_requires_db
 def test_object_types_from_lookup():
     # every object listed in static_data.OBJECT_TYPE should be classified correctly
     from src.core.static_data import OBJECT_TYPE
@@ -185,12 +205,14 @@ def test_object_types_from_lookup():
         assert actual == expected, f"{name} -> {actual} not {expected}"
 
 
+@_requires_db
 def test_at_least_one_object_has_keywords():
     # ensure keyword migration is not empty for all objects
     has_kw = any(obj.keywords for obj in static_db.objects.values())
     assert has_kw, "Expected at least one catalog object to carry keywords"
 
 
+@_requires_db
 def test_profile_formatter_chartobject():
     # Build a minimal ChartObject and ensure formatter does not attempt to
     # treat it like a mapping (no AttributeError and returns a non-empty string)

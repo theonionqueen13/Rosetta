@@ -3,7 +3,7 @@ import pytest
 
 from src.core.calc_v2 import build_aspect_edges, calculate_chart
 from src.core.models_v2 import AstrologicalChart
-from src.core.static_data import STANDARD_BASE_BODIES
+from src.core.constants import STANDARD_BASE_BODIES
 
 
 @pytest.fixture(scope="module")
